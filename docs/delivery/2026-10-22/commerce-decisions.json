@@ -1,0 +1,894 @@
+{
+  "schemaVersion": 1,
+  "purpose": "admission_review",
+  "package": {
+    "price": {
+      "value": 99900,
+      "unit": "fen",
+      "currency": "CNY"
+    },
+    "projects": 1,
+    "adultSubjects": 1,
+    "initiators": 1,
+    "firstCopies": 1,
+    "rolesDistinct": true,
+    "agreedShippingIncluded": true,
+    "completeExportIncluded": true,
+    "paidExtraCopies": false,
+    "paidExtraPages": false
+  },
+  "d02": {
+    "review": {
+      "state": "pending",
+      "ownerRef": null,
+      "decisionRef": null,
+      "decidedAt": null
+    },
+    "duration": {
+      "value": null,
+      "unit": "calendar_days"
+    },
+    "startsAt": null,
+    "notStarted": {
+      "maxWait": {
+        "value": null,
+        "unit": "calendar_days"
+      },
+      "startsAt": null,
+      "resolution": null,
+      "noticeRef": null
+    },
+    "pause": {
+      "clock": null,
+      "maxTotal": {
+        "value": null,
+        "unit": "calendar_days"
+      },
+      "atLimit": null,
+      "policyRef": null
+    },
+    "expiration": {
+      "newRecording": null,
+      "firstCopy": null,
+      "existingData": null,
+      "noticeRef": null
+    }
+  },
+  "d03": {
+    "review": {
+      "state": "pending",
+      "ownerRef": null,
+      "decisionRef": null,
+      "decidedAt": null
+    },
+    "onlinePlayback": {
+      "duration": {
+        "value": null,
+        "unit": "calendar_days"
+      },
+      "startsAt": null,
+      "expires": null
+    },
+    "exportRequests": {
+      "duration": {
+        "value": null,
+        "unit": "calendar_days"
+      },
+      "startsAt": null,
+      "channelRef": null
+    },
+    "retention": {
+      "originalAudio": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "originalPhotos": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "derivedAudio": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "derivedPhotos": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "transcripts": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "confirmedStories": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "bookPdf": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "exportPackages": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "activeData": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "historicalObjects": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "backupCopies": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "supplierCopies": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      }
+    },
+    "deletion": {
+      "activeData": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null,
+        "procedureRef": null
+      },
+      "historicalObjects": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null,
+        "procedureRef": null
+      },
+      "backupCopies": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null,
+        "procedureRef": null
+      },
+      "supplierCopies": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null,
+        "procedureRef": null
+      }
+    },
+    "expiryNotice": {
+      "advance": {
+        "value": null,
+        "unit": "calendar_days"
+      },
+      "channelRef": null,
+      "policyRef": null
+    },
+    "copyStatusSeparately": null,
+    "restoreAppliesDeletionLedger": null
+  },
+  "d04": {
+    "review": {
+      "state": "pending",
+      "ownerRef": null,
+      "decisionRef": null,
+      "decidedAt": null
+    },
+    "userQuotas": {
+      "recordingPerClip": {
+        "value": null,
+        "unit": "seconds",
+        "excess": null,
+        "noticeRef": null
+      },
+      "recordingTotal": {
+        "value": null,
+        "unit": "seconds",
+        "excess": null,
+        "noticeRef": null
+      },
+      "photos": {
+        "value": null,
+        "unit": "count",
+        "excess": null,
+        "noticeRef": null
+      },
+      "storyOrganizations": {
+        "value": null,
+        "unit": "count",
+        "excess": null,
+        "noticeRef": null
+      },
+      "activeRegenerations": {
+        "value": null,
+        "unit": "count",
+        "excess": null,
+        "noticeRef": null
+      },
+      "followUps": {
+        "value": null,
+        "unit": "count",
+        "excess": null,
+        "noticeRef": null
+      }
+    },
+    "providerBudget": {
+      "asrSubmissions": {
+        "value": null,
+        "unit": "count"
+      },
+      "asrPolls": {
+        "value": null,
+        "unit": "count"
+      },
+      "systemRetries": {
+        "value": null,
+        "unit": "count"
+      },
+      "costCap": {
+        "value": null,
+        "unit": "fen"
+      },
+      "scope": null,
+      "exhausted": null,
+      "ownerRef": null
+    },
+    "systemRetriesChargeUserQuota": null
+  },
+  "d05": {
+    "review": {
+      "state": "pending",
+      "ownerRef": null,
+      "decisionRef": null,
+      "decidedAt": null
+    },
+    "regionCatalogRef": null,
+    "includedRegionCodes": null,
+    "excludedRegionCodes": null,
+    "unlistedRegion": null,
+    "shippingFeeIncluded": null,
+    "beforePaymentNoticeRef": null,
+    "verification": {
+      "method": null,
+      "evidenceRef": null,
+      "checkedAt": null,
+      "ownerRef": null
+    }
+  },
+  "d06": {
+    "review": {
+      "state": "pending",
+      "ownerRef": null,
+      "decisionRef": null,
+      "decidedAt": null
+    },
+    "businessCalendarRef": null,
+    "proofreading": {
+      "within": {
+        "value": null,
+        "unit": "business_days"
+      },
+      "startsAt": null,
+      "ownerRef": null,
+      "procedureRef": null
+    },
+    "completeExport": {
+      "within": {
+        "value": null,
+        "unit": "business_days"
+      },
+      "startsAt": null,
+      "ownerRef": null,
+      "procedureRef": null
+    },
+    "production": {
+      "within": {
+        "value": null,
+        "unit": "business_days"
+      },
+      "startsAt": null,
+      "ownerRef": null,
+      "procedureRef": null
+    },
+    "logistics": {
+      "within": {
+        "value": null,
+        "unit": "business_days"
+      },
+      "startsAt": null,
+      "ownerRef": null,
+      "procedureRef": null
+    },
+    "customerService": {
+      "within": {
+        "value": null,
+        "unit": "business_days"
+      },
+      "startsAt": null,
+      "ownerRef": null,
+      "procedureRef": null
+    },
+    "afterSales": {
+      "within": {
+        "value": null,
+        "unit": "business_days"
+      },
+      "startsAt": null,
+      "ownerRef": null,
+      "procedureRef": null
+    },
+    "logisticsScope": null
+  },
+  "d07": {
+    "review": {
+      "state": "pending",
+      "ownerRef": null,
+      "decisionRef": null,
+      "decidedAt": null
+    },
+    "refundDeletesData": null,
+    "qualityReprintUsesOriginalOrder": null,
+    "notParticipated": {
+      "refundAmount": {
+        "value": null,
+        "unit": "fen"
+      },
+      "requestWindow": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "processing": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "remedy": null,
+      "entitlementEffect": {
+        "creation": null,
+        "firstCopy": null
+      },
+      "productionAction": null,
+      "policyRef": null,
+      "ownerRef": null
+    },
+    "usedNotProduced": {
+      "refundAmount": {
+        "value": null,
+        "unit": "fen"
+      },
+      "requestWindow": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "processing": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "remedy": null,
+      "entitlementEffect": {
+        "creation": null,
+        "firstCopy": null
+      },
+      "productionAction": null,
+      "policyRef": null,
+      "ownerRef": null
+    },
+    "inProduction": {
+      "refundAmount": {
+        "value": null,
+        "unit": "fen"
+      },
+      "requestWindow": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "processing": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "remedy": null,
+      "entitlementEffect": {
+        "creation": null,
+        "firstCopy": null
+      },
+      "productionAction": null,
+      "policyRef": null,
+      "ownerRef": null
+    },
+    "platformUnableDeliver": {
+      "refundAmount": {
+        "value": null,
+        "unit": "fen"
+      },
+      "requestWindow": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "processing": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "remedy": null,
+      "entitlementEffect": {
+        "creation": null,
+        "firstCopy": null
+      },
+      "productionAction": null,
+      "policyRef": null,
+      "ownerRef": null
+    },
+    "qualityDamaged": {
+      "refundAmount": {
+        "value": null,
+        "unit": "fen"
+      },
+      "requestWindow": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "processing": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "remedy": null,
+      "entitlementEffect": {
+        "creation": null,
+        "firstCopy": null
+      },
+      "productionAction": null,
+      "policyRef": null,
+      "ownerRef": null
+    },
+    "qualityMissingPages": {
+      "refundAmount": {
+        "value": null,
+        "unit": "fen"
+      },
+      "requestWindow": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "processing": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "remedy": null,
+      "entitlementEffect": {
+        "creation": null,
+        "firstCopy": null
+      },
+      "productionAction": null,
+      "policyRef": null,
+      "ownerRef": null
+    },
+    "qualityWrongVersion": {
+      "refundAmount": {
+        "value": null,
+        "unit": "fen"
+      },
+      "requestWindow": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "processing": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "remedy": null,
+      "entitlementEffect": {
+        "creation": null,
+        "firstCopy": null
+      },
+      "productionAction": null,
+      "policyRef": null,
+      "ownerRef": null
+    },
+    "qualityLayoutError": {
+      "refundAmount": {
+        "value": null,
+        "unit": "fen"
+      },
+      "requestWindow": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "processing": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "remedy": null,
+      "entitlementEffect": {
+        "creation": null,
+        "firstCopy": null
+      },
+      "productionAction": null,
+      "policyRef": null,
+      "ownerRef": null
+    },
+    "postConfirmationFactualError": {
+      "refundAmount": {
+        "value": null,
+        "unit": "fen"
+      },
+      "requestWindow": {
+        "duration": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "processing": {
+        "within": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "startsAt": null
+      },
+      "remedy": null,
+      "entitlementEffect": {
+        "creation": null,
+        "firstCopy": null
+      },
+      "productionAction": null,
+      "policyRef": null,
+      "ownerRef": null
+    }
+  },
+  "d08": {
+    "review": {
+      "state": "pending",
+      "ownerRef": null,
+      "decisionRef": null,
+      "decidedAt": null
+    },
+    "identity": {
+      "legalEntityRef": null,
+      "appId": null,
+      "merchantId": null,
+      "categoryId": null,
+      "paymentPathId": null,
+      "productType": "digital-production-plus-physical-book"
+    },
+    "platform": {
+      "merchantBinding": {
+        "outcome": "pending",
+        "evidenceRef": null,
+        "reviewerRef": null,
+        "checkedAt": null,
+        "scope": {
+          "legalEntityRef": null,
+          "appId": null,
+          "merchantId": null,
+          "categoryId": null,
+          "paymentPathId": null,
+          "productType": "digital-production-plus-physical-book"
+        },
+        "requirementsRef": null
+      },
+      "productAdmission": {
+        "outcome": "pending",
+        "evidenceRef": null,
+        "reviewerRef": null,
+        "checkedAt": null,
+        "scope": {
+          "legalEntityRef": null,
+          "appId": null,
+          "merchantId": null,
+          "categoryId": null,
+          "paymentPathId": null,
+          "productType": "digital-production-plus-physical-book"
+        },
+        "requirementsRef": null
+      },
+      "iosPayment": {
+        "outcome": "pending",
+        "evidenceRef": null,
+        "reviewerRef": null,
+        "checkedAt": null,
+        "scope": {
+          "legalEntityRef": null,
+          "appId": null,
+          "merchantId": null,
+          "categoryId": null,
+          "paymentPathId": null,
+          "productType": "digital-production-plus-physical-book"
+        },
+        "requirementsRef": null,
+        "deviceTestRef": null,
+        "paymentAndQuery": "pending"
+      },
+      "androidPayment": {
+        "outcome": "pending",
+        "evidenceRef": null,
+        "reviewerRef": null,
+        "checkedAt": null,
+        "scope": {
+          "legalEntityRef": null,
+          "appId": null,
+          "merchantId": null,
+          "categoryId": null,
+          "paymentPathId": null,
+          "productType": "digital-production-plus-physical-book"
+        },
+        "requirementsRef": null,
+        "deviceTestRef": null,
+        "paymentAndQuery": "pending"
+      },
+      "shippingManagement": {
+        "outcome": "pending",
+        "evidenceRef": null,
+        "reviewerRef": null,
+        "checkedAt": null,
+        "scope": {
+          "legalEntityRef": null,
+          "appId": null,
+          "merchantId": null,
+          "categoryId": null,
+          "paymentPathId": null,
+          "productType": "digital-production-plus-physical-book"
+        },
+        "requirementsRef": null,
+        "fulfillmentTestRef": null,
+        "requirementHandling": null
+      }
+    },
+    "identityBinding": {
+      "outcome": "pending",
+      "evidenceRef": null,
+      "reviewerRef": null,
+      "checkedAt": null,
+      "procedureRef": null,
+      "subjectAndOperatorSeparate": null,
+      "subjectAppliesInitiatorConfirms": null,
+      "rejectInitiatorSelfBinding": null,
+      "paymentIsNotConsent": null
+    },
+    "assistedConsent": {
+      "outcome": "pending",
+      "evidenceRef": null,
+      "reviewerRef": null,
+      "checkedAt": null,
+      "subjectPresenceRequired": null,
+      "evidenceFormRef": null,
+      "captureProcedureRef": null,
+      "bindsSubjectAndOperator": null,
+      "bindsPurposeAndNoticeVersion": null,
+      "bindsExactContentVersion": null,
+      "everyConfirmationRecorded": null,
+      "ownerRef": null
+    },
+    "disputes": {
+      "channelRef": null,
+      "verificationProcedureRef": null,
+      "interimAction": null,
+      "resolutionWithin": {
+        "value": null,
+        "unit": "calendar_days"
+      },
+      "ownerRef": null,
+      "decisionNoticeRef": null
+    },
+    "withoutWechat": {
+      "withdrawal": {
+        "channelRef": null,
+        "identityVerificationRef": null,
+        "scopeVerificationRef": null,
+        "confirmationChannelRef": null,
+        "ownerRef": null,
+        "responseWithin": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "applicant": null
+      },
+      "export": {
+        "channelRef": null,
+        "identityVerificationRef": null,
+        "scopeVerificationRef": null,
+        "confirmationChannelRef": null,
+        "ownerRef": null,
+        "responseWithin": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "applicant": null,
+        "deliveryChannelRef": null,
+        "recipient": null,
+        "neverDefaultToInitiator": null
+      },
+      "deletion": {
+        "channelRef": null,
+        "identityVerificationRef": null,
+        "scopeVerificationRef": null,
+        "confirmationChannelRef": null,
+        "ownerRef": null,
+        "responseWithin": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "applicant": null
+      }
+    },
+    "privacy": {
+      "outcome": "pending",
+      "evidenceRef": null,
+      "reviewerRef": null,
+      "checkedAt": null,
+      "noticeVersionRef": null,
+      "collectionAiSharingPrintSeparate": null,
+      "withdrawalStopsAccessAndProcessing": null,
+      "minimumProductionDataOnly": null
+    },
+    "suppliers": {
+      "asr": {
+        "outcome": "pending",
+        "evidenceRef": null,
+        "reviewerRef": null,
+        "checkedAt": null,
+        "providerRef": null,
+        "serviceConfigRef": null,
+        "termsRef": null,
+        "dataRegionRef": null,
+        "ownerRef": null,
+        "purpose": null,
+        "dataKinds": null,
+        "retention": {
+          "duration": {
+            "value": null,
+            "unit": "calendar_days"
+          },
+          "startsAt": null
+        },
+        "deletionWithin": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "deletionProcedureRef": null,
+        "trainingUse": null,
+        "onwardSharing": null
+      },
+      "text": {
+        "outcome": "pending",
+        "evidenceRef": null,
+        "reviewerRef": null,
+        "checkedAt": null,
+        "providerRef": null,
+        "serviceConfigRef": null,
+        "termsRef": null,
+        "dataRegionRef": null,
+        "ownerRef": null,
+        "purpose": null,
+        "dataKinds": null,
+        "retention": {
+          "duration": {
+            "value": null,
+            "unit": "calendar_days"
+          },
+          "startsAt": null
+        },
+        "deletionWithin": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "deletionProcedureRef": null,
+        "trainingUse": null,
+        "onwardSharing": null
+      },
+      "printing": {
+        "outcome": "pending",
+        "evidenceRef": null,
+        "reviewerRef": null,
+        "checkedAt": null,
+        "providerRef": null,
+        "serviceConfigRef": null,
+        "termsRef": null,
+        "dataRegionRef": null,
+        "ownerRef": null,
+        "purpose": null,
+        "dataKinds": null,
+        "retention": {
+          "duration": {
+            "value": null,
+            "unit": "calendar_days"
+          },
+          "startsAt": null
+        },
+        "deletionWithin": {
+          "value": null,
+          "unit": "calendar_days"
+        },
+        "deletionProcedureRef": null,
+        "trainingUse": null,
+        "onwardSharing": null
+      }
+    }
+  }
+}
