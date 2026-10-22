@@ -19,6 +19,9 @@ Page({
     if (read()?.purchased && q.browse !== "1") home();
   },
   async onShow() {
+    // Native login can bring the page foreground before its request completes.
+    // The active identity action owns both its result and the busy indicator.
+    if (this.data.busy) return;
     const version = ++this.identityVersion;
     const mode = dataMode();
     this.setData({ mode, userId: "", status: "" });
