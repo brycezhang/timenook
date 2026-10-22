@@ -4,6 +4,8 @@
 
 基于已定稿开发方案，已创建 **[1 个规格父 issue](https://github.com/brycezhang/timenook/issues/1) + 30 个子 tickets**，用 GitHub 原生 blocked-by 关系表示依赖，并按 ready-for-agent / ready-for-human 区分实现和外部决策。每票均可从本页打开完整验收条件。
 
+推进方式：主 Agent 逐票派发实施 subagent；每票完成 TDD、相关测试、审查及代码交付后再启动下一张开发票。外部验收缺失时保留票据未完成，按依赖选择其他可推进工作。T01 已由 PR #32 合并。部署目标已按 [ADR 0009](../../adr/0009-shared-ecs-api-path.md) 调整为 legal-agent 共用 ECS/域名、`/timenook` 分流。
+
 ## 阶段
 
 | 阶段 | Tickets | 结果 |
@@ -129,9 +131,9 @@
    - 阻塞：T27。
    - 交付：用户提交质量问题后，客服可核对确定 PDF、印刷及物流证据，处理赔付或原单重印。
 
-29. **[T29 发布独立环境并完成故障恢复演练](tickets/29-release-recovery.md)**
+29. **[T29 在共用 ECS 发布独立服务并完成恢复演练](tickets/29-release-recovery.md)**
    - 阻塞：T17、T26、T28。
-   - 交付：把全部业务链部署到独立阿里云环境，运维可识别失败、回滚发布并恢复服务。
+   - 交付：在共用 ECS 上隔离部署 TimeNook，通过同一 API 域名的 `/timenook` 分流，并验证现有 legal-agent 不受影响及故障恢复。
 
 30. **[T30 完成内部实物闭环与付费试点验收](tickets/30-pilot-acceptance.md)**
    - 阻塞：T29。
@@ -216,5 +218,5 @@ D01 由 T04 冻结；D02–D08 由 T05 冻结；D09 由 T09 冻结；D10 由 T08
 - [T26 · #27 · 执行资料删除及备份恢复防复活](https://github.com/brycezhang/timenook/issues/27)
 - [T27 · #28 · 实现退款申请、金额预留与结果对账](https://github.com/brycezhang/timenook/issues/28)
 - [T28 · #29 · 闭环质量售后与原单重印](https://github.com/brycezhang/timenook/issues/29)
-- [T29 · #30 · 发布独立环境并完成故障恢复演练](https://github.com/brycezhang/timenook/issues/30)
+- [T29 · #30 · 在共用 ECS 发布独立服务并完成恢复演练](https://github.com/brycezhang/timenook/issues/30)
 - [T30 · #31 · 完成内部实物闭环与付费试点验收](https://github.com/brycezhang/timenook/issues/31)

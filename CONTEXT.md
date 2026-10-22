@@ -9,6 +9,7 @@
 - AI服务：文件ASR首选豆包，追问与故事整理首选DeepSeek；模型、服务配置和处理条款经评测与准入核对后锁定。
 - 工程基线：[wutong技术栈对齐](docs/architecture/wutong技术栈对齐.md)，参考wutong-admin的工程组织及ECS/Nginx/systemd发布方式。
 - 上线参数：[决策与待定项](docs/architecture/决策与待定项.md)。
+- 部署入口：与 legal-agent 共用阿里云 ECS 和 `lawyerapi.threeminreading.com`，TimeNook 使用 `/timenook` 前缀；应用、数据及凭据独立。目标与已核实状态见 [ADR 0009](docs/adr/0009-shared-ecs-api-path.md)。
 - 业务语言：[GLOSSARY.md](GLOSSARY.md)。
 - 交互原型：[原型说明](design/figma-prototype/README.md)。
 

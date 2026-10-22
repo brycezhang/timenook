@@ -5,7 +5,7 @@
     "stage": "S0",
     "blockedBy": [],
     "file": "tickets/01-workspace-health.md",
-    "status": "open",
+    "status": "closed",
     "issueUrl": "https://github.com/brycezhang/timenook/issues/2",
     "issueNumber": 2,
     "issueId": 5972240734,
@@ -500,7 +500,7 @@
   },
   {
     "id": "T29",
-    "title": "发布独立环境并完成故障恢复演练",
+    "title": "在共用 ECS 发布独立服务并完成恢复演练",
     "stage": "S4",
     "blockedBy": [
       "T17",
