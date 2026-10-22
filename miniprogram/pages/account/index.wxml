@@ -1,0 +1,93 @@
+<view class="page with-tabs"
+  ><view class="account-profile"
+    ><view class="account-avatar"
+      ><image class="icon" src="/assets/icons/leaf.svg" /></view
+    ><view
+      ><view class="title">{{p.buyer}}的时光里</view
+      ><view class="subtitle">与重要的人，一起珍藏时光</view></view
+    ></view
+  ><button class="account-book section" bindtap="project"
+    ><view class="grow"
+      ><view class="serif section-title">{{p.title}}</view
+      ><view class="small muted"
+        >{{p.stories.length}}篇故事 · {{count}}段本机原声</view
+      ></view
+    ><image class="icon" src="/assets/icons/chevron-right.svg" /></button
+  ><button class="account-gift" bindtap="shop">
+    <image class="icon" src="/assets/icons/gift.svg" />
+    <view class="grow"><view class="section-title">再送一本</view><view class="small muted">回到首页，为另一位家人留住时光</view></view>
+    <image class="icon small" src="/assets/icons/chevron-right.svg" />
+  </button>
+  <view wx:if="{{projects.length > 1}}" class="section">
+    <view class="section-title">我的项目 <text class="small muted">{{projects.length}}个 · 点击切换</text></view>
+    <button wx:for="{{projects}}" wx:key="id" class="list-row project-option {{item.id === p.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="switchProject">
+      <view class="grow"><view>{{item.title}}</view><view class="small muted">{{item.sample ? '示例项目 · ' : ''}}{{item.stories.length}}篇故事 · {{item.recordings.length}}段原声</view></view>
+      <text class="small">{{item.id === p.id ? '当前' : '切换'}}</text>
+    </button>
+  </view>
+  <view class="section"
+    ><button class="list-row" bindtap="order"
+      ><image class="icon" src="/assets/icons/gift.svg" /><text class="grow"
+        >我的订单</text
+      ><image
+        class="icon small"
+        src="/assets/icons/chevron-right.svg" /></button
+    ><button class="list-row" bindtap="invite"
+      ><image class="icon" src="/assets/icons/send.svg" /><text class="grow"
+        >邀请与陪同讲述</text
+      ><image
+        class="icon small"
+        src="/assets/icons/chevron-right.svg" /></button
+    ><button class="list-row" bindtap="settings"
+      ><image class="icon" src="/assets/icons/settings.svg" /><text class="grow"
+        >项目资料</text
+      ><image
+        class="icon small"
+        src="/assets/icons/chevron-right.svg" /></button
+    ><button class="list-row" data-kind="recordings" bindtap="service"
+      ><image class="icon" src="/assets/icons/headphones.svg" /><text
+        class="grow"
+        >本机原声</text
+      ><text class="small muted">{{count}}段</text
+      ><image
+        class="icon small"
+        src="/assets/icons/chevron-right.svg" /></button
+    ><button class="list-row" data-kind="export" bindtap="service"
+      ><image class="icon" src="/assets/icons/download.svg" /><text class="grow"
+        >导出我的资料</text
+      ><image
+        class="icon small"
+        src="/assets/icons/chevron-right.svg" /></button
+    ><button class="list-row" data-kind="privacy" bindtap="service"
+      ><image class="icon" src="/assets/icons/shield-check.svg" /><text
+        class="grow"
+        >隐私与资料说明</text
+      ><image
+        class="icon small"
+        src="/assets/icons/chevron-right.svg" /></button
+    ><button class="list-row" data-kind="support" bindtap="service"
+      ><image class="icon" src="/assets/icons/circle-help.svg" /><text
+        class="grow"
+        >帮助与反馈</text
+      ><image
+        class="icon small"
+        src="/assets/icons/chevron-right.svg" /></button></view
+  ><view class="account-brand serif">时 光 里</view
+  ><view class="small muted center">让每一段人生，都值得被认真记录</view
+  ><button class="link" bindtap="reset">重新体验</button
+  ><view class="demo-note">前端演示版 · 所有资料保存在当前设备</view></view
+><view class="tabs"
+  ><button class="tab" bindtap="project"
+    ><image class="icon" src="/assets/icons/book-open.svg" /><text class="tab-label"
+      >{{p.title}}</text
+    ></button
+  ><button class="tab" bindtap="book"
+    ><image class="icon" src="/assets/icons/file-text.svg" /><text
+      >成书</text
+    ></button
+  ><button class="tab active" bindtap="account"
+    ><image class="icon" src="/assets/icons/user.svg" /><text
+      >我的</text
+    ></button
+  ></view
+>

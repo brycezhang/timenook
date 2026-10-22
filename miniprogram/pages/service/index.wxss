@@ -1,0 +1,10 @@
+.legal-section {
+  margin-top: 44rpx;
+}
+.legal-section text {
+  display: block;
+  font-size: 31rpx;
+  line-height: 1.9;
+  margin-top: 18rpx;
+  color: #6f6456;
+}

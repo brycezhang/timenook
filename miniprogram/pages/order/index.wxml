@@ -1,0 +1,48 @@
+<view class="page"
+  ><view class="success-icon"
+    ><image class="icon" src="/assets/icons/gift-light.svg" /></view
+  ><view class="title center"
+    >{{p.printRevision?'心意，已准备好成书':'故事，正在慢慢生长'}}</view
+  ><view class="subtitle center"
+    >{{p.printRevision?'已保存演示订单，尚未提交真实制作':'首本实体书，已包含在你的套餐中'}}</view
+  ><view class="paper section"
+    ><view class="row"
+      ><image class="cover-mini" src="{{bookImage}}" mode="aspectFill" /><view
+        class="grow"
+        ><view class="serif section-title">{{p.title}}</view
+        ><view class="note">1本专属故事书</view
+        ><view class="pill pending"
+          >{{p.printRevision?'本机演示订单':'等待完成书稿'}}</view
+        ></view
+      ></view
+    ><view class="divider" /><view class="order-step active"
+      ><view class="step-dot" /><view
+        ><view>项目已建立</view
+        ><view class="small muted">演示套餐 ¥999 · 未真实扣款</view></view
+      ></view
+    ><view class="order-step {{p.printRevision?'active':''}}"
+      ><view class="step-dot" /><view
+        ><view>书稿确认与收货信息</view
+        ><view class="small muted"
+          >{{p.printRevision?'已保存在本机':'等待故事与完整书稿确认'}}</view
+        ></view
+      ></view
+    ><view class="order-step"
+      ><view class="step-dot" /><view
+        ><view>印制与寄送</view
+        ><view class="small muted">暂未接入生产与物流服务</view></view
+      ></view
+    ></view
+  ><view wx:if="{{p.printRevision}}" class="soft section"
+    ><view class="row"
+      ><image class="icon" src="/assets/icons/map-pin.svg" /><text
+        >{{p.address.name}} · {{p.address.phone}}</text
+      ></view
+    ><view class="note" style="margin-top: 14rpx"
+      >{{p.address.detail}}</view
+    ></view
+  ><view class="stack section"
+    ><button class="btn" bindtap="book">回看这本书</button
+    ><button class="btn secondary" bindtap="project">继续记录故事</button></view
+  ><button class="link" bindtap="support">需要帮助？联系时光里</button></view
+>

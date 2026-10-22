@@ -1,0 +1,58 @@
+.account-profile {
+  display: flex;
+  gap: 24rpx;
+  align-items: center;
+}
+.account-profile .title {
+  font-size: 45rpx;
+}
+.account-avatar {
+  width: 110rpx;
+  height: 110rpx;
+  border-radius: 50%;
+  background: #e7eadc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.account-avatar .icon {
+  width: 62rpx;
+  height: 62rpx;
+}
+.account-book {
+  display: flex;
+  align-items: center;
+  text-align: left;
+  width: 100%;
+  padding: 28rpx;
+  border-radius: 20rpx;
+  background: #eee6d8;
+}
+.account-brand {
+  text-align: center;
+  font-size: 40rpx;
+  margin: 52rpx 0 12rpx;
+  color: var(--brown);
+}
+.account-gift {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  text-align: left;
+  width: 100%;
+  padding: 28rpx;
+  margin-top: 20rpx;
+  border: 1rpx solid #d5d9c6;
+  border-radius: 20rpx;
+  background: #eef0e6;
+}
+.account-gift .small {
+  margin-top: 8rpx;
+}
+.project-option .grow {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.project-option.selected {
+  color: var(--olive);
+}

@@ -1,0 +1,64 @@
+<view class="home"
+  ><view class="home-hero"
+    ><image
+      class="hero-photo"
+      src="/assets/family.jpg"
+      mode="aspectFill"
+    /><view class="hero-copy"
+      ><view class="title large"
+        >送给重要的人，<text class="line-break">{{'\n'}}</text>一本关于TA自己的书</view
+      ><view class="hero-sub">把散落的时光，变成一本温暖的书</view></view
+    ><text class="hero-label">效果示意</text></view
+  ><view class="home-content"
+    ><button wx:if="{{hasProject}}" class="home-return" bindtap="project">回到我的项目 <image class="icon small" src="/assets/icons/arrow-right.svg" /></button
+    ><view class="gift-options"
+      ><button class="gift-option" data-recipient="妈妈" bindtap="choose"
+        ><view class="gift-flower"
+          ><image class="icon" src="/assets/icons/flower-2.svg" /></view
+        ><view class="grow"
+          ><view class="gift-title">送给妈妈</view
+          ><view class="gift-desc">记录她的温柔与坚韧</view></view
+        ><image
+          class="icon small"
+          src="/assets/icons/chevron-right.svg" /></button
+      ><button class="gift-option" data-recipient="爸爸" bindtap="choose"
+        ><view class="gift-flower"
+          ><image class="icon" src="/assets/icons/sprout.svg" /></view
+        ><view class="grow"
+          ><view class="gift-title">送给爸爸</view
+          ><view class="gift-desc">记录他的担当与爱</view></view
+        ><image
+          class="icon small"
+          src="/assets/icons/chevron-right.svg" /></button></view
+    ><view class="home-benefits"
+      ><view
+        ><image class="icon" src="/assets/icons/mic.svg" /><view
+          >只需要说<text class="line-break">{{'\n'}}</text>不需要写</view
+        ><text>像聊天一样轻松</text></view
+      ><view
+        ><image class="icon" src="/assets/icons/image.svg" /><view
+          >照片与声音<text class="line-break">{{'\n'}}</text>一起珍藏</view
+        ><text>让回忆更完整</text></view
+      ><view
+        ><image class="icon" src="/assets/icons/book-open.svg" /><view
+          >把一生故事<text class="line-break">{{'\n'}}</text>变成一本书</view
+        ><text>留给最爱的人</text></view
+      ></view
+    ><button class="home-price" data-recipient="妈妈" bindtap="choose"
+      ><image src="/assets/book.jpg" mode="aspectFill" /><view class="grow"
+        ><view
+          ><text class="price">999</text><text class="price-unit">元</text
+          ><text class="price-line">含1本实体书</text></view
+        ><view class="note">一个人生项目，一份长久的礼物</view></view
+      ><image
+        class="icon small"
+        src="/assets/icons/chevron-right.svg" /></button
+    ><view class="home-signature serif">有些爱，值得被认真记录。</view
+    ><button class="link" bindtap="experience"
+      >先看看，一本故事书的模样
+      <image class="icon small" src="/assets/icons/arrow-right.svg" /></button
+    ><button class="privacy-link" bindtap="privacy"
+      >私密记录 · 故事由本人确认 · 原声可保留</button
+    ></view
+  ></view
+>

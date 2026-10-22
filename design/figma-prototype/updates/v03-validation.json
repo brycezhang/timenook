@@ -1,0 +1,32 @@
+{
+  "screens": 46,
+  "interactions": 125,
+  "flows": 8,
+  "unresolvedTargets": 0,
+  "evidence": "Figma native plugin completion UI",
+  "visualChecks": [
+    "purchase",
+    "setup",
+    "recording",
+    "story confirmation",
+    "book overview",
+    "print confirmation"
+  ],
+  "liveClickChecks": {
+    "status": "passed_core_paths",
+    "date": "2026-10-14",
+    "environment": "Figma desktop native prototype player",
+    "purchase": "P01 → P02 → P03 → P04 → P05 → P06 → P07",
+    "parentNarration": "N01 → E05 → N02 → N03 → N04 → N05 → N06 → S01 (automatic transition)",
+    "storyConfirmation": "S01 → S02; S01 → S03 after helper contrast correction",
+    "bookPreview": "B01 → B02 → B03; scrolled through page 12 → B10 → B05",
+    "printGate": "B02 → B04; disabled submit stays on B04; proofreading checkbox → B10",
+    "scrolling": "Story and full book scroll independently while primary footer actions remain visible",
+    "coverageLimit": "Core paths verified, not every one of the 125 interactions; payment, recording, sharing and form input remain simulated"
+  },
+  "contrast": {
+    "ink_on_paper": 16.99,
+    "ink_on_accent": 15.0,
+    "muted_on_paper": 5.27
+  }
+}

@@ -1,0 +1,161 @@
+.home-hero {
+  position: relative;
+  height: 855rpx;
+  overflow: hidden;
+}
+.hero-photo {
+  width: 100%;
+  height: 1000rpx;
+  object-fit: cover;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.hero-copy {
+  position: absolute;
+  left: 42rpx;
+  top: 28rpx;
+  right: 24rpx;
+}
+.hero-copy .title {
+  font-size: 54rpx;
+  letter-spacing: 0;
+  line-height: 1.38;
+}
+.hero-sub {
+  font-size: 26rpx;
+  letter-spacing: 3rpx;
+  margin-top: 18rpx;
+  color: #76523b;
+}
+.hero-label {
+  position: absolute;
+  right: 24rpx;
+  bottom: 42rpx;
+  background: rgba(255, 252, 247, 0.7);
+  padding: 3rpx 12rpx;
+  font-size: 20rpx;
+  color: #75604d;
+  border-radius: 8rpx;
+}
+.home-content {
+  position: relative;
+  padding: 18rpx 28rpx 34rpx;
+  margin-top: -32rpx;
+  background: var(--paper);
+  border-radius: 34rpx 34rpx 0 0;
+}
+.gift-options {
+  display: flex;
+  gap: 14rpx;
+}
+.gift-option {
+  display: flex;
+  gap: 12rpx;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: var(--sand);
+  border-radius: 22rpx;
+  padding: 22rpx 14rpx;
+  min-height: 136rpx;
+}
+.gift-flower .icon {
+  width: 46rpx;
+  height: 62rpx;
+}
+.gift-title {
+  font-size: 31rpx;
+  color: var(--brown-dark);
+  font-weight: 500;
+}
+.gift-desc {
+  font-size: 20rpx;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.home-benefits {
+  display: flex;
+  margin: 28rpx 0;
+  justify-content: space-around;
+  text-align: center;
+}
+.home-benefits > view {
+  width: 33.33%;
+  font-size: 27rpx;
+  line-height: 1.4;
+  border-right: 1rpx solid var(--line);
+}
+.home-benefits > view:last-child {
+  border: 0;
+}
+.home-benefits .icon {
+  width: 44rpx;
+  height: 44rpx;
+  padding: 0;
+  margin: 0 auto 12rpx;
+}
+.home-benefits text {
+  display: block;
+  font-size: 21rpx;
+  color: var(--muted);
+  margin-top: 8rpx;
+}
+.home-price {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  width: 100%;
+  padding: 0 18rpx 0 0;
+  border-radius: 22rpx;
+  overflow: hidden;
+  background: #efe2d3;
+  text-align: left;
+  min-height: 144rpx;
+}
+.home-price > image {
+  width: 150rpx;
+  height: 150rpx;
+  object-fit: cover;
+}
+.home-price .price {
+  font-size: 52rpx;
+}
+.price-line {
+  font-size: 26rpx;
+  border-left: 1rpx solid #b69c86;
+  margin-left: 12rpx;
+  padding-left: 12rpx;
+}
+.home-price .note {
+  font-size: 21rpx;
+}
+.home-signature {
+  text-align: center;
+  font-size: 32rpx;
+  color: var(--brown);
+  margin-top: 30rpx;
+}
+.home .link {
+  font-size: 25rpx;
+}
+.privacy-link {
+  font-size: 20rpx;
+  color: var(--muted);
+  text-align: center;
+  padding: 6rpx 0 12rpx;
+}
+.home-return {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  width: 100%;
+  min-height: 72rpx;
+  margin-bottom: 24rpx;
+  color: var(--brown);
+  background: #eee6d8;
+  border-radius: 16rpx;
+  font-size: 27rpx;
+}

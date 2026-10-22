@@ -1,0 +1,335 @@
+{
+  "screens": 92,
+  "uniqueStates": 47,
+  "interactions": 253,
+  "unresolvedTargets": 0,
+  "crossedFatherTargets": 0,
+  "invalid": [],
+  "crossed": [],
+  "version": "V0.5",
+  "date": "2026-10-17",
+  "flows": 9,
+  "evidence": "Current native Figma snapshot export and desktop prototype player",
+  "visualChecks": [
+    "purchase home",
+    "package agreement visible",
+    "project ready",
+    "parent invitation",
+    "book overview",
+    "print summary",
+    "father title and invitation"
+  ],
+  "liveClickChecks": {
+    "date": "2026-10-17",
+    "environment": "Figma desktop native prototype player",
+    "status": "passed_changed_core_paths",
+    "motherPurchase": "P01 → P02 → P03 → P08 → P03 → B01",
+    "fatherPurchase": "P01 → father P02 → father P03 → father P04 → father N01 → father E05",
+    "bookOverview": "B01 → B02; directory/interior scroll with fixed footer",
+    "printGate": "B02 → B04; disabled submit stays on B04; checkbox → B10; scroll address → B05",
+    "coverageLimit": "Changed paths verified, not all 253 interactions. Payment, recording, input and fulfillment simulated."
+  },
+  "previousCoreChecks": {
+    "status": "passed_core_paths",
+    "date": "2026-10-14",
+    "environment": "Figma desktop native prototype player",
+    "purchase": "P01 → P02 → P03 → P04 → P05 → P06 → P07",
+    "parentNarration": "N01 → E05 → N02 → N03 → N04 → N05 → N06 → S01 (automatic transition)",
+    "storyConfirmation": "S01 → S02; S01 → S03 after helper contrast correction",
+    "bookPreview": "B01 → B02 → B03; scrolled through page 12 → B10 → B05",
+    "printGate": "B02 → B04; disabled submit stays on B04; proofreading checkbox → B10",
+    "scrolling": "Story and full book scroll independently while primary footer actions remain visible",
+    "coverageLimit": "Core paths verified, not every one of the 125 interactions; payment, recording, sharing and form input remain simulated"
+  },
+  "contrast": {
+    "ink_on_paper": 16.99,
+    "ink_on_accent": 15.0,
+    "muted_on_paper": 5.27
+  },
+  "copyReview": {
+    "date": "2026-10-17",
+    "changedStateTypes": 33,
+    "originalTextEdits": 170,
+    "fatherVariantsUpdated": true,
+    "sourceStoryTextPreserved": true,
+    "metrics": [
+      {
+        "id": "3:257",
+        "key": "N01",
+        "before": 150,
+        "after": 95,
+        "bodyHeight": 468,
+        "viewportHeight": 584
+      },
+      {
+        "id": "3:258",
+        "key": "N02",
+        "before": 100,
+        "after": 35,
+        "bodyHeight": 360,
+        "viewportHeight": 652
+      },
+      {
+        "id": "3:259",
+        "key": "N03",
+        "before": 96,
+        "after": 34,
+        "bodyHeight": 360,
+        "viewportHeight": 652
+      },
+      {
+        "id": "3:260",
+        "key": "N04",
+        "before": 50,
+        "after": 32,
+        "bodyHeight": 508,
+        "viewportHeight": 712
+      },
+      {
+        "id": "3:261",
+        "key": "N05",
+        "before": 99,
+        "after": 52,
+        "bodyHeight": 312,
+        "viewportHeight": 584
+      },
+      {
+        "id": "3:262",
+        "key": "N06",
+        "before": 82,
+        "after": 23,
+        "bodyHeight": 136,
+        "viewportHeight": 652
+      },
+      {
+        "id": "3:263",
+        "key": "S01",
+        "before": 182,
+        "after": 133,
+        "bodyHeight": 680,
+        "viewportHeight": 584
+      },
+      {
+        "id": "3:264",
+        "key": "S02",
+        "before": 82,
+        "after": 41,
+        "bodyHeight": 280,
+        "viewportHeight": 584
+      },
+      {
+        "id": "3:265",
+        "key": "S03",
+        "before": 99,
+        "after": 33,
+        "bodyHeight": 224,
+        "viewportHeight": 652
+      },
+      {
+        "id": "3:273",
+        "key": "E01",
+        "before": 87,
+        "after": 44,
+        "bodyHeight": 264,
+        "viewportHeight": 584
+      },
+      {
+        "id": "3:274",
+        "key": "E02",
+        "before": 83,
+        "after": 39,
+        "bodyHeight": 248,
+        "viewportHeight": 584
+      },
+      {
+        "id": "3:275",
+        "key": "E03",
+        "before": 81,
+        "after": 41,
+        "bodyHeight": 444,
+        "viewportHeight": 584
+      },
+      {
+        "id": "3:276",
+        "key": "E04",
+        "before": 87,
+        "after": 55,
+        "bodyHeight": 324,
+        "viewportHeight": 584
+      },
+      {
+        "id": "3:277",
+        "key": "E05",
+        "before": 90,
+        "after": 43,
+        "bodyHeight": 256,
+        "viewportHeight": 584
+      },
+      {
+        "id": "3:278",
+        "key": "E06",
+        "before": 109,
+        "after": 68,
+        "bodyHeight": 440,
+        "viewportHeight": 584
+      },
+      {
+        "id": "8:421",
+        "key": "E07",
+        "before": 69,
+        "after": 32,
+        "bodyHeight": 172,
+        "viewportHeight": 584
+      },
+      {
+        "id": "8:422",
+        "key": "E08",
+        "before": 73,
+        "after": 32,
+        "bodyHeight": 224,
+        "viewportHeight": 584
+      },
+      {
+        "id": "8:423",
+        "key": "N07",
+        "before": 84,
+        "after": 31,
+        "bodyHeight": 336,
+        "viewportHeight": 652
+      },
+      {
+        "id": "8:424",
+        "key": "S06",
+        "before": 55,
+        "after": 31,
+        "bodyHeight": 176,
+        "viewportHeight": 652
+      },
+      {
+        "id": "9:651",
+        "key": "E10",
+        "before": 65,
+        "after": 31,
+        "bodyHeight": 454,
+        "viewportHeight": 712
+      },
+      {
+        "id": "9:652",
+        "key": "E11",
+        "before": 68,
+        "after": 43,
+        "bodyHeight": 252,
+        "viewportHeight": 584
+      },
+      {
+        "id": "9:653",
+        "key": "E12",
+        "before": 69,
+        "after": 37,
+        "bodyHeight": 176,
+        "viewportHeight": 652
+      },
+      {
+        "id": "9:654",
+        "key": "E13",
+        "before": 61,
+        "after": 35,
+        "bodyHeight": 344,
+        "viewportHeight": 652
+      },
+      {
+        "id": "9:657",
+        "key": "E09",
+        "before": 49,
+        "after": 28,
+        "bodyHeight": 132,
+        "viewportHeight": 652
+      },
+      {
+        "id": "9:658",
+        "key": "N08",
+        "before": 65,
+        "after": 31,
+        "bodyHeight": 208,
+        "viewportHeight": 584
+      },
+      {
+        "id": "9:659",
+        "key": "S07",
+        "before": 164,
+        "after": 145,
+        "bodyHeight": 688,
+        "viewportHeight": 584
+      },
+      {
+        "id": "4:1146",
+        "key": "S08",
+        "before": 83,
+        "after": 43,
+        "bodyHeight": 280,
+        "viewportHeight": 584
+      },
+      {
+        "id": "3:255",
+        "key": "P03",
+        "before": 102,
+        "after": 72,
+        "bodyHeight": 442,
+        "viewportHeight": 652
+      },
+      {
+        "id": "3:256",
+        "key": "P04",
+        "before": 109,
+        "after": 72,
+        "bodyHeight": 504.76190185546875,
+        "viewportHeight": 584
+      },
+      {
+        "id": "3:269",
+        "key": "B02",
+        "before": 210,
+        "after": 172,
+        "bodyHeight": 798.7714233398438,
+        "viewportHeight": 584
+      },
+      {
+        "id": "3:271",
+        "key": "B04",
+        "before": 164,
+        "after": 141,
+        "bodyHeight": 900,
+        "viewportHeight": 652
+      },
+      {
+        "id": "4:957",
+        "key": "B10",
+        "before": 164,
+        "after": 141,
+        "bodyHeight": 900,
+        "viewportHeight": 652
+      },
+      {
+        "id": "58:860",
+        "key": "P08",
+        "before": 87,
+        "after": 60,
+        "bodyHeight": 528,
+        "viewportHeight": 652
+      }
+    ],
+    "screenshots": [
+      "N01",
+      "N02",
+      "N03",
+      "N05",
+      "S01",
+      "S02",
+      "E05",
+      "E06",
+      "father-N01"
+    ],
+    "validation": "253 interaction targets still resolve; 0 cross-family targets",
+    "liveClickCheck": "N01 → E05 → N02 → N03 → N04 → N05 → N06 → S01 → S02; story scroll with fixed confirmation button"
+  }
+}

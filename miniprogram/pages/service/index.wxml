@@ -1,0 +1,87 @@
+<view class="page"
+  ><block wx:if="{{kind==='privacy'||kind==='terms'}}"
+    ><view class="title">你的故事，由你决定</view
+    ><view class="legal-section"
+      ><view class="section-title">关于这份礼物</view
+      ><text
+        >一个项目记录一位父母的人生，999元包含一本实体书。父母参与讲述，子女协助校对，故事经本人允许才入书。</text
+      ></view
+    ><view class="legal-section"
+      ><view class="section-title">资料与共享范围</view
+      ><text
+        >正式服务中，讲述、照片与故事仅供本人及获授权的购买子女查看。付款不代替讲述者授权，你可以选择不入书、停止参与或申请删除资料。</text
+      ></view
+    ><view class="legal-section"
+      ><view class="section-title">当前前端演示版</view
+      ><text
+        >录音、文字和照片仅保存在本机，不会上传云端。本版未接入微信登录、真实支付、AI整理与印刷生产。清理设备或浏览器数据可能删除本机资料，请先导出需要保留的内容。</text
+      ></view
+    ><view class="legal-section"
+      ><view class="section-title">原声与整理稿</view
+      ><text
+        >真实原声独立保留。示例故事明确标注，不代表录音内容；修改故事或照片后，需要重新确认。</text
+      ></view
+    ></block
+  ><block wx:if="{{kind==='support'}}"
+    ><view class="title">慢慢来，我们陪着你</view
+    ><view class="legal-section"
+      ><view class="section-title">一定要一口气讲完吗？</view
+      ><text>不用。每次说一小段，可以随时停下来，之后再继续。</text></view
+    ><view class="legal-section"
+      ><view class="section-title">录音后会自动写好故事吗？</view
+      ><text
+        >当前演示版只保存本机录音。AI整理尚未接入，你可以查看示例，体验故事确认与成书流程。</text
+      ></view
+    ><view class="legal-section"
+      ><view class="section-title">实体书需要再付钱吗？</view
+      ><text
+        >首本实体书包含在999元套餐内。本前端版不产生真实付款或印刷订单。</text
+      ></view
+    ><view class="soft note section"
+      >客服服务尚未接入。实际开放服务前，会在这里提供可用的客服入口与服务时间。</view
+    ></block
+  ><block wx:if="{{kind==='export'}}"
+    ><view class="title">珍贵的记忆，也交给你</view
+    ><view class="subtitle">将故事文字与本机资料索引导出保存。</view
+    ><view class="paper section"
+      ><view class="stack"
+        ><view class="row"
+          ><image class="icon" src="/assets/icons/file-text.svg" />
+          故事全文与版本信息</view
+        ><view class="row"
+          ><image class="icon" src="/assets/icons/clipboard-check.svg" />
+          本人确认与书稿状态</view
+        ><view class="row"
+          ><image class="icon" src="/assets/icons/headphones.svg" />
+          原声与照片的本机索引</view
+        ></view
+      ></view
+    ><view class="note section"
+      >此处导出JSON文件。音频请在“本机原声”逐段导出；照片索引不是照片文件。完整云端资料包与PDF尚未接入。</view
+    ><button class="btn section" bindtap="export"
+      ><image class="icon" src="/assets/icons/download-light.svg" />
+      导出故事资料</button
+    ></block
+  ><block wx:if="{{kind==='recordings'}}"
+    ><view class="title">熟悉的声音，留在这里</view
+    ><view class="subtitle">{{recordings.length}}段本机原声 · 尚未上传云端</view
+    ><view wx:if="{{!recordings.length}}" class="empty"
+      ><image class="icon" src="/assets/icons/mic.svg" /><view
+        >还没有录下第一段声音</view
+      ><button class="btn section" bindtap="record">开始讲述</button></view
+    ><view wx:for="{{recordings}}" wx:key="id" class="paper section"
+      ><view class="section-title">{{item.question}}</view
+      ><view class="small muted"
+        >录音时长 {{item.duration/1000}} 秒 · 已保存本机</view
+      ><view class="row section"
+        ><button class="btn compact" data-id="{{item.id}}" bindtap="play"
+          >{{playing===item.id?'暂停原声':'播放原声'}}</button
+        ><button class="link" data-id="{{item.id}}" bindtap="exportAudio"
+          >导出音频</button
+        ></view
+      ><view wx:if="{{playing===item.id}}" class="small muted"
+        >已播放 {{progress}} 秒 / {{duration}} 秒</view
+      ></view
+    ></block
+  ></view
+>

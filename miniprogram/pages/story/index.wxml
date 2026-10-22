@@ -1,0 +1,52 @@
+<view class="page story-page with-dock"
+  ><view class="eyebrow">{{s.chapter}}</view
+  ><view class="title story-title">{{s.title}}</view
+  ><view class="row story-meta"
+    ><text class="pill {{s.confirmedVersion===s.version?'':'pending'}}"
+      >{{s.confirmedVersion===s.version?'已确认入书':'等待你确认'}}</text
+    ><text class="small muted"
+      >第{{s.version}}版 · {{s.sample?'示例整理稿':'请您核对'}}</text
+    ></view
+  ><button class="audio-row" bindtap="play"
+    ><view class="badge-icon"
+      ><image class="icon" src="/assets/icons/volume-2.svg" /></view
+    ><view class="grow"
+      ><view>{{playing?'暂停原声':'听听这段原声'}}</view
+      ><view class="small muted"
+        >{{s.recordings.length?s.recordings.length+'段原始录音':'示例暂无原声'}}</view
+      ></view
+    ><image class="icon" src="/assets/icons/play.svg" /></button
+  ><view class="story-body"
+    ><text wx:for="{{paragraphs}}" wx:key="index" class="paragraph"
+      >{{item}}</text
+    ></view
+  ><view class="photos"
+    ><image
+      wx:for="{{s.photos}}"
+      wx:key="*this"
+      src="{{item}}"
+      mode="aspectFill" /></view
+  ><button class="add-photo" bindtap="photos"
+    ><image class="icon" src="/assets/icons/image.svg" />
+    添一张照片，让回忆更完整</button
+  ><view wx:if="{{s.sample}}" class="demo-note"
+    >示例故事用于体验，不对应您刚才的录音</view
+  ><view class="story-actions"
+    ><button class="link" bindtap="supplement"
+      ><image class="icon small" src="/assets/icons/mic.svg" />
+      再补充几句</button
+    ><button class="link" bindtap="edit"
+      ><image class="icon small" src="/assets/icons/pencil.svg" />
+      修改文字</button
+    ></view
+  ><button class="link" bindtap="exclude"
+    >{{s.included?'这篇暂不入书':'将这篇放入书中'}}</button
+  ></view
+><view class="dock"
+  ><button
+    class="btn"
+    disabled="{{s.confirmedVersion===s.version && s.included}}"
+    bindtap="confirm"
+    >{{s.confirmedVersion===s.version&&s.included?'已确认，允许入书':'没问题，同意入书'}}</button
+  ><view class="dock-note">修改文字或照片后，需要重新确认</view></view
+>

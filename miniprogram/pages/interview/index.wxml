@@ -1,0 +1,56 @@
+<view class="interview-page"
+  ><view
+    wx:if="{{state==='idle' || state==='recording' || state==='requesting' || state==='saving' || state==='error'}}"
+    ><image
+      wx:if="{{photo}}"
+      class="question-photo"
+      src="{{photo}}"
+      mode="aspectFill"
+    /><view class="interview-question">{{question}}</view
+    ><view class="interview-hint"
+      >{{state==='recording'?'正在录音 · 尚未保存':state==='saving'?'正在保存，请先别退出':state==='requesting'?'正在打开麦克风':'点一下开始，说完再点一下。'}}</view
+    ><view class="record-control"
+      ><view wx:if="{{state==='recording'}}" class="record-timer"
+        >{{timer}}</view
+      ><button
+        class="record-button {{state==='recording'?'recording':''}}"
+        disabled="{{state==='requesting'||state==='saving'}}"
+        aria-label="{{state==='recording'?'结束录音':'开始说'}}"
+        bindtap="record"
+        ><image
+          class="record-icon"
+          src="/assets/icons/{{state==='recording'?'square-light':'mic-light'}}.svg" /></button
+      ><view class="record-label"
+        >{{state==='recording'?'说完了，点一下':state==='saving'?'正在保存':state==='requesting'?'请稍候':'开始说'}}</view
+      ><view wx:if="{{state==='recording'}}" class="wave"
+        ><view /><view /><view /><view /><view /><view /><view /><view /><view /></view></view
+    ><view wx:if="{{error}}" class="record-error"
+      ><view class="error">{{error}}</view
+      ><button class="btn secondary" bindtap="retry">重试</button
+      ><button wx:if="{{permission}}" class="link" bindtap="settings"
+        >打开麦克风设置</button
+      ></view
+    ></view
+  ><view wx:if="{{state==='saved'}}" class="saved-state"
+    ><view class="success-icon"
+      ><image class="icon" src="/assets/icons/check-light.svg" /></view
+    ><view class="interview-question center">这段声音，留下来了。</view
+    ><view class="interview-hint center">已保存到本机，尚未上传云端</view
+    ><view class="soft section"
+      ><view class="small muted">还想听你说说</view
+      ><view class="interview-followup"
+        >那时候，家里最热闹的<text class="line-break">{{'\n'}}</text>是什么时候？</view
+      ><button class="btn secondary" bindtap="continue"
+        >再说一小段</button
+      ></view
+    ><view class="demo-note"
+      >AI整理尚未接入。可先查看示例故事，<text class="line-break">{{'\n'}}</text>示例文字不代表本次录音内容。</view
+    ><button class="btn" bindtap="example">看看整理后的故事示例</button
+    ><button class="link" bindtap="finish">今天先到这里</button></view
+  ></view
+><view wx:if="{{state==='idle'}}" class="interview-footer"
+  ><button class="btn quiet" bindtap="change"
+    ><image class="icon small" src="/assets/icons/rotate-ccw.svg" />
+    换一个问题</button
+  ></view
+>

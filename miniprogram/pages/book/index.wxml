@@ -1,0 +1,79 @@
+<view class="book-page with-tabs"
+  ><view class="book-heading center"
+    ><view class="title">让故事，成为一本书</view
+    ><view class="subtitle">把平凡的日子，装订成岁月的礼物</view></view
+  ><view class="book-display"
+    ><image src="{{bookImage}}" mode="aspectFill" /><text class="book-label"
+      >实体书效果示意</text
+    ></view
+  ><view class="book-content"
+    ><view class="section-head"
+      ><view
+        ><view class="serif section-title">{{p.title}}</view
+        ><view class="small muted">一套经典书封，属于你的故事</view></view
+      ><button class="link" bindtap="settings"
+        >改书名
+        <image
+          class="icon small"
+          src="/assets/icons/chevron-right.svg" /></button></view
+    ><view class="divider" /><view class="section-head"
+      ><view class="section-title">章节目录</view
+      ><text class="small muted">{{stories.length}}篇故事入书</text></view
+    ><button
+      wx:for="{{stories}}"
+      wx:key="id"
+      class="chapter-row"
+      data-id="{{item.id}}"
+      bindtap="story"
+      ><view class="chapter-num serif">0{{index+1}}</view
+      ><view class="grow"
+        ><view class="chapter-title">{{item.chapter}}</view
+        ><view class="small muted">{{item.title}}</view></view
+      ><image
+        class="icon small"
+        src="/assets/icons/chevron-right.svg" /></button
+    ><view wx:if="{{!stories.length}}" class="empty"
+      ><view>书的第一页，等你来讲。</view
+      ><button class="link" bindtap="record"
+        >从一段往事开始
+        <image
+          class="icon small"
+          src="/assets/icons/arrow-right.svg" /></button></view
+    ><view wx:if="{{stories.length}}" class="section"
+      ><view class="book-features"
+        ><view
+          ><image class="icon" src="/assets/icons/image.svg" /><view
+            >照片入书</view
+          ><text>留住珍贵瞬间</text></view
+        ><view
+          ><image class="icon" src="/assets/icons/headphones.svg" /><view
+            >原声相伴</view
+          ><text>每篇故事都可回听</text></view
+        ></view
+      ><view wx:if="{{pending}}" class="note pending-note"
+        >还有{{pending}}篇故事待本人确认。确认后，才能制作实体书。</view
+      ><view class="stack section"
+        ><button class="btn" bindtap="manuscript"
+          >查看完整书稿
+          <image class="icon" src="/assets/icons/book-open-light.svg" /></button
+        ><button class="btn secondary" bindtap="print"
+          >确认印刷与寄送</button
+        ></view
+      ><view class="demo-note">当前为前端书稿预览，尚未生成印刷PDF</view></view
+    ></view
+  ></view
+><view class="tabs"
+  ><button class="tab" bindtap="project"
+    ><image class="icon" src="/assets/icons/book-open.svg" /><text class="tab-label"
+      >{{p.title}}</text
+    ></button
+  ><button class="tab active" bindtap="book"
+    ><image class="icon" src="/assets/icons/file-text.svg" /><text
+      >成书</text
+    ></button
+  ><button class="tab" bindtap="account"
+    ><image class="icon" src="/assets/icons/user.svg" /><text
+      >我的</text
+    ></button
+  ></view
+>

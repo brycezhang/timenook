@@ -1,0 +1,13 @@
+.invitation-card {
+  padding: 36rpx;
+  background: #eee6d8;
+  border: 1rpx solid #ded2c1;
+  border-radius: 14rpx;
+  box-shadow: 0 16rpx 30rpx #65523d0d;
+}
+.invitation-sign {
+  text-align: right;
+  margin-top: 34rpx;
+  font-family: "Songti SC", serif;
+  color: var(--brown);
+}

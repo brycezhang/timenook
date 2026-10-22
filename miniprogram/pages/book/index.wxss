@@ -1,0 +1,75 @@
+.book-heading {
+  padding: 30rpx 20rpx 28rpx;
+}
+.book-heading .title {
+  font-size: 48rpx;
+}
+.book-display {
+  position: relative;
+  height: 660rpx;
+}
+.book-display > image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.book-label {
+  position: absolute;
+  right: 22rpx;
+  bottom: 20rpx;
+  font-size: 20rpx;
+  background: #f8f4edcc;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+  color: #817467;
+}
+.book-content {
+  position: relative;
+  margin-top: -14rpx;
+  border-radius: 26rpx 26rpx 0 0;
+  background: var(--paper);
+  padding: 30rpx 34rpx 42rpx;
+}
+.chapter-row {
+  display: flex;
+  align-items: center;
+  text-align: left;
+  gap: 22rpx;
+  width: 100%;
+  padding: 22rpx;
+  background: #f0ebe3;
+  border-radius: 14rpx;
+  margin-bottom: 12rpx;
+}
+.chapter-num {
+  font-size: 40rpx;
+  color: #aa967d;
+}
+.chapter-title {
+  font-size: 30rpx;
+}
+.book-features {
+  display: flex;
+  gap: 20rpx;
+}
+.book-features > view {
+  flex: 1;
+  border: 1rpx solid var(--line);
+  padding: 24rpx;
+  background: var(--surface);
+  border-radius: 16rpx;
+  font-size: 29rpx;
+}
+.book-features .icon {
+  margin-bottom: 14rpx;
+}
+.book-features text {
+  font-size: 24rpx;
+  color: var(--muted);
+}
+.pending-note {
+  padding: 22rpx;
+  background: #f4e7d7;
+  border-radius: 12rpx;
+  margin-top: 26rpx;
+}

@@ -1,0 +1,21 @@
+.order-step {
+  position: relative;
+  display: flex;
+  gap: 24rpx;
+  padding: 22rpx 0;
+  color: #9c9487;
+}
+.order-step .step-dot {
+  width: 20rpx;
+  height: 20rpx;
+  margin-top: 14rpx;
+  background: #ded8cc;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.order-step.active {
+  color: var(--olive);
+}
+.order-step.active .step-dot {
+  background: var(--olive);
+}

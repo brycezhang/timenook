@@ -1,0 +1,12 @@
+page {
+  --paper: #f8f4ed;
+  --surface: #fffcf7;
+  --sand: #f1e9de;
+  --line: #e8ded0;
+  --ink: #352d25;
+  --muted: #817467;
+  --brown: #986349;
+  --brown-dark: #593b2c;
+  --terracotta: #a7664e;
+  --olive: #566348;
+}

@@ -1,0 +1,5 @@
+.edit-body {
+  min-height: 800rpx;
+  font-size: 36rpx;
+  line-height: 1.9;
+}

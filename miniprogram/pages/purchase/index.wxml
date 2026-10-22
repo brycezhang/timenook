@@ -1,0 +1,62 @@
+<view class="page with-dock"
+  ><view class="title">这本书，你想送给谁？</view
+  ><view class="subtitle">让爱有迹可循，让时光有处安放。</view
+  ><view class="recipients section"
+    ><button
+      class="recipient {{recipient === '妈妈' ? 'selected' : ''}}"
+      data-recipient="妈妈"
+      bindtap="choose"
+      ><image class="icon" src="/assets/icons/flower-2.svg" /><text
+        >送给妈妈</text
+      ><text class="small muted">她的温柔，值得被记住</text></button
+    ><button
+      class="recipient {{recipient === '爸爸' ? 'selected' : ''}}"
+      data-recipient="爸爸"
+      bindtap="choose"
+      ><image class="icon" src="/assets/icons/sprout.svg" /><text>送给爸爸</text
+      ><text class="small muted">他的故事，想慢慢听</text></button
+    ></view
+  ><view class="paper section"
+    ><view class="row"
+      ><image
+        class="purchase-book"
+        src="{{bookImage}}"
+        mode="aspectFill"
+      /><view class="grow"
+        ><view class="serif section-title">{{recipient}}的一生</view
+        ><view class="subtitle">爱与岁月的故事</view
+        ><view class="pill" style="margin-top: 20rpx"
+          >一次购买 · 长久珍藏</view
+        ></view
+      ></view
+    ><view class="divider" /><view class="stack"
+      ><view class="row"
+        ><image class="icon" src="/assets/icons/mic.svg" /><text
+          >语音讲述，整理人生故事</text
+        ></view
+      ><view class="row"
+        ><image class="icon" src="/assets/icons/image.svg" /><text
+          >照片与原声，一起留下</text
+        ></view
+      ><view class="row"
+        ><image class="icon" src="/assets/icons/book-open.svg" /><text
+          >专属故事书，含1本实体书</text
+        ></view
+      ></view
+    ></view
+  ><view class="soft section note"
+    >这份礼物需要{{recipient}}参与讲述。每次说一小段，慢慢完成；故事经本人确认后再入书。</view
+  ><button class="check-row" bindtap="agree"
+    ><view class="check-box {{agreed?'on':''}}"
+      ><image class="icon" src="/assets/icons/check-light.svg" /></view
+    ><text>我已了解服务内容，并同意服务与隐私说明</text></button
+  ><button class="link" bindtap="privacy">查看服务与隐私说明</button
+  ><view class="demo-note">前端演示 · 不会产生真实扣款</view></view
+><view class="dock row"
+  ><view class="grow"
+    ><text class="price">¥999</text
+    ><view class="small muted">含1本实体书</view></view
+  ><button class="btn brown pay-btn" disabled="{{!agreed}}" bindtap="pay"
+    >体验购买流程
+    <image class="icon" src="/assets/icons/arrow-right-light.svg" /></button
+></view>

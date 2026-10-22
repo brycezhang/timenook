@@ -1,0 +1,49 @@
+{
+  "screens": 92,
+  "uniqueStates": 47,
+  "interactions": 253,
+  "unresolvedTargets": 0,
+  "crossedFatherTargets": 0,
+  "invalid": [],
+  "crossed": [],
+  "version": "V0.4",
+  "date": "2026-10-17",
+  "flows": 9,
+  "evidence": "Current native Figma snapshot export and desktop prototype player",
+  "visualChecks": [
+    "purchase home",
+    "package agreement visible",
+    "project ready",
+    "parent invitation",
+    "book overview",
+    "print summary",
+    "father title and invitation"
+  ],
+  "liveClickChecks": {
+    "date": "2026-10-17",
+    "environment": "Figma desktop native prototype player",
+    "status": "passed_changed_core_paths",
+    "motherPurchase": "P01 → P02 → P03 → P08 → P03 → B01",
+    "fatherPurchase": "P01 → father P02 → father P03 → father P04 → father N01 → father E05",
+    "bookOverview": "B01 → B02; directory/interior scroll with fixed footer",
+    "printGate": "B02 → B04; disabled submit stays on B04; checkbox → B10; scroll address → B05",
+    "coverageLimit": "Changed paths verified, not all 253 interactions. Payment, recording, input and fulfillment simulated."
+  },
+  "previousCoreChecks": {
+    "status": "passed_core_paths",
+    "date": "2026-10-14",
+    "environment": "Figma desktop native prototype player",
+    "purchase": "P01 → P02 → P03 → P04 → P05 → P06 → P07",
+    "parentNarration": "N01 → E05 → N02 → N03 → N04 → N05 → N06 → S01 (automatic transition)",
+    "storyConfirmation": "S01 → S02; S01 → S03 after helper contrast correction",
+    "bookPreview": "B01 → B02 → B03; scrolled through page 12 → B10 → B05",
+    "printGate": "B02 → B04; disabled submit stays on B04; proofreading checkbox → B10",
+    "scrolling": "Story and full book scroll independently while primary footer actions remain visible",
+    "coverageLimit": "Core paths verified, not every one of the 125 interactions; payment, recording, sharing and form input remain simulated"
+  },
+  "contrast": {
+    "ink_on_paper": 16.99,
+    "ink_on_accent": 15.0,
+    "muted_on_paper": 5.27
+  }
+}

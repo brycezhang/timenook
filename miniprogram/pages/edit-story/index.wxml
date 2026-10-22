@@ -1,0 +1,24 @@
+<view class="page with-dock"
+  ><view class="note"
+    >保留讲述者的本意。保存修改后，这篇故事需要本人重新确认。</view
+  ><view class="field"
+    ><text class="label">故事标题</text
+    ><input
+      value="{{title}}"
+      data-field="title"
+      bindinput="input"
+      maxlength="40" /></view
+  ><view class="field"
+    ><text class="label">故事正文</text
+    ><textarea
+      class="edit-body"
+      value="{{body}}"
+      data-field="body"
+      bindinput="input"
+      maxlength="10000"
+      auto-height="{{true}}"
+    /></view
+  ><view class="error">{{error}}</view></view
+><view class="dock"
+  ><button class="btn" bindtap="save">保存修改，重新确认</button></view
+>

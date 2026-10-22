@@ -1,0 +1,78 @@
+.project-head {
+  display: flex;
+  gap: 22rpx;
+  align-items: center;
+}
+.project-head .title {
+  font-size: 50rpx;
+  margin-top: 16rpx;
+}
+.project-head .eyebrow {
+  font-size: 21rpx;
+  letter-spacing: 2rpx;
+}
+.project-book {
+  width: 172rpx;
+  height: 208rpx;
+  border-radius: 12rpx;
+  box-shadow: 0 8rpx 18rpx #64503f18;
+}
+.project-progress {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 23rpx;
+  color: #9c9486;
+  margin-top: 32rpx;
+}
+.project-progress .active {
+  color: var(--olive);
+  font-weight: 600;
+}
+.project-progress .line {
+  flex: 1;
+  height: 1rpx;
+  background: #d9d6c9;
+}
+.next-story {
+  background: #eeefe5;
+  border-radius: 26rpx;
+  padding: 30rpx;
+}
+.prompt {
+  font-size: 46rpx;
+  line-height: 1.5;
+  color: var(--brown-dark);
+  margin: 24rpx 0 32rpx;
+}
+.filters {
+  display: flex;
+  gap: 32rpx;
+  border-bottom: 1rpx solid var(--line);
+}
+.filter {
+  font-size: 27rpx;
+  color: var(--muted);
+  padding: 0 0 16rpx;
+}
+.filter.selected {
+  color: var(--brown);
+  border-bottom: 3rpx solid var(--brown);
+}
+.story-row {
+  display: flex;
+  gap: 18rpx;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 28rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+.story-number {
+  font-size: 39rpx;
+  color: #b7a68c;
+}
+.story-name {
+  font-size: 30rpx;
+  margin-bottom: 8rpx;
+}

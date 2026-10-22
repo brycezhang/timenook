@@ -1,0 +1,87 @@
+<view class="page with-tabs"
+  ><view class="project-head"
+    ><view class="grow"
+      ><view class="eyebrow">把生命的故事，温柔收藏</view
+      ><view class="title">{{p.title}}</view
+      ><view class="subtitle"
+        >{{confirmed}}篇已确认 · {{pending}}篇待确认</view
+      ></view
+    ><image class="project-book" src="{{bookImage}}" mode="aspectFill" /></view
+  ><view class="project-progress"
+    ><view class="active">讲述往事</view><view class="line" /><view
+      >整理成书</view
+    ><view class="line" /><view>寄到身边</view></view
+  ><view class="next-story section"
+    ><view class="row"
+      ><image class="icon" src="/assets/icons/sprout.svg" /><text class="small"
+        >今天，聊一件记得的小事</text
+      ></view
+    ><view class="serif prompt"
+      >小时候的家，<text class="line-break">{{'\n'}}</text>是什么样子的？</view
+    ><button class="btn" bindtap="record"
+      ><image class="icon" src="/assets/icons/mic-light.svg" />
+      {{p.stories.length ? '继续讲述' : '开始讲述'}}</button
+    ><button class="link" bindtap="photo"
+      ><image class="icon small" src="/assets/icons/image.svg" />
+      看着老照片，讲一段往事</button
+    ></view
+  ><view class="section"
+    ><view class="section-head"
+      ><view class="section-title">留下来的故事</view
+      ><button class="link" bindtap="invite"
+        >邀请与陪同
+        <image
+          class="icon small"
+          src="/assets/icons/chevron-right.svg" /></button></view
+    ><view class="filters"
+      ><button
+        class="filter {{filter==='all'?'selected':''}}"
+        data-filter="all"
+        bindtap="filter"
+        >全部故事</button
+      ><button
+        class="filter {{filter==='pending'?'selected':''}}"
+        data-filter="pending"
+        bindtap="filter"
+        >待确认 {{pending}}</button
+      ></view
+    ><view wx:if="{{!stories.length}}" class="empty"
+      ><image class="icon" src="/assets/icons/book-open.svg" /><view
+        >{{filter==='pending'?'所有故事都已确认':'故事，正等着你慢慢说'}}</view
+      ><view class="subtitle"
+        >{{filter==='pending'?'继续留下更多珍贵回忆':'从一段小小的往事开始就好'}}</view
+      ></view
+    ><button
+      wx:for="{{stories}}"
+      wx:key="id"
+      class="story-row"
+      data-id="{{item.id}}"
+      bindtap="story"
+      ><view class="story-number serif">0{{index+1}}</view
+      ><view class="grow"
+        ><view class="story-name">{{item.title}}</view
+        ><view class="small muted"
+          >{{item.chapter}} · {{item.sample?'示例故事':'我的故事'}}</view
+        ></view
+      ><view class="pill {{item.confirmedVersion!==item.version?'pending':''}}"
+        >{{item.confirmedVersion===item.version?'已确认':'待确认'}}</view
+      ></button
+    ></view
+  ><view wx:if="{{p.sample}}" class="demo-note"
+    >正在浏览示例项目，人物与故事仅供体验</view
+  ></view
+><view class="tabs"
+  ><button class="tab active" bindtap="project"
+    ><image class="icon" src="/assets/icons/book-open.svg" /><text class="tab-label"
+      >{{p.title}}</text
+    ></button
+  ><button class="tab" bindtap="book"
+    ><image class="icon" src="/assets/icons/file-text.svg" /><text
+      >成书</text
+    ></button
+  ><button class="tab" bindtap="account"
+    ><image class="icon" src="/assets/icons/user.svg" /><text
+      >我的</text
+    ></button
+  ></view
+>

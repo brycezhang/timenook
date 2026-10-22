@@ -1,0 +1,36 @@
+<view class="page"
+  ><view class="center"
+    ><view class="success-icon"
+      ><image class="icon" src="/assets/icons/check-light.svg" /></view
+    ><view class="title"
+      >一本关于{{p.recipient}}的书，<text class="line-break">{{'\n'}}</text>从你的心意开始。</view
+    ><view class="subtitle"
+      >项目已建立，邀请{{p.recipient}}一起留下回忆</view
+    ></view
+  ><view class="invitation-card section"
+    ><view class="row"
+      ><image class="icon" src="/assets/icons/leaf.svg" /><text class="serif"
+        >时光里 · 岁月成书</text
+      ></view
+    ><view class="row section"
+      ><image class="cover-mini" src="{{bookImage}}" mode="aspectFill" /><view
+        class="grow"
+        ><view class="serif section-title">{{p.recipient}}，想更懂你</view
+        ><view class="note"
+          >想听听你的人生故事，<text class="line-break">{{'\n'}}</text>把它写成一本书，留给我们。</view
+        ></view
+      ></view
+    ><view class="invitation-sign">—— 来自{{p.buyer}}的心意</view></view
+  ><view class="stack section"
+    ><button class="btn" bindtap="share"
+      ><image class="icon" src="/assets/icons/send-light.svg" />
+      邀请{{p.recipient}}讲故事</button
+    ><button class="btn secondary" bindtap="preview"
+      >我陪{{p.recipient}}，一起开始</button
+    ></view
+  ><button class="link" bindtap="settings"
+    >修改书名与资料
+    <image class="icon small" src="/assets/icons/chevron-right.svg" /></button
+  ><button class="link" bindtap="project">回到我的项目</button
+  ><view class="demo-note">本机演示项目 · 尚未真实支付</view></view
+>

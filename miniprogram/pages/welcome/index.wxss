@@ -1,0 +1,51 @@
+.welcome {
+  padding-top: 42rpx;
+}
+.welcome-leaf {
+  float: right;
+  padding: 12rpx;
+}
+.welcome-leaf .icon {
+  width: 74rpx;
+  height: 74rpx;
+}
+.welcome .title {
+  font-size: 64rpx;
+}
+.letter {
+  position: relative;
+  border: 1rpx solid #e0d0b6;
+  background: #f4ead7;
+  padding: 32rpx 40rpx;
+  box-shadow: 8rpx 12rpx 0 #68734f2b;
+  border-radius: 8rpx;
+  transform: rotate(-1deg);
+}
+.letter-body {
+  font-size: 43rpx;
+  line-height: 1.8;
+  margin-top: 16rpx;
+  color: #6b4b33;
+}
+.letter-heart {
+  position: absolute;
+  right: 40rpx;
+  bottom: 36rpx;
+}
+.welcome-steps {
+  display: flex;
+  justify-content: space-between;
+  font-size: 25rpx;
+  text-align: center;
+}
+.welcome-steps .icon {
+  margin: 0 auto 16rpx;
+  width: 46rpx;
+  height: 46rpx;
+}
+.participation {
+  margin-top: 32rpx;
+}
+.welcome .check-row {
+  font-size: 29rpx;
+}
