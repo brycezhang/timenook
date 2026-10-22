@@ -1,3 +1,8 @@
+import {
+  Catalog,
+  CatalogController,
+  AdminCatalogController,
+} from "./catalog/catalog";
 import "reflect-metadata";
 import { AudioProbe } from "./probe/audio-probe";
 import { PrintProbeController } from "./probe/print-probe-controller";
@@ -72,7 +77,13 @@ class HealthController {
 }
 
 @Module({
-  controllers: [HealthController, IdentityController, AdminController],
+  controllers: [
+    HealthController,
+    IdentityController,
+    AdminController,
+    CatalogController,
+    AdminCatalogController,
+  ],
 })
 class AppModule {}
 
@@ -147,6 +158,7 @@ export async function createApplication(
       { provide: WECHAT_FETCH, useValue: options.wechatFetch ?? fetch },
       IdentityAccess,
       AdminAccess,
+      Catalog,
     ],
   };
   const app = await NestFactory.create<NestFastifyApplication>(

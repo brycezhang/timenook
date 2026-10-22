@@ -1,3 +1,20 @@
+<block wx:if="{{mode === 'live'}}">
+  <view class="page with-dock live-catalog">
+    <view class="title">这本书，你想送给谁？</view>
+    <view class="subtitle">记录一位重要的人，留下属于自己的故事。</view>
+    <view wx:if="{{loading}}" class="section note">正在加载套餐与赠礼称呼…</view>
+    <view wx:if="{{catalogError}}" class="soft section note"><view>{{catalogError}}</view><button class="link" bindtap="onShow">重新加载</button></view>
+    <block wx:if="{{!loading && !catalogError}}">
+      <view class="recipients live-recipients section"><button wx:for="{{recipientTypes}}" wx:key="code" class="recipient {{selection && selection.recipientCode === item.code ? 'selected' : ''}}" data-code="{{item.code}}" bindtap="chooseType">送给{{item.label}}</button></view>
+      <input data-field="custom-label" class="custom-label" maxlength="40" value="{{customLabelValue}}" placeholder="也可以自定义称呼，最多40字" bindinput="customLabel" />
+      <view wx:if="{{selectedLabel}}" class="section section-title">这份礼物，送给{{selectedLabel}}</view>
+      <view class="paper section"><view class="section-title">一个项目 · 一本实体书</view><view class="note">一位成年讲述者本人参与，一位发起人。赠礼称呼不改变价格或双方权限。</view><view class="divider"/><view class="note">{{availability}}</view><view wx:if="{{!packagePrice}}" class="small muted">套餐准备完成后，这里将展示服务期限、配送和退款说明。</view></view>
+      <view wx:if="{{packageTerms.length}}" class="section"><view class="section-title">套餐与服务说明</view><view wx:for="{{packageTerms}}" wx:key="label" class="catalog-term"><view class="term-label">{{item.label}}</view><view class="note">{{item.text}}</view></view></view>
+    </block>
+  </view>
+  <view class="dock row"><view class="grow"><text wx:if="{{packagePrice}}" class="price">¥{{packagePrice}}</text><view class="small muted">一个项目 · 首本一本</view></view><button class="btn brown live-pay" disabled="{{true}}" bindtap="pay">暂未开放购买</button></view>
+</block>
+<block wx:else="">
 <view class="page with-dock"
   ><view class="title">这本书，你想送给谁？</view
   ><view class="subtitle">让爱有迹可循，让时光有处安放。</view
@@ -60,3 +77,5 @@
     >体验购买流程
     <image class="icon" src="/assets/icons/arrow-right-light.svg" /></button
 ></view>
+
+</block>

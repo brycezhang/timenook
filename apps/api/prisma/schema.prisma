@@ -173,3 +173,44 @@ model ProbePrintEntry {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   @@map("probe_print_entries")
 }
+
+model RecipientType {
+  realm     String
+  code      String
+  label     String
+  sortOrder Int     @map("sort_order")
+  active    Boolean
+  revision  Int     @default(1)
+
+  @@id([realm, code])
+  @@map("recipient_types")
+}
+
+model PackageDraft {
+  id                   String   @id @db.Uuid
+  realm                String
+  title                String
+  revision             Int      @default(1)
+  d01                  Json
+  admission            Json
+  shippingRegionLabels Json     @map("shipping_region_labels")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("package_drafts")
+}
+
+model PackageVersion {
+  id            String   @id @db.Uuid
+  sequence      Int      @unique @default(autoincrement())
+  realm         String
+  purpose       String
+  draftId       String   @map("draft_id") @db.Uuid
+  draftRevision Int      @map("draft_revision")
+  snapshot      Json
+  publicOffer   Json     @map("public_offer")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([realm, draftId, draftRevision])
+  @@map("package_versions")
+}

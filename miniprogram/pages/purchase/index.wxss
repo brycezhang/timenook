@@ -32,3 +32,35 @@
 .pay-btn {
   width: 390rpx;
 }
+
+.live-recipients {
+  flex-wrap: wrap;
+}
+.live-recipients .recipient {
+  flex: 0 1 calc(50% - 12rpx);
+  padding: 26rpx 14rpx;
+}
+.custom-label {
+  background: var(--surface);
+  border: 2rpx solid var(--line);
+  border-radius: 14rpx;
+  padding: 22rpx;
+  min-height: 48rpx;
+  font-size: 28rpx;
+}
+.catalog-term {
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid var(--line);
+}
+.term-label {
+  font-weight: 600;
+  margin-bottom: 10rpx;
+}
+.live-pay {
+  width: 310rpx;
+}
+.live-pay[disabled] {
+  color: #624b3d;
+  background: #e7d6c9;
+  opacity: 1;
+}

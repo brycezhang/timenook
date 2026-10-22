@@ -7,3 +7,5 @@ ffmpeg -hide_banner -loglevel error -f lavfi -i 'sine=frequency=440:sample_rate=
 ```
 
 6480bytes; MP3/16kHz/mono/48kbps; 1080ms decoded frames including encoder padding. SHA-256: `11acbbcff6041a9f144e26d84400ec07264bb42885c3473a380cee08e75d1016`. Tests concatenate280 copies for a decoded302.4second rejection without storing a large fixture. CI only needs the pinned decoder.
+
+`catalog-synthetic.json` 是 T08 独立本地测试夹具。印刷规格、商业期限/额度/地区、身份和审核引用全部是合成值，不是已批准销售参数；仅导入随机测试 schema，并在测试后清理。

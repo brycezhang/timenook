@@ -82,6 +82,9 @@ Page({
     }
     home("home");
   },
+  catalog() {
+    go("purchase");
+  },
   project() {
     home();
   },

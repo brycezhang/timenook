@@ -38,6 +38,15 @@ const ROUTE_ACTIONS: Record<string, string> = {
   "GET /v1/admin/runtime": "admin.runtime",
   "GET /v1/admin/audit": "admin.audit",
   "POST /v1/admin/logout": "admin.logout",
+  "GET /v1/admin/catalog/recipient-types": "catalog.recipient.list",
+  "POST /v1/admin/catalog/recipient-types": "catalog.recipient.create",
+  "PUT /v1/admin/catalog/recipient-types/:code": "catalog.recipient.update",
+  "GET /v1/admin/catalog/package-drafts": "catalog.draft.list",
+  "POST /v1/admin/catalog/package-drafts": "catalog.draft.create",
+  "PUT /v1/admin/catalog/package-drafts/:id": "catalog.draft.update",
+  "POST /v1/admin/catalog/package-drafts/:id/preview-versions":
+    "catalog.preview.freeze",
+  "GET /v1/admin/catalog/package-versions": "catalog.version.list",
 };
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -369,6 +378,39 @@ export class AdminAccess implements OnModuleDestroy {
     if (!session.account?.permissions.includes(permission))
       throw new ForbiddenException();
     return session;
+  }
+  /** Catalog writes and their audit commit together; recheck authority after locking. */
+  async command<T>(
+    request: AdminRequest,
+    permission: AdminPermission,
+    work: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    const session = await this.authorized(request, permission);
+    this.assertCsrf(request);
+    const result = await this.database.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM admin_sessions WHERE id = ${session.id}::uuid FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM admin_accounts WHERE id = ${session.adminId!}::uuid FOR UPDATE`;
+      const current = await tx.adminSession.findUnique({
+        where: { id: session.id },
+        include: { account: true },
+      });
+      if (
+        !current ||
+        current.revokedAt ||
+        current.expiresAt.getTime() <= Date.now() ||
+        current.account?.disabled ||
+        current.phase !== "authenticated" ||
+        current.realm !== this.realm
+      )
+        throw new UnauthorizedException();
+      if (!current.account?.permissions.includes(permission))
+        throw new ForbiddenException();
+      const value = await work(tx);
+      await this.audit(request.adminAction!, request, "success", tx);
+      return value;
+    });
+    request.auditRecorded = true;
+    return result;
   }
   async audits(request: AdminRequest): Promise<AdminAuditEntry[]> {
     await this.authorized(request, ADMIN_PERMISSIONS.readAudit);

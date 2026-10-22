@@ -1,6 +1,6 @@
 # TimeNook 管理入口（Vben web-antd）
 
-真实 Vben 5.7.0 `VbenAdminLayout`、preferences、request、styles 和 antdv-next；框架源码来源与必要修改见 [vendor/vben/UPSTREAM.md](../../vendor/vben/UPSTREAM.md)。应用层按 api / layouts / views 组织，不包含参考工程业务、demo 或配置。T07 只交付独立登录、TOTP MFA、运行信息与审计查看。
+真实 Vben 5.7.0 `VbenAdminLayout`、preferences、request、styles 和 antdv-next；框架源码来源与必要修改见 [vendor/vben/UPSTREAM.md](../../vendor/vben/UPSTREAM.md)。应用层按 api / layouts / views 组织，不包含参考工程业务、demo 或配置。T07 交付独立登录、TOTP MFA、运行信息与审计查看。T08 新增关系目录、缺参草稿与不可变本地套餐预览，使用 `catalog:read/write/freeze` 权限；正式开售仍关闭。操作与导入格式见 [T08 本地指南](../../docs/delivery/2026-10-22/catalog-local.md)。
 
 构建：`pnpm --filter @timenook/admin build`；产物 `apps/admin/dist/`，公网路径 `/timenook/admin/`。请求固定走同源 `/timenook/v1/admin/`，不读取服务端密钥，不保存 token/password/seed 到浏览器存储。命名空间 `timenook-admin-v1` 仅用于框架外观偏好。
 
