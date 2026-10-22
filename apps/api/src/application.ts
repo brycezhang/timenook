@@ -13,11 +13,11 @@ import {
   FastifyAdapter,
   NestFastifyApplication,
 } from "@nestjs/platform-fastify";
-import type { FastifyRequest } from "fastify";
+import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import type { ApiResponse, HealthStatus } from "@timenook/contracts";
 import { API_CONFIG, ApiConfig } from "./config";
 import { Infrastructure } from "./infrastructure";
-import { HttpErrorFilter } from "./http-error-filter";
+import { errorResponse, HttpErrorFilter } from "./http-error-filter";
 import {
   ApiOkResponse,
   ApiServiceUnavailableResponse,
@@ -66,6 +66,16 @@ export async function createApplication(
     logger: false,
     requestIdHeader: false,
     genReqId: () => randomUUID(),
+    frameworkErrors: (
+      error: FastifyError,
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      // Malformed URLs fail before onRequest and the Nest exception filter.
+      const status = error.code === "FST_ERR_BAD_URL" ? 400 : 500;
+      reply.header("x-request-id", request.id);
+      reply.status(status).send(errorResponse(status, request.id));
+    },
   });
   adapter.getInstance().addHook("onRequest", async (request, reply) => {
     reply.header("x-request-id", request.id);

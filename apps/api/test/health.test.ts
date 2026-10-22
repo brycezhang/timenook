@@ -2,6 +2,63 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createApplication } from "../src/application";
 
+test("malformed URLs use the standard error without echoing query data", async () => {
+  const app = await createApplication({
+    environment: "test",
+    host: "127.0.0.1",
+    port: 3417,
+    databaseUrl: "postgresql://unused:unused@127.0.0.1:1/unavailable",
+    redisUrl: "redis://127.0.0.1:1",
+  });
+  try {
+    for (const path of ["/%FF", "/%ZZ"]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `${path}?secret=private-probe`,
+        headers: { "x-request-id": "client-supplied-id" },
+      });
+      assert.equal(response.statusCode, 400);
+      assert.deepEqual(response.json().error, {
+        code: "INVALID_REQUEST",
+        message: "Invalid request",
+        retryable: false,
+      });
+      assert.match(response.json().meta.requestId, /^[0-9a-f-]{36}$/);
+      assert.equal(response.headers["x-request-id"], response.json().meta.requestId);
+      assert.doesNotMatch(response.body, /private-probe|client-supplied-id|%FF|%ZZ/);
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test("oversized JSON is reported as a client payload error", async () => {
+  const app = await createApplication({
+    environment: "test",
+    host: "127.0.0.1",
+    port: 3417,
+    databaseUrl: "postgresql://unused:unused@127.0.0.1:1/unavailable",
+    redisUrl: "redis://127.0.0.1:1",
+  });
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/health/live",
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify({ data: "x".repeat(1024 * 1024) }),
+    });
+    assert.equal(response.statusCode, 413);
+    assert.deepEqual(response.json().error, {
+      code: "PAYLOAD_TOO_LARGE",
+      message: "Request payload is too large",
+      retryable: false,
+    });
+    assert.equal(response.headers["x-request-id"], response.json().meta.requestId);
+  } finally {
+    await app.close();
+  }
+});
+
 test("liveness responds with a request ID without requiring database or Redis", async () => {
   const app = await createApplication({
     environment: "test",
