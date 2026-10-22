@@ -1,0 +1,17 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Infrastructure marker: readiness must verify migrations, not just a TCP port.
+// Business entities are introduced by their own vertical tickets.
+model ServiceSchema {
+  id       Int @id
+  revision Int
+
+  @@map("service_schema")
+}

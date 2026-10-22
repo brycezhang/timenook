@@ -1,0 +1,46 @@
+name: Check
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
+        env:
+          POSTGRES_USER: timenook
+          POSTGRES_PASSWORD: local-development-only
+          POSTGRES_DB: timenook
+        ports: ["54329:5432"]
+        options: >-
+          --health-cmd "pg_isready -U timenook -d timenook"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+      redis:
+        image: redis:7-alpine@sha256:8b81dd37ff027bec4e516d41acfbe9fe2460070dc6d4a4570a2ac5b9d59df065
+        ports: ["63791:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://timenook:local-development-only@127.0.0.1:54329/timenook?connect_timeout=2&pool_timeout=2
+      REDIS_URL: redis://127.0.0.1:63791
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - run: npm install --global pnpm@10.34.7
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm db:migrate
+      - run: pnpm check
+      - run: pnpm api:openapi
