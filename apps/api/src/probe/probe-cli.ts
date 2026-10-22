@@ -6,6 +6,7 @@ import { LocalProbeObjects } from "./local-objects";
 import { OssProbeObjects } from "./oss-objects";
 import Redis from "ioredis";
 import { readConfig } from "../config";
+import { probeStorageScope } from "./storage-scope";
 
 async function main() {
   const config = readConfig(process.env);
@@ -37,18 +38,14 @@ async function main() {
         `${config.redisKeyPrefix ?? "timenook"}:probe:session:${createHash("sha256").update(identity.token).digest("hex")}`,
       );
       const oss = config.audioProbe.oss;
-      const scope = createHash("sha256")
-        .update(
-          oss
-            ? `oss:${oss.bucket}:${oss.region}`
-            : `local:${config.audioProbe.storageRoot}`,
-        )
-        .digest("hex");
       const objects = oss
         ? new OssProbeObjects(oss)
         : new LocalProbeObjects(config.audioProbe.storageRoot);
       const clips = await db.probeClip.findMany({
-        where: { ownerId: identity.id, storageScope: scope },
+        where: {
+          ownerId: identity.id,
+          storageScope: probeStorageScope(config.audioProbe),
+        },
       });
       for (const clip of clips) {
         await objects.remove(`staging/${clip.id}.mp3`);

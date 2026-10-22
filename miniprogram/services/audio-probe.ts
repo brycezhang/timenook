@@ -103,6 +103,10 @@ export class AudioProbeClient {
   }
   start() {
     this.check();
+    if (this.uploading) {
+      this.update(this.current.stage, "正在上传或校验，请完成后再录音");
+      return;
+    }
     if (
       this.active ||
       this.pending ||
@@ -236,6 +240,13 @@ export class AudioProbeClient {
   async upload(clientClipId: string) {
     if (this.uploading) return;
     this.check();
+    if (this.active || this.pending || this.saving) {
+      this.update(
+        this.current.stage,
+        "请先停止录音并完成本机保存，再上传已有片段",
+      );
+      return;
+    }
     const clip = this.current.clips.find(
       (c) => c.clientClipId === clientClipId,
     );

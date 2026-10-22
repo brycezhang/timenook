@@ -9,13 +9,14 @@
     </view>
     <block wx:else>
       <text class="notice">MP3 · 16 kHz · 单声道 · 48 kbps · 最长 5 分钟。只承诺实际保存的片段。</text>
+      <text class="notice">录音与上传依次进行：停止并完成本机保存后，再上传片段。</text>
       <button wx:if="{{stage === 'recording' || stage === 'requesting'}}" bindtap="stop">停止并保存本机</button>
-      <button wx:else disabled="{{stage === 'saving' || hasPendingSave}}" bindtap="start">开始测试录音</button>
+      <button wx:else disabled="{{stage === 'saving' || hasPendingSave || stage === 'uploading' || stage === 'sealing'}}" bindtap="start">开始测试录音</button>
       <button wx:if="{{hasPendingSave}}" bindtap="retry">重试保存</button>
       <view wx:for="{{clips}}" wx:key="clientClipId" class="clip">
         <text>片段 {{index + 1}} · {{item.durationMs}} ms · {{item.bytes}} bytes</text>
         <text class="hash" selectable>SHA-256 {{item.sha256}}</text>
-        <button bindtap="upload" data-id="{{item.clientClipId}}">{{item.sealed ? '复核封存状态' : '上传并校验'}}</button>
+        <button disabled="{{stage === 'requesting' || stage === 'recording' || stage === 'saving' || hasPendingSave || stage === 'uploading' || stage === 'sealing'}}" bindtap="upload" data-id="{{item.clientClipId}}">{{item.sealed ? '复核封存状态' : '上传并校验'}}</button>
         <button wx:if="{{item.sealed}}" bindtap="play" data-id="{{item.clientClipId}}">鉴权下载回听</button>
       </view>
       <text class="notice">离开页面停止回听并清理下载缓存；已保存录音仍留在本机。已下载的设备副本不属于可远程回收的云端资料。</text>

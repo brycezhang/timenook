@@ -20,6 +20,7 @@ import type {
 import { inspectAudio } from "./inspect-audio";
 import { PROBE_OBJECTS, ProbeObjects } from "./local-objects";
 import { API_CONFIG, ApiConfig } from "../config";
+import { probeStorageScope } from "./storage-scope";
 
 @Injectable()
 export class AudioProbe implements OnModuleDestroy {
@@ -62,14 +63,14 @@ export class AudioProbe implements OnModuleDestroy {
           data: {
             id: randomUUID(),
             ownerId,
-            storageScope: this.storageScope(),
+            storageScope: probeStorageScope(this.config.audioProbe),
             ...command,
           },
         })
       );
     });
     if (
-      clip.storageScope !== this.storageScope() ||
+      clip.storageScope !== probeStorageScope(this.config.audioProbe) ||
       clip.bytes !== command.bytes ||
       clip.sha256 !== command.sha256
     )
@@ -81,7 +82,11 @@ export class AudioProbe implements OnModuleDestroy {
       async (tx) => {
         await tx.$executeRaw`SELECT id FROM probe_clips WHERE id = ${id}::uuid FOR UPDATE`;
         const clip = await tx.probeClip.findFirst({
-          where: { id, ownerId, storageScope: this.storageScope() },
+          where: {
+            id,
+            ownerId,
+            storageScope: probeStorageScope(this.config.audioProbe),
+          },
         });
         if (!clip) throw new NotFoundException();
         if (clip.state === "sealed") return this.present(clip);
@@ -128,22 +133,16 @@ export class AudioProbe implements OnModuleDestroy {
       throw new UnprocessableEntityException();
     return bytes;
   }
-  private storageScope() {
-    const oss = this.config.audioProbe?.oss;
-    return createHash("sha256")
-      .update(
-        oss
-          ? `oss:${oss.bucket}:${oss.region}`
-          : `local:${this.config.audioProbe?.storageRoot}`,
-      )
-      .digest("hex");
-  }
   private prefix() {
     return `${this.config.redisKeyPrefix ?? "timenook"}:probe:`;
   }
   async get(ownerId: string, id: string) {
     const clip = await this.db.probeClip.findFirst({
-      where: { id, ownerId, storageScope: this.storageScope() },
+      where: {
+        id,
+        ownerId,
+        storageScope: probeStorageScope(this.config.audioProbe),
+      },
     });
     if (!clip) throw new NotFoundException();
     return this.present(clip);
@@ -222,7 +221,7 @@ export class AudioProbe implements OnModuleDestroy {
         where: {
           id: permission.id,
           ownerId: permission.ownerId,
-          storageScope: this.storageScope(),
+          storageScope: probeStorageScope(this.config.audioProbe),
         },
       });
       if (!clip || clip.state !== "pending") throw new ConflictException();
