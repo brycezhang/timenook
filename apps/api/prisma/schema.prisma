@@ -15,3 +15,52 @@ model ServiceSchema {
 
   @@map("service_schema")
 }
+
+model OutlineTemplateVersion {
+  templateId   String    @map("template_id")
+  version      Int
+  content      Json
+  contentHash  String    @map("content_hash") @db.Char(64)
+  reviewStatus String    @map("review_status")
+  projects     Project[]
+
+  @@id([templateId, version])
+  @@map("outline_template_versions")
+}
+
+model Project {
+  id                    String                 @id @db.Uuid
+  createdBy             String                 @map("created_by")
+  sourceTemplateId      String                 @map("source_template_id")
+  sourceTemplateVersion Int                    @map("source_template_version")
+  currentRevision       Int                    @default(1) @map("current_revision")
+  sourceTemplate        OutlineTemplateVersion @relation(fields: [sourceTemplateId, sourceTemplateVersion], references: [templateId, version])
+  revisions             PlanRevision[]         @relation("ProjectRevisions")
+  currentPlan           PlanRevision           @relation("CurrentPlan", fields: [id, currentRevision], references: [projectId, revision], onDelete: NoAction, onUpdate: NoAction)
+  preferences           InterviewPreferences?
+
+  @@map("projects")
+}
+
+model PlanRevision {
+  projectId   String    @map("project_id") @db.Uuid
+  revision    Int
+  content     Json
+  contentHash String    @map("content_hash") @db.Char(64)
+  createdBy   String    @map("created_by")
+  project     Project   @relation("ProjectRevisions", fields: [projectId], references: [id])
+  currentFor  Project[] @relation("CurrentPlan")
+
+  @@id([projectId, revision])
+  @@map("plan_revisions")
+}
+
+model InterviewPreferences {
+  projectId     String   @id @map("project_id") @db.Uuid
+  version       Int      @default(1)
+  blockedTopics String[] @default([]) @map("blocked_topics")
+  updatedBy     String?  @map("updated_by")
+  project       Project  @relation(fields: [projectId], references: [id])
+
+  @@map("interview_preferences")
+}
