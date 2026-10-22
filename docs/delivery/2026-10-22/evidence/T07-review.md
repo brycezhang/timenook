@@ -23,4 +23,15 @@
 
 ## 修复与复审
 
-实现Agent正逐条补公开边界回归并修复；修复后的固定提交、复审结论和最终CI另行补充。首轮发现尚未计为解决。
+修复提交：`36efcd71a34f3bebfc9170a431168ede934fb3b5 fix(admin): preserve safe rejection and logout semantics (#8)`。复审增量为 `git diff edeccd67503c0de32ec9300490942916cb769908...36efcd71a34f3bebfc9170a431168ede934fb3b5`。
+
+- Standards复审：原2项明确违约、1项判断性建议全部闭环；新增明确违约0、heuristic 0。审查Agent独立以不可连接合成数据库复现，得到标准400/INVALID_REQUEST/error+meta，无Prisma或数据库地址泄漏。
+- Spec复审：原2项全部闭环；新增问题0、未解决问题0。审查Agent独立重跑5项真实PostgreSQL/Redis HTTP回归通过，包含固定行锁交错、正常注销与拒绝审计归属。
+
+修复采用当前会话的条件撤销：旋转已消费旧挑战时返回401，不清新Cookie，不擅自注销其他设备；失败审计共用安全身份解析且不覆盖原安全响应。公开契约和权限码集中至共享contracts，前端统一清理身份状态。
+
+最终本地检查：99项测试（前端35/API64）、2项锁定Chromium浏览器、类型检查、构建、OpenAPI和frozen install均通过。四组行为回归保留实际RED→GREEN日志，见[T07证据](T07.md)。测试资源清理完成，原迁移未改。
+
+初始提交`edeccd6`的push/PR两条Linux CI均通过；修复后最终HEAD检查以[PR #36 Checks](https://github.com/brycezhang/timenook/pull/36/checks)为准，必须通过才合入。正式管理员MFA、共享域名和部署仍为外部待验收，不关闭#8。
+
+最终轴内结论：Standards未解决0；Spec未解决0；两轴均无剩余严重项。
