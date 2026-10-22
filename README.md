@@ -29,6 +29,6 @@ npm run check:native # 使用本机微信开发者工具的 WXML / WXSS 编译�
 
 技术架构采用**TypeScript / NestJS + Fastify**与**Vben Admin**，工程尽量对齐wutong-admin。基础设施使用**阿里云RDS PostgreSQL、Tair、私有OSS和ECS**；文件ASR首选**豆包**，追问与故事整理首选**DeepSeek**。录音可靠保存后异步转写，产品支持动态赠礼关系与个人大纲，详见[技术架构](docs/architecture/技术架构.md)与[工程基线](docs/architecture/wutong技术栈对齐.md)。
 
-GitHub 仓库：[brycezhang/timenook](https://github.com/brycezhang/timenook)。分步实施见 [2026-10-22 ticket 拆分草稿](docs/delivery/2026-10-22/README.md)：1 个规格及 30 张 tickets，包含依赖、验收与外部条件；当前待确认，尚未发布为 GitHub Issues。
+GitHub 仓库：[brycezhang/timenook](https://github.com/brycezhang/timenook)。分步实施见 [2026-10-22 ticket 实施清单](docs/delivery/2026-10-22/README.md)：1 个规格及 30 张 tickets，包含依赖、验收与外部条件；已发布为 [GitHub 规格及子票据](https://github.com/brycezhang/timenook/issues/1)，按依赖实施。
 
 2026-10-22 MVP 模板调整：后端内置一套固定大纲，跳过运营模板管理与多模板选择/切换；个人计划仍可编辑，详见 [ADR 0008](docs/adr/0008-single-builtin-template.md)。

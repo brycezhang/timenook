@@ -1,6 +1,6 @@
 # T18 · 从完整转录清单整理可核对故事
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#19](https://github.com/brycezhang/timenook/issues/19) · 状态以 GitHub 为准。
 阶段：S2
 
 ## 交付结果

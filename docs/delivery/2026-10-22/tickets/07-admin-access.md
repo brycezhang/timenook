@@ -1,6 +1,6 @@
 # T07 · 建立独立运营登录与受限管理入口
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#8](https://github.com/brycezhang/timenook/issues/8) · 状态以 GitHub 为准。
 阶段：S1
 
 ## 交付结果

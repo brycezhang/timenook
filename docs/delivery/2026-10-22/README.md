@@ -1,8 +1,8 @@
 # 实施路线与 ticket 审阅清单
 
-2026-10-22 · 用户已确认并将运营模板改为后端单套内置模板；正在发布 GitHub issues。目标仓库：[brycezhang/timenook](https://github.com/brycezhang/timenook)。
+2026-10-22 · 用户已确认并将运营模板改为后端单套内置模板；已发布 GitHub issues。目标仓库：[brycezhang/timenook](https://github.com/brycezhang/timenook)。
 
-基于已定稿开发方案，拟创建 **1 个规格父 issue + 30 个子 tickets**，用 GitHub 原生 blocked-by 关系表示依赖，并按 ready-for-agent / ready-for-human 区分实现和外部决策。每票均可从本页打开完整验收条件。
+基于已定稿开发方案，已创建 **[1 个规格父 issue](https://github.com/brycezhang/timenook/issues/1) + 30 个子 tickets**，用 GitHub 原生 blocked-by 关系表示依赖，并按 ready-for-agent / ready-for-human 区分实现和外部决策。每票均可从本页打开完整验收条件。
 
 ## 阶段
 
@@ -185,3 +185,36 @@ D01 由 T04 冻结；D02–D08 由 T05 冻结；D09 由 T09 冻结；D10 由 T08
 - [仓库流程配置草稿](setup-proposal.md)：GitHub Issues、默认标签、根 AGENTS.md、现有单一术语表与 ADR。
 
 发布规格和 tickets，建立原生父子/阻塞关系，再执行 T01。实际 issue 链接回填后作为执行索引；功能状态以验收证据为准。
+
+## GitHub 执行索引
+
+- [T01 · #2 · 建立可复现工程与服务健康闭环](https://github.com/brycezhang/timenook/issues/2)
+- [T02 · #3 · 验证真机录音、私有封存与鉴权回听](https://github.com/brycezhang/timenook/issues/3)
+- [T03 · #4 · 验证豆包文件转写与 DeepSeek 生成质量](https://github.com/brycezhang/timenook/issues/4)
+- [T04 · #5 · 验证照片处理、固定 PDF 与纸面原声入口](https://github.com/brycezhang/timenook/issues/5)
+- [T05 · #6 · 冻结销售参数并核验实际微信支付路径](https://github.com/brycezhang/timenook/issues/6)
+- [T06 · #7 · 接通微信登录、会话与账号恢复](https://github.com/brycezhang/timenook/issues/7)
+- [T07 · #8 · 建立独立运营登录与受限管理入口](https://github.com/brycezhang/timenook/issues/8)
+- [T08 · #9 · 发布动态赠礼关系与不可变套餐](https://github.com/brycezhang/timenook/issues/9)
+- [T09 · #10 · 后端内置单套默认大纲并复制为个人计划](https://github.com/brycezhang/timenook/issues/10)
+- [T10 · #11 · 核验付款并唯一激活人生项目和首本权益](https://github.com/brycezhang/timenook/issues/11)
+- [T11 · #12 · 实现讲述者邀请绑定与分用途授权](https://github.com/brycezhang/timenook/issues/12)
+- [T12 · #13 · 支持无个人微信的同机协助与本人证据](https://github.com/brycezhang/timenook/issues/13)
+- [T13 · #14 · 编辑个人大纲、问题和拒答偏好](https://github.com/brycezhang/timenook/issues/14)
+- [T14 · #15 · 接通分轮录音、本地恢复与云端封存](https://github.com/brycezhang/timenook/issues/15)
+- [T15 · #16 · 持久化文件转写、重试与异常接管](https://github.com/brycezhang/timenook/issues/16)
+- [T16 · #17 · 接通照片起讲与私有照片处理](https://github.com/brycezhang/timenook/issues/17)
+- [T17 · #18 · 生成可跳过的单条追问并处理迟到结果](https://github.com/brycezhang/timenook/issues/18)
+- [T18 · #19 · 从完整转录清单整理可核对故事](https://github.com/brycezhang/timenook/issues/19)
+- [T19 · #20 · 实现校对、本人版本确认与真实项目进度](https://github.com/brycezhang/timenook/issues/20)
+- [T20 · #21 · 冻结书稿快照并生成完整可核对 PDF](https://github.com/brycezhang/timenook/issues/21)
+- [T21 · #22 · 接通书中原声码与版本固定的受控回听](https://github.com/brycezhang/timenook/issues/22)
+- [T22 · #23 · 双方确认同一 PDF 并唯一预留首本制作](https://github.com/brycezhang/timenook/issues/23)
+- [T23 · #24 · 审核生产、人工交接与物流追踪](https://github.com/brycezhang/timenook/issues/24)
+- [T24 · #25 · 贯通撤回、活动流终止与生产暂停](https://github.com/brycezhang/timenook/issues/25)
+- [T25 · #26 · 受理并交付可独立读取的完整资料导出](https://github.com/brycezhang/timenook/issues/26)
+- [T26 · #27 · 执行资料删除及备份恢复防复活](https://github.com/brycezhang/timenook/issues/27)
+- [T27 · #28 · 实现退款申请、金额预留与结果对账](https://github.com/brycezhang/timenook/issues/28)
+- [T28 · #29 · 闭环质量售后与原单重印](https://github.com/brycezhang/timenook/issues/29)
+- [T29 · #30 · 发布独立环境并完成故障恢复演练](https://github.com/brycezhang/timenook/issues/30)
+- [T30 · #31 · 完成内部实物闭环与付费试点验收](https://github.com/brycezhang/timenook/issues/31)

@@ -1,6 +1,6 @@
 # T17 · 生成可跳过的单条追问并处理迟到结果
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#18](https://github.com/brycezhang/timenook/issues/18) · 状态以 GitHub 为准。
 阶段：S2
 
 ## 交付结果

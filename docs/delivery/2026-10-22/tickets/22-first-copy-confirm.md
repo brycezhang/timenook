@@ -1,6 +1,6 @@
 # T22 · 双方确认同一 PDF 并唯一预留首本制作
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#23](https://github.com/brycezhang/timenook/issues/23) · 状态以 GitHub 为准。
 阶段：S3
 
 ## 交付结果

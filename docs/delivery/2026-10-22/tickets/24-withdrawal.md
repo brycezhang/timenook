@@ -1,6 +1,6 @@
 # T24 · 贯通撤回、活动流终止与生产暂停
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#25](https://github.com/brycezhang/timenook/issues/25) · 状态以 GitHub 为准。
 阶段：S4
 
 ## 交付结果

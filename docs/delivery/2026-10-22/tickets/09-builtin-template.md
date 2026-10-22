@@ -1,6 +1,6 @@
 # T09 · 后端内置单套默认大纲并复制为个人计划
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#10](https://github.com/brycezhang/timenook/issues/10) · 状态以 GitHub 为准。
 阶段：S1
 
 ## 交付结果

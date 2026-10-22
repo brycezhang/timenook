@@ -1,6 +1,6 @@
 # T12 · 支持无个人微信的同机协助与本人证据
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#13](https://github.com/brycezhang/timenook/issues/13) · 状态以 GitHub 为准。
 阶段：S1
 
 ## 交付结果

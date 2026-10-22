@@ -1,6 +1,6 @@
 # T30 · 完成内部实物闭环与付费试点验收
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#31](https://github.com/brycezhang/timenook/issues/31) · 状态以 GitHub 为准。
 阶段：S5
 
 ## 交付结果

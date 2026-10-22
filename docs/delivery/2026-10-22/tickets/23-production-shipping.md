@@ -1,6 +1,6 @@
 # T23 · 审核生产、人工交接与物流追踪
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#24](https://github.com/brycezhang/timenook/issues/24) · 状态以 GitHub 为准。
 阶段：S3
 
 ## 交付结果

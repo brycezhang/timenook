@@ -1,6 +1,6 @@
 # T04 · 验证照片处理、固定 PDF 与纸面原声入口
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#5](https://github.com/brycezhang/timenook/issues/5) · 状态以 GitHub 为准。
 阶段：S0
 
 ## 交付结果

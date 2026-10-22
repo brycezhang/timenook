@@ -1,6 +1,6 @@
 # T19 · 实现校对、本人版本确认与真实项目进度
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#20](https://github.com/brycezhang/timenook/issues/20) · 状态以 GitHub 为准。
 阶段：S2
 
 ## 交付结果

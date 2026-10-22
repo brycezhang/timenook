@@ -1,6 +1,6 @@
 # T29 · 发布独立环境并完成故障恢复演练
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#30](https://github.com/brycezhang/timenook/issues/30) · 状态以 GitHub 为准。
 阶段：S4
 
 ## 交付结果

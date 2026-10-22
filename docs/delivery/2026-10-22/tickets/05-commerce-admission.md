@@ -1,6 +1,6 @@
 # T05 · 冻结销售参数并核验实际微信支付路径
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#6](https://github.com/brycezhang/timenook/issues/6) · 状态以 GitHub 为准。
 阶段：S0
 
 ## 交付结果

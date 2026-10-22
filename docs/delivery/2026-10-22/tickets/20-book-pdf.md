@@ -1,6 +1,6 @@
 # T20 · 冻结书稿快照并生成完整可核对 PDF
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#21](https://github.com/brycezhang/timenook/issues/21) · 状态以 GitHub 为准。
 阶段：S3
 
 ## 交付结果

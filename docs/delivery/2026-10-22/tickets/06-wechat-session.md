@@ -1,6 +1,6 @@
 # T06 · 接通微信登录、会话与账号恢复
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#7](https://github.com/brycezhang/timenook/issues/7) · 状态以 GitHub 为准。
 阶段：S1
 
 ## 交付结果

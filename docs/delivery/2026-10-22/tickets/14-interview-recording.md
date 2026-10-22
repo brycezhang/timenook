@@ -1,6 +1,6 @@
 # T14 · 接通分轮录音、本地恢复与云端封存
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#15](https://github.com/brycezhang/timenook/issues/15) · 状态以 GitHub 为准。
 阶段：S2
 
 ## 交付结果

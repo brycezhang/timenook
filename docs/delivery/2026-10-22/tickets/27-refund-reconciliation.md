@@ -1,6 +1,6 @@
 # T27 · 实现退款申请、金额预留与结果对账
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#28](https://github.com/brycezhang/timenook/issues/28) · 状态以 GitHub 为准。
 阶段：S4
 
 ## 交付结果

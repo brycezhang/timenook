@@ -1,6 +1,6 @@
 # T02 · 验证真机录音、私有封存与鉴权回听
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#3](https://github.com/brycezhang/timenook/issues/3) · 状态以 GitHub 为准。
 阶段：S0
 
 ## 交付结果

@@ -1,6 +1,6 @@
 # T10 · 核验付款并唯一激活人生项目和首本权益
 
-状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
+GitHub：[#11](https://github.com/brycezhang/timenook/issues/11) · 状态以 GitHub 为准。
 阶段：S1
 
 ## 交付结果
