@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+test.use({ timezoneId: "Asia/Shanghai" });
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -297,8 +298,36 @@ test("support uses a minimal shared-case pause form and the mini-program restore
   await page.getByRole("button", { name: "验证并登录" }).click();
   await page.getByRole("button", { name: "服务期限", exact: true }).click();
   await page.getByLabel("项目编号").fill(projectId);
+  const query = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/service-terms/${projectId}`) &&
+      response.request().method() === "GET",
+  );
   await page.getByRole("button", { name: "查询期限" }).click();
   await expect(page.getByText("制作进行中", { exact: true })).toBeVisible();
+  const deadline = (await (await query).json()).data.creation.expiresAt;
+  await expect(
+    page.getByText("显示时区：Asia/Shanghai", { exact: true }),
+  ).toBeVisible();
+  const localDeadline = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(deadline));
+  await expect(
+    page.getByText(`制作到期：${localDeadline}`, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("回听到期：未起算", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("导出申请到期：未起算", { exact: true }),
+  ).toBeVisible();
   await page.getByLabel("共享工单引用").fill("record:synthetic-browser-case");
   await page.getByRole("button", { name: "暂停制作计时", exact: true }).click();
   await expect(page.getByText("制作已暂停", { exact: true })).toBeVisible();

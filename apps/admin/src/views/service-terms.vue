@@ -11,6 +11,19 @@ const projectId = ref(""),
   terms = ref<ServiceTermsView | null>(null);
 let intent: { input: string; key: string } | null = null;
 const validProject = computed(() => /^[a-f0-9-]{36}$/.test(projectId.value));
+const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const dateTime = new Intl.DateTimeFormat("zh-CN", {
+  timeZone,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+const displayTime = (value?: string | null) =>
+  value ? dateTime.format(new Date(value)) : "未起算";
 const creation = computed(
   () =>
     ({
@@ -84,9 +97,10 @@ async function run(action?: "pause" | "resume") {
     >
     <section v-if="terms" class="audit-section">
       <h2>{{ creation }}</h2>
-      <p>制作到期：{{ terms.creation?.expiresAt ?? "未起算" }}</p>
-      <p>回听到期：{{ terms.playback?.expiresAt ?? "未起算" }}</p>
-      <p>导出申请到期：{{ terms.exportRequests?.expiresAt ?? "未起算" }}</p>
+      <p>显示时区：{{ timeZone }}</p>
+      <p>制作到期：{{ displayTime(terms.creation?.expiresAt) }}</p>
+      <p>回听到期：{{ displayTime(terms.playback?.expiresAt) }}</p>
+      <p>导出申请到期：{{ displayTime(terms.exportRequests?.expiresAt) }}</p>
       <p v-if="terms.notStarted?.action === 'contact_and_offer_refund'">
         尚未参与已达约定等待期，请按共享工单联系并核验退款选项。
       </p>

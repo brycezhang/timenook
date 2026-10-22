@@ -848,17 +848,19 @@ test("support pauses require admin permission, CSRF and a shared case; mutation 
     (await app.inject({ method: "POST", url, headers, payload })).statusCode,
     201,
   );
-  assert.equal(
-    (
-      await app.inject({
-        method: "POST",
-        url,
-        headers,
-        payload: { ...payload, action: "resume" },
-      })
-    ).statusCode,
-    409,
-  );
+  for (const conflicting of [
+    { ...payload, action: "resume" },
+    { ...payload, supportCaseRef: "record:different-shared-case" },
+  ]) {
+    const conflict = await app.inject({
+      method: "POST",
+      url,
+      headers,
+      payload: conflicting,
+    });
+    assert.equal(conflict.statusCode, 409);
+    assert.equal(conflict.json().error.code, "IDEMPOTENCY_CONFLICT");
+  }
   const audits = await app.inject({
     method: "GET",
     url: "/v1/admin/audit",

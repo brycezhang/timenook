@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { PaymentIdempotencyConflict } from "../payments/errors";
 import {
   BadRequestException,
   ConflictException,
@@ -193,7 +194,7 @@ export class ProjectServiceTerms {
           prior.operatorId !== command.operatorId ||
           prior.supportCaseRef !== command.supportCaseRef
         )
-          throw new ConflictException();
+          throw new PaymentIdempotencyConflict();
         return;
       }
       const now = this.now();

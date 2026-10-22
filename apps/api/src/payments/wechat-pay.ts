@@ -17,13 +17,6 @@ export interface WechatPayConfig {
   apiV3Key: string;
   notifyUrl: string;
 }
-export interface MiniPaymentParameters {
-  timeStamp: string;
-  nonceStr: string;
-  package: string;
-  signType: "RSA";
-  paySign: string;
-}
 export class PaymentProtocolError extends Error {
   constructor() {
     super("Payment provider result could not be verified");

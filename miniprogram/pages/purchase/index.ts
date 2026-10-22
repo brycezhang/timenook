@@ -1,5 +1,5 @@
 import { API_BASE_URL, PAYMENT_VERIFICATION_BUILD } from "../../config";
-import { sessionClient } from "../../services/session";
+import { ApiFailure, sessionClient } from "../../services/session";
 import { paymentClient, paymentKey } from "../../services/payments";
 import type { CreateOrderCommand } from "../../../packages/contracts/src";
 import type {
@@ -211,7 +211,24 @@ Page({
         // Persist before the first request: unknown network results replay this intent.
         wx.setStorageSync(storageKey, intent);
       }
-      const order = await paymentClient.create(intent.command, intent.key);
+      const order = await paymentClient
+        .create(intent.command, intent.key)
+        .catch((error: unknown) => {
+          // This create endpoint returns INVALID_REQUEST before insertion or after
+          // rolling back its transaction. Other failures can still hide an order.
+          if (
+            error instanceof ApiFailure &&
+            error.status === 400 &&
+            error.code === "INVALID_REQUEST" &&
+            error.requestId &&
+            current() &&
+            wx.getStorageSync(storageKey)?.key === intent.key
+          ) {
+            wx.removeStorageSync(storageKey);
+            throw new Error("订单未创建，请核对套餐、称呼与配送区域后重试");
+          }
+          throw error;
+        });
       if (!current()) return;
       await paymentClient.pay(order.id, {
         localOnly: true,
