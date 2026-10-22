@@ -1,5 +1,6 @@
 import type { CatalogValidation, PackageTerm } from "@timenook/contracts";
 import { validateSalesAdmission } from "../commerce/admission";
+import { isRecordReference, isUtcReviewTime } from "../commerce/review-values";
 const at = (input: unknown, path: string): unknown =>
   path
     .split(".")
@@ -91,24 +92,9 @@ export function validatePackage(
     "review.ownerRef",
     "review.decisionRef",
   ]) {
-    const value = at(d01, name);
-    if (
-      typeof value !== "string" ||
-      !/^record:[A-Za-z0-9][A-Za-z0-9._/-]{2,119}$/.test(value) ||
-      /(?:^record:|[/.])(pending|unknown|tbd|todo|approved|completed|null|undefined)$/i.test(
-        value,
-      )
-    )
-      fail(name);
+    if (!isRecordReference(at(d01, name))) fail(name);
   }
-  const date = at(d01, "review.decidedAt");
-  if (
-    typeof date !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(date) ||
-    !Number.isFinite(Date.parse(date)) ||
-    new Date(date).toISOString() !== date.replace("Z", ".000Z")
-  )
-    fail("review.decidedAt");
+  if (!isUtcReviewTime(at(d01, "review.decidedAt"))) fail("review.decidedAt");
   const regions = [
     ...(Array.isArray(at(admission, "d05.includedRegionCodes"))
       ? (at(admission, "d05.includedRegionCodes") as string[])

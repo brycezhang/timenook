@@ -744,6 +744,46 @@ test("complete-looking commercial files still require a frozen complete D01 and 
   }
 });
 
+test("D01 review metadata rejects placeholder references and noncanonical UTC times through draft and freeze HTTP", async () => {
+  const headers = writeHeaders(await authenticate());
+  const cases = [
+    { field: "fontLicenseRef", value: "record:pending" },
+    { field: "review.ownerRef", value: "record:operations/tbd" },
+    { field: "review.decisionRef", value: "record:decision.approved" },
+    { field: "review.decidedAt", value: "2026-02-30T08:00:00Z" },
+    { field: "review.decidedAt", value: "2026-10-22T08:00:00+00:00" },
+  ];
+  for (const { field, value } of cases) {
+    const input = synthetic();
+    if (field === "fontLicenseRef") input.d01.fontLicenseRef = value;
+    else input.d01.review[field.slice("review.".length)] = value;
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/admin/catalog/package-drafts",
+      headers,
+      payload: input,
+    });
+    assert.equal(response.statusCode, 201);
+    const saved = response.json().data;
+    assert.equal(saved.validation.completeness, "incomplete");
+    assert.deepEqual(saved.validation.issues, [
+      {
+        path: `d01.${field}`,
+        code: "PRINT_SPEC_REQUIRED",
+        message: "须填写冻结的完整印刷规格及审核引用；候选打样参数不能替代。",
+      },
+    ]);
+    const frozen = await app.inject({
+      method: "POST",
+      url: `/v1/admin/catalog/package-drafts/${saved.id}/preview-versions`,
+      headers,
+      payload: { expectedRevision: 1 },
+    });
+    assert.equal(frozen.statusCode, 422);
+    assert.equal(frozen.json().error.code, "INVALID_PACKAGE");
+  }
+});
+
 test("production cannot read local catalog or preview versions and even its authenticated operator cannot freeze previews", async () => {
   const account = createAccount();
   // Fixture provisioning only: give the synthetic operator a production realm.

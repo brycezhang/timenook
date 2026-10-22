@@ -1,3 +1,5 @@
+import { isRecordReference, isUtcReviewTime } from "./review-values";
+
 export interface AdmissionIssue {
   path: string;
   code: string;
@@ -50,13 +52,7 @@ export function validateSalesAdmission(input: unknown): AdmissionReport {
       issue(path, code, "缺少已确定的规定值；请按填表说明核对。");
   };
   const reference = (path: string) => {
-    if (
-      typeof at(path) !== "string" ||
-      !/^record:[A-Za-z0-9][A-Za-z0-9._/-]{2,119}$/.test(at(path) as string) ||
-      /(?:^record:|[/.])(pending|unknown|tbd|todo|approved|completed|null|undefined)$/i.test(
-        at(path) as string,
-      )
-    ) {
+    if (!isRecordReference(at(path))) {
       issue(
         path,
         "REFERENCE_REQUIRED",
@@ -65,13 +61,7 @@ export function validateSalesAdmission(input: unknown): AdmissionReport {
     }
   };
   const date = (path: string) => {
-    const value = at(path);
-    if (
-      typeof value !== "string" ||
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value) ||
-      !Number.isFinite(Date.parse(value)) ||
-      new Date(value).toISOString() !== value.replace("Z", ".000Z")
-    ) {
+    if (!isUtcReviewTime(at(path))) {
       issue(path, "INVALID_DATE", "须填明确的 UTC 审核时间。");
     }
   };
