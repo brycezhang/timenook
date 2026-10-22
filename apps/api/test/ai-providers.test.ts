@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DoubaoFileAsr, DeepSeekText } from "../src/probe/ai-providers";
+import {
+  DoubaoFileAsr,
+  DeepSeekText,
+  AsrSourcePreflightError,
+} from "../src/probe/ai-providers";
 
 const config = {
   apiKey: "synthetic-key",
@@ -96,6 +100,17 @@ test("ASR never converts ambiguous responses into success or retries, and reject
     });
     await assert.rejects(provider.submit(id, bad), /source/i);
   }
+  let calls = 0;
+  const transportError = new DoubaoFileAsr(config, async () => {
+    calls++;
+    // The same error class after transport entry is not proof of non-submission.
+    throw new AsrSourcePreflightError("synthetic external failure");
+  });
+  assert.deepEqual(await transportError.submit(id, source), {
+    state: "unknown",
+    code: null,
+  });
+  assert.equal(calls, 1);
 });
 
 test("DeepSeek returns one sourced optional question with provider usage, without mutating the transcript", async () => {
@@ -105,15 +120,11 @@ test("DeepSeek returns one sourced optional question with provider usage, withou
     transcriptHash: "a".repeat(64),
   };
   const output = {
-    status: "ok",
+    action: "ask",
     question: "关于这段经历，您还想补充什么？",
-    sources: [
-      {
-        clipId: id,
-        transcriptHash: input.transcriptHash,
-        quote: "约在八十年代",
-      },
-    ],
+    intent: "specific_detail",
+    sourceRefs: [`transcript:${id}:${input.transcriptHash}`],
+    reasonCode: "DETAIL_AVAILABLE",
   };
   let body: any;
   const provider = new DeepSeekText(
@@ -149,6 +160,10 @@ test("DeepSeek returns one sourced optional question with provider usage, withou
     prompt_cache_hit_tokens: 10,
     prompt_cache_miss_tokens: 20,
   });
+  assert.deepEqual(
+    JSON.parse(body.messages[1].content).sourceRefs,
+    output.sourceRefs,
+  );
   assert.equal(body.model, "explicit-candidate");
   assert.deepEqual(body.response_format, { type: "json_object" });
   assert.deepEqual(body.thinking, { type: "disabled" });
@@ -160,21 +175,19 @@ test("DeepSeek returns one sourced optional question with provider usage, withou
   );
 });
 
-test("DeepSeek validates source quotes, completion boundaries, nulls and refusal shapes before accepting any generated output", async () => {
+test("DeepSeek validates agreed sourceRefs contracts, completion boundaries, nulls and explicit no-content results", async () => {
   const input = {
     clipId: id,
     transcript: "合成：约在八十年代。也可能是九十年代。",
     transcriptHash: "a".repeat(64),
   };
-  const source = {
-    clipId: id,
-    transcriptHash: input.transcriptHash,
-    quote: "约在八十年代",
-  };
+  const ref = `transcript:${id}:${input.transcriptHash}`;
   const valid = {
-    status: "ok",
+    action: "ask",
     question: "您还想补充什么？",
-    sources: [source],
+    intent: "specific_detail",
+    sourceRefs: [ref],
+    reasonCode: "DETAIL_AVAILABLE",
   };
   async function generate(
     output: unknown,
@@ -202,11 +215,31 @@ test("DeepSeek validates source quotes, completion boundaries, nulls and refusal
     {},
     { ...valid, question: null },
     { ...valid, question: "发生了什么？你后来怎么办？" },
-    { ...valid, sources: [{ ...source, clipId: "other" }] },
-    { ...valid, sources: [{ ...source, transcriptHash: "b".repeat(64) }] },
-    { ...valid, sources: [{ ...source, quote: "虚构事实" }] },
+    { ...valid, sourceRefs: ["transcript:other:unknown"] },
+    { ...valid, sourceRefs: [] },
+    { ...valid, sourceRefs: [ref, ref] },
+    { ...valid, intent: null },
+    { ...valid, reasonCode: "UNKNOWN" },
     { ...valid, unexpected: "field" },
-    { status: "declined", question: "还想追问吗？", sources: [] },
+    { ...valid, action: "finish", reasonCode: "DECLINED" },
+    {
+      action: "finish",
+      question: null,
+      intent: null,
+      sourceRefs: [],
+      reasonCode: "UNKNOWN",
+    },
+    {
+      status: "ok",
+      question: "还想补充什么？",
+      sources: [
+        {
+          clipId: id,
+          transcriptHash: input.transcriptHash,
+          quote: "约在八十年代",
+        },
+      ],
+    },
   ])
     assert.equal((await generate(output)).state, "failed");
   for (const reason of ["length", "content_filter", "tool_calls", "aborted"])
@@ -244,45 +277,95 @@ test("DeepSeek validates source quotes, completion boundaries, nulls and refusal
     ).state,
     "failed",
   );
-  for (const status of ["declined", "not_applicable"])
+  for (const [intent, reasonCode] of [
+    ["scene", "SCENE_AVAILABLE"],
+    ["specific_detail", "DETAIL_AVAILABLE"],
+    ["feeling", "FEELING_AVAILABLE"],
+    ["meaning", "MEANING_AVAILABLE"],
+  ])
     assert.equal(
-      (await generate({ status, question: null, sources: [] })).state,
-      status,
+      (await generate({ ...valid, intent, reasonCode })).state,
+      "succeeded",
     );
+  for (const [reasonCode, expected] of [
+    ["DECLINED", "declined"],
+    ["NOT_APPLICABLE", "not_applicable"],
+    ["ENOUGH_DETAIL", "finished"],
+    ["USER_FINISHED", "finished"],
+  ]) {
+    const output = {
+      action: "finish",
+      question: null,
+      intent: null,
+      sourceRefs: [],
+      reasonCode,
+    };
+    const result = await generate(output);
+    assert.equal(result.state, expected);
+    assert.deepEqual(result.output, output);
+    assert.equal(
+      (await generate({ ...output, sourceRefs: [ref] })).state,
+      "failed",
+    );
+  }
   const story = {
-    status: "ok",
     title: "合成回忆",
     paragraphs: [
-      { text: "我记得约在八十年代，也可能是九十年代。", sources: [source] },
+      { text: "我记得约在八十年代，也可能是九十年代。", sourceRefs: [ref] },
     ],
-    uncertainties: ["年代有矛盾，待本人核对"],
+    theme: "年代不确定的合成回忆",
+    reviewItems: ["年代有矛盾，待本人核对"],
   };
-  assert.equal((await generate(story, {}, "story")).state, "succeeded");
-  assert.equal(
-    (
-      await generate(
-        { ...story, paragraphs: [{ text: "虚构内容", sources: [] }] },
-        {},
-        "story",
-      )
-    ).state,
-    "failed",
-  );
-  assert.equal(
-    (
-      await generate(
+  const result = await generate(story, {}, "story");
+  assert.equal(result.state, "succeeded");
+  assert.deepEqual(result.output, story);
+  const { theme: _theme, ...withoutTheme } = story;
+  const { reviewItems: _reviewItems, ...withoutReviewItems } = story;
+  for (const output of [
+    withoutTheme,
+    withoutReviewItems,
+    { ...story, theme: null },
+    { ...story, reviewItems: [null] },
+    { ...story, paragraphs: [] },
+    { ...story, paragraphs: [{ text: "合成", sourceRefs: [] }] },
+    { ...story, paragraphs: [{ text: "合成", sourceRefs: ["unknown"] }] },
+    { ...story, paragraphs: [{ text: "合成", sources: [ref] }] },
+    { ...story, status: "ok" },
+    { ...story, status: "declined" },
+    {
+      status: "ok",
+      title: story.title,
+      paragraphs: [
         {
-          status: "not_applicable",
-          title: null,
-          paragraphs: [],
-          uncertainties: [],
+          text: "合成",
+          sources: [
+            {
+              clipId: id,
+              transcriptHash: input.transcriptHash,
+              quote: "约在八十年代",
+            },
+          ],
         },
-        {},
-        "story",
-      )
-    ).state,
-    "not_applicable",
-  );
+      ],
+      uncertainties: [],
+    },
+  ])
+    assert.equal((await generate(output, {}, "story")).state, "failed");
+  for (const status of ["declined", "not_applicable"]) {
+    const output = {
+      status,
+      title: null,
+      paragraphs: [],
+      theme: null,
+      reviewItems: [],
+    };
+    assert.equal((await generate(output, {}, "story")).state, status);
+    assert.equal(
+      (await generate({ ...output, reviewItems: ["仍输出内容"] }, {}, "story"))
+        .state,
+      "failed",
+    );
+  }
 });
 
 test("provider response bodies are bounded and transport failures remain unknown without secret error text", async () => {

@@ -10,6 +10,7 @@ import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
 import { createApplication } from "../src/application";
 import type { ApiConfig } from "../src/config";
+import { AsrSourcePreflightError } from "../src/probe/ai-providers";
 
 const schema = `t03_${randomUUID().replaceAll("-", "")}`;
 let config: ApiConfig;
@@ -417,20 +418,22 @@ test("generation is optional, replayable and keeps original transcription separa
     generationCalls++;
     const body = JSON.parse(String(init?.body));
     const input = JSON.parse(body.messages[1].content);
-    const source = {
-      clipId: input.clipId,
-      transcriptHash: input.transcriptHash,
-      quote: "约在八十年代",
-    };
+    const sourceRefs = input.sourceRefs;
     const story = body.messages[0].content.includes("第一人称结构化");
     const output = story
       ? {
-          status: "ok",
           title: "合成故事",
-          paragraphs: [{ text: "我记得约在八十年代。", sources: [source] }],
-          uncertainties: ["具体年份待核对"],
+          paragraphs: [{ text: "我记得约在八十年代。", sourceRefs }],
+          theme: "合成回忆",
+          reviewItems: ["具体年份待核对"],
         }
-      : { status: "ok", question: "您还想补充什么？", sources: [source] };
+      : {
+          action: "ask",
+          question: "您还想补充什么？",
+          intent: "specific_detail",
+          sourceRefs,
+          reasonCode: "DETAIL_AVAILABLE",
+        };
     return Response.json({
       model: "synthetic-model",
       choices: [
@@ -853,15 +856,11 @@ test("in-flight generation is persisted once, then invalidation discards its tex
             message: {
               role: "assistant",
               content: JSON.stringify({
-                status: "ok",
+                action: "ask",
                 question: "您还想补充什么？",
-                sources: [
-                  {
-                    clipId: input.clipId,
-                    transcriptHash: input.transcriptHash,
-                    quote: "合成讲述",
-                  },
-                ],
+                intent: "specific_detail",
+                sourceRefs: input.sourceRefs,
+                reasonCode: "DETAIL_AVAILABLE",
               }),
             },
           },
@@ -1052,75 +1051,86 @@ test("configuration/account drift and storage changes cannot resume a frozen req
 });
 
 test("an expired ASR claim is queried by a second API instance and its late submit response cannot overwrite the transcript", async (t) => {
-  const fixture = await ossFixture();
-  let entered!: () => void;
-  let release!: () => void;
-  const started = new Promise<void>((r) => {
-    entered = r;
-  });
-  const gate = new Promise<void>((r) => {
-    release = r;
-  });
-  let submits = 0;
-  const transport: typeof fetch = async (url) => {
-    if (String(url).endsWith("/submit")) {
-      submits++;
-      entered();
-      await gate;
-      return new Response(null, {
-        headers: { "X-Api-Status-Code": "20000000" },
-      });
+  for (const lateOutcome of ["accepted", "transport-error"]) {
+    const fixture = await ossFixture();
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((r) => {
+      entered = r;
+    });
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let submits = 0;
+    const transport: typeof fetch = async (url) => {
+      if (String(url).endsWith("/submit")) {
+        submits++;
+        entered();
+        await gate;
+        if (lateOutcome === "transport-error")
+          throw new AsrSourcePreflightError(
+            "Transport error must stay unknown",
+          );
+        return new Response(null, {
+          headers: { "X-Api-Status-Code": "20000000" },
+        });
+      }
+      return Response.json(
+        { result: { text: "租约恢复后的合成转录" } },
+        { headers: { "X-Api-Status-Code": "20000000" } },
+      );
+    };
+    const first = await createApplication(fixture.enabled, {
+      aiFetch: transport,
+    });
+    let second: App | undefined;
+    try {
+      const input = command(await fixture.clip(first));
+      const path = `ai/runs/${input.requestId}`;
+      await request(first, fixture.identity.token, "POST", "ai/runs", input);
+      const pending = request(
+        first,
+        fixture.identity.token,
+        "POST",
+        `${path}/advance`,
+        {},
+      );
+      await started;
+      const future = Date.now() + 31000;
+      t.mock.method(Date, "now", () => future);
+      second = await createApplication(fixture.enabled, { aiFetch: transport });
+      assert.equal(
+        (await request(second, fixture.identity.token, "GET", path)).json().data
+          .state,
+        "unknown",
+      );
+      assert.equal(
+        (
+          await request(
+            second,
+            fixture.identity.token,
+            "POST",
+            `${path}/advance`,
+            {},
+          )
+        ).json().data.originalTranscript,
+        "租约恢复后的合成转录",
+      );
+      release();
+      assert.equal((await pending).json().data.state, "succeeded");
+      const saved = (
+        await request(second, fixture.identity.token, "GET", path)
+      ).json().data;
+      assert.equal(saved.submitAttempts, 1);
+      assert.equal(saved.originalTranscript, "租约恢复后的合成转录");
+      assert.equal(submits, 1);
+    } finally {
+      t.mock.restoreAll();
+      release?.();
+      await second?.close();
+      await first.close();
+      nock.cleanAll();
     }
-    return Response.json(
-      { result: { text: "租约恢复后的合成转录" } },
-      { headers: { "X-Api-Status-Code": "20000000" } },
-    );
-  };
-  const first = await createApplication(fixture.enabled, {
-    aiFetch: transport,
-  });
-  let second: App | undefined;
-  try {
-    const input = command(await fixture.clip(first));
-    const path = `ai/runs/${input.requestId}`;
-    await request(first, fixture.identity.token, "POST", "ai/runs", input);
-    const pending = request(
-      first,
-      fixture.identity.token,
-      "POST",
-      `${path}/advance`,
-      {},
-    );
-    await started;
-    const future = Date.now() + 31000;
-    t.mock.method(Date, "now", () => future);
-    second = await createApplication(fixture.enabled, { aiFetch: transport });
-    assert.equal(
-      (await request(second, fixture.identity.token, "GET", path)).json().data
-        .state,
-      "unknown",
-    );
-    assert.equal(
-      (
-        await request(
-          second,
-          fixture.identity.token,
-          "POST",
-          `${path}/advance`,
-          {},
-        )
-      ).json().data.originalTranscript,
-      "租约恢复后的合成转录",
-    );
-    release();
-    assert.equal((await pending).json().data.state, "succeeded");
-    assert.equal(submits, 1);
-  } finally {
-    t.mock.restoreAll();
-    release?.();
-    await second?.close();
-    await first.close();
-    nock.cleanAll();
   }
 });
 
@@ -1177,6 +1187,345 @@ test("revoking the probe identity while ASR is in flight discards the result and
   } finally {
     release?.();
     redis.disconnect();
+    await app.close();
+    nock.cleanAll();
+  }
+});
+
+test("a source window expiring before transport restores ready and retries the same UUID without recording a submit", async (t) => {
+  const fixture = await ossFixture();
+  const calls: { action: string; id: string }[] = [];
+  const app = await createApplication(fixture.enabled, {
+    aiFetch: async (url, init) => {
+      calls.push({
+        action: String(url).split("/").pop()!,
+        id: new Headers(init?.headers).get("X-Api-Request-Id")!,
+      });
+      return Response.json(
+        String(url).endsWith("/query")
+          ? { result: { text: "源窗重签后的合成转录" } }
+          : {},
+        { headers: { "X-Api-Status-Code": "20000000" } },
+      );
+    },
+  });
+  const db = new PrismaClient({ datasourceUrl: fixture.enabled.databaseUrl });
+  let release!: () => void;
+  let locked!: (pid: number) => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const ready = new Promise<number>((resolve) => {
+    locked = resolve;
+  });
+  let blocker: Promise<unknown> | undefined;
+  try {
+    const input = command(await fixture.clip(app));
+    const path = `ai/runs/${input.requestId}`;
+    await request(app, fixture.identity.token, "POST", "ai/runs", input);
+    blocker = db.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT id FROM probe_ai_runs WHERE id = ${input.requestId}::uuid FOR UPDATE`;
+        const [{ pid }] = await tx.$queryRaw<
+          { pid: number }[]
+        >`SELECT pg_backend_pid() AS pid`;
+        locked(pid);
+        await gate;
+      },
+      { timeout: 10000 },
+    );
+    const pid = await ready;
+    const pending = request(
+      app,
+      fixture.identity.token,
+      "POST",
+      `${path}/advance`,
+      {},
+    );
+    let waiting = false;
+    for (let n = 0; n < 100; n++) {
+      const [{ count }] = await db.$queryRaw<
+        { count: number }[]
+      >`SELECT count(*)::int AS count FROM pg_stat_activity WHERE ${pid} = ANY(pg_blocking_pids(pid))`;
+      if (count) {
+        waiting = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(
+      waiting,
+      "Claim must wait after the real OSS SDK has signed the source",
+    );
+    const delayed = Date.now() + 6000;
+    t.mock.method(Date, "now", () => delayed);
+    release();
+    await blocker;
+    const response = await pending;
+    assert.equal(response.statusCode, 201);
+    assert.equal(response.json().data.state, "ready");
+    assert.equal(response.json().data.submitAttempts, 0);
+    assert.equal(response.json().data.submittedAt, null);
+    assert.deepEqual(calls, []);
+    const persisted = (
+      await request(app, fixture.identity.token, "GET", path)
+    ).json().data;
+    assert.equal(persisted.state, "ready");
+    assert.equal(
+      (
+        await request(
+          app,
+          fixture.identity.token,
+          "POST",
+          `${path}/advance`,
+          {},
+        )
+      ).json().data.state,
+      "accepted",
+    );
+    assert.equal(
+      (
+        await request(
+          app,
+          fixture.identity.token,
+          "POST",
+          `${path}/advance`,
+          {},
+        )
+      ).json().data.originalTranscript,
+      "源窗重签后的合成转录",
+    );
+    assert.deepEqual(calls, [
+      { action: "submit", id: input.requestId },
+      { action: "query", id: input.requestId },
+    ]);
+    assert.equal(
+      (await request(app, fixture.identity.token, "GET", path)).json().data
+        .submitAttempts,
+      1,
+    );
+  } finally {
+    t.mock.restoreAll();
+    release?.();
+    await blocker;
+    await db.$disconnect();
+    await app.close();
+    nock.cleanAll();
+  }
+});
+
+test("a finish decision is a known terminal result without a usable question or question latency", async () => {
+  const fixture = await ossFixture();
+  let generationCalls = 0;
+  const output = {
+    action: "finish",
+    question: null,
+    intent: null,
+    sourceRefs: [],
+    reasonCode: "ENOUGH_DETAIL",
+  };
+  const app = await createApplication(fixture.enabled, {
+    aiFetch: async (url) => {
+      if (!String(url).includes("deepseek"))
+        return Response.json(
+          String(url).endsWith("/query")
+            ? { result: { text: "合成讲述已经完整。" } }
+            : {},
+          { headers: { "X-Api-Status-Code": "20000000" } },
+        );
+      generationCalls++;
+      return Response.json({
+        model: "synthetic-model",
+        choices: [
+          {
+            finish_reason: "stop",
+            message: { role: "assistant", content: JSON.stringify(output) },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+      });
+    },
+  });
+  try {
+    const input = command(await fixture.clip(app));
+    const path = `ai/runs/${input.requestId}`;
+    await request(app, fixture.identity.token, "POST", "ai/runs", input);
+    await request(app, fixture.identity.token, "POST", `${path}/advance`, {});
+    await request(app, fixture.identity.token, "POST", `${path}/advance`, {});
+    const generation = { requestId: randomUUID(), kind: "question" };
+    for (let replay = 0; replay < 2; replay++) {
+      const response = await request(
+        app,
+        fixture.identity.token,
+        "POST",
+        `${path}/generations`,
+        generation,
+      );
+      assert.equal(response.statusCode, 201);
+      assert.equal(response.json().data.state, "finished");
+      assert.equal(response.json().data.usable, false);
+      assert.equal(response.json().data.latency.transcriptToQuestionMs, null);
+      assert.deepEqual(response.json().data.output, output);
+    }
+    assert.equal(generationCalls, 1);
+    const metrics = (
+      await request(app, fixture.identity.token, "GET", "ai/metrics")
+    ).json().data;
+    assert.deepEqual(metrics.groups[0].generation, {
+      counts: { finished: 1 },
+      total: 1,
+      finalCount: 1,
+      failureRateAmongFinal: 0,
+    });
+    const saved = (
+      await request(app, fixture.identity.token, "GET", path)
+    ).json().data;
+    assert.equal(saved.originalTranscript, "合成讲述已经完整。");
+    assert.equal(saved.generations[0].usable, false);
+  } finally {
+    await app.close();
+    nock.cleanAll();
+  }
+});
+
+test("v1 synthetic persisted results remain readable but their UUIDs cannot run the v2 prompt or output contract", async () => {
+  const fixture = await ossFixture();
+  let externalCalls = 0;
+  const app = await createApplication(fixture.enabled, {
+    aiFetch: async () => {
+      externalCalls++;
+      throw new Error("Historical inputs must not enter provider transport");
+    },
+  });
+  const db = new PrismaClient({ datasourceUrl: fixture.enabled.databaseUrl });
+  // Synthetic historical fixture copied from 6c41f37's persisted shape; not a backup restore drill.
+  const historicalConfiguration = {
+    version: "synthetic-2026-10-22",
+    doubao: {
+      protocol: "bigmodel-async-v3-api-key",
+      resourceId: "volc.bigasr.auc",
+      fetchWindowSeconds: 600,
+    },
+    deepseek: {
+      model: "synthetic-model",
+      maxTokens: 1024,
+      thinking: "disabled",
+    },
+    promptVersion: "t03-v1",
+  };
+  const historicalHash = createHash("sha256")
+    .update(
+      JSON.stringify({
+        configuration: historicalConfiguration,
+        credentials: {
+          doubao: "synthetic-secret",
+          deepseek: "synthetic-secret",
+        },
+      }),
+    )
+    .digest("hex");
+  try {
+    const clipId = await fixture.clip(app);
+    const completed = command(clipId);
+    const pending = command(clipId);
+    for (const input of [completed, pending]) {
+      await request(app, fixture.identity.token, "POST", "ai/runs", input);
+      await db.probeAiRun.update({
+        where: { id: input.requestId },
+        data: {
+          configuration: historicalConfiguration,
+          configurationHash: historicalHash,
+        },
+      });
+    }
+    const transcriptHash = createHash("sha256")
+      .update("合成历史原转录")
+      .digest("hex");
+    const historicalOutput = {
+      status: "ok",
+      title: "合成旧稿",
+      paragraphs: [
+        {
+          text: "合成历史原转录",
+          sources: [{ clipId, transcriptHash, quote: "合成历史原转录" }],
+        },
+      ],
+      uncertainties: [],
+    };
+    await db.probeAiRun.update({
+      where: { id: completed.requestId },
+      data: {
+        state: "succeeded",
+        originalTranscript: "合成历史原转录",
+        completedAt: new Date(),
+      },
+    });
+    await db.probeAiGeneration.create({
+      data: {
+        id: randomUUID(),
+        runId: completed.requestId,
+        kind: "story",
+        transcriptHash,
+        state: "succeeded",
+        output: historicalOutput,
+        completedAt: new Date(),
+      },
+    });
+    const read = await request(
+      app,
+      fixture.identity.token,
+      "GET",
+      `ai/runs/${completed.requestId}`,
+    );
+    assert.equal(read.statusCode, 200);
+    assert.deepEqual(read.json().data.configuration, historicalConfiguration);
+    assert.deepEqual(read.json().data.generations[0].output, historicalOutput);
+    assert.equal(read.json().data.originalTranscript, "合成历史原转录");
+    for (const input of [completed, pending]) {
+      assert.equal(
+        (await request(app, fixture.identity.token, "POST", "ai/runs", input))
+          .statusCode,
+        409,
+      );
+    }
+    assert.equal(
+      (
+        await request(
+          app,
+          fixture.identity.token,
+          "POST",
+          `ai/runs/${pending.requestId}/advance`,
+          {},
+        )
+      ).statusCode,
+      409,
+    );
+    assert.equal(
+      (
+        await request(
+          app,
+          fixture.identity.token,
+          "POST",
+          `ai/runs/${completed.requestId}/generations`,
+          { requestId: randomUUID(), kind: "story" },
+        )
+      ).statusCode,
+      409,
+    );
+    const current = (
+      await request(
+        app,
+        fixture.identity.token,
+        "POST",
+        "ai/runs",
+        command(clipId),
+      )
+    ).json().data;
+    assert.equal(current.configuration.promptVersion, "t03-v2");
+    assert.equal(current.configuration.outputContract, "t03-v2");
+    assert.equal(externalCalls, 0);
+  } finally {
+    await db.$disconnect();
     await app.close();
     nock.cleanAll();
   }

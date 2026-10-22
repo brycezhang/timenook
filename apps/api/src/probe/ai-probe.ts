@@ -20,6 +20,7 @@ import { probeStorageScope } from "./storage-scope";
 import {
   AI_FETCH,
   AsrSource,
+  AsrSourcePreflightError,
   DoubaoConfig,
   DoubaoFileAsr,
   DeepSeekText,
@@ -50,7 +51,8 @@ function configuration(config: AiProbeConfig) {
       maxTokens: config.deepseek.maxTokens,
       thinking: "disabled",
     },
-    promptVersion: "t03-v1",
+    promptVersion: "t03-v2",
+    outputContract: "t03-v2",
   };
 }
 const terminal = ["succeeded", "no_speech", "failed", "invalidated"];
@@ -261,31 +263,40 @@ export class AiProbe implements OnModuleDestroy {
       )
         return this.get(ownerId, id);
     } catch {
+      await this.invalidateAsrClaim(id, claimed.run.fence);
+      throw new ConflictException();
+    }
+    let result;
+    try {
+      result = claimed.submit
+        ? await this.asr.submit(id, source!)
+        : await this.asr.query(id);
+    } catch (error) {
+      if (!claimed.submit || !(error instanceof AsrSourcePreflightError))
+        throw error;
+      // No transport was entered. Only this claim may undo its submit marker;
+      // a later command signs a fresh source for the same persisted UUID.
       await this.db.probeAiRun.updateMany({
-        where: { id, fence: claimed.run.fence },
+        where: {
+          ...this.where(ownerId, id),
+          fence: claimed.run.fence,
+          state: "submitting",
+        },
         data: {
-          state: "invalidated",
+          state: "ready",
           fence: { increment: 1 },
+          attempts: { decrement: 1 },
+          submittedAt: null,
           leaseUntil: null,
         },
       });
-      throw new ConflictException();
+      return this.get(ownerId, id);
     }
-    const result = claimed.submit
-      ? await this.asr.submit(id, source!)
-      : await this.asr.query(id);
     try {
       await this.audio.identity(authorization);
       await this.load(ownerId, id);
     } catch {
-      await this.db.probeAiRun.updateMany({
-        where: { id, fence: claimed.run.fence },
-        data: {
-          state: "invalidated",
-          fence: { increment: 1 },
-          leaseUntil: null,
-        },
-      });
+      await this.invalidateAsrClaim(id, claimed.run.fence);
       throw new ConflictException();
     }
     await this.db.probeAiRun.updateMany({
@@ -305,6 +316,16 @@ export class AiProbe implements OnModuleDestroy {
       },
     });
     return this.get(ownerId, id);
+  }
+  private invalidateAsrClaim(id: string, fence: number) {
+    return this.db.probeAiRun.updateMany({
+      where: { id, fence },
+      data: {
+        state: "invalidated",
+        fence: { increment: 1 },
+        leaseUntil: null,
+      },
+    });
   }
   async metrics(ownerId: string) {
     const runs = await this.db.probeAiRun.findMany({
@@ -349,7 +370,7 @@ export class AiProbe implements OnModuleDestroy {
           ),
           generation: summary(
             generations.map((g) => this.effectiveGenerationState(g)),
-            ["succeeded", "declined", "not_applicable", "failed"],
+            ["succeeded", "finished", "declined", "not_applicable", "failed"],
           ),
           usage: {
             sealedAudioMs: rows.reduce(
@@ -472,10 +493,7 @@ export class AiProbe implements OnModuleDestroy {
       )
         throw new ConflictException();
     } catch {
-      await this.db.probeAiGeneration.updateMany({
-        where: { id: command.requestId, state: "generating" },
-        data: { state: "invalidated" },
-      });
+      await this.invalidateGeneration(command.requestId);
       throw new ConflictException();
     }
     const result = await this.text.generate(command.kind, {
@@ -496,10 +514,7 @@ export class AiProbe implements OnModuleDestroy {
       await this.audio.identity(authorization);
       await this.load(ownerId, id);
     } catch {
-      await this.db.probeAiGeneration.updateMany({
-        where: { id: command.requestId, state: "generating" },
-        data: { state: "invalidated" },
-      });
+      await this.invalidateGeneration(command.requestId);
       throw new ConflictException();
     }
     await this.db.probeAiGeneration.updateMany({
@@ -527,6 +542,12 @@ export class AiProbe implements OnModuleDestroy {
       }),
       await this.load(ownerId, id),
     );
+  }
+  private invalidateGeneration(id: string) {
+    return this.db.probeAiGeneration.updateMany({
+      where: { id, state: "generating" },
+      data: { state: "invalidated" },
+    });
   }
   async onModuleDestroy() {
     await this.db.$disconnect();
