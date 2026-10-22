@@ -1,4 +1,13 @@
-<view class="home"
+<view wx:if="{{mode === 'live'}}" class="page">
+  <view class="title">真实服务</view>
+  <view class="section">{{status}}</view>
+  <view wx:if="{{userId}}" class="small muted">服务端账号：{{userId}}</view>
+  <view class="section muted">当前仅提供账号登录与恢复。购买、项目和资料服务尚未开放；这里不显示本机演示项目。</view>
+  <button wx:if="{{!userId}}" class="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="login">微信登录</button>
+  <button class="link" disabled="{{busy}}" bindtap="logout">退出登录</button>
+  <button class="link" disabled="{{busy}}" bindtap="useDemo">切换到本机演示</button>
+</view>
+<view wx:else="" class="home"
   ><view class="home-hero"
     ><image
       class="hero-photo"
@@ -9,7 +18,9 @@
         >送给重要的人，<text class="line-break">{{'\n'}}</text>一本关于TA自己的书</view
       ><view class="hero-sub">把散落的时光，变成一本温暖的书</view></view
     ><text class="hero-label">效果示意</text></view
-  ><view class="home-content"
+    ><view class="home-content"
+    ><view class="demo-note">本机演示 · 不会付款，资料不属于服务端账号</view
+    ><button class="link" bindtap="login">切换到真实服务</button
     ><button wx:if="{{hasProject}}" class="home-return" bindtap="project">回到我的项目 <image class="icon small" src="/assets/icons/arrow-right.svg" /></button
     ><view class="gift-options"
       ><button class="gift-option" data-recipient="妈妈" bindtap="choose"

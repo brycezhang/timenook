@@ -4,6 +4,10 @@ export interface ApiConfig {
   port: number;
   databaseUrl: string;
   redisUrl: string;
+  wechat?: { appId: string; secret: string };
+  sessionTtlSeconds?: number;
+  redisKeyPrefix?: string;
+  loginLimitPerMinute?: number;
 }
 
 export const API_CONFIG = Symbol("API_CONFIG");
@@ -40,12 +44,38 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
       "Production requires independent database credentials",
     );
   }
+  const appId = env.TIMENOOK_WECHAT_APP_ID?.trim();
+  const secret = env.TIMENOOK_WECHAT_APP_SECRET?.trim();
+  if (!!appId !== !!secret)
+    throw new ConfigurationError("Configure both TimeNook WeChat credentials");
+  if (environment === "production" && (!appId || !secret)) {
+    throw new ConfigurationError(
+      "Production requires TimeNook WeChat credentials",
+    );
+  }
+  if (appId && secret && /\s|YOUR_|PLACEHOLDER|<|>/i.test(appId + secret)) {
+    throw new ConfigurationError(
+      "TimeNook WeChat credentials must not contain placeholders or whitespace",
+    );
+  }
+  const sessionTtlSeconds = Number(env.SESSION_TTL_SECONDS ?? "604800");
+  if (
+    !Number.isInteger(sessionTtlSeconds) ||
+    sessionTtlSeconds < 1 ||
+    sessionTtlSeconds > 2592000
+  ) {
+    throw new ConfigurationError(
+      "SESSION_TTL_SECONDS must be an integer between 1 and 2592000",
+    );
+  }
   return {
     environment,
     host: env.API_HOST ?? "127.0.0.1",
     port,
     databaseUrl,
     redisUrl,
+    wechat: appId && secret ? { appId, secret } : undefined,
+    sessionTtlSeconds,
   };
 }
 

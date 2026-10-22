@@ -64,3 +64,48 @@ model InterviewPreferences {
 
   @@map("interview_preferences")
 }
+
+model User {
+  id         String           @id @db.Uuid
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  identities WechatIdentity[]
+  sessions   Session[]
+
+  @@map("users")
+}
+
+model WechatIdentity {
+  appId  String @map("app_id")
+  openId String @map("open_id")
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@id([appId, openId])
+  @@index([userId])
+  @@map("wechat_identities")
+}
+
+model Session {
+  id        String    @id @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// An exchange is consumed before the external request, including unknown results.
+// Clients must obtain a fresh wx.login code after any failed exchange.
+model WechatCodeRedemption {
+  appId     String   @map("app_id")
+  codeHash  String   @map("code_hash") @db.Char(64)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@id([appId, codeHash])
+  @@index([expiresAt])
+  @@map("wechat_code_redemptions")
+}

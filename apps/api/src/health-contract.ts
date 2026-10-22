@@ -5,7 +5,7 @@ import type {
   HealthStatus,
 } from "@timenook/contracts";
 
-class RequestMetaDto {
+export class RequestMetaDto {
   @ApiProperty({ format: "uuid" })
   requestId!: string;
 }

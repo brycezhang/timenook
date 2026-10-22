@@ -4,6 +4,7 @@ import {
   type Project,
   type Recipient,
 } from "../domain/model";
+import { dataMode } from "./mode";
 const KEY = "timenook.frontend.v1";
 interface Library {
   version: 2;
@@ -11,6 +12,8 @@ interface Library {
   projects: Project[];
 }
 function library(): Library {
+  if (dataMode() === "live")
+    throw new Error("真实模式不能读取或创建本机演示资料");
   const value = wx.getStorageSync(KEY);
   if (!value) return { version: 2, activeProjectId: null, projects: [] };
   // Read the original single-project format without changing its contents.
@@ -72,9 +75,14 @@ export function required() {
   return p;
 }
 export function go(page: string, query = "") {
+  if (dataMode() === "live" && page !== "home") {
+    home("home");
+    return;
+  }
   wx.navigateTo({ url: `/pages/${page}/index${query ? "?" + query : ""}` });
 }
 export function home(page = "project") {
+  if (dataMode() === "live") page = "home";
   wx.reLaunch({ url: `/pages/${page}/index` });
 }
 export function toast(title: string) {
