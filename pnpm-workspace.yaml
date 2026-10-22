@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - vendor/vben/*
 
 onlyBuiltDependencies:
   - "@nestjs/core"
@@ -11,3 +12,7 @@ onlyBuiltDependencies:
 
 ignoredBuiltDependencies:
   - "@scarf/scarf"
+
+overrides:
+  vue: 3.5.31
+  vue-router: 5.0.4

@@ -1,7 +1,7 @@
 name: Check
 on:
   push:
-    branches: [main, "feat/**"]
+    branches: [main, "feat/**", "codex/**"]
   pull_request:
 permissions:
   contents: read
@@ -44,3 +44,5 @@ jobs:
       - run: pnpm db:migrate
       - run: pnpm check
       - run: pnpm api:openapi
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:admin-browser
