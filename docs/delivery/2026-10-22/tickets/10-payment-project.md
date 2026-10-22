@@ -1,6 +1,6 @@
 # T10 · 核验付款并唯一激活人生项目和首本权益
 
-状态：draft-review（待确认拆分，尚未发布到 GitHub）
+状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
 阶段：S1
 
 ## 交付结果
@@ -19,7 +19,7 @@
 - [T05 · 冻结销售参数并核验实际微信支付路径](05-commerce-admission.md)
 - [T06 · 接通微信登录、会话与账号恢复](06-wechat-session.md)
 - [T08 · 发布动态赠礼关系与不可变套餐](08-catalog-package.md)
-- [T09 · 发布中性大纲模板并预览讲述起点](09-template-publish.md)
+- [T09 · 后端内置单套默认大纲并复制为个人计划](09-builtin-template.md)
 
 ## 外部条件与完成边界
 

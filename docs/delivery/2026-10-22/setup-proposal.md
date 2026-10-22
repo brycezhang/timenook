@@ -1,8 +1,8 @@
 # 工程流程配置草稿
 
-状态：待确认后应用；这些段落目前不会作为仓库规则加载。
+状态：2026-10-22 已确认并应用。下方保留本次审阅的配置文本，实际规则以根 AGENTS.md 和 docs/agents 为准。
 
-建议：使用已指定 GitHub 仓库作为 tracker，保留五个默认 triage 标签，创建根 AGENTS.md；现有 GLOSSARY.md 和 docs/adr 保持单一业务上下文。以下是待写入各文件的完整文本。
+建议：使用已指定 GitHub 仓库作为 tracker，保留五个默认 triage 标签，创建根 AGENTS.md；现有 GLOSSARY.md 和 docs/adr 保持单一业务上下文。以下是本次确认写入的文本。
 
 ## AGENTS.md
 
@@ -72,4 +72,4 @@ PRs as a request surface: no.
 使用词汇表术语描述票据、接口和测试。新的不易逆转决策记录 ADR；与已有 ADR 冲突时先指出冲突及证据，不静默覆盖。目标能力与实际运行结果分开描述。
 ```
 
-选择 AGENTS.md 是本次建议；仓库此前没有 AGENTS.md 或 CLAUDE.md，确认后才创建。测试边界见 [实施规格](spec.md)。
+已采用 AGENTS.md；仓库此前没有 AGENTS.md 或 CLAUDE.md。测试边界见 [实施规格](spec.md)。

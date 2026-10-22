@@ -1,6 +1,6 @@
 # T03 · 验证豆包文件转写与 DeepSeek 生成质量
 
-状态：draft-review（待确认拆分，尚未发布到 GitHub）
+状态：approved（2026-10-22 用户调整后确认，待发布 GitHub）
 阶段：S0
 
 ## 交付结果

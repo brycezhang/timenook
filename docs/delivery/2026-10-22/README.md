@@ -1,6 +1,6 @@
 # 实施路线与 ticket 审阅清单
 
-2026-10-22 · 待确认拆分，尚未向 GitHub 发布 issues。目标仓库：[brycezhang/timenook](https://github.com/brycezhang/timenook)。
+2026-10-22 · 用户已确认并将运营模板改为后端单套内置模板；正在发布 GitHub issues。目标仓库：[brycezhang/timenook](https://github.com/brycezhang/timenook)。
 
 基于已定稿开发方案，拟创建 **1 个规格父 issue + 30 个子 tickets**，用 GitHub 原生 blocked-by 关系表示依赖，并按 ready-for-agent / ready-for-human 区分实现和外部决策。每票均可从本页打开完整验收条件。
 
@@ -49,9 +49,9 @@
    - 阻塞：T04、T05、T07。
    - 交付：运营发布关系目录和套餐后，小程序展示相同的价格、称呼及服务条款；配置不完整时明确不可购买。
 
-9. **[T09 发布中性大纲模板并预览讲述起点](tickets/09-template-publish.md)**
-   - 阻塞：T07。
-   - 交付：运营审校并发布模板，用户能预览章节和单个问题，后续项目固定引用当时模板。
+9. **[T09 后端内置单套默认大纲并复制为个人计划](tickets/09-builtin-template.md)**
+   - 阻塞：T01。
+   - 交付：后端内置一套默认模板，创建项目时复制独立计划；代码更新不覆盖旧项目，用户可编辑个人章节和问题。
 
 10. **[T10 核验付款并唯一激活人生项目和首本权益](tickets/10-payment-project.md)**
    - 阻塞：T05、T06、T08、T09。
@@ -139,7 +139,7 @@
 
 ## 启动顺序
 
-先完成 T01。之后按真正依赖推进：T02/T04/T05 进入 S0 联调与外部核验；T06 登录和 T07 管理入口可在本地独立推进。T09 可独立推进模板编辑与审校；T08 在 T04/T05 通过后发布完整套餐。需要提前验证 T08 的草稿约束时，可做本地准备，但不领取为无阻塞票或关闭验收。S0 尚未通过时，不把后续本地开发结果当作阶段验收或正式售卖授权。
+先完成 T01。之后按真正依赖推进：T02/T04/T05 进入 S0 联调与外部核验；T06 登录和 T07 管理入口可在本地独立推进。T09 可独立推进服务端固定模板与审校；T08 在 T04/T05 通过后发布完整套餐。需要提前验证 T08 的草稿约束时，可做本地准备，但不领取为无阻塞票或关闭验收。S0 尚未通过时，不把后续本地开发结果当作阶段验收或正式售卖授权。
 
 技术验证票须真实证据才关闭。任何票缺少账号、样本、设备、商业决策或印厂回执时保留未完成，转做图中其他可开始的票。生产数据采集、资金、印厂交接与售卖仍受对应条件约束。实施采用逐票实现和评审，不一次性搭建所有空壳模块。
 
@@ -151,7 +151,7 @@
 - A04：[T11](tickets/11-invitation-consent.md)；T30 汇总实测。
 - A05：[T11](tickets/11-invitation-consent.md)；T30 汇总实测。
 - A06：[T05](tickets/05-commerce-admission.md)、[T12](tickets/12-assisted-session.md)；T30 汇总实测。
-- A07：[T03](tickets/03-ai-provider-probe.md)、[T09](tickets/09-template-publish.md)、[T13](tickets/13-personal-plan.md)、[T14](tickets/14-interview-recording.md)、[T17](tickets/17-optional-followup.md)；T30 汇总实测。
+- A07：[T03](tickets/03-ai-provider-probe.md)、[T09](tickets/09-builtin-template.md)、[T13](tickets/13-personal-plan.md)、[T14](tickets/14-interview-recording.md)、[T17](tickets/17-optional-followup.md)；T30 汇总实测。
 - A08：[T16](tickets/16-story-photos.md)；T30 汇总实测。
 - A09：[T02](tickets/02-audio-storage-probe.md)、[T14](tickets/14-interview-recording.md)、[T15](tickets/15-durable-transcription.md)；T30 汇总实测。
 - A10：[T02](tickets/02-audio-storage-probe.md)、[T03](tickets/03-ai-provider-probe.md)、[T14](tickets/14-interview-recording.md)、[T15](tickets/15-durable-transcription.md)、[T18](tickets/18-story-generation.md)；T30 汇总实测。
@@ -173,15 +173,15 @@
 - X02：[T02](tickets/02-audio-storage-probe.md)、[T03](tickets/03-ai-provider-probe.md)、[T14](tickets/14-interview-recording.md)、[T15](tickets/15-durable-transcription.md)；T30 汇总实测。
 - X03：[T02](tickets/02-audio-storage-probe.md)、[T03](tickets/03-ai-provider-probe.md)、[T14](tickets/14-interview-recording.md)、[T15](tickets/15-durable-transcription.md)、[T17](tickets/17-optional-followup.md)、[T18](tickets/18-story-generation.md)、[T24](tickets/24-withdrawal.md)、[T29](tickets/29-release-recovery.md)；T30 汇总实测。
 - X04：[T04](tickets/04-print-image-probe.md)、[T05](tickets/05-commerce-admission.md)、[T10](tickets/10-payment-project.md)、[T16](tickets/16-story-photos.md)、[T23](tickets/23-production-shipping.md)、[T27](tickets/27-refund-reconciliation.md)；T30 汇总实测。
-- X05：[T09](tickets/09-template-publish.md)、[T13](tickets/13-personal-plan.md)、[T20](tickets/20-book-pdf.md)；T30 汇总实测。
+- X05：[T09](tickets/09-builtin-template.md)、[T13](tickets/13-personal-plan.md)、[T20](tickets/20-book-pdf.md)；T30 汇总实测。
 - X06：[T03](tickets/03-ai-provider-probe.md)、[T13](tickets/13-personal-plan.md)、[T17](tickets/17-optional-followup.md)、[T19](tickets/19-story-confirmation.md)、[T20](tickets/20-book-pdf.md)；T30 汇总实测。
 
 D01 由 T04 冻结；D02–D08 由 T05 冻结；D09 由 T09 冻结；D10 由 T08 冻结。T08 必需参数缺失则拒绝可售发布。T30 汇总全部参数、平台与实物证据。
 
-## 待确认内容
+## 已确认内容
 
-- 30 票的粒度、阻塞边是否适合分步实施，是否需要合并或拆开。
+- 沿用 30 票拆分；T09 改为后端一套固定模板，去掉运营模板管理及多模板选择/切换。
 - [实施规格](spec.md)中的四类测试边界，先从 HTTP 健康与依赖就绪验证开始。
 - [仓库流程配置草稿](setup-proposal.md)：GitHub Issues、默认标签、根 AGENTS.md、现有单一术语表与 ADR。
 
-确认后发布规格和 tickets，建立原生父子/阻塞关系，再执行 T01。当前文件是可审阅的草稿，既不是 GitHub 已创建票据，也不是功能已实现声明。
+发布规格和 tickets，建立原生父子/阻塞关系，再执行 T01。实际 issue 链接回填后作为执行索引；功能状态以验收证据为准。
