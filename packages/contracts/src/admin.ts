@@ -1,6 +1,9 @@
 export const ADMIN_PERMISSIONS = {
   readRuntime: "ops:read",
   readAudit: "audit:read",
+  readCatalog: "catalog:read",
+  writeCatalog: "catalog:write",
+  freezeCatalog: "catalog:freeze",
 } as const;
 
 export type AdminPermission =

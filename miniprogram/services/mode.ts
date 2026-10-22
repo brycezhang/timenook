@@ -5,3 +5,7 @@ export function dataMode(): DataMode {
 export function setDataMode(mode: DataMode): void {
   wx.setStorageSync("timenook.mode.v1", mode);
 }
+
+export function livePageAllowed(page: string): boolean {
+  return page === "home" || page === "purchase";
+}

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { Alert } from "antdv-next";
+import { Alert, Button } from "antdv-next";
 import { ADMIN_PERMISSIONS } from "@timenook/contracts";
 import type {
   AdminState,
@@ -11,6 +11,8 @@ import { adminApi } from "./api/admin";
 import Auth from "./views/auth.vue";
 import BasicLayout from "./layouts/basic.vue";
 import Runtime from "./views/runtime.vue";
+import Catalog from "./views/catalog.vue";
+const view = ref("runtime");
 const state = ref<AdminState | null>(null),
   secret = ref(""),
   busy = ref(false),
@@ -28,7 +30,14 @@ const canReadAudit = computed(
     state.value?.operator?.permissions.includes(ADMIN_PERMISSIONS.readAudit) ??
     false,
 );
+const canReadCatalog = computed(
+  () =>
+    state.value?.operator?.permissions.includes(
+      ADMIN_PERMISSIONS.readCatalog,
+    ) ?? false,
+);
 function clearSession() {
+  view.value = "runtime";
   state.value = null;
   secret.value = "";
   audits.value = null;
@@ -109,7 +118,29 @@ onMounted(() => {
       class="notice"
       role="alert"
     />
+    <nav v-if="canReadCatalog" class="catalog-navigation">
+      <Button
+        :type="view === 'runtime' ? 'primary' : 'default'"
+        @click="view = 'runtime'"
+        >运行信息</Button
+      ><Button
+        :type="view === 'catalog' ? 'primary' : 'default'"
+        @click="view = 'catalog'"
+        >关系与套餐</Button
+      >
+    </nav>
+    <Catalog
+      v-if="view === 'catalog' && canReadCatalog"
+      :csrf="state.csrfToken"
+      :permissions="state.operator!.permissions"
+      @expired="
+        perform(async () => {
+          throw { error: { code: 'UNAUTHENTICATED' } };
+        })
+      "
+    />
     <Runtime
+      v-else
       :status="status"
       :can-read-runtime="canReadRuntime"
       :can-read-audit="canReadAudit"

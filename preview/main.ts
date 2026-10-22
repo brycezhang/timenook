@@ -1,6 +1,6 @@
 import "./base.css";
 import { read as readProject } from "../miniprogram/services/store";
-import { dataMode } from "../miniprogram/services/mode";
+import { dataMode, livePageAllowed } from "../miniprogram/services/mode";
 import {
   createRecorder,
   createAudio,
@@ -109,6 +109,48 @@ const wx: any = {
   },
   removeStorageSync(key: string) {
     localStorage.removeItem(key);
+  },
+  request(options: any) {
+    // Browser preview implements public catalog HTTP only; it cannot synthesize wx.login.
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      options.timeout ?? 10000,
+    );
+    const url = new URL(options.url, location.origin);
+    const supported =
+      (!options.method || options.method === "GET") &&
+      /\/v1\/(recipient-types|packages\/current)$/.test(url.pathname);
+    void (async () => {
+      try {
+        if (!supported) throw new Error("Unsupported preview request");
+        const response = await fetch(url, {
+          method: "GET",
+          credentials: "omit",
+          signal: controller.signal,
+        });
+        const result = {
+          statusCode: response.status,
+          data: await response.json(),
+          header: Object.fromEntries(response.headers.entries()),
+          cookies: [],
+          errMsg: "request:ok",
+        };
+        options.success?.(result);
+        options.complete?.(result);
+      } catch {
+        const result = { errMsg: "request:fail" };
+        options.fail?.(result);
+        options.complete?.(result);
+      } finally {
+        clearTimeout(timer);
+      }
+    })();
+    return {
+      abort() {
+        controller.abort();
+      },
+    };
   },
   navigateTo({ url }: any) {
     location.hash = targetUrl(url);
@@ -338,7 +380,7 @@ async function mount() {
   const ticket = ++serial;
   const hash = location.hash.replace(/^#\/?/, "") || "home";
   const [name, query] = hash.split("?");
-  if (dataMode() === "live" && name !== "home") {
+  if (dataMode() === "live" && !livePageAllowed(name)) {
     wx.reLaunch({ url: "/pages/home/index" });
     return;
   }
@@ -419,7 +461,8 @@ document.querySelector("#capsule")!.addEventListener("click", () => {
     b.onclick = () => {
       overlay.replaceChildren();
       if (dataMode() === "live") {
-        toast("真实模式只开放账号入口；请先切换到本机演示");
+        if (livePageAllowed(name)) location.hash = "#/" + name;
+        else toast("此页面仅用于本机演示，请先切换模式");
         return;
       }
       const project = readProject();

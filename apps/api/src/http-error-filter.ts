@@ -1,3 +1,4 @@
+import { InvalidPackageException } from "./catalog/errors";
 import {
   ArgumentsHost,
   Catch,
@@ -69,6 +70,13 @@ export class HttpErrorFilter implements ExceptionFilter {
     const request = http.getRequest<FastifyRequest>();
     const reply = http.getResponse<FastifyReply>();
     const status = error instanceof HttpException ? error.getStatus() : 500;
-    reply.status(status).send(errorResponse(status, request.id));
+    const payload = errorResponse(status, request.id);
+    if (error instanceof InvalidPackageException)
+      payload.error = {
+        code: "INVALID_PACKAGE",
+        message: "Package parameters are incomplete",
+        retryable: false,
+      };
+    reply.status(status).send(payload);
   }
 }

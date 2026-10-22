@@ -4,7 +4,7 @@ import {
   type Project,
   type Recipient,
 } from "../domain/model";
-import { dataMode } from "./mode";
+import { dataMode, livePageAllowed } from "./mode";
 const KEY = "timenook.frontend.v1";
 interface Library {
   version: 2;
@@ -75,7 +75,7 @@ export function required() {
   return p;
 }
 export function go(page: string, query = "") {
-  if (dataMode() === "live" && page !== "home") {
+  if (dataMode() === "live" && !livePageAllowed(page)) {
     home("home");
     return;
   }

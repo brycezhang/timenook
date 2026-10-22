@@ -50,3 +50,80 @@ export const adminApi = {
     await client.post("/logout", {}, { headers: { "X-CSRF-Token": csrf } });
   },
 };
+
+import type {
+  ManagedRecipientType,
+  PackageDraft,
+  PackageDraftInput,
+  PackageVersion,
+} from "@timenook/contracts";
+export const catalogApi = {
+  async recipients() {
+    return (
+      await client.get<ApiResponse<ManagedRecipientType[]>>(
+        "/catalog/recipient-types",
+      )
+    ).data;
+  },
+  async saveRecipient(
+    input: Omit<ManagedRecipientType, "revision">,
+    revision: number | null,
+    csrf: string,
+  ) {
+    const { code, label, sortOrder, active } = input;
+    const fields = { label, sortOrder, active };
+    return (
+      revision === null
+        ? await client.post<ApiResponse<ManagedRecipientType>>(
+            "/catalog/recipient-types",
+            { code, ...fields },
+            { headers: { "X-CSRF-Token": csrf } },
+          )
+        : await client.put<ApiResponse<ManagedRecipientType>>(
+            `/catalog/recipient-types/${encodeURIComponent(code)}`,
+            { ...fields, expectedRevision: revision },
+            { headers: { "X-CSRF-Token": csrf } },
+          )
+    ).data;
+  },
+  async drafts() {
+    return (
+      await client.get<ApiResponse<PackageDraft[]>>("/catalog/package-drafts")
+    ).data;
+  },
+  async saveDraft(
+    input: PackageDraftInput,
+    draft: { id: string; revision: number } | null,
+    csrf: string,
+  ) {
+    return (
+      draft
+        ? await client.put<ApiResponse<PackageDraft>>(
+            `/catalog/package-drafts/${draft.id}`,
+            { ...input, expectedRevision: draft.revision },
+            { headers: { "X-CSRF-Token": csrf } },
+          )
+        : await client.post<ApiResponse<PackageDraft>>(
+            "/catalog/package-drafts",
+            input,
+            { headers: { "X-CSRF-Token": csrf } },
+          )
+    ).data;
+  },
+  async versions() {
+    return (
+      await client.get<ApiResponse<PackageVersion[]>>(
+        "/catalog/package-versions",
+      )
+    ).data;
+  },
+  async freeze(draft: { id: string; revision: number }, csrf: string) {
+    return (
+      await client.post<ApiResponse<PackageVersion>>(
+        `/catalog/package-drafts/${draft.id}/preview-versions`,
+        { expectedRevision: draft.revision },
+        { headers: { "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
+};

@@ -1,0 +1,922 @@
+{
+  "title": "合成套餐预览",
+  "d01": {
+    "review": {
+      "state": "frozen",
+      "ownerRef": "record:synthetic-print-owner",
+      "decisionRef": "record:synthetic-print-decision",
+      "decidedAt": "2026-10-22T08:00:00Z"
+    },
+    "widthMm": 148,
+    "heightMm": 210,
+    "paper": "合成纸张说明",
+    "binding": "合成装帧",
+    "color": "合成色彩",
+    "minPages": 48,
+    "maxPages": 120,
+    "bleedMm": 3,
+    "pdfFormat": "PDF/X-4",
+    "embeddedFonts": true,
+    "fontLicenseRef": "record:synthetic-font-license",
+    "photoMinDpi": 300
+  },
+  "admission": {
+    "schemaVersion": 1,
+    "purpose": "admission_review",
+    "package": {
+      "price": {
+        "value": 99900,
+        "unit": "fen",
+        "currency": "CNY"
+      },
+      "projects": 1,
+      "adultSubjects": 1,
+      "initiators": 1,
+      "firstCopies": 1,
+      "rolesDistinct": true,
+      "agreedShippingIncluded": true,
+      "completeExportIncluded": true,
+      "paidExtraCopies": false,
+      "paidExtraPages": false
+    },
+    "d02": {
+      "review": {
+        "state": "frozen",
+        "ownerRef": "record:operations-owner",
+        "decisionRef": "record:decision-review",
+        "decidedAt": "2026-10-22T08:00:00Z"
+      },
+      "duration": {
+        "value": 180,
+        "unit": "calendar_days"
+      },
+      "startsAt": "subject_participation",
+      "notStarted": {
+        "maxWait": {
+          "value": 90,
+          "unit": "calendar_days"
+        },
+        "startsAt": "payment_verified",
+        "resolution": "contact_and_offer_refund",
+        "noticeRef": "record:not-started-policy"
+      },
+      "pause": {
+        "clock": "stops",
+        "maxTotal": {
+          "value": 30,
+          "unit": "calendar_days"
+        },
+        "atLimit": "resume_clock",
+        "policyRef": "record:pause-policy"
+      },
+      "expiration": {
+        "newRecording": "blocked",
+        "firstCopy": "manual_review",
+        "existingData": "per_d03",
+        "noticeRef": "record:creation-expiry"
+      }
+    },
+    "d03": {
+      "review": {
+        "state": "frozen",
+        "ownerRef": "record:operations-owner",
+        "decisionRef": "record:decision-review",
+        "decidedAt": "2026-10-22T08:00:00Z"
+      },
+      "onlinePlayback": {
+        "duration": {
+          "value": 365,
+          "unit": "calendar_days"
+        },
+        "startsAt": "delivery_completed",
+        "expires": "stop_access"
+      },
+      "exportRequests": {
+        "duration": {
+          "value": 365,
+          "unit": "calendar_days"
+        },
+        "startsAt": "delivery_completed",
+        "channelRef": "record:export-intake"
+      },
+      "retention": {
+        "originalAudio": {
+          "duration": {
+            "value": 400,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivery_completed"
+        },
+        "originalPhotos": {
+          "duration": {
+            "value": 400,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivery_completed"
+        },
+        "derivedAudio": {
+          "duration": {
+            "value": 400,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivery_completed"
+        },
+        "derivedPhotos": {
+          "duration": {
+            "value": 400,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivery_completed"
+        },
+        "transcripts": {
+          "duration": {
+            "value": 400,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivery_completed"
+        },
+        "confirmedStories": {
+          "duration": {
+            "value": 400,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivery_completed"
+        },
+        "bookPdf": {
+          "duration": {
+            "value": 400,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivery_completed"
+        },
+        "exportPackages": {
+          "duration": {
+            "value": 7,
+            "unit": "calendar_days"
+          },
+          "startsAt": "export_ready"
+        },
+        "activeData": {
+          "duration": {
+            "value": 400,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivery_completed"
+        },
+        "historicalObjects": {
+          "duration": {
+            "value": 400,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivery_completed"
+        },
+        "backupCopies": {
+          "duration": {
+            "value": 430,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivery_completed"
+        },
+        "supplierCopies": {
+          "duration": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "startsAt": "processing_completed"
+        }
+      },
+      "deletion": {
+        "activeData": {
+          "within": {
+            "value": 7,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_deletion_request",
+          "procedureRef": "record:deletion-procedure"
+        },
+        "historicalObjects": {
+          "within": {
+            "value": 7,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_deletion_request",
+          "procedureRef": "record:deletion-procedure"
+        },
+        "backupCopies": {
+          "within": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_deletion_request",
+          "procedureRef": "record:deletion-procedure"
+        },
+        "supplierCopies": {
+          "within": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_deletion_request",
+          "procedureRef": "record:deletion-procedure"
+        }
+      },
+      "expiryNotice": {
+        "advance": {
+          "value": 30,
+          "unit": "calendar_days"
+        },
+        "channelRef": "record:expiry-contact",
+        "policyRef": "record:expiry-policy"
+      },
+      "copyStatusSeparately": true,
+      "restoreAppliesDeletionLedger": true
+    },
+    "d04": {
+      "review": {
+        "state": "frozen",
+        "ownerRef": "record:operations-owner",
+        "decisionRef": "record:decision-review",
+        "decidedAt": "2026-10-22T08:00:00Z"
+      },
+      "userQuotas": {
+        "recordingPerClip": {
+          "value": 600,
+          "unit": "seconds",
+          "excess": "stop_and_contact_support",
+          "noticeRef": "record:quota-notice"
+        },
+        "recordingTotal": {
+          "value": 36000,
+          "unit": "seconds",
+          "excess": "stop_and_contact_support",
+          "noticeRef": "record:quota-notice"
+        },
+        "photos": {
+          "value": 80,
+          "unit": "count",
+          "excess": "stop_and_contact_support",
+          "noticeRef": "record:quota-notice"
+        },
+        "storyOrganizations": {
+          "value": 50,
+          "unit": "count",
+          "excess": "stop_and_contact_support",
+          "noticeRef": "record:quota-notice"
+        },
+        "activeRegenerations": {
+          "value": 20,
+          "unit": "count",
+          "excess": "stop_and_contact_support",
+          "noticeRef": "record:quota-notice"
+        },
+        "followUps": {
+          "value": 100,
+          "unit": "count",
+          "excess": "stop_and_contact_support",
+          "noticeRef": "record:quota-notice"
+        }
+      },
+      "providerBudget": {
+        "asrSubmissions": {
+          "value": 150,
+          "unit": "count"
+        },
+        "asrPolls": {
+          "value": 1000,
+          "unit": "count"
+        },
+        "systemRetries": {
+          "value": 20,
+          "unit": "count"
+        },
+        "costCap": {
+          "value": 5000,
+          "unit": "fen"
+        },
+        "scope": "per_project",
+        "exhausted": "manual_review",
+        "ownerRef": "record:cost-owner"
+      },
+      "systemRetriesChargeUserQuota": false
+    },
+    "d05": {
+      "review": {
+        "state": "frozen",
+        "ownerRef": "record:operations-owner",
+        "decisionRef": "record:decision-review",
+        "decidedAt": "2026-10-22T08:00:00Z"
+      },
+      "regionCatalogRef": "record:shipping-region-catalog",
+      "includedRegionCodes": ["CN-110000", "CN-310000"],
+      "excludedRegionCodes": ["CN-810000"],
+      "unlistedRegion": "reject_before_payment",
+      "shippingFeeIncluded": true,
+      "beforePaymentNoticeRef": "record:shipping-notice",
+      "verification": {
+        "method": "address_code_and_manual_review",
+        "evidenceRef": "record:shipping-check",
+        "checkedAt": "2026-10-22T08:00:00Z",
+        "ownerRef": "record:shipping-owner"
+      }
+    },
+    "d06": {
+      "review": {
+        "state": "frozen",
+        "ownerRef": "record:operations-owner",
+        "decisionRef": "record:decision-review",
+        "decidedAt": "2026-10-22T08:00:00Z"
+      },
+      "businessCalendarRef": "record:service-calendar",
+      "proofreading": {
+        "within": {
+          "value": 3,
+          "unit": "business_days"
+        },
+        "startsAt": "proofreading_requested",
+        "ownerRef": "record:service-owner",
+        "procedureRef": "record:service-procedure"
+      },
+      "completeExport": {
+        "within": {
+          "value": 3,
+          "unit": "business_days"
+        },
+        "startsAt": "export_identity_and_scope_verified",
+        "ownerRef": "record:service-owner",
+        "procedureRef": "record:service-procedure"
+      },
+      "production": {
+        "within": {
+          "value": 10,
+          "unit": "business_days"
+        },
+        "startsAt": "book_locked_and_operations_approved",
+        "ownerRef": "record:service-owner",
+        "procedureRef": "record:service-procedure"
+      },
+      "logistics": {
+        "within": {
+          "value": 5,
+          "unit": "business_days"
+        },
+        "startsAt": "carrier_accepted",
+        "ownerRef": "record:service-owner",
+        "procedureRef": "record:service-procedure"
+      },
+      "customerService": {
+        "within": {
+          "value": 1,
+          "unit": "business_days"
+        },
+        "startsAt": "request_received",
+        "ownerRef": "record:service-owner",
+        "procedureRef": "record:service-procedure"
+      },
+      "afterSales": {
+        "within": {
+          "value": 3,
+          "unit": "business_days"
+        },
+        "startsAt": "after_sales_request_verified",
+        "ownerRef": "record:service-owner",
+        "procedureRef": "record:service-procedure"
+      },
+      "logisticsScope": "all_included_regions"
+    },
+    "d07": {
+      "review": {
+        "state": "frozen",
+        "ownerRef": "record:operations-owner",
+        "decisionRef": "record:decision-review",
+        "decidedAt": "2026-10-22T08:00:00Z"
+      },
+      "refundDeletesData": false,
+      "qualityReprintUsesOriginalOrder": true,
+      "notParticipated": {
+        "refundAmount": {
+          "value": 99900,
+          "unit": "fen"
+        },
+        "requestWindow": {
+          "duration": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "startsAt": "payment_verified"
+        },
+        "processing": {
+          "within": {
+            "value": 7,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_refund_request"
+        },
+        "remedy": "refund",
+        "entitlementEffect": {
+          "creation": "terminate",
+          "firstCopy": "cancel"
+        },
+        "productionAction": "check_and_stop_if_possible",
+        "policyRef": "record:refund-policy",
+        "ownerRef": "record:refund-owner"
+      },
+      "usedNotProduced": {
+        "refundAmount": {
+          "value": 70000,
+          "unit": "fen"
+        },
+        "requestWindow": {
+          "duration": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "startsAt": "service_first_used"
+        },
+        "processing": {
+          "within": {
+            "value": 7,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_refund_request"
+        },
+        "remedy": "refund",
+        "entitlementEffect": {
+          "creation": "terminate",
+          "firstCopy": "cancel"
+        },
+        "productionAction": "check_and_stop_if_possible",
+        "policyRef": "record:refund-policy",
+        "ownerRef": "record:refund-owner"
+      },
+      "inProduction": {
+        "refundAmount": {
+          "value": 20000,
+          "unit": "fen"
+        },
+        "requestWindow": {
+          "duration": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "startsAt": "production_accepted"
+        },
+        "processing": {
+          "within": {
+            "value": 7,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_refund_request"
+        },
+        "remedy": "refund",
+        "entitlementEffect": {
+          "creation": "terminate",
+          "firstCopy": "cancel"
+        },
+        "productionAction": "check_and_stop_if_possible",
+        "policyRef": "record:refund-policy",
+        "ownerRef": "record:refund-owner"
+      },
+      "platformUnableDeliver": {
+        "refundAmount": {
+          "value": 99900,
+          "unit": "fen"
+        },
+        "requestWindow": {
+          "duration": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "startsAt": "failure_notified"
+        },
+        "processing": {
+          "within": {
+            "value": 7,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_refund_request"
+        },
+        "remedy": "refund",
+        "entitlementEffect": {
+          "creation": "terminate",
+          "firstCopy": "cancel"
+        },
+        "productionAction": "check_and_stop_if_possible",
+        "policyRef": "record:refund-policy",
+        "ownerRef": "record:refund-owner"
+      },
+      "qualityDamaged": {
+        "refundAmount": {
+          "value": 99900,
+          "unit": "fen"
+        },
+        "requestWindow": {
+          "duration": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivered"
+        },
+        "processing": {
+          "within": {
+            "value": 7,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_refund_request"
+        },
+        "remedy": "resend_or_refund",
+        "entitlementEffect": {
+          "creation": "terminate",
+          "firstCopy": "cancel"
+        },
+        "productionAction": "check_and_stop_if_possible",
+        "policyRef": "record:refund-policy",
+        "ownerRef": "record:refund-owner"
+      },
+      "qualityMissingPages": {
+        "refundAmount": {
+          "value": 99900,
+          "unit": "fen"
+        },
+        "requestWindow": {
+          "duration": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivered"
+        },
+        "processing": {
+          "within": {
+            "value": 7,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_refund_request"
+        },
+        "remedy": "reprint_or_refund",
+        "entitlementEffect": {
+          "creation": "terminate",
+          "firstCopy": "cancel"
+        },
+        "productionAction": "check_and_stop_if_possible",
+        "policyRef": "record:refund-policy",
+        "ownerRef": "record:refund-owner"
+      },
+      "qualityWrongVersion": {
+        "refundAmount": {
+          "value": 99900,
+          "unit": "fen"
+        },
+        "requestWindow": {
+          "duration": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivered"
+        },
+        "processing": {
+          "within": {
+            "value": 7,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_refund_request"
+        },
+        "remedy": "reprint_or_refund",
+        "entitlementEffect": {
+          "creation": "terminate",
+          "firstCopy": "cancel"
+        },
+        "productionAction": "check_and_stop_if_possible",
+        "policyRef": "record:refund-policy",
+        "ownerRef": "record:refund-owner"
+      },
+      "qualityLayoutError": {
+        "refundAmount": {
+          "value": 99900,
+          "unit": "fen"
+        },
+        "requestWindow": {
+          "duration": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "startsAt": "delivered"
+        },
+        "processing": {
+          "within": {
+            "value": 7,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_refund_request"
+        },
+        "remedy": "reprint_or_refund",
+        "entitlementEffect": {
+          "creation": "terminate",
+          "firstCopy": "cancel"
+        },
+        "productionAction": "check_and_stop_if_possible",
+        "policyRef": "record:refund-policy",
+        "ownerRef": "record:refund-owner"
+      },
+      "postConfirmationFactualError": {
+        "refundAmount": {
+          "value": 0,
+          "unit": "fen"
+        },
+        "requestWindow": {
+          "duration": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "startsAt": "error_discovered"
+        },
+        "processing": {
+          "within": {
+            "value": 7,
+            "unit": "calendar_days"
+          },
+          "startsAt": "verified_refund_request"
+        },
+        "remedy": "correction_and_explain",
+        "entitlementEffect": {
+          "creation": "terminate",
+          "firstCopy": "cancel"
+        },
+        "productionAction": "check_and_stop_if_possible",
+        "policyRef": "record:refund-policy",
+        "ownerRef": "record:refund-owner"
+      }
+    },
+    "d08": {
+      "review": {
+        "state": "frozen",
+        "ownerRef": "record:operations-owner",
+        "decisionRef": "record:decision-review",
+        "decidedAt": "2026-10-22T08:00:00Z"
+      },
+      "identity": {
+        "legalEntityRef": "record:synthetic-entity",
+        "appId": "wx0123456789abcdef",
+        "merchantId": "1900000109",
+        "categoryId": "record:synthetic-category",
+        "paymentPathId": "record:synthetic-payment-path",
+        "productType": "digital-production-plus-physical-book"
+      },
+      "platform": {
+        "merchantBinding": {
+          "outcome": "approved",
+          "scope": {
+            "legalEntityRef": "record:synthetic-entity",
+            "appId": "wx0123456789abcdef",
+            "merchantId": "1900000109",
+            "categoryId": "record:synthetic-category",
+            "paymentPathId": "record:synthetic-payment-path",
+            "productType": "digital-production-plus-physical-book"
+          },
+          "evidenceRef": "record:synthetic-platform-result",
+          "requirementsRef": "record:synthetic-platform-requirements",
+          "reviewerRef": "record:platform-reviewer",
+          "checkedAt": "2026-10-22T08:00:00Z"
+        },
+        "productAdmission": {
+          "outcome": "approved",
+          "scope": {
+            "legalEntityRef": "record:synthetic-entity",
+            "appId": "wx0123456789abcdef",
+            "merchantId": "1900000109",
+            "categoryId": "record:synthetic-category",
+            "paymentPathId": "record:synthetic-payment-path",
+            "productType": "digital-production-plus-physical-book"
+          },
+          "evidenceRef": "record:synthetic-platform-result",
+          "requirementsRef": "record:synthetic-platform-requirements",
+          "reviewerRef": "record:platform-reviewer",
+          "checkedAt": "2026-10-22T08:00:00Z"
+        },
+        "iosPayment": {
+          "outcome": "approved",
+          "scope": {
+            "legalEntityRef": "record:synthetic-entity",
+            "appId": "wx0123456789abcdef",
+            "merchantId": "1900000109",
+            "categoryId": "record:synthetic-category",
+            "paymentPathId": "record:synthetic-payment-path",
+            "productType": "digital-production-plus-physical-book"
+          },
+          "evidenceRef": "record:synthetic-platform-result",
+          "requirementsRef": "record:synthetic-platform-requirements",
+          "reviewerRef": "record:platform-reviewer",
+          "checkedAt": "2026-10-22T08:00:00Z",
+          "deviceTestRef": "record:ios-test",
+          "paymentAndQuery": "passed"
+        },
+        "androidPayment": {
+          "outcome": "approved",
+          "scope": {
+            "legalEntityRef": "record:synthetic-entity",
+            "appId": "wx0123456789abcdef",
+            "merchantId": "1900000109",
+            "categoryId": "record:synthetic-category",
+            "paymentPathId": "record:synthetic-payment-path",
+            "productType": "digital-production-plus-physical-book"
+          },
+          "evidenceRef": "record:synthetic-platform-result",
+          "requirementsRef": "record:synthetic-platform-requirements",
+          "reviewerRef": "record:platform-reviewer",
+          "checkedAt": "2026-10-22T08:00:00Z",
+          "deviceTestRef": "record:android-test",
+          "paymentAndQuery": "passed"
+        },
+        "shippingManagement": {
+          "outcome": "approved",
+          "scope": {
+            "legalEntityRef": "record:synthetic-entity",
+            "appId": "wx0123456789abcdef",
+            "merchantId": "1900000109",
+            "categoryId": "record:synthetic-category",
+            "paymentPathId": "record:synthetic-payment-path",
+            "productType": "digital-production-plus-physical-book"
+          },
+          "evidenceRef": "record:synthetic-platform-result",
+          "requirementsRef": "record:synthetic-platform-requirements",
+          "reviewerRef": "record:platform-reviewer",
+          "checkedAt": "2026-10-22T08:00:00Z",
+          "fulfillmentTestRef": "record:shipping-test",
+          "requirementHandling": "implemented_and_verified"
+        }
+      },
+      "identityBinding": {
+        "outcome": "approved",
+        "evidenceRef": "record:synthetic-review-evidence",
+        "reviewerRef": "record:synthetic-reviewer",
+        "checkedAt": "2026-10-22T08:00:00Z",
+        "procedureRef": "record:binding-procedure",
+        "subjectAndOperatorSeparate": true,
+        "subjectAppliesInitiatorConfirms": true,
+        "rejectInitiatorSelfBinding": true,
+        "paymentIsNotConsent": true
+      },
+      "assistedConsent": {
+        "outcome": "approved",
+        "evidenceRef": "record:synthetic-review-evidence",
+        "reviewerRef": "record:synthetic-reviewer",
+        "checkedAt": "2026-10-22T08:00:00Z",
+        "subjectPresenceRequired": true,
+        "evidenceFormRef": "record:assisted-evidence-form",
+        "captureProcedureRef": "record:assisted-capture",
+        "bindsSubjectAndOperator": true,
+        "bindsPurposeAndNoticeVersion": true,
+        "bindsExactContentVersion": true,
+        "everyConfirmationRecorded": true,
+        "ownerRef": "record:consent-owner"
+      },
+      "disputes": {
+        "channelRef": "record:dispute-intake",
+        "verificationProcedureRef": "record:dispute-verification",
+        "interimAction": "freeze_access_and_processing",
+        "resolutionWithin": {
+          "value": 7,
+          "unit": "calendar_days"
+        },
+        "ownerRef": "record:dispute-owner",
+        "decisionNoticeRef": "record:dispute-notice"
+      },
+      "withoutWechat": {
+        "withdrawal": {
+          "channelRef": "record:subject-service-channel",
+          "identityVerificationRef": "record:subject-verification",
+          "scopeVerificationRef": "record:request-scope",
+          "confirmationChannelRef": "record:subject-confirmation",
+          "ownerRef": "record:rights-owner",
+          "responseWithin": {
+            "value": 3,
+            "unit": "calendar_days"
+          },
+          "applicant": "verified_subject"
+        },
+        "export": {
+          "channelRef": "record:subject-service-channel",
+          "identityVerificationRef": "record:subject-verification",
+          "scopeVerificationRef": "record:request-scope",
+          "confirmationChannelRef": "record:subject-confirmation",
+          "ownerRef": "record:rights-owner",
+          "responseWithin": {
+            "value": 3,
+            "unit": "calendar_days"
+          },
+          "applicant": "verified_subject",
+          "deliveryChannelRef": "record:verified-subject-delivery",
+          "recipient": "verified_subject_or_explicitly_authorized_recipient",
+          "neverDefaultToInitiator": true
+        },
+        "deletion": {
+          "channelRef": "record:subject-service-channel",
+          "identityVerificationRef": "record:subject-verification",
+          "scopeVerificationRef": "record:request-scope",
+          "confirmationChannelRef": "record:subject-confirmation",
+          "ownerRef": "record:rights-owner",
+          "responseWithin": {
+            "value": 3,
+            "unit": "calendar_days"
+          },
+          "applicant": "verified_subject"
+        }
+      },
+      "privacy": {
+        "outcome": "approved",
+        "evidenceRef": "record:synthetic-review-evidence",
+        "reviewerRef": "record:synthetic-reviewer",
+        "checkedAt": "2026-10-22T08:00:00Z",
+        "noticeVersionRef": "record:privacy-notice-version",
+        "collectionAiSharingPrintSeparate": true,
+        "withdrawalStopsAccessAndProcessing": true,
+        "minimumProductionDataOnly": true
+      },
+      "suppliers": {
+        "asr": {
+          "outcome": "approved",
+          "evidenceRef": "record:synthetic-review-evidence",
+          "reviewerRef": "record:synthetic-reviewer",
+          "checkedAt": "2026-10-22T08:00:00Z",
+          "providerRef": "record:synthetic-provider",
+          "serviceConfigRef": "record:synthetic-service-version",
+          "termsRef": "record:synthetic-processing-terms",
+          "dataRegionRef": "record:synthetic-processing-region",
+          "ownerRef": "record:supplier-owner",
+          "purpose": "file_asr",
+          "dataKinds": ["original_audio"],
+          "retention": {
+            "duration": {
+              "value": 30,
+              "unit": "calendar_days"
+            },
+            "startsAt": "processing_completed"
+          },
+          "deletionWithin": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "deletionProcedureRef": "record:supplier-deletion",
+          "trainingUse": "prohibited",
+          "onwardSharing": "contracted_subprocessors_only"
+        },
+        "text": {
+          "outcome": "approved",
+          "evidenceRef": "record:synthetic-review-evidence",
+          "reviewerRef": "record:synthetic-reviewer",
+          "checkedAt": "2026-10-22T08:00:00Z",
+          "providerRef": "record:synthetic-provider",
+          "serviceConfigRef": "record:synthetic-service-version",
+          "termsRef": "record:synthetic-processing-terms",
+          "dataRegionRef": "record:synthetic-processing-region",
+          "ownerRef": "record:supplier-owner",
+          "purpose": "story_and_follow_up",
+          "dataKinds": ["transcripts"],
+          "retention": {
+            "duration": {
+              "value": 30,
+              "unit": "calendar_days"
+            },
+            "startsAt": "processing_completed"
+          },
+          "deletionWithin": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "deletionProcedureRef": "record:supplier-deletion",
+          "trainingUse": "prohibited",
+          "onwardSharing": "contracted_subprocessors_only"
+        },
+        "printing": {
+          "outcome": "approved",
+          "evidenceRef": "record:synthetic-review-evidence",
+          "reviewerRef": "record:synthetic-reviewer",
+          "checkedAt": "2026-10-22T08:00:00Z",
+          "providerRef": "record:synthetic-provider",
+          "serviceConfigRef": "record:synthetic-service-version",
+          "termsRef": "record:synthetic-processing-terms",
+          "dataRegionRef": "record:synthetic-processing-region",
+          "ownerRef": "record:supplier-owner",
+          "purpose": "print_and_ship",
+          "dataKinds": ["production_pdf", "shipping_address"],
+          "retention": {
+            "duration": {
+              "value": 30,
+              "unit": "calendar_days"
+            },
+            "startsAt": "processing_completed"
+          },
+          "deletionWithin": {
+            "value": 30,
+            "unit": "calendar_days"
+          },
+          "deletionProcedureRef": "record:supplier-deletion",
+          "trainingUse": "prohibited",
+          "onwardSharing": "contracted_subprocessors_only"
+        }
+      }
+    }
+  },
+  "shippingRegionLabels": {
+    "CN-110000": "北京地区（合成）",
+    "CN-310000": "上海地区（合成）",
+    "CN-810000": "香港地区（合成）"
+  }
+}

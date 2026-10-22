@@ -72,3 +72,7 @@ T07 独立管理员的配置、受控建号、MFA、会话重启规则和本地 
 T02 非生产录音probe的身份、私有存储模拟、OSS候选适配器、受控页及清理见[音频probe开发](development-audio-probe.md)。本地/契约测试不代表双端及真实OSS验收；[T02证据](delivery/2026-10-22/evidence/T02.md)分开记录。
 
 T04 照片候选处理、固定字体/Chromium PDF 与纸面入口的本地命令、资源边界及真实待项见[印刷probe开发](print-probe.md)。首次执行 `pnpm check` 前还需 `pnpm exec playwright install chromium` 和 `pnpm setup:print-font`；PDF/HTTP测试只使用合成样本。
+
+## T08 动态关系与套餐本地预览
+
+见 [T08 本地指南](delivery/2026-10-22/catalog-local.md)：包含目录权限、草稿导入、预览冻结与真实 API 浏览器联动命令。本票没有正式开售接口；生产不可读取本地合成版本。
