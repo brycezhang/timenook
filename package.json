@@ -25,7 +25,8 @@
     "probe:api": "pnpm --filter @timenook/api probe:api",
     "test:print": "node --test tests/print-probe/*.test.mjs",
     "probe:print": "node --env-file-if-exists=.env scripts/print-probe/cli.mjs",
-    "setup:print-font": "node scripts/setup-print-font.mjs"
+    "setup:print-font": "node scripts/setup-print-font.mjs",
+    "check:commerce": "pnpm -r --filter @timenook/api... build && node apps/api/dist/commerce/admission-cli.js"
   },
   "devDependencies": {
     "@napi-rs/canvas": "0.1.100",
