@@ -615,10 +615,18 @@ test("invalid provider response signature remains unknown and concurrent prepare
   const concurrent = await Promise.all(
     Array.from({ length: 8 }, () => create(token, key)),
   );
+  assert.deepEqual(
+    concurrent.map((r) => ({
+      status: r.statusCode,
+      error: r.json().error?.code,
+    })),
+    Array.from({ length: 8 }, () => ({ status: 201, error: undefined })),
+    "every concurrent create must succeed before comparing order identities",
+  );
   assert.equal(new Set(concurrent.map((r) => r.json().data.id)).size, 1);
   const id = concurrent[0].json().data.id;
   const no = concurrent[0].json().data.outTradeNo;
-  await Promise.all(
+  const prepared = await Promise.all(
     Array.from({ length: 8 }, () =>
       app.inject({
         method: "POST",
@@ -628,12 +636,47 @@ test("invalid provider response signature remains unknown and concurrent prepare
       }),
     ),
   );
+  assert.deepEqual(
+    prepared.map((r) => ({
+      status: r.statusCode,
+      error: r.json().error?.code,
+    })),
+    Array.from({ length: 8 }, () => ({ status: 201, error: undefined })),
+    "every concurrent prepare must return a verified or explicitly unknown result",
+  );
   assert.equal(
     paymentRequests.filter(
       (r) => r.method === "POST" && r.body.out_trade_no === no,
     ).length,
     1,
   );
+});
+test("a buyer can create and replay an order with a single database connection", async () => {
+  const url = new URL(config.databaseUrl);
+  url.searchParams.set("connection_limit", "1");
+  url.searchParams.set("pool_timeout", "2");
+  const limited = await createApplication(
+    { ...config, databaseUrl: url.toString() },
+    { wechatFetch, paymentFetch },
+  );
+  try {
+    const token = await login("single-connection", limited);
+    const key = randomUUID();
+    const first = await create(token, key, command(), limited);
+    assert.equal(
+      first.statusCode,
+      201,
+      JSON.stringify({
+        status: first.statusCode,
+        error: first.json().error?.code,
+      }),
+    );
+    const replay = await create(token, key, command(), limited);
+    assert.equal(replay.statusCode, 201, replay.body);
+    assert.equal(replay.json().data.id, first.json().data.id);
+  } finally {
+    await limited.close();
+  }
 });
 test("payment activation freezes independent service terms while participation and delivery clocks remain unstarted", async () => {
   const token = await login("terms");

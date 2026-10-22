@@ -149,7 +149,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
     const buyer = await this.buyer(authorization);
     const cfg = this.enabled();
     const requestHash = hash(body);
-    return this.database.$transaction(async (tx) => {
+    const order = await this.database.$transaction(async (tx) => {
       // Same actor + create-order operation + order collection + key. The order
       // is the durable idempotency record, never an expiring Redis entry.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${buyer.userId + ":create-order:" + key},0))`;
@@ -163,7 +163,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       });
       if (existing) {
         if (existing.requestHash !== requestHash) throw conflict();
-        return this.view(existing);
+        return existing;
       }
       const version = await tx.packageVersion.findFirst({
         where: {
@@ -223,8 +223,11 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
           bookTitle: body.bookTitle?.trim() || "我的时光手记",
         },
       });
-      return this.view(order);
+      return order;
     });
+    // Release the transaction connection and lock before loading the response.
+    // view() uses the regular client and must not borrow from a pool held here.
+    return this.view(order);
   }
   async prepare(
     authorization: string | undefined,
