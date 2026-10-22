@@ -70,3 +70,5 @@ ADR 0009 的部署目标为 `https://lawyerapi.threeminreading.com/timenook/v1`�
 T07 独立管理员的配置、受控建号、MFA、会话重启规则和本地 HTTPS 管理端见 [管理端开发](development-admin.md)。
 
 T02 非生产录音probe的身份、私有存储模拟、OSS候选适配器、受控页及清理见[音频probe开发](development-audio-probe.md)。本地/契约测试不代表双端及真实OSS验收；[T02证据](delivery/2026-10-22/evidence/T02.md)分开记录。
+
+T04 照片候选处理、固定字体/Chromium PDF 与纸面入口的本地命令、资源边界及真实待项见[印刷probe开发](print-probe.md)。首次执行 `pnpm check` 前还需 `pnpm exec playwright install chromium` 和 `pnpm setup:print-font`；PDF/HTTP测试只使用合成样本。

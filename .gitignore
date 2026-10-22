@@ -15,3 +15,7 @@ coverage/
 # Controlled S0 identities and synthesized/local probe audio
 .probe-local/
 .env.probe-local
+
+# S0 print artifacts, downloaded verified fonts, and rendered inspection pages
+output/pdf/
+.cache/print-probe/
