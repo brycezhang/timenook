@@ -5,6 +5,7 @@ import {
   writeFileSync,
   rmSync,
   symlinkSync,
+  chmodSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -62,8 +63,8 @@ test("renamed or deleted code, executable Markdown and fixtures under docs requi
   f.put("docs/decision.json", "{}\n");
   assert.equal(f.run("classify", renamed, f.commit()).stdout.trim(), "full");
   const beforeMode = f.git("rev-parse", "HEAD");
-  f.git("update-index", "--chmod=+x", "docs/guide.md");
-  f.git("commit", "-qm", "executable markdown");
+  chmodSync(join(f.cwd, "docs/guide.md"), 0o755);
+  f.commit();
   assert.equal(f.run("classify", beforeMode, "HEAD").stdout.trim(), "full");
   const beforeLink = f.git("rev-parse", "HEAD");
   symlinkSync("../app.ts", join(f.cwd, "docs/link.md"));
@@ -183,3 +184,30 @@ test("docs check preserves historical unresolved links and Git-excluded evidence
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /trailing whitespace/);
 });
+
+for (const kind of ["executable", "symlink", "broken-link"]) {
+  test(`tab-containing Markdown paths preserve ${kind} checking`, (t) => {
+    const f = fixture(t);
+    f.put("README.md", "# Example\n");
+    const base = f.commit();
+    const file = "docs/guide\t.md";
+    if (kind === "symlink") {
+      mkdirSync(join(f.cwd, "docs"));
+      symlinkSync("../README.md", join(f.cwd, file));
+    } else {
+      f.put(file, "# Guide\n[Missing](missing.md)\n");
+      if (kind === "executable") chmodSync(join(f.cwd, file), 0o755);
+    }
+    const head = f.commit();
+    const route = f.run("classify", base, head);
+    assert.equal(route.status, 0, route.stderr);
+    if (kind === "broken-link") {
+      assert.equal(route.stdout.trim(), "docs");
+      const result = f.run("docs", base, head);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /guide\t\.md.*missing\.md/);
+    } else {
+      assert.equal(route.stdout.trim(), "full");
+    }
+  });
+}

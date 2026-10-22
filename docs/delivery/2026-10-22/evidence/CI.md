@@ -34,3 +34,11 @@ node scripts/ci/check.mjs docs 18363fd^ 18363fd
 ```
 
 两条命令 exit 0。因此该类纯规格变更走轻量路径；实际远端时间仍需以合并后的运行记录衡量。当前工作流/脚本本身的 PR 属于代码调整，仍走完整检查。
+
+## 独立审查修复：保留合法 Git 路径
+
+Spec 审查在固定提交 `3ecd9745c3e2944075484a07b19138795ef826f2` 发现 P2：`git ls-tree -z` 的元数据与路径以第一个 Tab 分隔，路径自身也可含 Tab；原实现按所有 Tab 拆分，截断路径后，可能让可执行 Markdown / 符号链接误入轻量检查，且跳过普通 Markdown 的断链检查。
+
+实施 subagent 增加三个彼此独立的真实临时仓库用例，经公开 CLI 分别验证含 Tab 路径的 100755、120000、含断链 100644。修复前原六项通过、新三项全部失败；仅改为按第一个分隔符拆开元数据并保留完整路径后，**9/9** 通过，约 2.6 秒。旧可执行位测试改用真实 chmod 后提交，避免后续 git add 恢复索引模式而污染符号链接用例。没有扩展 Markdown 解析或变更检查范围。
+
+RED/GREEN 日志：`/tmp/timenook-ci-16-review-tab-red.log`、`/tmp/timenook-ci-17-review-tab-green.log`。修复后 Node 语法、Prettier、差异检查通过；只运行相关 CLI 回归，最终提交的远端 CI 与独立复审仍由主 Agent 记录。

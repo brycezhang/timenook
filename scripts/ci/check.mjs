@@ -17,7 +17,9 @@ function tree(ref) {
       .split("\0")
       .filter(Boolean)
       .map((entry) => {
-        const [metadata, path] = entry.split("\t");
+        const separator = entry.indexOf("\t");
+        const metadata = entry.slice(0, separator);
+        const path = entry.slice(separator + 1);
         return [path, metadata.split(" ")[0]];
       }),
   );
