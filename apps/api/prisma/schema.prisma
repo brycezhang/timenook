@@ -151,6 +151,7 @@ model AdminAudit {
 
 // Controlled S0 probe realm; deliberately no FK to product users/projects.
 model ProbeClip {
+  printEntry ProbePrintEntry?
   storageScope String @map("storage_scope")
   id String @id @db.Uuid
   ownerId String @map("owner_id") @db.Uuid
@@ -162,4 +163,13 @@ model ProbeClip {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   @@unique([ownerId, clientClipId])
   @@map("probe_clips")
+}
+
+// A random locator, never a bearer credential. Authorization stays on ProbeClip.
+model ProbePrintEntry {
+  id String @id @db.VarChar(22)
+  clipId String @unique @map("clip_id") @db.Uuid
+  clip ProbeClip @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  @@map("probe_print_entries")
 }

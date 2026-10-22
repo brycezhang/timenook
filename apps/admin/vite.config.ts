@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
+import { privateArtifactsDeny } from "../../tools/vite-private-artifacts.ts";
 export default defineConfig(({ command }) => {
   if (
     command === "serve" &&
@@ -22,6 +23,7 @@ export default defineConfig(({ command }) => {
       },
     },
     server: {
+      fs: { deny: privateArtifactsDeny },
       host: "localhost",
       port: 3443,
       strictPort: true,

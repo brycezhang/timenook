@@ -46,7 +46,8 @@ jobs:
           echo "$RUNNER_TEMP/timenook-ffmpeg/bin" >> "$GITHUB_PATH"
       - run: pnpm db:generate
       - run: pnpm db:migrate
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm setup:print-font
       - run: pnpm check
       - run: pnpm api:openapi
-      - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:admin-browser

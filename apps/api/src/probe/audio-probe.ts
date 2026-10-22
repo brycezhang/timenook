@@ -133,6 +133,41 @@ export class AudioProbe implements OnModuleDestroy {
       throw new UnprocessableEntityException();
     return bytes;
   }
+  async reservePrintEntry(ownerId: string, clipId: string) {
+    return this.db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM probe_clips WHERE id = ${clipId}::uuid FOR UPDATE`;
+      const clip = await tx.probeClip.findFirst({
+        where: {
+          id: clipId,
+          ownerId,
+          storageScope: probeStorageScope(this.config.audioProbe),
+        },
+      });
+      if (!clip) throw new NotFoundException();
+      if (clip.state !== "sealed") throw new ConflictException();
+      const entry = await tx.probePrintEntry.upsert({
+        where: { clipId },
+        create: { id: randomBytes(16).toString("base64url"), clipId },
+        update: {},
+      });
+      return { id: entry.id };
+    });
+  }
+  async resolvePrintEntry(ownerId: string, id: string) {
+    if (!/^[A-Za-z0-9_-]{22}$/.test(id)) throw new NotFoundException();
+    const entry = await this.db.probePrintEntry.findFirst({
+      where: {
+        id,
+        clip: {
+          ownerId,
+          state: "sealed",
+          storageScope: probeStorageScope(this.config.audioProbe),
+        },
+      },
+    });
+    if (!entry) throw new NotFoundException();
+    return { clipId: entry.clipId };
+  }
   private prefix() {
     return `${this.config.redisKeyPrefix ?? "timenook"}:probe:`;
   }

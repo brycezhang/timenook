@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { AudioProbe } from "./probe/audio-probe";
+import { PrintProbeController } from "./probe/print-probe-controller";
 import { ProbeController } from "./probe/probe-controller";
 import { OssProbeObjects } from "./probe/oss-objects";
 import multipart from "@fastify/multipart";
@@ -110,23 +111,23 @@ export async function createApplication(
   });
   await adapter.getInstance().register(cookie);
   if (config.audioProbe)
-    await adapter
-      .getInstance()
-      .register(multipart, {
-        limits: {
-          fileSize: 2097152,
-          fields: 3,
-          files: 1,
-          parts: 4,
-          fieldSize: 4096,
-        },
-      });
+    await adapter.getInstance().register(multipart, {
+      limits: {
+        fileSize: 2097152,
+        fields: 3,
+        files: 1,
+        parts: 4,
+        fieldSize: 4096,
+      },
+    });
   adapter.getInstance().addHook("onRequest", async (request, reply) => {
     reply.header("x-request-id", request.id);
   });
   const module = {
     module: AppModule,
-    controllers: config.audioProbe ? [ProbeController] : [],
+    controllers: config.audioProbe
+      ? [ProbeController, PrintProbeController]
+      : [],
     providers: [
       { provide: API_CONFIG, useValue: config },
       Infrastructure,
