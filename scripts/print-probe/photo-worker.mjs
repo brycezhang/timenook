@@ -82,7 +82,7 @@ try {
   const pixelSource = () =>
     sharp(decoded, {
       raw: { width: info.width, height: info.height, channels: info.channels },
-    });
+    }).flatten({ background: "#ffffff" });
   const preview = await pixelSource()
     .resize({
       width: 1200,
@@ -128,6 +128,7 @@ try {
           sha256: sha(print),
           sourceSha256: originalHash,
         },
+        candidateBackground: "#ffffff",
         printPlacement: { widthMm, heightMm, fit: "contain" },
         effectiveDpi: Math.round(effectiveDpi * 100) / 100,
         actualPrintSizeMm: {

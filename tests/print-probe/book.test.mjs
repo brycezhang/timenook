@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import sharp from "sharp";
 
 const cli = resolve("scripts/print-probe/cli.mjs");
 export const paragraph =
@@ -288,6 +289,144 @@ test("paragraph pagination never strands closing Chinese punctuation at a new pa
         /^[，。！？、；：）】》」』”’]/,
         `body page ${index + 1}`,
       );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("transparent and translucent PNG regions match the candidate white paper in preview, print and actual PDF", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "t04-alpha-"));
+  try {
+    const source = join(dir, "rgba.png"),
+      photo = join(dir, "photo");
+    const pixels = Buffer.alloc(240 * 80 * 4);
+    // Three independent RGBA stripes: invisible red, half-opacity red, opaque blue.
+    for (let y = 0; y < 80; y++)
+      for (let x = 0; x < 240; x++)
+        pixels.set(
+          x < 80
+            ? [255, 0, 0, 0]
+            : x < 160
+              ? [255, 0, 0, 128]
+              : [0, 0, 255, 255],
+          (y * 240 + x) * 4,
+        );
+    await sharp(pixels, { raw: { width: 240, height: 80, channels: 4 } })
+      .png()
+      .toFile(source);
+    const original = await readFile(source);
+    const photoResult = spawnSync(
+      process.execPath,
+      [cli, "photo", source, photo, "96", "32"],
+      {
+        env: { ...process.env, PRINT_PROBE_ENABLED: "synthetic-local" },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(photoResult.status, 0, photoResult.stderr);
+    assert.deepEqual(await readFile(join(photo, "original.bin")), original);
+    const preview = await sharp(join(photo, "preview.jpg"))
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const printed = await sharp(join(photo, "print.png"))
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const rgbAt = ({ data, info }, x, y) => [
+      ...data.subarray(
+        (y * info.width + x) * info.channels,
+        (y * info.width + x) * info.channels + 3,
+      ),
+    ];
+    // Literal expected colors from a white-paper alpha blend; not calculated using the converter.
+    const expected = [
+      [255, 255, 255],
+      [255, 127, 127],
+      [0, 0, 255],
+    ];
+    for (let stripe = 0; stripe < 3; stripe++)
+      for (let channel = 0; channel < 3; channel++) {
+        assert.ok(
+          Math.abs(
+            rgbAt(preview, 40 + stripe * 80, 40)[channel] -
+              expected[stripe][channel],
+          ) <= 3,
+          `preview stripe ${stripe} channel ${channel}`,
+        );
+        assert.ok(
+          Math.abs(
+            rgbAt(printed, 40 + stripe * 80, 40)[channel] -
+              expected[stripe][channel],
+          ) <= 1,
+          `print stripe ${stripe} channel ${channel}`,
+        );
+      }
+    const input = join(dir, "book.json"),
+      out = join(dir, "book"),
+      pages = join(dir, "pages");
+    await writeFile(
+      input,
+      JSON.stringify({
+        scope: "synthetic-local-probe",
+        title: "透明照片候选白底",
+        chapters: [
+          {
+            title: "白底合成检查",
+            paragraphs: ["透明、半透明与不透明色块。"],
+            photoDirectory: photo,
+          },
+        ],
+      }),
+    );
+    const rendered = run(input, out);
+    assert.equal(rendered.status, 0, rendered.stderr);
+    const inspected = spawnSync(
+      process.execPath,
+      [cli, "inspect", join(out, "book.pdf"), pages],
+      {
+        env: { ...process.env, PRINT_PROBE_ENABLED: "synthetic-local" },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(inspected.status, 0, inspected.stderr);
+    const raster = await sharp(join(pages, "page-003.png"))
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    let left = Infinity,
+      top = Infinity,
+      right = -1,
+      bottom = -1;
+    for (let y = 0; y < raster.info.height; y++)
+      for (let x = 0; x < raster.info.width; x++) {
+        const [r, g, b] = rgbAt(raster, x, y);
+        if (r < 10 && g < 10 && b > 245) {
+          left = Math.min(left, x);
+          right = Math.max(right, x);
+          top = Math.min(top, y);
+          bottom = Math.max(bottom, y);
+        }
+      }
+    assert.ok(
+      right > left && bottom > top,
+      "Find the opaque blue anchor in the real PDF raster",
+    );
+    const stripeWidth = right - left + 1,
+      blueX = Math.round((left + right) / 2),
+      centerY = Math.round((top + bottom) / 2);
+    for (let stripe = 0; stripe < 3; stripe++) {
+      const actual = rgbAt(raster, blueX - (2 - stripe) * stripeWidth, centerY);
+      for (let channel = 0; channel < 3; channel++) {
+        assert.ok(
+          Math.abs(actual[channel] - expected[stripe][channel]) <= 3,
+          `PDF stripe ${stripe} channel ${channel}`,
+        );
+        assert.ok(
+          Math.abs(
+            actual[channel] - rgbAt(preview, 40 + stripe * 80, 40)[channel],
+          ) <= 3,
+          `preview/PDF stripe ${stripe} channel ${channel}`,
+        );
+      }
+    }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

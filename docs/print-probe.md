@@ -25,7 +25,7 @@ PRINT_PROBE_ENABLED=synthetic-local pnpm probe:print photo \
   "$PWD/output/pdf/example-photo" 96 64
 ```
 
-生成 `original.bin`、`preview.jpg`、`print.png` 与 `photo.json`，文件为 mode 600、目录为 mode 700。原图按原字节保留，衍生图从已定向像素重新编码，剥离 EXIF/定位数据。后续重新生成使用新目录，不覆盖旧结果。
+生成 `original.bin`、`preview.jpg`、`print.png` 与 `photo.json`，文件为 mode 600、目录为 mode 700。原图按原字节保留，衍生图从已定向像素重新编码，剥离 EXIF/定位数据。预览与印刷衍生图均将透明像素合成到候选模板的白底（`#ffffff`），避免 JPEG 与白底 PDF 显示不一致；此候选背景记录在 `photo.json`，不替代印厂纸张/色彩决定。后续重新生成使用新目录，不覆盖旧结果。
 
 书稿输入为本地 JSON，结构如下；`photoDirectory` 为上一步绝对路径，`entryId` 来自受控 HTTP 入口。省略这两个字段可只验证文字分页。
 
