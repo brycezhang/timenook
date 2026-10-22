@@ -3,7 +3,7 @@
   <view class="section">{{status}}</view>
   <view wx:if="{{userId}}" class="small muted">服务端账号：{{userId}}</view>
   <view class="section muted">当前仅提供账号登录与恢复。购买、项目和资料服务尚未开放；这里不显示本机演示项目。</view>
-  <button wx:if="{{!userId}}" class="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="login">微信登录</button>
+  <button wx:if="{{!userId}}" class="btn" loading="{{busy}}" disabled="{{busy}}" bindtap="login">微信登录</button>
   <button class="link" disabled="{{busy}}" bindtap="logout">退出登录</button>
   <button class="link" disabled="{{busy}}" bindtap="useDemo">切换到本机演示</button>
 </view>
