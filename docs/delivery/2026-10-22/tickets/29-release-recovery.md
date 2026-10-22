@@ -14,6 +14,18 @@ GitHub：[#30](https://github.com/brycezhang/timenook/issues/30) · 状态以 Gi
 - [ ] 验证 RDS/Tair/OSS 权限、TLS、健康检查、Tair Lua/阻塞命令/续租/noeviction；密钥只在服务端独立配置。
 - [ ] 演练发布回滚、数据库备份恢复且先重放删除台账、Redis 丢失重建、供应商失败及队列积压；记录 RTO/RPO 实测。
 - [ ] 按 request/project/task/revision/book/fulfillment 标识串联脱敏日志，告警覆盖支付无权益、Outbox、任务费用、错版、访问与工单超时。
+- [ ] 集中承接 T06/T07 的正式域名及管理部署验证：实际管理员受控建号/MFA、密钥保管与恢复、生产 PostgreSQL/Redis 重启；用户 `/timenook/v1`、运营 `/timenook/v1/admin`、管理页面 `/timenook/admin/`、支付/退款 `/timenook/v1/webhooks/wechat-pay/...` 与健康路径正确，前缀只剥离一次。检查 Cookie Path、静态资源、客户端/通知/OpenAPI 基址及 legal-agent 原路径。
+- [ ] 验证 T10/T26 服务期限调度在暂停、重启、积压与恢复后补扫，重复事件不延长权益或重复执行清理；正式参数和时钟有依据，资料副本清理结果逐层留证。
+
+## 实现边界
+
+沿用现有 ECS/Nginx/systemd 和单体进程角色；集中验正式环境、共用路由与恢复。引用 T15/T26 机制证据，仅补目标环境增量，不建设部署平台或重复业务故障矩阵。
+
+## 测试决策
+
+- 覆盖模块：部署、调度、IdentityAccess 正式管理、恢复。
+- 主入口：真实进程/公网路由/云资源及隔离恢复演练。通用约定见[父规格测试决策](../spec.md#测试决策)。
+- 现有范例：[health.test.ts](../../../../apps/api/test/health.test.ts)、[startup.test.ts](../../../../apps/api/test/startup.test.ts)、[access.spec.mjs](../../../../tests/admin/access.spec.mjs)；仅作测试方式参考。
 
 ## 阻塞依赖
 
@@ -21,11 +33,13 @@ GitHub：[#30](https://github.com/brycezhang/timenook/issues/30) · 状态以 Gi
 - [T26 · 执行资料删除及备份恢复防复活](26-deletion-ledger.md)
 - [T28 · 闭环质量售后与原单重印](28-quality-care.md)
 
-## 外部条件与完成边界
+## 工程前提与外部条件
+
+工程前提：T17/T26/T28 及传递上游的工程成果全部合并并验证；前序票的正式环境检查在本票集中完成，不要求其先等待本票关闭。
 
 与 legal-agent 共用的 ECS/域名/TLS 入口、隔离的 RDS/Tair/OSS 配置与运维身份；生产部署前使用可审核发布包及目标环境授权。已核实的主机与路径目标见 [ADR 0009](../../../adr/0009-shared-ecs-api-path.md)，部署时重新验证；只读观察不代表部署验收。
 
-关闭前记录提交/PR、执行命令及结果、对应证据。只有本地适配器通过时写明“模拟已通过，真实验收待完成”，保持本票未关闭。凭据通过受限的 Git 忽略环境文件或平台密钥管理提供，不附在 issue 或日志中。
+执行[完成规则](../spec.md#依赖完成规则)与[证据复用](../spec.md#验收复用与唯一归属)；本票勾选与真实状态保持原有证据口径。
 
 ## 验收映射
 

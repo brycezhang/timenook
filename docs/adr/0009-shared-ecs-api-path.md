@@ -11,6 +11,19 @@ date: 2026-10-22
 
 公网基址采用 `https://lawyerapi.threeminreading.com/timenook`。业务 API 使用 `/timenook/v1/...`，健康入口使用 `/timenook/health/live` 与 `/timenook/health/ready`。Nginx 只对 `/timenook/` 前缀剥离该前缀后转发至 TimeNook；服务内部对应 `/v1/...` 和 `/health/...`。既有 legal-agent 的 `/v1/...` 与其他路由保持原状。
 
+2026-10-22 规格复核统一接口命名；下表为目标契约，支付/退款通知仍待对应票据实现。现有登录与管理 API 已分别采用内部 `/v1` 与 `/v1/admin`。
+
+| 用途 | 服务内部路径 | 公网路径 |
+| --- | --- | --- |
+| 用户 API | `/v1/...` | `/timenook/v1/...` |
+| 运营 API | `/v1/admin/...` | `/timenook/v1/admin/...` |
+| 支付通知 | `/v1/webhooks/wechat-pay/payments` | `/timenook/v1/webhooks/wechat-pay/payments` |
+| 退款通知 | `/v1/webhooks/wechat-pay/refunds` | `/timenook/v1/webhooks/wechat-pay/refunds` |
+| 健康检查 | `/health/live`、`/health/ready` | `/timenook/health/live`、`/timenook/health/ready` |
+| 管理页面 | 静态站点 `/admin/` | `/timenook/admin/` |
+
+API 代理只剥离一次 `/timenook`；管理页面由独立静态站点提供，静态资源及客户端 API 基址均保留公网前缀。T10/T27 验证通知地址，T29 验证代理、静态资源、Cookie Path、OpenAPI 和既有 legal-agent 路由。这份表替代旧接口文档的路径命名，不证明目标路由已部署。
+
 TimeNook 使用独立的 systemd 服务、Linux 用户、release/current/shared 目录、环境文件及仅回环监听的端口。初选 API 端口 `4310`，发布前重新检查占用与配置引用。API、Worker 和渲染任务仍分进程，限制 CPU/内存/并发，避免拖累同机 legal-agent。
 
 共用主机和 TLS 入口不代表共用用户、会话、AppID、商户配置、数据库账号、队列或 Bucket。RDS/Tair/私有 OSS 的隔离及访问要求沿用 ADR 0007；资源实例及配额以实际配置验证为准。小程序合法域名按同一域名配置，客户端基址、回调及受控素材入口必须带 TimeNook 前缀。
