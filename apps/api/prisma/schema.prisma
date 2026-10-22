@@ -148,3 +148,18 @@ model AdminAudit {
   @@index([createdAt])
   @@map("admin_audit")
 }
+
+// Controlled S0 probe realm; deliberately no FK to product users/projects.
+model ProbeClip {
+  storageScope String @map("storage_scope")
+  id String @id @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  clientClipId String @map("client_clip_id") @db.Uuid
+  bytes Int
+  sha256 String @db.Char(64)
+  state String @default("pending")
+  durationMs Int? @map("duration_ms")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  @@unique([ownerId, clientClipId])
+  @@map("probe_clips")
+}

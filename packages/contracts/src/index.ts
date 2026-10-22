@@ -70,3 +70,5 @@ export interface ProjectPlanRevision extends PlanContent {
 export interface ProjectPlan extends ProjectPlanRevision {
   preferences: { version: number; blockedTopics: string[] };
 }
+
+export * from "./audio-probe";

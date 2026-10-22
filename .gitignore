@@ -11,3 +11,7 @@ playwright-report/
 *.tsbuildinfo
 dist-test/
 coverage/
+
+# Controlled S0 identities and synthesized/local probe audio
+.probe-local/
+.env.probe-local
