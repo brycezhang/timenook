@@ -73,4 +73,3 @@ PRs as a request surface: no.
 ```
 
 选择 AGENTS.md 是本次建议；仓库此前没有 AGENTS.md 或 CLAUDE.md，确认后才创建。测试边界见 [实施规格](spec.md)。
-
