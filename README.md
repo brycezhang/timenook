@@ -2,14 +2,18 @@
 
 微信小程序帮助一位讲述者把真实讲述、照片和经本人确认的故事制作成个人故事书。目标支持父母、亲友等可配置赠礼关系，以及可修改的大纲与问题。999元套餐包含一个人生项目及一本实体书。
 
-已实现首版原生微信小程序前端（15个页面，当前仍仅妈妈/爸爸、静态题库），附共用页面源码的浏览器预览。当前仍使用本机演示数据，后端、微信登录/支付、云存储、文件转写、AI整理和印刷服务未接入。
+已实现首版原生微信小程序前端（15个页面，当前仍仅妈妈/爸爸、静态题库），附共用页面源码的浏览器预览。当前仍使用本机演示数据，已增加 NestJS/Fastify 工程 API、数据库迁移和健康检查；业务后端、微信登录/支付、云存储、文件转写、AI整理和印刷服务仍未接入。
 
 ```bash
-npm install
-npm run dev          # 浏览器预览：http://127.0.0.1:5173
-npm run check        # 类型检查、行为测试、原生构建
-npm run check:native # 使用本机微信开发者工具的 WXML / WXSS 编译器
+pnpm install --frozen-lockfile # Node 22.23.4 / pnpm 10.34.7
+# 首次启动、环境配置、容器和迁移见下方开发说明
+pnpm dev             # 浏览器预览：http://127.0.0.1:5173
+pnpm dev:api         # API：http://127.0.0.1:3417
+pnpm check           # 类型、前后端行为、原生及预览构建
+pnpm check:native    # Mac 微信开发者工具 WXML / WXSS 编译器
 ```
+
+首次开发请按[本地开发与验证](docs/development.md)启动独立 PostgreSQL/Redis、生成 Prisma Client 并执行迁移。
 
 微信开发者工具导入本目录，读取 `project.config.json`，构建目录为 `dist/miniprogram/`。当前使用游客 AppID，真机预览需配置自己的小程序 AppID。
 
