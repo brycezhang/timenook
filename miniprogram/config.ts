@@ -9,3 +9,12 @@ export const API_BASE_URL =
 declare const __TIMENOOK_AUDIO_PROBE__: boolean | undefined;
 export const AUDIO_PROBE_BUILD =
   typeof __TIMENOOK_AUDIO_PROBE__ === "boolean" && __TIMENOOK_AUDIO_PROBE__;
+
+// Explicit loopback-only build gate; never enables commercial purchases.
+declare const __TIMENOOK_PAYMENT_VERIFICATION__: boolean | undefined;
+export const PAYMENT_VERIFICATION_BUILD =
+  typeof __TIMENOOK_PAYMENT_VERIFICATION__ === "boolean" &&
+  __TIMENOOK_PAYMENT_VERIFICATION__ &&
+  /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(?:\/timenook)?\/v1$/.test(
+    API_BASE_URL,
+  );

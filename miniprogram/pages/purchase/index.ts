@@ -1,3 +1,7 @@
+import { API_BASE_URL, PAYMENT_VERIFICATION_BUILD } from "../../config";
+import { sessionClient } from "../../services/session";
+import { paymentClient, paymentKey } from "../../services/payments";
+import type { CreateOrderCommand } from "../../../packages/contracts/src";
 import type {
   RecipientType,
   PackageTerm,
@@ -14,6 +18,11 @@ type E = {
 Page({
   data: {
     mode: dataMode(),
+    localVerification: PAYMENT_VERIFICATION_BUILD,
+    packageVersionId: "",
+    shippingRegionCode: "",
+    verificationBusy: false,
+    verificationError: "",
     loading: false,
     catalogError: "",
     recipientTypes: [] as RecipientType[],
@@ -62,6 +71,8 @@ Page({
       selection: null,
       selectedLabel: "",
       customLabelValue: "",
+      verificationBusy: false,
+      verificationError: "",
     });
     if (mode !== "live") return;
     this.setData({
@@ -81,6 +92,7 @@ Page({
         return;
       this.setData({
         recipientTypes: recipients.types,
+        packageVersionId: offer.version?.id ?? "",
         packageTitle: offer.version?.title ?? "",
         packagePrice: offer.version
           ? (offer.version.price.value / 100).toFixed(2)
@@ -147,6 +159,75 @@ Page({
   },
   privacy() {
     go("service", "kind=terms");
+  },
+  shippingRegion(e: E) {
+    this.setData({ shippingRegionCode: e.detail.value.trim() });
+  },
+  orders() {
+    go("order");
+  },
+  async verifyPurchase() {
+    if (
+      !PAYMENT_VERIFICATION_BUILD ||
+      dataMode() !== "live" ||
+      this.data.verificationBusy
+    )
+      return;
+    const context = sessionClient.context();
+    const generation = this.catalogGeneration;
+    if (!context) {
+      this.setData({ verificationError: "请先在首页登录服务端账号" });
+      return;
+    }
+    const current = () =>
+      context === sessionClient.context() &&
+      generation === this.catalogGeneration &&
+      dataMode() === "live";
+    this.setData({ verificationBusy: true, verificationError: "" });
+    try {
+      const storageKey = `timenook.payment-intent.v1:${API_BASE_URL}:${context.split(":")[0]}`;
+      let intent = wx.getStorageSync(storageKey) as
+        { key: string; command: CreateOrderCommand } | undefined;
+      if (!intent) {
+        if (
+          !this.data.packageVersionId ||
+          !this.data.selection ||
+          !this.data.shippingRegionCode
+        )
+          throw new Error("请先选择赠礼称呼和本地验证配送区域");
+        intent = {
+          key: paymentKey(),
+          command: {
+            packageVersionId: this.data.packageVersionId,
+            recipient: {
+              ...(this.data.selection.recipientCode
+                ? { typeCode: this.data.selection.recipientCode }
+                : {}),
+              relationshipLabel: this.data.selectedLabel,
+            },
+            shippingRegionCode: this.data.shippingRegionCode,
+          },
+        };
+        // Persist before the first request: unknown network results replay this intent.
+        wx.setStorageSync(storageKey, intent);
+      }
+      const order = await paymentClient.create(intent.command, intent.key);
+      if (!current()) return;
+      await paymentClient.pay(order.id, {
+        localOnly: true,
+        isCurrent: current,
+      });
+      if (!current()) return;
+      go("order", `id=${order.id}`);
+    } catch (error) {
+      if (current())
+        this.setData({
+          verificationError:
+            error instanceof Error ? error.message : "订单核验失败，请重新查询",
+        });
+    } finally {
+      if (current()) this.setData({ verificationBusy: false });
+    }
   },
   pay() {
     if (dataMode() === "live") {

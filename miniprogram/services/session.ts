@@ -50,6 +50,12 @@ function loginResult(value: unknown): value is LoginResult {
 export class SessionClient {
   private generation = 0;
   constructor(private readonly apiBaseUrl: string) {}
+  context(): string {
+    const stored = this.stored();
+    return dataMode() === "live" && stored
+      ? `${stored.user.id}:${stored.session.id}`
+      : "";
+  }
   async restore(): Promise<Account | null> {
     if (dataMode() !== "live") return null;
     const stored = this.stored();
@@ -83,7 +89,10 @@ export class SessionClient {
       setDataMode("demo");
     }
   }
-  async request<T>(path: string): Promise<T> {
+  async request<T>(
+    path: string,
+    command?: { data: Record<string, unknown>; key: string },
+  ): Promise<T> {
     if (dataMode() !== "live") throw new ApiFailure("DEMO_MODE");
     const generation = this.generation;
     const stored = this.stored();
@@ -91,9 +100,10 @@ export class SessionClient {
     try {
       const result = await this.send<T>(
         path,
-        "GET",
-        undefined,
+        command ? "POST" : "GET",
+        command?.data,
         stored.session.token,
+        command?.key,
       );
       this.assertCurrent(generation);
       if (this.stored()?.session.token !== stored.session.token)
@@ -170,6 +180,7 @@ export class SessionClient {
     method: "GET" | "POST" | "DELETE",
     data?: Record<string, unknown>,
     token?: string,
+    idempotencyKey?: string,
   ): Promise<T> {
     this.checkBaseUrl();
     if (!/^\/[A-Za-z0-9/_-]+$/.test(path))
@@ -182,6 +193,7 @@ export class SessionClient {
         timeout: 10000,
         header: {
           "content-type": "application/json",
+          ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
         success: (response) => {

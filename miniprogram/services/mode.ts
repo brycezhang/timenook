@@ -7,5 +7,5 @@ export function setDataMode(mode: DataMode): void {
 }
 
 export function livePageAllowed(page: string): boolean {
-  return page === "home" || page === "purchase";
+  return page === "home" || page === "purchase" || page === "order";
 }

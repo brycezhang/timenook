@@ -32,6 +32,9 @@ await build({
   platform: "neutral",
   bundle: false,
   define: {
+    __TIMENOOK_PAYMENT_VERIFICATION__: JSON.stringify(
+      process.env.TIMENOOK_PAYMENT_VERIFICATION === "local-verification",
+    ),
     __TIMENOOK_AUDIO_PROBE__: JSON.stringify(
       process.env.TIMENOOK_AUDIO_PROBE_BUILD === "1",
     ),

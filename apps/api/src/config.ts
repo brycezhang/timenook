@@ -1,3 +1,4 @@
+import type { WechatPayConfig } from "./payments/wechat-pay";
 import type { AiProbeConfig } from "./probe/ai-probe";
 import type { ProbeOssConfig } from "./probe/oss-objects";
 
@@ -8,6 +9,7 @@ export interface ApiConfig {
   databaseUrl: string;
   redisUrl: string;
   wechat?: { appId: string; secret: string };
+  payments?: WechatPayConfig;
   sessionTtlSeconds?: number;
   redisKeyPrefix?: string;
   loginLimitPerMinute?: number;

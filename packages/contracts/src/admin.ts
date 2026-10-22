@@ -1,4 +1,5 @@
 export const ADMIN_PERMISSIONS = {
+  writeServiceTerms: "service-terms:write",
   readRuntime: "ops:read",
   readAudit: "audit:read",
   readCatalog: "catalog:read",
