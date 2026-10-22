@@ -20,7 +20,14 @@ test("development preview refuses private probe artifacts through direct and fil
   const server = await createServer({
     configFile: "vite.config.mjs",
     logLevel: "silent",
-    server: { host: "127.0.0.1", port: 0, strictPort: true, watch: null },
+    // A null inline override is discarded when Vite merges a config file.
+    // These finite HTTP checks need no file watching or HMR.
+    server: {
+      host: "127.0.0.1",
+      port: 0,
+      strictPort: true,
+      watch: { ignored: () => true },
+    },
     optimizeDeps: { noDiscovery: true, include: [] },
   });
   try {
@@ -109,7 +116,12 @@ test("admin development HTTPS refuses workspace probe files without breaking its
       root: resolve("apps/admin"),
       configFile: resolve("apps/admin/vite.config.ts"),
       logLevel: "silent",
-      server: { host: "127.0.0.1", port: 0, strictPort: true, watch: null },
+      server: {
+        host: "127.0.0.1",
+        port: 0,
+        strictPort: true,
+        watch: { ignored: () => true },
+      },
       optimizeDeps: { noDiscovery: true, include: [] },
     });
     await server.listen();
