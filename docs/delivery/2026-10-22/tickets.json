@@ -1,0 +1,346 @@
+[
+  {
+    "id": "T01",
+    "title": "建立可复现工程与服务健康闭环",
+    "stage": "S0",
+    "blockedBy": [],
+    "file": "tickets/01-workspace-health.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T02",
+    "title": "验证真机录音、私有封存与鉴权回听",
+    "stage": "S0",
+    "blockedBy": [
+      "T01"
+    ],
+    "file": "tickets/02-audio-storage-probe.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T03",
+    "title": "验证豆包文件转写与 DeepSeek 生成质量",
+    "stage": "S0",
+    "blockedBy": [
+      "T02"
+    ],
+    "file": "tickets/03-ai-provider-probe.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T04",
+    "title": "验证照片处理、固定 PDF 与纸面原声入口",
+    "stage": "S0",
+    "blockedBy": [
+      "T01"
+    ],
+    "file": "tickets/04-print-image-probe.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T05",
+    "title": "冻结销售参数并核验实际微信支付路径",
+    "stage": "S0",
+    "blockedBy": [
+      "T01"
+    ],
+    "file": "tickets/05-commerce-admission.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T06",
+    "title": "接通微信登录、会话与账号恢复",
+    "stage": "S1",
+    "blockedBy": [
+      "T01"
+    ],
+    "file": "tickets/06-wechat-session.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T07",
+    "title": "建立独立运营登录与受限管理入口",
+    "stage": "S1",
+    "blockedBy": [
+      "T01"
+    ],
+    "file": "tickets/07-admin-access.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T08",
+    "title": "发布动态赠礼关系与不可变套餐",
+    "stage": "S1",
+    "blockedBy": [
+      "T04",
+      "T05",
+      "T07"
+    ],
+    "file": "tickets/08-catalog-package.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T09",
+    "title": "发布中性大纲模板并预览讲述起点",
+    "stage": "S1",
+    "blockedBy": [
+      "T07"
+    ],
+    "file": "tickets/09-template-publish.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T10",
+    "title": "核验付款并唯一激活人生项目和首本权益",
+    "stage": "S1",
+    "blockedBy": [
+      "T05",
+      "T06",
+      "T08",
+      "T09"
+    ],
+    "file": "tickets/10-payment-project.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T11",
+    "title": "实现讲述者邀请绑定与分用途授权",
+    "stage": "S1",
+    "blockedBy": [
+      "T10"
+    ],
+    "file": "tickets/11-invitation-consent.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T12",
+    "title": "支持无个人微信的同机协助与本人证据",
+    "stage": "S1",
+    "blockedBy": [
+      "T11"
+    ],
+    "file": "tickets/12-assisted-session.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T13",
+    "title": "编辑个人大纲、问题和拒答偏好",
+    "stage": "S2",
+    "blockedBy": [
+      "T09",
+      "T11"
+    ],
+    "file": "tickets/13-personal-plan.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T14",
+    "title": "接通分轮录音、本地恢复与云端封存",
+    "stage": "S2",
+    "blockedBy": [
+      "T02",
+      "T11",
+      "T13"
+    ],
+    "file": "tickets/14-interview-recording.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T15",
+    "title": "持久化文件转写、重试与异常接管",
+    "stage": "S2",
+    "blockedBy": [
+      "T03",
+      "T14"
+    ],
+    "file": "tickets/15-durable-transcription.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T16",
+    "title": "接通照片起讲与私有照片处理",
+    "stage": "S2",
+    "blockedBy": [
+      "T04",
+      "T14"
+    ],
+    "file": "tickets/16-story-photos.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T17",
+    "title": "生成可跳过的单条追问并处理迟到结果",
+    "stage": "S2",
+    "blockedBy": [
+      "T15"
+    ],
+    "file": "tickets/17-optional-followup.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T18",
+    "title": "从完整转录清单整理可核对故事",
+    "stage": "S2",
+    "blockedBy": [
+      "T15"
+    ],
+    "file": "tickets/18-story-generation.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T19",
+    "title": "实现校对、本人版本确认与真实项目进度",
+    "stage": "S2",
+    "blockedBy": [
+      "T12",
+      "T16",
+      "T18"
+    ],
+    "file": "tickets/19-story-confirmation.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T20",
+    "title": "冻结书稿快照并生成完整可核对 PDF",
+    "stage": "S3",
+    "blockedBy": [
+      "T04",
+      "T19"
+    ],
+    "file": "tickets/20-book-pdf.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T21",
+    "title": "接通书中原声码与版本固定的受控回听",
+    "stage": "S3",
+    "blockedBy": [
+      "T20"
+    ],
+    "file": "tickets/21-versioned-audio-entry.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T22",
+    "title": "双方确认同一 PDF 并唯一预留首本制作",
+    "stage": "S3",
+    "blockedBy": [
+      "T21"
+    ],
+    "file": "tickets/22-first-copy-confirm.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T23",
+    "title": "审核生产、人工交接与物流追踪",
+    "stage": "S3",
+    "blockedBy": [
+      "T22"
+    ],
+    "file": "tickets/23-production-shipping.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T24",
+    "title": "贯通撤回、活动流终止与生产暂停",
+    "stage": "S4",
+    "blockedBy": [
+      "T23"
+    ],
+    "file": "tickets/24-withdrawal.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T25",
+    "title": "受理并交付可独立读取的完整资料导出",
+    "stage": "S4",
+    "blockedBy": [
+      "T21"
+    ],
+    "file": "tickets/25-complete-export.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T26",
+    "title": "执行资料删除及备份恢复防复活",
+    "stage": "S4",
+    "blockedBy": [
+      "T24",
+      "T25"
+    ],
+    "file": "tickets/26-deletion-ledger.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T27",
+    "title": "实现退款申请、金额预留与结果对账",
+    "stage": "S4",
+    "blockedBy": [
+      "T23"
+    ],
+    "file": "tickets/27-refund-reconciliation.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T28",
+    "title": "闭环质量售后与原单重印",
+    "stage": "S4",
+    "blockedBy": [
+      "T27"
+    ],
+    "file": "tickets/28-quality-care.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T29",
+    "title": "发布独立环境并完成故障恢复演练",
+    "stage": "S4",
+    "blockedBy": [
+      "T17",
+      "T26",
+      "T28"
+    ],
+    "file": "tickets/29-release-recovery.md",
+    "status": "draft-review",
+    "issueUrl": null
+  },
+  {
+    "id": "T30",
+    "title": "完成内部实物闭环与付费试点验收",
+    "stage": "S5",
+    "blockedBy": [
+      "T29"
+    ],
+    "file": "tickets/30-pilot-acceptance.md",
+    "status": "draft-review",
+    "issueUrl": null
+  }
+]
