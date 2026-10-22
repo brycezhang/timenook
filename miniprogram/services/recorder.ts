@@ -1,3 +1,5 @@
+import { recordingLease } from "./recording-lease";
+const microphoneOwner = {};
 import type { Recording } from "../domain/model";
 import { read, save } from "./store";
 export type RecordState =
@@ -34,6 +36,7 @@ function clearTimer() {
   timer = undefined;
 }
 manager.onStart(() => {
+  if (!recordingLease.owns(microphoneOwner)) return;
   if (cancelRequested) {
     emit({ state: "saving" });
     manager.stop();
@@ -44,11 +47,15 @@ manager.onStart(() => {
   timer = setInterval(() => emit({ seconds: current.seconds + 1 }), 1000);
 });
 manager.onStop((res) => {
+  if (!recordingLease.owns(microphoneOwner)) return;
+  recordingLease.release(microphoneOwner);
   clearTimer();
   temp = res;
   void persist();
 });
 manager.onError(() => {
+  if (!recordingLease.owns(microphoneOwner)) return;
+  recordingLease.release(microphoneOwner);
   clearTimer();
   emit({
     state: "error",
@@ -56,6 +63,7 @@ manager.onError(() => {
   });
 });
 manager.onInterruptionBegin(() => {
+  if (!recordingLease.owns(microphoneOwner)) return;
   if (current.state === "recording") {
     manager.stop();
     emit({ state: "saving" });
@@ -111,7 +119,7 @@ export const recorder = {
     const p = read();
     if (!p?.consent) throw new Error("请先同意参与");
     if (["requesting", "recording", "saving"].includes(current.state)) return;
-    if (temp) return;
+    if (temp || !recordingLease.acquire(microphoneOwner)) return;
     question = q;
     projectId = p.id;
     cancelRequested = false;

@@ -40,6 +40,10 @@ jobs:
           node-version-file: .node-version
       - run: npm install --global pnpm@10.34.7
       - run: pnpm install --frozen-lockfile
+      - name: Build pinned audio validator
+        run: |
+          bash scripts/setup-audio-tools.sh "$RUNNER_TEMP/timenook-ffmpeg"
+          echo "$RUNNER_TEMP/timenook-ffmpeg/bin" >> "$GITHUB_PATH"
       - run: pnpm db:generate
       - run: pnpm db:migrate
       - run: pnpm check

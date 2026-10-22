@@ -20,6 +20,16 @@ const errors: Record<number, ApiErrorResponse["error"]> = {
   },
   403: { code: "FORBIDDEN", message: "Access denied", retryable: false },
   404: { code: "NOT_FOUND", message: "Resource not found", retryable: false },
+  409: {
+    code: "CONFLICT",
+    message: "State or command conflict",
+    retryable: false,
+  },
+  422: {
+    code: "INVALID_MEDIA",
+    message: "Media validation or sealing failed",
+    retryable: true,
+  },
   413: {
     code: "PAYLOAD_TOO_LARGE",
     message: "Request payload is too large",

@@ -1,3 +1,5 @@
+import type { ProbeOssConfig } from "./probe/oss-objects";
+
 export interface ApiConfig {
   environment: "development" | "test" | "production";
   host: string;
@@ -8,6 +10,12 @@ export interface ApiConfig {
   sessionTtlSeconds?: number;
   redisKeyPrefix?: string;
   loginLimitPerMinute?: number;
+  audioProbe?: {
+    storageRoot: string;
+    sessionTtlSeconds?: number;
+    uploadTtlSeconds?: number;
+    oss?: ProbeOssConfig;
+  };
   admin?: {
     origin: string;
     encryptionKey: string;
@@ -31,6 +39,10 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
       "NODE_ENV must be development, test or production",
     );
   }
+  if (environment === "production" && env.AUDIO_PROBE_ENABLED)
+    throw new ConfigurationError(
+      "Audio probe cannot be configured in production",
+    );
   const databaseUrl = connectionUrl(env, "DATABASE_URL", [
     "postgres:",
     "postgresql:",
@@ -125,7 +137,57 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     throw new ConfigurationError(
       "Production requires independent admin origin and encryption key",
     );
+  let audioProbe: ApiConfig["audioProbe"];
+  if (
+    env.AUDIO_PROBE_ENABLED === "local-simulator" ||
+    env.AUDIO_PROBE_ENABLED === "oss"
+  ) {
+    const storageRoot = env.AUDIO_PROBE_STORAGE_ROOT;
+    if (!storageRoot?.startsWith("/"))
+      throw new ConfigurationError(
+        "Audio probe requires an absolute private storage root",
+      );
+    const ttl = Number(env.AUDIO_PROBE_SESSION_TTL ?? "3600");
+    if (!Number.isInteger(ttl) || ttl < 1 || ttl > 3600)
+      throw new ConfigurationError("Probe session TTL must be within 1..3600");
+    audioProbe = { storageRoot, sessionTtlSeconds: ttl };
+    if (env.AUDIO_PROBE_ENABLED === "oss") {
+      const fields = [
+        "BUCKET",
+        "REGION",
+        "ACCESS_KEY_ID",
+        "ACCESS_KEY_SECRET",
+        "SECURITY_TOKEN",
+        "EXPIRES_AT",
+      ] as const;
+      for (const field of fields)
+        if (!env[`TIMENOOK_PROBE_OSS_${field}`]?.trim())
+          throw new ConfigurationError(
+            "TimeNook probe requires complete independent OSS STS configuration",
+          );
+      const oss: ProbeOssConfig = {
+        bucket: env.TIMENOOK_PROBE_OSS_BUCKET!,
+        region: env.TIMENOOK_PROBE_OSS_REGION!,
+        accessKeyId: env.TIMENOOK_PROBE_OSS_ACCESS_KEY_ID!,
+        accessKeySecret: env.TIMENOOK_PROBE_OSS_ACCESS_KEY_SECRET!,
+        securityToken: env.TIMENOOK_PROBE_OSS_SECURITY_TOKEN!,
+        expiresAt: env.TIMENOOK_PROBE_OSS_EXPIRES_AT!,
+      };
+      if (
+        !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(oss.bucket) ||
+        !/^[a-z]{2}-[a-z0-9-]+$/.test(oss.region) ||
+        !Number.isFinite(Date.parse(oss.expiresAt)) ||
+        Date.parse(oss.expiresAt) <= Date.now() + 10000
+      )
+        throw new ConfigurationError(
+          "Probe OSS bucket/region or STS expiration is invalid",
+        );
+      audioProbe.oss = oss;
+    }
+  } else if (env.AUDIO_PROBE_ENABLED)
+    throw new ConfigurationError("Unsupported audio probe adapter");
   return {
+    audioProbe,
     admin,
     environment,
     host: env.API_HOST ?? "127.0.0.1",

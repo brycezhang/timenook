@@ -20,7 +20,9 @@
     "api:openapi": "pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api openapi",
     "test:admin-browser": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test -c playwright.admin.config.mjs",
     "dev:admin": "pnpm --filter @timenook/admin dev",
-    "admin:create": "pnpm --filter @timenook/api admin:create"
+    "admin:create": "pnpm --filter @timenook/api admin:create",
+    "probe:identity": "pnpm --filter @timenook/api probe:identity",
+    "probe:api": "pnpm --filter @timenook/api probe:api"
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",

@@ -2,6 +2,11 @@ import { build } from "esbuild";
 import fs from "node:fs/promises";
 import path from "node:path";
 const out = "dist/miniprogram";
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.TIMENOOK_AUDIO_PROBE_BUILD === "1"
+)
+  throw new Error("Probe cannot be built for production");
 await fs.rm(out, { recursive: true, force: true });
 async function walk(dir) {
   let files = [];
@@ -27,6 +32,9 @@ await build({
   platform: "neutral",
   bundle: false,
   define: {
+    __TIMENOOK_AUDIO_PROBE__: JSON.stringify(
+      process.env.TIMENOOK_AUDIO_PROBE_BUILD === "1",
+    ),
     __TIMENOOK_API_BASE_URL__: JSON.stringify(
       process.env.TIMENOOK_API_BASE_URL ?? "",
     ),

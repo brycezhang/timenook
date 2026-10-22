@@ -1,4 +1,13 @@
 import "reflect-metadata";
+import { AudioProbe } from "./probe/audio-probe";
+import { ProbeController } from "./probe/probe-controller";
+import { OssProbeObjects } from "./probe/oss-objects";
+import multipart from "@fastify/multipart";
+import {
+  LocalProbeObjects,
+  PROBE_OBJECTS,
+  ProbeObjects,
+} from "./probe/local-objects";
 import cookie from "@fastify/cookie";
 import { AdminAccess } from "./admin/admin-access";
 import { AdminController } from "./admin/admin-controller";
@@ -68,8 +77,14 @@ class AppModule {}
 
 export async function createApplication(
   config: ApiConfig,
-  options: { wechatFetch?: typeof fetch } = {},
+  options: { wechatFetch?: typeof fetch; probeObjects?: ProbeObjects } = {},
 ): Promise<NestFastifyApplication> {
+  if (options.probeObjects && config.environment !== "test")
+    throw new ConfigurationError(
+      "Custom probe storage is only allowed in test",
+    );
+  if (config.audioProbe && config.environment === "production")
+    throw new ConfigurationError("Audio probe cannot be enabled in production");
   if (options.wechatFetch && config.environment !== "test") {
     throw new ConfigurationError(
       "Custom WeChat transport is only allowed in test",
@@ -94,14 +109,40 @@ export async function createApplication(
     },
   });
   await adapter.getInstance().register(cookie);
+  if (config.audioProbe)
+    await adapter
+      .getInstance()
+      .register(multipart, {
+        limits: {
+          fileSize: 2097152,
+          fields: 3,
+          files: 1,
+          parts: 4,
+          fieldSize: 4096,
+        },
+      });
   adapter.getInstance().addHook("onRequest", async (request, reply) => {
     reply.header("x-request-id", request.id);
   });
   const module = {
     module: AppModule,
+    controllers: config.audioProbe ? [ProbeController] : [],
     providers: [
       { provide: API_CONFIG, useValue: config },
       Infrastructure,
+      ...(config.audioProbe
+        ? [
+            AudioProbe,
+            {
+              provide: PROBE_OBJECTS,
+              useValue:
+                options.probeObjects ??
+                (config.audioProbe.oss
+                  ? new OssProbeObjects(config.audioProbe.oss)
+                  : new LocalProbeObjects(config.audioProbe.storageRoot)),
+            },
+          ]
+        : []),
       { provide: WECHAT_FETCH, useValue: options.wechatFetch ?? fetch },
       IdentityAccess,
       AdminAccess,
@@ -154,6 +195,15 @@ export function createOpenApiDocument(app: NestFastifyApplication) {
         "__Secure-timenook_admin",
         { type: "apiKey", in: "cookie" },
         "timenook-admin",
+      )
+      .addBearerAuth(
+        {
+          type: "http",
+          scheme: "bearer",
+          description:
+            "Independent operator-provisioned non-production probe token",
+        },
+        "timenook-probe",
       )
       .addBearerAuth({
         type: "http",

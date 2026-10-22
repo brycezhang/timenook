@@ -68,3 +68,5 @@ TIMENOOK_API_BASE_URL=http://127.0.0.1:3417/v1 pnpm build:frontend
 ADR 0009 的部署目标为 `https://lawyerapi.threeminreading.com/timenook/v1`，Nginx 剥离 `/timenook` 后转发内部 `/v1`。该路径尚未部署；不得把设置基址或本地 HTTP 测试当作公网可用。真机需独立 AppID、开发权限及微信合法 request 域名配置。
 
 T07 独立管理员的配置、受控建号、MFA、会话重启规则和本地 HTTPS 管理端见 [管理端开发](development-admin.md)。
+
+T02 非生产录音probe的身份、私有存储模拟、OSS候选适配器、受控页及清理见[音频probe开发](development-audio-probe.md)。本地/契约测试不代表双端及真实OSS验收；[T02证据](delivery/2026-10-22/evidence/T02.md)分开记录。
