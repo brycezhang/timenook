@@ -45,6 +45,24 @@ API 默认绑定本机。GET /health/live 返回进程存活；GET /health/ready
 - GitHub Check 使用 Ubuntu 24.04、同一 Node/pnpm 和镜像 digest，执行迁移、检查和 OpenAPI 导出。微信原生编译器只能在安装开发者工具的 Mac 上单独执行，Linux CI 不将其记为已通过。
 - T01 工程基础、T09 内置模板模块及 T06 本地身份链路已实现；真实微信身份/支付、录音上传、OSS、豆包/DeepSeek、业务 Worker、管理后台和实体交付仍以各票据验收为准。
 
+## 持续集成
+
+`Check` 只响应 PR 和 main push，功能分支 push 不重复执行。代码稳定后固定提交，PR CI 与独立双轴审查并行；修复后只认最终提交的 PR CI 和复审结果。完成合并后再开始下一票；main 检查用于发现集成回归。具体交付门槛见 [Issue tracker](agents/issue-tracker.md#逐票验证与合并)。
+
+仅 `docs/**/*.md` 和根 `README.md`、`CONTEXT.md`、`GLOSSARY.md`、`AGENTS.md` 的普通文件变化走轻量检查；JSON、图片/模板、代码、迁移、依赖、工作流、可执行位或符号链接变化均保守执行原完整检查。重命名同时检查旧、新路径；空差异走完整检查，无法读取差异直接失败。
+
+轻量检查只需要 Git 和 Node：检查 `git diff --check`、仓库内 Markdown 文件链接及 `tickets.json` 对应的票据标题、验收清单、测试/依赖章节、Issue 与依赖一致性，不固定票据总数或依赖条数。新增断链、删除被引用文件会失败；原有未解决链接单独计数，不追认通过。Git 忽略的本地证据、个人绝对路径和外部 URL 不做可用性探测；标题锚点不在本轮检查范围。票据状态仍以 GitHub 为准，轻量检查不代替规格审查或平台验收。
+
+```bash
+node --test tests/ci/*.test.mjs
+node scripts/ci/check.mjs classify BASE_COMMIT HEAD_COMMIT
+node scripts/ci/check.mjs docs BASE_COMMIT HEAD_COMMIT
+```
+
+所有路径最后汇入始终运行、名称不变的 `check`：分类成功且选中的检查成功才通过；分类失败、选中任务失败/取消/跳过都失败。没有 workflow 级路径过滤，避免必需检查一直 Pending；依据 [GitHub 路径过滤说明](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore)及 [needs / always 条件](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idneeds)。
+
+本地每个行为保持 RED → GREEN，并验证相关回归、类型与构建；全量回归交给 CI，不在结果已充分时机械重复。Mac 微信原生编译、真机及供应商验证仍本地或按责任票完成。此轮不增加缓存或测试调度系统；耗时收益以调整后的实际 Actions 记录衡量。
+
 ## T06 微信身份与小程序模式
 
 API 内部路径为 `POST /v1/sessions/wechat`（只接受 `{ code }`）、`GET /v1/users/me` 和 `DELETE /v1/sessions/:sessionId`。登录返回 `user.id` 和 `session.id/token/expiresAt`；后两者需 `Authorization: Bearer <token>`，撤销仅允许本人会话，跨账号和未知会话均返回 404。成功撤销为 204；其余成功/错误沿用统一 envelope 和 requestId。账号恢复是重新 `wx.login` 回到同一 `(AppID, openid)` 账号，不含手机号、项目或支付权限。
