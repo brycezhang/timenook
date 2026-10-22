@@ -42,6 +42,9 @@ importers:
 
   apps/admin:
     dependencies:
+      '@timenook/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@vben-core/layout-ui':
         specifier: workspace:*
         version: link:../../vendor/vben/vben-core-layout-ui

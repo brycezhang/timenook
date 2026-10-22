@@ -19,6 +19,13 @@ import {
 } from "@nestjs/swagger";
 import { IsString, Length, Matches } from "class-validator";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { ADMIN_PERMISSIONS } from "@timenook/contracts";
+import type {
+  AdminLoginCommand,
+  AdminMfaCommand,
+  AdminRuntime,
+  ApiResponse as ApiEnvelope,
+} from "@timenook/contracts";
 import {
   AdminStateResponseDto,
   AdminEnrollmentResponseDto,
@@ -28,7 +35,7 @@ import {
 import { AdminAccess } from "./admin-access";
 import { Infrastructure } from "../infrastructure";
 import { ErrorResponseDto } from "../health-contract";
-class AdminLoginDto {
+class AdminLoginDto implements AdminLoginCommand {
   @ApiProperty({ minLength: 3, maxLength: 64 })
   @IsString()
   @Matches(/^[a-z0-9][a-z0-9._-]{2,63}$/)
@@ -43,7 +50,7 @@ class AdminLoginDto {
   @Length(16, 128)
   password!: string;
 }
-class MfaDto {
+class MfaDto implements AdminMfaCommand {
   @ApiProperty({ pattern: "^[0-9]{6}$", writeOnly: true })
   @IsString()
   @Matches(/^\d{6}$/)
@@ -64,7 +71,7 @@ export class AdminController {
     action: string,
     request: FastifyRequest,
     work: () => Promise<T>,
-  ) {
+  ): Promise<ApiEnvelope<T>> {
     return {
       data: await this.access.run(action, request, work),
       meta: { requestId: request.id },
@@ -136,13 +143,17 @@ export class AdminController {
   @ApiOperation({ summary: "ops:read only: minimal runtime dependency state" })
   @ApiOkResponse({ type: AdminRuntimeResponseDto })
   runtime(@Req() req: FastifyRequest) {
-    return this.response("admin.runtime", req, async () => {
-      await this.access.authorized(req, "ops:read");
-      return {
-        service: "timenook-api",
-        status: (await this.infrastructure.ready()) ? "ready" : "unavailable",
-      };
-    });
+    return this.response(
+      "admin.runtime",
+      req,
+      async (): Promise<AdminRuntime> => {
+        await this.access.authorized(req, ADMIN_PERMISSIONS.readRuntime);
+        return {
+          service: "timenook-api",
+          status: (await this.infrastructure.ready()) ? "ready" : "unavailable",
+        };
+      },
+    );
   }
   @Get("audit")
   @Header("Cache-Control", "no-store")

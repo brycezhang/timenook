@@ -1,3 +1,5 @@
+export * from "./admin";
+
 export interface ApiResponse<T> {
   data: T;
   meta: { requestId: string };

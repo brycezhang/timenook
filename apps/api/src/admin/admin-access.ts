@@ -17,12 +17,28 @@ import {
 import { Prisma, PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { ADMIN_PERMISSIONS, isAdminPermission } from "@timenook/contracts";
+import type {
+  AdminAuditEntry,
+  AdminEnrollment,
+  AdminPermission,
+  AdminState,
+} from "@timenook/contracts";
 import { verify, generateURI } from "otplib";
 import { API_CONFIG, ApiConfig } from "../config";
 import { decryptSecret, hashPassword, verifyPassword } from "./secrets";
 
 const COOKIE = "__Secure-timenook_admin";
 const PATH = "/timenook/v1/admin";
+const ROUTE_ACTIONS: Record<string, string> = {
+  "GET /v1/admin/session": "admin.session",
+  "POST /v1/admin/login": "admin.password",
+  "GET /v1/admin/mfa/enrollment": "admin.mfa.enrollment",
+  "POST /v1/admin/mfa": "admin.mfa",
+  "GET /v1/admin/runtime": "admin.runtime",
+  "GET /v1/admin/audit": "admin.audit",
+  "POST /v1/admin/logout": "admin.logout",
+};
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 type Session = Prisma.AdminSessionGetPayload<{ include: { account: true } }>;
@@ -65,13 +81,13 @@ export class AdminAccess implements OnModuleDestroy {
       if (!request.auditRecorded) await this.audit(action, request, "success");
       return result;
     } catch (error) {
-      await this.audit(
+      await this.auditFailure(
         action,
         request,
         error instanceof HttpException
           ? `denied:${error.getStatus()}`
           : "error",
-      ).catch(() => {});
+      );
       throw error;
     }
   }
@@ -135,7 +151,7 @@ export class AdminAccess implements OnModuleDestroy {
     )
       throw new ForbiddenException();
   }
-  private result(session: Session, token: string) {
+  private result(session: Session, token: string): AdminState {
     return {
       authenticated: session.phase === "authenticated",
       mfaRequired: session.phase === "password",
@@ -146,7 +162,8 @@ export class AdminAccess implements OnModuleDestroy {
           ? {
               id: session.account!.id,
               username: session.account!.username,
-              permissions: session.account!.permissions,
+              permissions:
+                session.account!.permissions.filter(isAdminPermission),
             }
           : null,
       csrfToken: this.csrf(token),
@@ -209,8 +226,34 @@ export class AdminAccess implements OnModuleDestroy {
     return this.result(issued.session, issued.token);
   }
   async auditUnhandled(request: AdminRequest, status: number) {
-    if (!request.adminAction)
-      await this.audit("admin.invalid", request, `denied:${status}`);
+    if (request.adminAction) return;
+    await this.auditFailure(
+      ROUTE_ACTIONS[`${request.method} ${request.routeOptions.url}`] ??
+        "admin.invalid",
+      request,
+      `denied:${status}`,
+    );
+  }
+  private async auditFailure(
+    action: string,
+    request: AdminRequest,
+    result: string,
+  ) {
+    try {
+      if (!request.adminOperator) {
+        try {
+          // Validation, cross-site or phase checks may reject before identity
+          // resolution. Only a valid cookie can identify the operator here.
+          await this.session(request);
+        } catch (error) {
+          if (!(error instanceof UnauthorizedException)) throw error;
+        }
+      }
+      await this.audit(action, request, result);
+    } catch {
+      // Failure auditing is best effort. Preserve the original safe response,
+      // including when this runs in onSend after the exception filter.
+    }
   }
   private async limit(scope: string, value: string, maximum: number) {
     try {
@@ -277,7 +320,7 @@ export class AdminAccess implements OnModuleDestroy {
       ),
     );
   }
-  async enrollment(request: AdminRequest) {
+  async enrollment(request: AdminRequest): Promise<AdminEnrollment> {
     const session = await this.session(request, "password");
     if (!session.account || session.account.mfaEnrolled)
       throw new ForbiddenException();
@@ -321,27 +364,38 @@ export class AdminAccess implements OnModuleDestroy {
     });
     return this.finish(request, reply, issued);
   }
-  async authorized(request: AdminRequest, permission: string) {
+  async authorized(request: AdminRequest, permission: AdminPermission) {
     const session = await this.session(request, "authenticated");
     if (!session.account?.permissions.includes(permission))
       throw new ForbiddenException();
     return session;
   }
-  async audits(request: AdminRequest) {
-    await this.authorized(request, "audit:read");
-    return this.database.adminAudit.findMany({
+  async audits(request: AdminRequest): Promise<AdminAuditEntry[]> {
+    await this.authorized(request, ADMIN_PERMISSIONS.readAudit);
+    const records = await this.database.adminAudit.findMany({
       orderBy: { createdAt: "desc" },
       take: 100,
     });
+    return records.map((record) => ({
+      ...record,
+      createdAt: record.createdAt.toISOString(),
+    }));
   }
   async logout(request: AdminRequest, reply: FastifyReply) {
     const session = await this.session(request);
     this.assertCsrf(request);
     await this.database.$transaction(async (tx) => {
-      await tx.adminSession.update({
-        where: { id: session.id },
+      const revoked = await tx.adminSession.updateMany({
+        where: {
+          id: session.id,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
         data: { revokedAt: new Date() },
       });
+      // A concurrent password/MFA rotation may already have consumed this
+      // cookie. Do not claim logout succeeded or clear the newer cookie.
+      if (!revoked.count) throw new UnauthorizedException();
       await this.audit(request.adminAction!, request, "success", tx);
     });
     request.auditRecorded = true;

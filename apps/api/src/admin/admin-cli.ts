@@ -8,6 +8,11 @@ import {
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { generateSecret } from "otplib";
+import { isAdminPermission } from "@timenook/contracts";
+import type {
+  AdminProvisionCommand,
+  AdminProvisionResult,
+} from "@timenook/contracts";
 import { readConfig } from "../config";
 import { encryptSecret, hashPassword } from "./secrets";
 
@@ -41,11 +46,15 @@ async function main() {
     input.password.length < 16 ||
     input.password.length > 128 ||
     !Array.isArray(input.permissions) ||
-    input.permissions.some(
-      (p: unknown) => p !== "ops:read" && p !== "audit:read",
-    )
+    !input.permissions.every(isAdminPermission)
   )
     throw new Error();
+  const commandInput: AdminProvisionCommand = {
+    username: input.username,
+    password: input.password,
+    realm,
+    permissions: input.permissions,
+  };
   const database = new PrismaClient({ datasourceUrl: config.databaseUrl });
   try {
     const id = randomUUID();
@@ -54,13 +63,13 @@ async function main() {
         data: {
           id,
           realm,
-          username: input.username,
-          passwordHash: await hashPassword(input.password),
+          username: commandInput.username,
+          passwordHash: await hashPassword(commandInput.password),
           mfaSecret: encryptSecret(
             generateSecret(),
             config.admin!.encryptionKey,
           ),
-          permissions: [...new Set<string>(input.permissions)],
+          permissions: [...new Set(commandInput.permissions)],
         },
       });
       await tx.adminAudit.create({
@@ -73,7 +82,13 @@ async function main() {
         },
       });
     });
-    console.info(JSON.stringify({ id, realm, mfaEnrollmentRequired: true }));
+    console.info(
+      JSON.stringify({
+        id,
+        realm,
+        mfaEnrollmentRequired: true,
+      } satisfies AdminProvisionResult),
+    );
   } finally {
     await database.$disconnect();
   }

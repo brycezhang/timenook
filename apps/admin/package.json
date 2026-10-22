@@ -9,6 +9,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@timenook/contracts": "workspace:*",
     "@vben-core/layout-ui": "workspace:*",
     "@vben/preferences": "workspace:*",
     "@vben/request": "workspace:*",

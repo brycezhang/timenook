@@ -29,7 +29,9 @@ CLI 拒绝符号链接、非当前用户所有、组/其他用户可读、超过
 - 完整会话绝对有效期8小时，挑战默认5分钟；可通过 `ADMIN_SESSION_TTL_SECONDS` / `ADMIN_CHALLENGE_TTL_SECONDS` 缩短，最大仍为8小时/5分钟。没有静默续期。数据库持久化会话，所以 API 重启保留未到期会话，到期/注销后不可恢复。
 - 专用 `__Secure-timenook_admin` Cookie：Secure、HttpOnly、SameSite=Strict、host-only、Path=`/timenook/v1/admin`。不覆盖 legal-agent 的 Cookie，不发往其 `/v1` 或小程序身份接口。Cookie Path 是浏览器发送范围，同源其他应用的 XSS 仍属于共享源风险；身份权限仍由独立账号/会话表验证。
 - 所有写请求必须携带与当前Cookie绑定的 `X-CSRF-Token`，Origin必须精确匹配配置；跨站请求拒绝。密码/MFA成功会轮换并撤销旧挑战；退出同时撤销服务端会话和清Cookie。前端在完整会话或MFA挑战失效后恢复登录。
+- 若 MFA/密码轮换已先消费旧挑战，并发退出该旧挑战返回401且不清除新Cookie；调用方须用当前会话重新退出，不能把旧挑战的退出失败当作新会话已撤销。该规则只作用于当前会话，不注销其他设备。
 - 会话创建/轮换/注销与成功审计同PG事务，事务提交后才发送Cookie。审计失败导致事务回滚，不会发出新的有效身份。审计只记录operatorId、固定action、服务端生成requestId、result和时间；不记录请求体、密码、验证码、种子、Cookie/CSRF令牌、云key或完整地址。
+- DTO、跨站或会话阶段拒绝也从有效Cookie解析已知操作者，使用固定路由动作；无法识别时记录空操作者。失败审计不可用时保留原安全HTTP错误，不返回原始数据库异常。
 
 ## 验证与部署边界
 

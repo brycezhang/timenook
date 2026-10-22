@@ -14,6 +14,13 @@ export default defineConfig(({ command }) => {
   return {
     base: "/timenook/admin/",
     plugins: [vue(), tailwindcss()],
+    // The shared workspace contract also serves the CommonJS Nest API.
+    optimizeDeps: { include: ["@timenook/contracts"] },
+    build: {
+      commonjsOptions: {
+        include: [/node_modules/, /packages\/contracts\/dist/],
+      },
+    },
     server: {
       host: "localhost",
       port: 3443,

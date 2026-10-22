@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { Alert } from "antdv-next";
-import { adminApi, type AdminState, type AuditEntry } from "./api/admin";
+import { ADMIN_PERMISSIONS } from "@timenook/contracts";
+import type {
+  AdminState,
+  AdminAuditEntry,
+  AdminRuntime,
+} from "@timenook/contracts";
+import { adminApi } from "./api/admin";
 import Auth from "./views/auth.vue";
 import BasicLayout from "./layouts/basic.vue";
 import Runtime from "./views/runtime.vue";
@@ -9,14 +15,25 @@ const state = ref<AdminState | null>(null),
   secret = ref(""),
   busy = ref(false),
   error = ref(""),
-  status = ref("");
-const audits = ref<AuditEntry[] | null>(null);
+  status = ref<AdminRuntime["status"] | "">("");
+const audits = ref<AdminAuditEntry[] | null>(null);
 const canReadRuntime = computed(
-  () => state.value?.operator?.permissions.includes("ops:read") ?? false,
+  () =>
+    state.value?.operator?.permissions.includes(
+      ADMIN_PERMISSIONS.readRuntime,
+    ) ?? false,
 );
 const canReadAudit = computed(
-  () => state.value?.operator?.permissions.includes("audit:read") ?? false,
+  () =>
+    state.value?.operator?.permissions.includes(ADMIN_PERMISSIONS.readAudit) ??
+    false,
 );
+function clearSession() {
+  state.value = null;
+  secret.value = "";
+  audits.value = null;
+  status.value = "";
+}
 async function sync() {
   state.value = await adminApi.session();
   secret.value = "";
@@ -35,10 +52,7 @@ async function perform(action: () => Promise<unknown>) {
   } catch (failure) {
     const code = (failure as { error?: { code?: string } }).error?.code;
     if (code === "UNAUTHENTICATED") {
-      state.value = null;
-      secret.value = "";
-      audits.value = null;
-      status.value = "";
+      clearSession();
       const refreshed = await sync().catch(() => null);
       error.value = refreshed?.mfaRequired
         ? "验证码无效或已使用，请等待新验证码。"
@@ -73,10 +87,7 @@ function mfa(code: string) {
 function logout() {
   void perform(async () => {
     await adminApi.logout(state.value!.csrfToken);
-    state.value = null;
-    secret.value = "";
-    audits.value = null;
-    status.value = "";
+    clearSession();
     await sync();
   });
 }

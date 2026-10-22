@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { Alert, Button, Tag } from "antdv-next";
-import type { AuditEntry } from "../api/admin";
+import type { AdminAuditEntry, AdminRuntime } from "@timenook/contracts";
 defineProps<{
-  status: string;
+  status: AdminRuntime["status"] | "";
   canReadRuntime: boolean;
   canReadAudit: boolean;
-  audits: AuditEntry[] | null;
+  audits: AdminAuditEntry[] | null;
   busy: boolean;
 }>();
 const emit = defineEmits<{ refresh: []; audit: [] }>();

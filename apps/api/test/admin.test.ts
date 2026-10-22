@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID, randomBytes } from "node:crypto";
+import { createHash, randomUUID, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -264,6 +264,140 @@ test("rejected malformed operations are audited without copying input or secrets
     assert.equal(audits.body.includes(secret), false);
 });
 
+test("validation rejection keeps its safe HTTP response when the audit database is unavailable", async () => {
+  const auth = await authenticate();
+  const database = new PrismaClient({ datasourceUrl: config.databaseUrl });
+  try {
+    await database.$executeRawUnsafe(
+      "ALTER TABLE admin_audit RENAME TO unavailable_audit",
+    );
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/v1/admin/mfa",
+      headers: { cookie: auth.cookie, origin, "x-csrf-token": auth.csrf },
+      payload: { code: "malformed-sensitive-input" },
+    });
+    assert.equal(rejected.statusCode, 400);
+    assert.deepEqual(rejected.json(), {
+      error: {
+        code: "INVALID_REQUEST",
+        message: "Invalid request",
+        retryable: false,
+      },
+      meta: { requestId: rejected.headers["x-request-id"] },
+    });
+    assert.ok(!rejected.headers["set-cookie"]);
+  } finally {
+    await database.$executeRawUnsafe(
+      "ALTER TABLE unavailable_audit RENAME TO admin_audit",
+    );
+    await database.$disconnect();
+  }
+});
+
+test("malformed admin commands retain their known operator and fixed action without recording input", async () => {
+  const auth = await authenticate();
+  const marker = randomBytes(24).toString("hex");
+  for (const command of [
+    {
+      route: "mfa",
+      payload: { code: marker },
+      cookie: auth.cookie,
+      action: "admin.mfa",
+      operatorId: auth.account.id,
+    },
+    {
+      route: "login",
+      payload: { username: marker, password: "invalid" },
+      cookie: auth.cookie,
+      action: "admin.password",
+      operatorId: auth.account.id,
+    },
+    {
+      route: "login",
+      payload: { username: marker, password: "invalid" },
+      cookie: "",
+      action: "admin.password",
+      operatorId: null,
+    },
+  ]) {
+    const rejected = await app.inject({
+      method: "POST",
+      url: `/v1/admin/${command.route}`,
+      headers: { cookie: command.cookie, origin, "x-csrf-token": auth.csrf },
+      payload: command.payload,
+    });
+    assert.equal(rejected.statusCode, 400);
+    const audits = await app.inject({
+      method: "GET",
+      url: "/v1/admin/audit",
+      headers: { cookie: auth.cookie },
+    });
+    const record = audits
+      .json()
+      .data.find(
+        (entry: { requestId: string }) =>
+          entry.requestId === rejected.headers["x-request-id"],
+      );
+    assert.equal(record.operatorId, command.operatorId);
+    assert.equal(record.action, command.action);
+    assert.equal(record.result, "denied:400");
+    for (const sensitive of [
+      marker,
+      auth.account.password,
+      auth.secret,
+      auth.cookie.split("=")[1],
+      auth.csrf,
+    ])
+      assert.equal(audits.body.includes(sensitive), false);
+  }
+});
+
+test("early cross-site and phase rejections audit the valid cookie operator without granting authority", async () => {
+  const auth = await authenticate();
+  for (const command of [
+    {
+      method: "GET" as const,
+      route: "runtime",
+      headers: { "sec-fetch-site": "cross-site" },
+      payload: undefined,
+      status: 403,
+      action: "admin.runtime",
+    },
+    {
+      method: "POST" as const,
+      route: "mfa",
+      headers: { origin, "x-csrf-token": auth.csrf },
+      payload: { code: "000000" },
+      status: 401,
+      action: "admin.mfa",
+    },
+  ]) {
+    const rejected = await app.inject({
+      method: command.method,
+      url: `/v1/admin/${command.route}`,
+      headers: { cookie: auth.cookie, ...command.headers },
+      payload: command.payload,
+    });
+    assert.equal(rejected.statusCode, command.status);
+    assert.ok(!rejected.headers["set-cookie"]);
+    const audits = await app.inject({
+      method: "GET",
+      url: "/v1/admin/audit",
+      headers: { cookie: auth.cookie },
+    });
+    const record = audits
+      .json()
+      .data.find(
+        (entry: { requestId: string }) =>
+          entry.requestId === rejected.headers["x-request-id"],
+      );
+    assert.equal(record.operatorId, auth.account.id);
+    assert.equal(record.action, command.action);
+    assert.equal(record.result, `denied:${command.status}`);
+  }
+});
+
 test("password and wrong MFA challenges have no runtime authority; code replay loses even concurrently", async () => {
   const auth = await authenticate();
   const pending = await begin(auth.account);
@@ -409,6 +543,118 @@ test("admin cookies are host-only, scoped, Secure and HttpOnly; logout revokes t
     );
   } finally {
     await restarted.close();
+  }
+});
+
+test("logout queued behind MFA rotation cannot report success for the consumed challenge", async () => {
+  const pending = await begin(createAccount());
+  const enrollment = await app.inject({
+    method: "GET",
+    url: "/v1/admin/mfa/enrollment",
+    headers: { cookie: pending.cookie },
+  });
+  const code = await generate({ secret: enrollment.json().data.secret });
+  const headers = {
+    cookie: pending.cookie,
+    origin,
+    "x-csrf-token": pending.csrf,
+  };
+  const database = new PrismaClient({ datasourceUrl: config.databaseUrl });
+  let release!: () => void;
+  let acquired!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const locked = new Promise<void>((resolve) => {
+    acquired = resolve;
+  });
+  const tokenHash = createHash("sha256")
+    .update(pending.cookie.split("=")[1])
+    .digest("hex");
+  // Control only database scheduling; all outcome assertions use HTTP.
+  const blocker = database.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT id::text FROM admin_sessions WHERE token_hash = ${tokenHash} FOR UPDATE`;
+      acquired();
+      await released;
+    },
+    { timeout: 15000 },
+  );
+  const waitForQueuedRequests = async (count: number) => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const [{ waiting }] = await database.$queryRaw<{ waiting: number }[]>`
+        SELECT COUNT(*)::int AS waiting FROM pg_stat_activity
+        WHERE wait_event_type = 'Lock' AND query LIKE ${`%"${schema}"."admin_sessions"%`}
+      `;
+      if (waiting >= count) return;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error("Concurrent HTTP requests did not reach the database lock");
+  };
+  let verified, logout;
+  try {
+    await locked;
+    const verification = app
+      .inject({
+        method: "POST",
+        url: "/v1/admin/mfa",
+        headers,
+        payload: { code },
+      })
+      .then((response) => response);
+    try {
+      await waitForQueuedRequests(1);
+      const revocation = app
+        .inject({
+          method: "POST",
+          url: "/v1/admin/logout",
+          headers,
+        })
+        .then((response) => response);
+      try {
+        await waitForQueuedRequests(2);
+      } finally {
+        release();
+        [verified, logout] = await Promise.all([verification, revocation]);
+      }
+    } finally {
+      release();
+      await verification;
+    }
+    assert.equal(verified!.statusCode, 200);
+    assert.equal(logout!.statusCode, 401);
+    assert.ok(
+      !logout!.headers["set-cookie"],
+      "stale logout must not clear the rotated browser cookie",
+    );
+    const currentCookie = cookie(verified!);
+    assert.equal(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/v1/admin/runtime",
+          headers: { cookie: currentCookie },
+        })
+      ).statusCode,
+      200,
+    );
+    const audits = await app.inject({
+      method: "GET",
+      url: "/v1/admin/audit",
+      headers: { cookie: currentCookie },
+    });
+    const record = audits
+      .json()
+      .data.find(
+        (entry: { requestId: string }) =>
+          entry.requestId === logout!.headers["x-request-id"],
+      );
+    assert.equal(record.action, "admin.logout");
+    assert.equal(record.result, "denied:401");
+  } finally {
+    release();
+    await blocker;
+    await database.$disconnect();
   }
 });
 

@@ -12,7 +12,7 @@ const { PrismaClient } = apiRequire("@prisma/client");
 const { generate } = apiRequire("otplib");
 const Redis = apiRequire("ioredis");
 const schema = `t07_browser_${randomUUID().replaceAll("-", "")}`;
-const privateDir = mkdtempSync(join(tmpdir(), "t07-browser-"));
+let privateDir;
 const apiCwd = resolve("apps/api");
 let api, vite, databaseUrl, account;
 const logs = [];
@@ -52,6 +52,7 @@ async function waitFor(url) {
 }
 let env;
 test.beforeAll(async () => {
+  privateDir = mkdtempSync(join(tmpdir(), "t07-browser-"));
   if (existsSync(".env")) process.loadEnvFile(".env");
   const url = new URL(process.env.DATABASE_URL);
   url.searchParams.set("schema", schema);
@@ -143,7 +144,7 @@ test.afterAll(async () => {
       redis.disconnect();
     }
   }
-  rmSync(privateDir, { recursive: true, force: true });
+  if (privateDir) rmSync(privateDir, { recursive: true, force: true });
 });
 test("desktop and mobile operator completes MFA, survives API restart, and logs out with real Secure cookies", async ({
   page,
