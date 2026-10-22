@@ -1,15 +1,50 @@
 name: Check
 on:
   push:
-    branches: [main, "feat/**", "codex/**"]
+    branches: [main]
   pull_request:
 permissions:
   contents: read
 concurrency:
   group: check-${{ github.ref }}
   cancel-in-progress: true
+env:
+  CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+  CHECK_HEAD: ${{ github.sha }}
 jobs:
-  check:
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.route.outputs.mode }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - run: node --test tests/ci/*.test.mjs
+      - id: route
+        run: |
+          mode=$(node scripts/ci/check.mjs classify "$CHECK_BASE" "$CHECK_HEAD")
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+  docs:
+    needs: changes
+    if: needs.changes.outputs.mode == 'docs'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - run: node scripts/ci/check.mjs docs "$CHECK_BASE" "$CHECK_HEAD"
+  full:
+    needs: changes
+    if: needs.changes.outputs.mode == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -35,9 +70,12 @@ jobs:
       REDIS_URL: redis://127.0.0.1:63791
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
+      - run: node scripts/ci/check.mjs docs "$CHECK_BASE" "$CHECK_HEAD"
       - run: npm install --global pnpm@10.34.7
       - run: pnpm install --frozen-lockfile
       - name: Build pinned audio validator
@@ -51,3 +89,16 @@ jobs:
       - run: pnpm check
       - run: pnpm api:openapi
       - run: pnpm test:admin-browser
+  check:
+    needs: [changes, docs, full]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - run: node scripts/ci/check.mjs gate
+        env:
+          CHECK_NEEDS: ${{ toJSON(needs) }}
