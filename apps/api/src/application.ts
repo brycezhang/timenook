@@ -1,3 +1,11 @@
+import { AdminTermsController } from "./payments/admin-terms-controller";
+import { validateWechatPayConfig } from "./payments/wechat-pay";
+import {
+  Orders,
+  OrdersController,
+  PaymentWebhookController,
+  PAYMENT_FETCH,
+} from "./payments/orders";
 import { AI_FETCH } from "./probe/ai-providers";
 import { AiProbe } from "./probe/ai-probe";
 import { AiProbeController } from "./probe/ai-probe-controller";
@@ -86,6 +94,9 @@ class HealthController {
 
 @Module({
   controllers: [
+    OrdersController,
+    AdminTermsController,
+    PaymentWebhookController,
     HealthController,
     IdentityController,
     AdminController,
@@ -101,8 +112,29 @@ export async function createApplication(
     wechatFetch?: typeof fetch;
     probeObjects?: ProbeObjects;
     aiFetch?: typeof fetch;
+    paymentFetch?: typeof fetch;
   } = {},
 ): Promise<NestFastifyApplication> {
+  if (
+    config.payments &&
+    (config.environment !== "test" ||
+      !options.paymentFetch ||
+      options.paymentFetch === fetch ||
+      config.payments.mode !== "local-verification" ||
+      config.payments.appId !== config.wechat?.appId)
+  )
+    throw new ConfigurationError(
+      "Payments require test-only local verification and synthetic transport for this AppID",
+    );
+  if (config.payments) {
+    try {
+      validateWechatPayConfig(config.payments);
+    } catch {
+      throw new ConfigurationError(
+        "Invalid isolated payment protocol configuration or callback path",
+      );
+    }
+  }
   if (config.aiProbe) validateAiProbeConfig(config.aiProbe);
   if (options.aiFetch && config.environment !== "test")
     throw new ConfigurationError("Custom AI transport is only allowed in test");
@@ -191,6 +223,8 @@ export async function createApplication(
       IdentityAccess,
       AdminAccess,
       Catalog,
+      Orders,
+      { provide: PAYMENT_FETCH, useValue: options.paymentFetch ?? fetch },
     ],
   };
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -198,6 +232,7 @@ export async function createApplication(
     adapter,
     {
       logger: false,
+      rawBody: true,
       abortOnError: false,
     },
   );

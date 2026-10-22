@@ -82,6 +82,9 @@ Page({
     }
     home("home");
   },
+  orders() {
+    go("order");
+  },
   catalog() {
     go("purchase");
   },

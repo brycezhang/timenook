@@ -12,6 +12,7 @@ import Auth from "./views/auth.vue";
 import BasicLayout from "./layouts/basic.vue";
 import Runtime from "./views/runtime.vue";
 import Catalog from "./views/catalog.vue";
+import ServiceTerms from "./views/service-terms.vue";
 const view = ref("runtime");
 const state = ref<AdminState | null>(null),
   secret = ref(""),
@@ -19,6 +20,12 @@ const state = ref<AdminState | null>(null),
   error = ref(""),
   status = ref<AdminRuntime["status"] | "">("");
 const audits = ref<AdminAuditEntry[] | null>(null);
+const canManageTerms = computed(
+  () =>
+    state.value?.operator?.permissions.includes(
+      ADMIN_PERMISSIONS.writeServiceTerms,
+    ) ?? false,
+);
 const canReadRuntime = computed(
   () =>
     state.value?.operator?.permissions.includes(
@@ -118,21 +125,37 @@ onMounted(() => {
       class="notice"
       role="alert"
     />
-    <nav v-if="canReadCatalog" class="catalog-navigation">
+    <nav v-if="canReadCatalog || canManageTerms" class="catalog-navigation">
       <Button
         :type="view === 'runtime' ? 'primary' : 'default'"
         @click="view = 'runtime'"
         >运行信息</Button
       ><Button
+        v-if="canReadCatalog"
         :type="view === 'catalog' ? 'primary' : 'default'"
         @click="view = 'catalog'"
         >关系与套餐</Button
+      >
+      <Button
+        v-if="canManageTerms"
+        :type="view === 'terms' ? 'primary' : 'default'"
+        @click="view = 'terms'"
+        >服务期限</Button
       >
     </nav>
     <Catalog
       v-if="view === 'catalog' && canReadCatalog"
       :csrf="state.csrfToken"
       :permissions="state.operator!.permissions"
+      @expired="
+        perform(async () => {
+          throw { error: { code: 'UNAUTHENTICATED' } };
+        })
+      "
+    />
+    <ServiceTerms
+      v-else-if="view === 'terms' && canManageTerms"
+      :csrf="state.csrfToken"
       @expired="
         perform(async () => {
           throw { error: { code: 'UNAUTHENTICATED' } };

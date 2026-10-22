@@ -1,3 +1,4 @@
+import { PaymentIdempotencyConflict } from "./payments/errors";
 import { InvalidPackageException } from "./catalog/errors";
 import {
   ArgumentsHost,
@@ -75,6 +76,12 @@ export class HttpErrorFilter implements ExceptionFilter {
       payload.error = {
         code: "INVALID_PACKAGE",
         message: "Package parameters are incomplete",
+        retryable: false,
+      };
+    if (error instanceof PaymentIdempotencyConflict)
+      payload.error = {
+        code: "IDEMPOTENCY_CONFLICT",
+        message: "Idempotency key was already used for a different command",
         retryable: false,
       };
     reply.status(status).send(payload);

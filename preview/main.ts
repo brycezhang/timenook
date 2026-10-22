@@ -111,7 +111,7 @@ const wx: any = {
     localStorage.removeItem(key);
   },
   request(options: any) {
-    // Browser preview implements public catalog HTTP only; it cannot synthesize wx.login.
+    // Browser preview uses the same authenticated order boundary; it cannot synthesize wx.login or native payment.
     const controller = new AbortController();
     const timer = setTimeout(
       () => controller.abort(),
@@ -119,13 +119,24 @@ const wx: any = {
     );
     const url = new URL(options.url, location.origin);
     const supported =
-      (!options.method || options.method === "GET") &&
-      /\/v1\/(recipient-types|packages\/current)$/.test(url.pathname);
+      ((!options.method || options.method === "GET") &&
+        /\/v1\/(recipient-types|packages\/current|orders(?:\/[a-f0-9-]{36})?)$/.test(
+          url.pathname,
+        )) ||
+      (options.method === "POST" &&
+        /\/v1\/orders(?:\/[a-f0-9-]{36}\/(payment|close))?$/.test(
+          url.pathname,
+        ));
     void (async () => {
       try {
         if (!supported) throw new Error("Unsupported preview request");
         const response = await fetch(url, {
-          method: "GET",
+          method: options.method ?? "GET",
+          headers: options.header,
+          body:
+            options.method === "POST"
+              ? JSON.stringify(options.data ?? {})
+              : undefined,
           credentials: "omit",
           signal: controller.signal,
         });

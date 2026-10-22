@@ -74,3 +74,4 @@ export interface ProjectPlan extends ProjectPlanRevision {
 export * from "./audio-probe";
 
 export * from "./catalog";
+export * from "./payments";

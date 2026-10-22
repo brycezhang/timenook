@@ -3,6 +3,7 @@
   <view class="section">{{status}}</view>
   <view wx:if="{{userId}}" class="small muted">服务端账号：{{userId}}</view>
   <view class="section muted">可查看套餐与赠礼称呼。当前暂未开放购买、项目和资料服务。</view>
+  <button wx:if="{{userId}}" class="btn secondary" bindtap="orders">查看订单与恢复项目</button>
   <button class="btn" bindtap="catalog">查看套餐与赠礼称呼</button>
   <button wx:if="{{!userId}}" class="btn" loading="{{busy}}" disabled="{{busy}}" bindtap="login">微信登录</button>
   <button class="link" disabled="{{busy}}" bindtap="logout">退出登录</button>
