@@ -1,3 +1,4 @@
+import type { AiProbeConfig } from "./probe/ai-probe";
 import type { ProbeOssConfig } from "./probe/oss-objects";
 
 export interface ApiConfig {
@@ -10,6 +11,7 @@ export interface ApiConfig {
   sessionTtlSeconds?: number;
   redisKeyPrefix?: string;
   loginLimitPerMinute?: number;
+  aiProbe?: AiProbeConfig;
   audioProbe?: {
     storageRoot: string;
     sessionTtlSeconds?: number;
@@ -186,7 +188,35 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     }
   } else if (env.AUDIO_PROBE_ENABLED)
     throw new ConfigurationError("Unsupported audio probe adapter");
+  let aiProbe: AiProbeConfig | undefined;
+  if (env.AI_PROBE_ENABLED) {
+    if (
+      env.AI_PROBE_ENABLED !== "candidate" ||
+      environment === "production" ||
+      !audioProbe
+    )
+      throw new ConfigurationError(
+        "AI probe requires explicit candidate mode and a non-production audio probe",
+      );
+    aiProbe = {
+      configVersion: env.TIMENOOK_PROBE_AI_CONFIG_VERSION ?? "",
+      doubao: {
+        apiKey: env.TIMENOOK_PROBE_DOUBAO_API_KEY ?? "",
+        resourceId: env.TIMENOOK_PROBE_DOUBAO_RESOURCE_ID ?? "",
+        fetchWindowSeconds: Number(
+          env.TIMENOOK_PROBE_DOUBAO_FETCH_WINDOW_SECONDS,
+        ),
+      },
+      deepseek: {
+        apiKey: env.TIMENOOK_PROBE_DEEPSEEK_API_KEY ?? "",
+        model: env.TIMENOOK_PROBE_DEEPSEEK_MODEL ?? "",
+        maxTokens: Number(env.TIMENOOK_PROBE_DEEPSEEK_MAX_TOKENS),
+      },
+    };
+    validateAiProbeConfig(aiProbe);
+  }
   return {
+    aiProbe,
     audioProbe,
     admin,
     environment,
@@ -214,4 +244,26 @@ function connectionUrl(
     throw new ConfigurationError(`${key} must be a valid connection URL`);
   }
   return value;
+}
+
+export function validateAiProbeConfig(config: AiProbeConfig) {
+  if (
+    !/^[A-Za-z0-9._-]{1,80}$/.test(config.configVersion) ||
+    !["volc.bigasr.auc", "volc.seedasr.auc"].includes(
+      config.doubao.resourceId,
+    ) ||
+    !Number.isInteger(config.doubao.fetchWindowSeconds) ||
+    config.doubao.fetchWindowSeconds < 1 ||
+    config.doubao.fetchWindowSeconds > 43190 ||
+    !/^[A-Za-z0-9._:-]{1,120}$/.test(config.deepseek.model) ||
+    !Number.isInteger(config.deepseek.maxTokens) ||
+    config.deepseek.maxTokens < 1 ||
+    config.deepseek.maxTokens > 32768 ||
+    [config.doubao.apiKey, config.deepseek.apiKey].some(
+      (key) => !key || /\s|YOUR_|PLACEHOLDER|<|>/i.test(key),
+    )
+  )
+    throw new ConfigurationError(
+      "Explicit complete AI probe candidate configuration is required",
+    );
 }

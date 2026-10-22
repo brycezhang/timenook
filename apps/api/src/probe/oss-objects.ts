@@ -91,6 +91,47 @@ export class OssProbeObjects {
       },
     };
   }
+  async asrSource(key: string, fetchWindowSeconds: number) {
+    if (
+      !/^sealed\/[0-9a-f-]{36}\.mp3$/.test(key) ||
+      !Number.isInteger(fetchWindowSeconds) ||
+      fetchWindowSeconds < 1 ||
+      fetchWindowSeconds > 43190
+    )
+      throw new Error("Invalid ASR source grant");
+    const expiresSeconds = fetchWindowSeconds + 5;
+    const expiresAt = new Date(
+      Date.now() + expiresSeconds * 1000,
+    ).toISOString();
+    if (
+      !Number.isFinite(Date.parse(this.config.expiresAt)) ||
+      Date.parse(this.config.expiresAt) < Date.parse(expiresAt) + 5000
+    )
+      throw new Error("STS does not cover the ASR fetch window");
+    const signer = this.client as OSS & {
+      signatureUrlV4(
+        method: string,
+        expires: number,
+        request: undefined,
+        key: string,
+      ): Promise<string>;
+    };
+    const url = await signer.signatureUrlV4(
+      "GET",
+      expiresSeconds,
+      undefined,
+      key,
+    );
+    const parsed = new URL(url);
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.hostname !==
+        `${this.config.bucket}.oss-${this.config.region}.aliyuncs.com` ||
+      parsed.pathname !== `/${key}`
+    )
+      throw new Error("ASR source must use the public OSS endpoint");
+    return { url, expiresAt, credentialsExpireAt: this.config.expiresAt };
+  }
   private checkKey(key: string) {
     if (!/^(staging|sealed)\/[0-9a-f-]{36}\.mp3$/.test(key))
       throw new Error("Invalid object key");

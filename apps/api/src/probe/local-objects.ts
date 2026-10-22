@@ -11,6 +11,10 @@ import { join, dirname } from "node:path";
 export const PROBE_OBJECTS = Symbol("PROBE_OBJECTS");
 /** External object-storage seam. Only the explicit local simulator is implemented in T02. */
 export interface ProbeObjects {
+  asrSource?(
+    key: string,
+    fetchWindowSeconds: number,
+  ): Promise<import("./ai-providers").AsrSource>;
   uploadForm?(
     key: string,
     bytes: number,

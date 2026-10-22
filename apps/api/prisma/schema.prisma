@@ -151,6 +151,7 @@ model AdminAudit {
 
 // Controlled S0 probe realm; deliberately no FK to product users/projects.
 model ProbeClip {
+  aiRuns ProbeAiRun[]
   printEntry ProbePrintEntry?
   storageScope String @map("storage_scope")
   id String @id @db.Uuid
@@ -213,4 +214,42 @@ model PackageVersion {
 
   @@unique([realm, draftId, draftRevision])
   @@map("package_versions")
+}
+
+// S0 only: immutable input and candidate configuration, independent of product tasks.
+model ProbeAiRun {
+  generations ProbeAiGeneration[]
+  id String @id @db.Uuid
+  clipId String @map("clip_id") @db.Uuid
+  clip ProbeClip @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  input Json
+  configuration Json
+  configurationHash String @map("configuration_hash") @db.Char(64)
+  fence Int @default(0)
+  leaseUntil DateTime? @map("lease_until") @db.Timestamptz(3)
+  submittedAt DateTime? @map("submitted_at") @db.Timestamptz(3)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+  providerCode String? @map("provider_code")
+  attempts Int @default(0)
+  state String @default("ready")
+  originalTranscript String? @map("original_transcript")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  @@map("probe_ai_runs")
+}
+
+model ProbeAiGeneration {
+  id String @id @db.Uuid
+  runId String @map("run_id") @db.Uuid
+  run ProbeAiRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  kind String
+  state String @default("generating")
+  transcriptHash String @map("transcript_hash") @db.Char(64)
+  output Json?
+  usage Json?
+  model String?
+  failure String?
+  startedAt DateTime @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+  @@index([runId])
+  @@map("probe_ai_generations")
 }
