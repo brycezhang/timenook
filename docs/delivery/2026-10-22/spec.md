@@ -52,7 +52,7 @@
 
 - 原生微信小程序保留，Vben 采用 web-antd 路线；后端 NestJS/Fastify 模块化单体，API、Worker 和 PDF 渲染分进程。
 - Prisma/PostgreSQL 保存业务事实、约束、版本、Inbox/Outbox；BullMQ/ioredis 负责调度，Redis 丢失可恢复。
-- 基础设施为独立阿里云 ECS/RDS/Tair/私有 OSS；ASR 为豆包文件识别，追问/整理为 DeepSeek，供应商经服务端适配器接入，无自动跨供应商回退。
+- 阿里云 ECS 与 API 域名复用 legal-agent，TimeNook 以 `/timenook` 路径分流，应用进程、数据及凭据独立，见 [ADR 0009](../../adr/0009-shared-ecs-api-path.md)。RDS/Tair/私有 OSS 保留原隔离要求；ASR 为豆包文件识别，追问/整理为 DeepSeek，供应商经服务端适配器接入，无自动跨供应商回退。
 - 初始化时验证并锁定 Node 22 系、pnpm 10 及方案指定依赖家族的兼容版本；现有宿主工具版本不自动成为项目运行基线。
 - 登录账号、讲述者 subject 和操作人分别记录；关系、付款、管理员身份都不自动授予私人内容或本人确认权限。
 - 录音先持久保存及封存再转写；原声、原转录和 AI 稿独立，用户等待时可离开、补录和恢复。
@@ -79,6 +79,6 @@
 
 ## 当前验证与完成定义
 
-2026-10-22 已运行现有 npm check：类型检查、23/23 行为测试与15页构建通过；微信 wcc/wcsc 15页编译通过。该基线使用本机 Node v25.8.2 和现有 npm 锁文件；目标 Node 22 / pnpm workspace 的兼容验证属于 T01，尚未完成。当前仍没有业务后端、云服务联调或真实售卖证据。
+2026-10-22 T01 已通过 PR #32 合并：Node 22.23.4 / pnpm 10.34.7 workspace、NestJS/Fastify 健康 API、Prisma 迁移及本地 PostgreSQL/Redis 就绪验证完成。23 项既有行为测试和 14 项 API/启动测试、15 页小程序原生编译及 GitHub Linux CI 通过。业务闭环、TimeNook 云部署和真实售卖尚未验收；工程证据见 [T01](evidence/T01.md)。
 
 工程完成、外部联调完成、上线验收通过分开记录。每票附实现提交/PR、命令结果和外部证据；S5 在 A01–A24/X01–X06 及 D01–D10 完成前保持关闭。外部条件欠缺不妨碍推进图中其他无阻塞工作，也不能据此关闭被阻塞的票。

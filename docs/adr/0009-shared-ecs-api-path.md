@@ -1,0 +1,22 @@
+---
+status: accepted
+date: 2026-10-22
+---
+
+# 与 legal-agent 共用 ECS 和 API 域名，以路径分流
+
+用户决定 TimeNook 使用 legal-agent 所在的阿里云服务器及同一 API 域名，以 path 区分。此决定替代实施规格中“独立 ECS”及交付文档中的首版两台计算节点假设；应用、数据、身份与凭据继续独立。
+
+## 路由与运行边界
+
+公网基址采用 `https://lawyerapi.threeminreading.com/timenook`。业务 API 使用 `/timenook/v1/...`，健康入口使用 `/timenook/health/live` 与 `/timenook/health/ready`。Nginx 只对 `/timenook/` 前缀剥离该前缀后转发至 TimeNook；服务内部对应 `/v1/...` 和 `/health/...`。既有 legal-agent 的 `/v1/...` 与其他路由保持原状。
+
+TimeNook 使用独立的 systemd 服务、Linux 用户、release/current/shared 目录、环境文件及仅回环监听的端口。初选 API 端口 `4310`，发布前重新检查占用与配置引用。API、Worker 和渲染任务仍分进程，限制 CPU/内存/并发，避免拖累同机 legal-agent。
+
+共用主机和 TLS 入口不代表共用用户、会话、AppID、商户配置、数据库账号、队列或 Bucket。RDS/Tair/私有 OSS 的隔离及访问要求沿用 ADR 0007；资源实例及配额以实际配置验证为准。小程序合法域名按同一域名配置，客户端基址、回调及受控素材入口必须带 TimeNook 前缀。
+
+## 当前证据与发布门槛
+
+2026-10-22 只读核实：域名解析到 `106.14.11.96`；legal-agent API/Worker/Web 及 Nginx 运行中；公网 `/v1/health` 返回 200 且 TLS 校验通过。当前 Nginx 的该域名入口转发至 `127.0.0.1:4300`，未发现 TimeNook 路由。旧 `lawyer-be.service` 已非当前运行服务，后续操作以实际 `legal-agent-*` 服务为准。
+
+本 ADR 记录目标与只读观察，不表示 TimeNook 已部署、容量已足够或业务联调已通过。T29 发布前检查 Nginx 完整生效配置、端口及服务归属、资源余量和回滚点；变更后分别验证 TimeNook 前缀、legal-agent 既有路径、TLS、鉴权与服务状态。单台 ECS 是共用故障域，容量与恢复结果须实测。
