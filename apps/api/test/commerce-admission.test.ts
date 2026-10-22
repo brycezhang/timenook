@@ -866,3 +866,18 @@ test("CLI usage and malformed input errors do not print files, keys, parse fragm
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("sparse shipping arrays cannot stand in for explicit supported or excluded regions", () => {
+  for (const field of ["includedRegionCodes", "excludedRegionCodes"] as const) {
+    const input = syntheticCompleteDecision();
+    input.d05[field] = new Array<string>(1);
+    const report = validateSalesAdmission(input);
+    assert.equal(report.completeness, "incomplete");
+    assert.ok(
+      report.issues.some(
+        (issue) =>
+          issue.path === `d05.${field}` && issue.code === "INVALID_REGIONS",
+      ),
+    );
+  }
+});

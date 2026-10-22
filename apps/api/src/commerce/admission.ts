@@ -277,7 +277,7 @@ export function validateSalesAdmission(input: unknown): AdmissionReport {
     if (
       !Array.isArray(value) ||
       value.length === 0 ||
-      value.some(
+      Array.from(value).some(
         (code) =>
           typeof code !== "string" || !/^[A-Z]{2}-[A-Z0-9]{2,8}$/.test(code),
       ) ||
@@ -327,7 +327,7 @@ export function validateSalesAdmission(input: unknown): AdmissionReport {
   exact("d06.logisticsScope", "all_included_regions");
   exact("d07.refundDeletesData", false);
   exact("d07.qualityReprintUsesOriginalOrder", true);
-  for (const [kind, startsAt] of [
+  const refundCases = [
     ["notParticipated", "payment_verified"],
     ["usedNotProduced", "service_first_used"],
     ["inProduction", "production_accepted"],
@@ -337,7 +337,8 @@ export function validateSalesAdmission(input: unknown): AdmissionReport {
     ["qualityWrongVersion", "delivered"],
     ["qualityLayoutError", "delivered"],
     ["postConfirmationFactualError", "error_discovered"],
-  ]) {
+  ] as const;
+  for (const [kind, startsAt] of refundCases) {
     quantity(`d07.${kind}.refundAmount`, "fen", 0, 99900);
     serviceTerm(`d07.${kind}.requestWindow`, [startsAt]);
     quantity(`d07.${kind}.processing.within`, "calendar_days");
@@ -666,24 +667,13 @@ export function validateSalesAdmission(input: unknown): AdmissionReport {
     "afterSales",
   ])
     shape(`d06.${kind}`, ["within", "startsAt", "ownerRef", "procedureRef"]);
-  const refundCases = [
-    "notParticipated",
-    "usedNotProduced",
-    "inProduction",
-    "platformUnableDeliver",
-    "qualityDamaged",
-    "qualityMissingPages",
-    "qualityWrongVersion",
-    "qualityLayoutError",
-    "postConfirmationFactualError",
-  ];
   shape("d07", [
     "review",
     "refundDeletesData",
     "qualityReprintUsesOriginalOrder",
-    ...refundCases,
+    ...refundCases.map(([kind]) => kind),
   ]);
-  for (const kind of refundCases) {
+  for (const [kind] of refundCases) {
     shape(`d07.${kind}`, [
       "refundAmount",
       "requestWindow",
