@@ -25,6 +25,12 @@ const errors: Record<number, ApiErrorResponse["error"]> = {
     message: "Request payload is too large",
     retryable: false,
   },
+  429: { code: "RATE_LIMITED", message: "Too many requests", retryable: true },
+  502: {
+    code: "UPSTREAM_UNAVAILABLE",
+    message: "Identity provider is unavailable",
+    retryable: true,
+  },
   503: {
     code: "SERVICE_UNAVAILABLE",
     message: "Service is not ready",
@@ -32,7 +38,10 @@ const errors: Record<number, ApiErrorResponse["error"]> = {
   },
 };
 
-export function errorResponse(status: number, requestId: string): ApiErrorResponse {
+export function errorResponse(
+  status: number,
+  requestId: string,
+): ApiErrorResponse {
   return {
     error: errors[status] ?? {
       code: "INTERNAL_ERROR",

@@ -1,5 +1,6 @@
 import "./base.css";
 import { read as readProject } from "../miniprogram/services/store";
+import { dataMode } from "../miniprogram/services/mode";
 import {
   createRecorder,
   createAudio,
@@ -337,6 +338,10 @@ async function mount() {
   const ticket = ++serial;
   const hash = location.hash.replace(/^#\/?/, "") || "home";
   const [name, query] = hash.split("?");
+  if (dataMode() === "live" && name !== "home") {
+    wx.reLaunch({ url: "/pages/home/index" });
+    return;
+  }
   if (!names.includes(name)) return;
   current?.onHide?.();
   current?.onUnload?.();
@@ -413,6 +418,10 @@ document.querySelector("#capsule")!.addEventListener("click", () => {
     ).navigationBarTitleText;
     b.onclick = () => {
       overlay.replaceChildren();
+      if (dataMode() === "live") {
+        toast("真实模式只开放账号入口；请先切换到本机演示");
+        return;
+      }
       const project = readProject();
       if (!["home", "purchase", "service"].includes(name) && !project) {
         toast("请先创建项目，或在首页体验示例项目");

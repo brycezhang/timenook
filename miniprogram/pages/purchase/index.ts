@@ -1,5 +1,6 @@
 import { type Recipient } from "../../domain/model";
 import { go, home, start, toast } from "../../services/store";
+import { dataMode } from "../../services/mode";
 type E = {
   currentTarget: { dataset: Record<string, string> };
   detail: { value: string };
@@ -11,6 +12,10 @@ Page({
     bookImage: "/assets/book.jpg",
   },
   onLoad(q) {
+    if (dataMode() === "live") {
+      home("home");
+      return;
+    }
     const recipient = q.recipient === "爸爸" ? "爸爸" : "妈妈";
     this.setData({
       recipient,
@@ -33,6 +38,10 @@ Page({
     go("service", "kind=terms");
   },
   pay() {
+    if (dataMode() === "live") {
+      toast("真实购买尚未开放");
+      return;
+    }
     if (!this.data.agreed) return;
     wx.showModal({
       title: "体验购买流程",

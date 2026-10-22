@@ -26,6 +26,11 @@ await build({
   target: "es2020",
   platform: "neutral",
   bundle: false,
+  define: {
+    __TIMENOOK_API_BASE_URL__: JSON.stringify(
+      process.env.TIMENOOK_API_BASE_URL ?? "",
+    ),
+  },
 });
 for (const page of JSON.parse(await fs.readFile("miniprogram/app.json", "utf8"))
   .pages) {

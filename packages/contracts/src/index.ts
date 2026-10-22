@@ -8,6 +8,17 @@ export interface ApiErrorResponse {
   meta: { requestId: string };
 }
 
+export interface LoginCommand {
+  code: string;
+}
+export interface Account {
+  id: string;
+}
+export interface LoginResult {
+  user: Account;
+  session: { id: string; token: string; expiresAt: string };
+}
+
 export interface HealthStatus {
   status: "ok" | "ready";
   service: "timenook-api";

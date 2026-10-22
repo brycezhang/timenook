@@ -15,7 +15,7 @@ import {
 } from "@nestjs/platform-fastify";
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import type { ApiResponse, HealthStatus } from "@timenook/contracts";
-import { API_CONFIG, ApiConfig } from "./config";
+import { API_CONFIG, ApiConfig, ConfigurationError } from "./config";
 import { Infrastructure } from "./infrastructure";
 import { errorResponse, HttpErrorFilter } from "./http-error-filter";
 import {
@@ -26,6 +26,8 @@ import {
   SwaggerModule,
 } from "@nestjs/swagger";
 import { ErrorResponseDto, HealthResponseDto } from "./health-contract";
+import { IdentityAccess, WECHAT_FETCH } from "./identity/identity-access";
+import { IdentityController } from "./identity/identity-controller";
 
 @Controller("health")
 @ApiTags("Health")
@@ -56,14 +58,23 @@ class HealthController {
   }
 }
 
-@Module({ controllers: [HealthController] })
+@Module({ controllers: [HealthController, IdentityController] })
 class AppModule {}
 
 export async function createApplication(
   config: ApiConfig,
+  options: { wechatFetch?: typeof fetch } = {},
 ): Promise<NestFastifyApplication> {
+  if (options.wechatFetch && config.environment !== "test") {
+    throw new ConfigurationError(
+      "Custom WeChat transport is only allowed in test",
+    );
+  }
   const adapter = new FastifyAdapter({
     logger: false,
+    // Only the local Nginx hop can supply X-Forwarded-For. It must append or
+    // replace the actual peer address; arbitrary Internet peers are untrusted.
+    trustProxy: ["127.0.0.1", "::1"],
     requestIdHeader: false,
     genReqId: () => randomUUID(),
     frameworkErrors: (
@@ -82,7 +93,12 @@ export async function createApplication(
   });
   const module = {
     module: AppModule,
-    providers: [{ provide: API_CONFIG, useValue: config }, Infrastructure],
+    providers: [
+      { provide: API_CONFIG, useValue: config },
+      Infrastructure,
+      { provide: WECHAT_FETCH, useValue: options.wechatFetch ?? fetch },
+      IdentityAccess,
+    ],
   };
   const app = await NestFactory.create<NestFastifyApplication>(
     module,
@@ -119,6 +135,12 @@ export function createOpenApiDocument(app: NestFastifyApplication) {
         "Public transport contracts. Health readiness checks PostgreSQL migrations and Redis.",
       )
       .setVersion("0.1.0")
+      .addBearerAuth({
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "opaque",
+        description: "Opaque TimeNook session token",
+      })
       .build(),
   );
 }

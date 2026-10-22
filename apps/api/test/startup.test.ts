@@ -45,6 +45,29 @@ for (const scenario of [
     },
     message: /Production requires independent database credentials/,
   },
+  {
+    name: "production missing WeChat identity",
+    overrides: {
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://synthetic:synthetic@127.0.0.1:1/synthetic",
+      TIMENOOK_WECHAT_APP_ID: "",
+      TIMENOOK_WECHAT_APP_SECRET: "",
+    },
+    message: /Production requires TimeNook WeChat credentials/,
+  },
+  {
+    name: "partial WeChat identity configuration",
+    overrides: {
+      TIMENOOK_WECHAT_APP_ID: "synthetic",
+      TIMENOOK_WECHAT_APP_SECRET: "",
+    },
+    message: /Configure both TimeNook WeChat credentials/,
+  },
+  {
+    name: "invalid session lifetime",
+    overrides: { SESSION_TTL_SECONDS: "0" },
+    message: /SESSION_TTL_SECONDS must be/,
+  },
 ]) {
   test(`startup rejects ${scenario.name}`, () => {
     const result = spawnSync(
