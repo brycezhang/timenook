@@ -315,11 +315,33 @@ async function uploaded(
     sha256: createHash("sha256").update(audio).digest("hex"),
   };
   const created = await request(app, token, "POST", "/clips", command);
-  assert.equal(created.statusCode, 201);
+  assert.equal(
+    created.statusCode,
+    201,
+    JSON.stringify({
+      stage: "create clip",
+      status: created.statusCode,
+      error: created.json().error?.code,
+    }),
+  );
   const clip = created.json().data;
-  const form = (
-    await request(app, token, "POST", `/clips/${clip.id}/upload`, {})
-  ).json().data;
+  const issued = await request(
+    app,
+    token,
+    "POST",
+    `/clips/${clip.id}/upload`,
+    {},
+  );
+  assert.equal(
+    issued.statusCode,
+    201,
+    JSON.stringify({
+      stage: "issue upload form",
+      status: issued.statusCode,
+      error: issued.json().error?.code,
+    }),
+  );
+  const form = issued.json().data;
   assert.equal((await formUpload(app, form, audio)).statusCode, 204);
   return { clip, form };
 }
@@ -574,7 +596,7 @@ test("changing object storage scope cannot relabel a previous simulator clip as 
 });
 
 test("operator cleanup removes only the selected probe identity and its objects, including after expiry", async () => {
-  const identity = await provision(1);
+  const identity = await provision();
   const foreign = await provision();
   const app = await createApplication({
     ...config,
@@ -592,10 +614,34 @@ test("operator cleanup removes only the selected probe identity and its objects,
     other = (
       await request(app, foreign.token, "POST", "/clips", clipCommand())
     ).json().data.id;
+    assert.equal(
+      (await request(app, identity.token, "GET", `/clips/${owned}`)).statusCode,
+      200,
+    );
+    // Expire only this fixture after setup, independent of CLI/API startup speed.
+    const redis = new Redis(config.redisUrl);
+    try {
+      assert.equal(
+        await redis.pexpireat(
+          `${schema}:probe:session:${createHash("sha256").update(identity.token).digest("hex")}`,
+          1,
+        ),
+        1,
+      );
+    } finally {
+      redis.disconnect();
+    }
+    const expired = await request(
+      app,
+      identity.token,
+      "GET",
+      `/clips/${owned}`,
+    );
+    assert.equal(expired.statusCode, 401);
+    assert.equal(expired.json().error.code, "UNAUTHENTICATED");
   } finally {
     await app.close();
   }
-  await new Promise((resolve) => setTimeout(resolve, 1100));
   const result = spawnSync(
     process.execPath,
     ["dist-test/src/probe/probe-cli.js", "--clean", identity.file],
