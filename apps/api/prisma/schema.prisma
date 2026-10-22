@@ -109,3 +109,42 @@ model WechatCodeRedemption {
   @@index([expiresAt])
   @@map("wechat_code_redemptions")
 }
+
+// Separate identity realm: no relation to product users or their sessions.
+model AdminAccount {
+  id String @id @db.Uuid
+  username String
+  realm String
+  passwordHash String @map("password_hash")
+  mfaSecret String @map("mfa_secret")
+  mfaEnrolled Boolean @default(false) @map("mfa_enrolled")
+  lastTotpStep Int @default(-1) @map("last_totp_step")
+  permissions String[]
+  disabled Boolean @default(false)
+  sessions AdminSession[]
+  @@unique([realm, username])
+  @@map("admin_accounts")
+}
+model AdminSession {
+  id String @id @db.Uuid
+  tokenHash String @unique @map("token_hash") @db.Char(64)
+  adminId String? @map("admin_id") @db.Uuid
+  account AdminAccount? @relation(fields: [adminId], references: [id])
+  realm String
+  phase String
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  @@index([expiresAt])
+  @@index([adminId])
+  @@map("admin_sessions")
+}
+model AdminAudit {
+  id String @id @db.Uuid
+  operatorId String? @map("operator_id") @db.Uuid
+  action String
+  requestId String @map("request_id")
+  result String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  @@index([createdAt])
+  @@map("admin_audit")
+}

@@ -1,4 +1,7 @@
 import "reflect-metadata";
+import cookie from "@fastify/cookie";
+import { AdminAccess } from "./admin/admin-access";
+import { AdminController } from "./admin/admin-controller";
 import { randomUUID } from "node:crypto";
 import {
   Controller,
@@ -58,7 +61,9 @@ class HealthController {
   }
 }
 
-@Module({ controllers: [HealthController, IdentityController] })
+@Module({
+  controllers: [HealthController, IdentityController, AdminController],
+})
 class AppModule {}
 
 export async function createApplication(
@@ -88,6 +93,7 @@ export async function createApplication(
       reply.status(status).send(errorResponse(status, request.id));
     },
   });
+  await adapter.getInstance().register(cookie);
   adapter.getInstance().addHook("onRequest", async (request, reply) => {
     reply.header("x-request-id", request.id);
   });
@@ -98,6 +104,7 @@ export async function createApplication(
       Infrastructure,
       { provide: WECHAT_FETCH, useValue: options.wechatFetch ?? fetch },
       IdentityAccess,
+      AdminAccess,
     ],
   };
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -108,6 +115,14 @@ export async function createApplication(
       abortOnError: false,
     },
   );
+  adapter.getInstance().addHook("onSend", async (request, reply, payload) => {
+    if (request.routeOptions.url?.startsWith("/v1/admin/")) {
+      // Validation rejects before the controller; only the fixed action, generated
+      // request ID and status are retained, never a raw URL/body/header.
+      await app.get(AdminAccess).auditUnhandled(request, reply.statusCode);
+    }
+    return payload;
+  });
   app.useGlobalFilters(new HttpErrorFilter());
   app.useGlobalPipes(
     new ValidationPipe({
@@ -135,6 +150,11 @@ export function createOpenApiDocument(app: NestFastifyApplication) {
         "Public transport contracts. Health readiness checks PostgreSQL migrations and Redis.",
       )
       .setVersion("0.1.0")
+      .addCookieAuth(
+        "__Secure-timenook_admin",
+        { type: "apiKey", in: "cookie" },
+        "timenook-admin",
+      )
       .addBearerAuth({
         type: "http",
         scheme: "bearer",

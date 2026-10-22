@@ -66,3 +66,5 @@ TIMENOOK_API_BASE_URL=http://127.0.0.1:3417/v1 pnpm build:frontend
 构建脚本不会自动读取 `.env` 中的公开基址；只传入上述非敏感值，不把 Secret 打包进小程序。空基址明确提示尚未配置。浏览器预览保留同页模式入口，但没有原生 `wx.login`，不模拟真实身份；可返回演示模式继续原 15 页体验。
 
 ADR 0009 的部署目标为 `https://lawyerapi.threeminreading.com/timenook/v1`，Nginx 剥离 `/timenook` 后转发内部 `/v1`。该路径尚未部署；不得把设置基址或本地 HTTP 测试当作公网可用。真机需独立 AppID、开发权限及微信合法 request 域名配置。
+
+T07 独立管理员的配置、受控建号、MFA、会话重启规则和本地 HTTPS 管理端见 [管理端开发](development-admin.md)。

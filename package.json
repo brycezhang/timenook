@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "pnpm run build:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api build",
-    "typecheck": "pnpm run typecheck:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api typecheck",
+    "build": "pnpm run build:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api build && pnpm --filter @timenook/admin build",
+    "typecheck": "pnpm run typecheck:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api typecheck && pnpm --filter @timenook/admin typecheck",
     "test": "pnpm run test:frontend && pnpm --filter @timenook/api test",
     "check": "pnpm run typecheck && pnpm test && pnpm run build",
     "check:native": "node scripts/check-native.mjs",
@@ -17,9 +17,13 @@
     "services:down": "docker compose down",
     "db:generate": "pnpm --filter @timenook/api db:generate",
     "db:migrate": "pnpm --filter @timenook/api db:migrate",
-    "api:openapi": "pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api openapi"
+    "api:openapi": "pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api openapi",
+    "test:admin-browser": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test -c playwright.admin.config.mjs",
+    "dev:admin": "pnpm --filter @timenook/admin dev",
+    "admin:create": "pnpm --filter @timenook/api admin:create"
   },
   "devDependencies": {
+    "@playwright/test": "1.58.2",
     "@types/node": "^24.0.0",
     "esbuild": "^0.28.2",
     "lucide-static": "^0.468.0",

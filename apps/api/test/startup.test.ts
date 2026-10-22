@@ -22,6 +22,42 @@ test("production refuses to start without database configuration", () => {
 
 for (const scenario of [
   {
+    name: "production missing admin identity configuration",
+    overrides: {
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://synthetic:synthetic@127.0.0.1:1/synthetic",
+      TIMENOOK_WECHAT_APP_ID: "synthetic",
+      TIMENOOK_WECHAT_APP_SECRET: "synthetic",
+      ADMIN_ORIGIN: "",
+      ADMIN_ENCRYPTION_KEY: "",
+    },
+    message: /Production requires independent admin origin/,
+  },
+  {
+    name: "non-HTTPS admin origin",
+    overrides: {
+      ADMIN_ORIGIN: "http://localhost:3443",
+      ADMIN_ENCRYPTION_KEY: "synthetic-invalid-key",
+    },
+    message: /ADMIN_ORIGIN must be an HTTPS origin/,
+  },
+  {
+    name: "path in admin origin",
+    overrides: {
+      ADMIN_ORIGIN: "https://localhost:3443/timenook",
+      ADMIN_ENCRYPTION_KEY: "synthetic-invalid-key",
+    },
+    message: /ADMIN_ORIGIN must be an HTTPS origin/,
+  },
+  {
+    name: "invalid admin encryption key",
+    overrides: {
+      ADMIN_ORIGIN: "https://localhost:3443",
+      ADMIN_ENCRYPTION_KEY: "synthetic-invalid-key",
+    },
+    message: /ADMIN_ENCRYPTION_KEY must be a 32-byte/,
+  },
+  {
     name: "missing Redis URL",
     overrides: { REDIS_URL: "" },
     message: /REDIS_URL is required/,
