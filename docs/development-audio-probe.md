@@ -1,6 +1,6 @@
 # T02 受控音频 probe
 
-这是独立的非生产测试链路，不创建产品账号、采访、转写、计费或授权记录。默认关闭；服务端production拒绝probe配置，小程序默认构建关闭且release页面拒绝进入。CLI是唯一身份发放入口；微信bearer、Admin Cookie与probe身份互不代替。
+这是独立的非生产测试链路，不创建产品账号、采访、转写、计费或授权记录。T03 的[受控 AI probe](development-ai-probe.md)可按需复用其封存片段，仍不创建产品授权/故事记录。默认关闭；服务端production拒绝probe配置，小程序默认构建关闭且release页面拒绝进入。CLI是唯一身份发放入口；微信bearer、Admin Cookie与probe身份互不代替。
 
 ## 本地重现
 

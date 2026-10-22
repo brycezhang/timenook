@@ -1,3 +1,6 @@
+import { AI_FETCH } from "./probe/ai-providers";
+import { AiProbe } from "./probe/ai-probe";
+import { AiProbeController } from "./probe/ai-probe-controller";
 import {
   Catalog,
   CatalogController,
@@ -33,7 +36,12 @@ import {
 } from "@nestjs/platform-fastify";
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import type { ApiResponse, HealthStatus } from "@timenook/contracts";
-import { API_CONFIG, ApiConfig, ConfigurationError } from "./config";
+import {
+  API_CONFIG,
+  ApiConfig,
+  ConfigurationError,
+  validateAiProbeConfig,
+} from "./config";
 import { Infrastructure } from "./infrastructure";
 import { errorResponse, HttpErrorFilter } from "./http-error-filter";
 import {
@@ -89,8 +97,22 @@ class AppModule {}
 
 export async function createApplication(
   config: ApiConfig,
-  options: { wechatFetch?: typeof fetch; probeObjects?: ProbeObjects } = {},
+  options: {
+    wechatFetch?: typeof fetch;
+    probeObjects?: ProbeObjects;
+    aiFetch?: typeof fetch;
+  } = {},
 ): Promise<NestFastifyApplication> {
+  if (config.aiProbe) validateAiProbeConfig(config.aiProbe);
+  if (options.aiFetch && config.environment !== "test")
+    throw new ConfigurationError("Custom AI transport is only allowed in test");
+  if (
+    config.aiProbe &&
+    (!config.audioProbe || config.environment === "production")
+  )
+    throw new ConfigurationError(
+      "AI probe requires non-production audio probe",
+    );
   if (options.probeObjects && config.environment !== "test")
     throw new ConfigurationError(
       "Custom probe storage is only allowed in test",
@@ -137,7 +159,11 @@ export async function createApplication(
   const module = {
     module: AppModule,
     controllers: config.audioProbe
-      ? [ProbeController, PrintProbeController]
+      ? [
+          ProbeController,
+          PrintProbeController,
+          ...(config.aiProbe ? [AiProbeController] : []),
+        ]
       : [],
     providers: [
       { provide: API_CONFIG, useValue: config },
@@ -145,6 +171,12 @@ export async function createApplication(
       ...(config.audioProbe
         ? [
             AudioProbe,
+            ...(config.aiProbe
+              ? [
+                  AiProbe,
+                  { provide: AI_FETCH, useValue: options.aiFetch ?? fetch },
+                ]
+              : []),
             {
               provide: PROBE_OBJECTS,
               useValue:

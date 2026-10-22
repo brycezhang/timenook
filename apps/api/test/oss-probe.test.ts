@@ -124,3 +124,37 @@ test("OSS candidate uses authenticated private copy and bounded reads, with prov
     nock.enableNetConnect();
   }
 });
+
+test("ASR source grant signs only a sealed public HTTPS URL and refuses STS shorter than the explicit fetch window", async () => {
+  const objects = new OssProbeObjects({
+    ...config,
+    expiresAt: new Date(Date.now() + 700000).toISOString(),
+  });
+  const key = "sealed/00000000-0000-4000-8000-000000000003.mp3";
+  const source = await objects.asrSource(key, 600);
+  const url = new URL(source.url);
+  assert.equal(url.protocol, "https:");
+  assert.equal(
+    url.hostname,
+    "timenook-synthetic-probe.oss-cn-hangzhou.aliyuncs.com",
+  );
+  assert.equal(url.pathname, `/${key}`);
+  assert.equal(url.searchParams.get("x-oss-expires"), "605");
+  assert.equal(
+    url.searchParams.get("x-oss-signature-version"),
+    "OSS4-HMAC-SHA256",
+  );
+  assert.ok(Date.parse(source.expiresAt) >= Date.now() + 600000);
+  assert.ok(
+    Date.parse(source.credentialsExpireAt) > Date.parse(source.expiresAt),
+  );
+  await assert.rejects(
+    objects.asrSource(key.replace("sealed", "staging"), 600),
+  );
+  await assert.rejects(
+    new OssProbeObjects({
+      ...config,
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    }).asrSource(key, 600),
+  );
+});
