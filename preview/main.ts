@@ -36,6 +36,7 @@ let current: any = null,
   scheduled = false;
 const definitions: Record<string, any> = {};
 let registering = "";
+let pageLoad = Promise.resolve();
 let cssTag = document.createElement("style");
 document.head.append(cssTag);
 function css(source: string) {
@@ -507,8 +508,13 @@ async function mount() {
   current?.onHide?.();
   current?.onUnload?.();
   route = name;
-  registering = name;
-  await imports[`../miniprogram/pages/${name}/index.ts`]();
+  // Page() has no route argument; keep its owner stable until the module loads.
+  const loaded = pageLoad.then(async () => {
+    registering = name;
+    await imports[`../miniprogram/pages/${name}/index.ts`]();
+  });
+  pageLoad = loaded.catch(() => {});
+  await loaded;
   if (ticket !== serial) return;
   const def = definitions[name];
   current = { ...def, data: structuredClone(def.data || {}) };

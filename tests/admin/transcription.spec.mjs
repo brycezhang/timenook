@@ -424,6 +424,20 @@ test("the real interview page shows processing, retry and restored completion ac
   ).toBeVisible();
   await wake();
   await wake();
+  const completedRetry = data(
+    await request("GET", `/v1/projects/${projectId}/tasks`, narrator),
+    200,
+  ).find((task) => task.id === taskId);
+  expect(completedRetry).toMatchObject({ state: "failed", retryable: true });
+  await page.goto(`${base}/#/welcome?projectId=${projectId}`);
+  await page.goto(`${base}/#/interview?projectId=${projectId}`);
+  await expect(
+    page.getByText("转写未完成；已保存原声，可以按原任务重试。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  // Returning again also exercises the page module that finished loading after
+  // the first rapid departure from the project page.
   await page.goto(`${base}/#/welcome?projectId=${projectId}`);
   await page.goto(`${base}/#/interview?projectId=${projectId}`);
   await expect(
