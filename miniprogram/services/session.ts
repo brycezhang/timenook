@@ -131,6 +131,19 @@ export class SessionClient {
       )
         this.invalidate(stored);
       throw error;
+    } finally {
+      try {
+        if (
+          generation === this.generation &&
+          dataMode() === "live" &&
+          this.invalidatedToken !== stored.session.token &&
+          Date.parse(stored.session.expiresAt) <= Date.now() &&
+          this.persisted()?.session.token === stored.session.token
+        )
+          this.invalidate(stored);
+      } catch {
+        // A device cleanup lookup must not replace the request's result or error.
+      }
     }
   }
 

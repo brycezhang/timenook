@@ -1,3 +1,4 @@
+import { Followups, invalidateFollowupIn } from "../followups/followups";
 import { invalidateStoryRecordingIn } from "../stories/stories";
 import {
   Body,
@@ -7,6 +8,8 @@ import {
   Inject,
   Injectable,
   OnModuleDestroy,
+  Optional,
+  ServiceUnavailableException,
   Param,
   ParseUUIDPipe,
   Post,
@@ -67,6 +70,31 @@ class StartInterviewDto {
   @IsUUID()
   assistedSessionId?: string;
 }
+class DisplayActualQuestionDto extends InterviewCollectionDto {
+  @ApiProperty({ format: "uuid" }) @IsUUID() clientQuestionId!: string;
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedVersion!: number;
+  @ApiProperty({ format: "uuid" }) @IsUUID() expectedActualQuestionId!: string;
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedPlanRevision!: number;
+  @ApiProperty({ required: false, type: Object })
+  @IsObject()
+  @IsOptional()
+  selfWritten?: { text: string; intent: string; rewritesQuestionKey?: string };
+  @ApiProperty({ required: false, format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  followupTaskId?: string;
+}
+class RecordingStartDto extends InterviewCollectionDto {
+  @ApiProperty({ required: false, format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  actualQuestionId?: string;
+  @ApiProperty({ required: false, minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  expectedQuestionVersion?: number;
+}
 @Injectable()
 export class Interviews implements OnModuleDestroy {
   private readonly plans: ProjectPlans;
@@ -74,6 +102,7 @@ export class Interviews implements OnModuleDestroy {
   constructor(
     @Inject(API_CONFIG) config: ApiConfig,
     private readonly participation: Participation,
+    @Optional() private readonly followups?: Followups,
   ) {
     this.plans = new ProjectPlans(config.databaseUrl);
     this.terms = new ProjectServiceTerms(config.databaseUrl);
@@ -82,10 +111,15 @@ export class Interviews implements OnModuleDestroy {
     tx: Prisma.TransactionClient,
     projectId: string,
     id: string,
+    collectionOperatorId?: string,
   ) {
     const row = await tx.interview.findFirst({ where: { id, projectId } });
     if (!row) throw new NotFoundException();
     const state = await this.plans.readPersonalState(projectId, tx);
+    const history = await tx.interviewActualQuestion.findMany({
+      where: { projectId, interviewId: id },
+      orderBy: { sequence: "asc" },
+    });
     return {
       id: row.id,
       projectId: row.projectId,
@@ -94,9 +128,35 @@ export class Interviews implements OnModuleDestroy {
       actualQuestion: state.actualQuestions.find(
         (q) => q.id === row.actualQuestionId,
       ),
+      currentQuestion: state.actualQuestions.find(
+        (q) => q.id === history.at(-1)?.actualQuestionId,
+      ),
+      questionVersion: history.at(-1)?.sequence,
+      ...(!collectionOperatorId
+        ? {
+            questionHistory: history.map((item) => ({
+              sequence: item.sequence,
+              parentActualQuestionId: item.parentActualQuestionId,
+              question: state.actualQuestions.find(
+                (q) => q.id === item.actualQuestionId,
+              ),
+            })),
+          }
+        : {}),
       clips: await tx.recordingIntent.findMany({
-        where: { projectId, interviewId: id, state: "sealed" },
-        select: { id: true, clientClipId: true, state: true },
+        where: {
+          projectId,
+          interviewId: id,
+          ...(collectionOperatorId
+            ? { state: "pending", operatorUserId: collectionOperatorId }
+            : { state: "sealed" }),
+        },
+        select: {
+          id: true,
+          clientClipId: true,
+          state: true,
+          actualQuestionId: true,
+        },
       }),
       usage: await tx.recordingIntent
         .aggregate({
@@ -179,11 +239,190 @@ export class Interviews implements OnModuleDestroy {
                 ...actor,
               },
             }));
+          if (!prior) {
+            const owned = await tx.interview.findMany({
+              where: {
+                projectId,
+                operatorUserId: actor.operatorUserId,
+                id: { not: row.id },
+              },
+              select: { id: true },
+            });
+            await tx.followupSession.updateMany({
+              where: {
+                projectId,
+                interviewId: { in: owned.map((i) => i.id) },
+                ended: false,
+              },
+              data: { version: { increment: 1 }, ended: true },
+            });
+          }
           await this.plans.linkActualAnswer(
             { projectId, actualQuestionId: actual.id, answerRef: row.id },
             tx,
           );
-          return this.view(tx, projectId, row.id);
+          await tx.interviewActualQuestion.upsert({
+            where: {
+              projectId_interviewId_actualQuestionId: {
+                projectId,
+                interviewId: row.id,
+                actualQuestionId: actual.id,
+              },
+            },
+            create: {
+              projectId,
+              interviewId: row.id,
+              actualQuestionId: actual.id,
+              sequence: 1,
+            },
+            update: {},
+          });
+          return this.view(
+            tx,
+            projectId,
+            row.id,
+            actor.method === "assisted" ? actor.operatorUserId : undefined,
+          );
+        },
+      );
+    } catch (error) {
+      if (error instanceof ProjectPlanError) {
+        if (["VERSION_CONFLICT", "IDEMPOTENCY_CONFLICT"].includes(error.code))
+          throw new ConflictException();
+        throw new BadRequestException();
+      }
+      throw error;
+    }
+  }
+  async displayQuestion(
+    projectId: string,
+    interviewId: string,
+    body: DisplayActualQuestionDto,
+    authorization?: string,
+    key?: string,
+  ) {
+    try {
+      return await this.participation.withCollectionAccess(
+        projectId,
+        authorization,
+        body.assistedSessionId,
+        async (tx, actor) => {
+          const row = await tx.interview.findFirst({
+            where: { projectId, id: interviewId },
+          });
+          if (!row) throw new NotFoundException();
+          if (
+            row.subjectId !== actor.subjectId ||
+            row.bindingVersion !== actor.bindingVersion ||
+            row.accessEpoch !== actor.accessEpoch ||
+            (actor.method === "assisted" &&
+              row.operatorUserId !== actor.operatorUserId)
+          )
+            throw new ForbiddenException();
+          await claimRecordingCommand(
+            tx,
+            projectId,
+            actor.operatorUserId,
+            key,
+            {
+              kind: "display-question",
+              interviewId,
+              clientQuestionId: body.clientQuestionId,
+              expectedVersion: body.expectedVersion,
+              expectedActualQuestionId: body.expectedActualQuestionId,
+              expectedPlanRevision: body.expectedPlanRevision,
+              followupTaskId: body.followupTaskId,
+              selfWritten: body.selfWritten
+                ? {
+                    text: body.selfWritten.text,
+                    intent: body.selfWritten.intent,
+                    ...(body.selfWritten.rewritesQuestionKey !== undefined
+                      ? {
+                          rewritesQuestionKey:
+                            body.selfWritten.rewritesQuestionKey,
+                        }
+                      : {}),
+                  }
+                : undefined,
+            },
+          );
+          const prior = await tx.interviewActualQuestion.findUnique({
+            where: { actualQuestionId: body.clientQuestionId },
+          });
+          if (prior) {
+            if (
+              prior.projectId !== projectId ||
+              prior.interviewId !== interviewId ||
+              prior.sequence !== body.expectedVersion + 1 ||
+              prior.parentActualQuestionId !== body.expectedActualQuestionId
+            )
+              throw new ConflictException();
+          } else {
+            const current = await tx.interviewActualQuestion.findFirst({
+              where: { projectId, interviewId },
+              orderBy: { sequence: "desc" },
+            });
+            if (
+              current?.sequence !== body.expectedVersion ||
+              current.actualQuestionId !== body.expectedActualQuestionId
+            )
+              throw new ConflictException();
+          }
+          if (body.followupTaskId && !this.followups)
+            throw new ServiceUnavailableException();
+          const source = body.followupTaskId
+            ? await this.followups!.displaySourceIn(
+                tx,
+                projectId,
+                interviewId,
+                body.followupTaskId,
+                !!prior,
+                !!body.selfWritten,
+              )
+            : undefined;
+          const selfWritten =
+            body.selfWritten ??
+            (source
+              ? {
+                  text: String(source.original.question),
+                  intent: String(source.original.intent),
+                }
+              : undefined);
+          if (!selfWritten) throw new BadRequestException();
+          const actual = await this.plans.captureActualQuestion(
+            {
+              id: body.clientQuestionId,
+              projectId,
+              expectedPlanRevision: body.expectedPlanRevision,
+              capturedBy: actor.operatorUserId,
+              selfWritten,
+              followupSource: source,
+            },
+            tx,
+          );
+          await this.plans.linkActualAnswer(
+            { projectId, actualQuestionId: actual.id, answerRef: interviewId },
+            tx,
+          );
+          if (!prior)
+            await tx.interviewActualQuestion.create({
+              data: {
+                projectId,
+                interviewId,
+                actualQuestionId: actual.id,
+                parentActualQuestionId: body.expectedActualQuestionId,
+                sequence: body.expectedVersion + 1,
+                followupTaskId: body.followupTaskId,
+                followupSourceQuestionId: source?.sourceActualQuestionId,
+              },
+            });
+          if (!prior) await invalidateFollowupIn(tx, projectId, interviewId);
+          return this.view(
+            tx,
+            projectId,
+            interviewId,
+            actor.method === "assisted" ? actor.operatorUserId : undefined,
+          );
         },
       );
     } catch (error) {
@@ -275,7 +514,9 @@ export class Interviews implements OnModuleDestroy {
       row.subjectId !== actor.subjectId ||
       row.bindingVersion !== actor.bindingVersion ||
       row.accessEpoch !== actor.accessEpoch
-    ) throw new ForbiddenException();
+    )
+      throw new ForbiddenException();
+    return row;
   }
   collectionCheck(
     projectId: string,
@@ -296,7 +537,7 @@ export class Interviews implements OnModuleDestroy {
   recordingStart(
     projectId: string,
     id: string,
-    body: { assistedSessionId?: string },
+    body: RecordingStartDto,
     authorization?: string,
   ) {
     return this.participation.withCollectionAccess(
@@ -304,9 +545,30 @@ export class Interviews implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        await this.assertCollectionInterviewIn(tx, projectId, id, actor);
+        const row = await this.assertCollectionInterviewIn(
+          tx,
+          projectId,
+          id,
+          actor,
+        );
+        const current = await tx.interviewActualQuestion.findFirst({
+          where: { projectId, interviewId: id },
+          orderBy: { sequence: "desc" },
+        });
+        if (
+          !current ||
+          (body.actualQuestionId ?? row.actualQuestionId) !==
+            current.actualQuestionId ||
+          (body.expectedQuestionVersion ?? 1) !== current.sequence
+        )
+          throw new ConflictException();
+        await invalidateFollowupIn(tx, projectId, id);
         await invalidateStoryRecordingIn(tx, projectId, id);
-        return { allowed: true };
+        return {
+          allowed: true,
+          actualQuestionId: current.actualQuestionId,
+          questionVersion: current.sequence,
+        };
       },
     );
   }
@@ -330,24 +592,7 @@ export class Interviews implements OnModuleDestroy {
           row.bindingVersion !== actor.bindingVersion
         )
           throw new ForbiddenException();
-        const state = await this.plans.readPersonalState(projectId, tx);
-        return {
-          id: row.id,
-          projectId,
-          subjectId: row.subjectId,
-          actualQuestion: state.actualQuestions.find(
-            (q) => q.id === row.actualQuestionId,
-          ),
-          clips: await tx.recordingIntent.findMany({
-            where: {
-              projectId,
-              interviewId: id,
-              operatorUserId: actor.operatorUserId,
-              state: "pending",
-            },
-            select: { id: true, clientClipId: true, state: true },
-          }),
-        };
+        return this.view(tx, projectId, row.id, actor.operatorUserId);
       },
       "existing",
     );
@@ -362,6 +607,25 @@ export class Interviews implements OnModuleDestroy {
 @ApiBearerAuth()
 export class InterviewsController {
   constructor(private readonly interviews: Interviews) {}
+  @Post(":interviewId/actual-question")
+  @Header("Cache-Control", "no-store")
+  async displayQuestion(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("interviewId", new ParseUUIDPipe()) interviewId: string,
+    @Body() body: DisplayActualQuestionDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.interviews.displayQuestion(
+        id,
+        interviewId,
+        body,
+        req.headers.authorization,
+        req.headers["idempotency-key"] as string | undefined,
+      ),
+      meta: { requestId: req.id },
+    };
+  }
   @Post()
   @Header("Cache-Control", "no-store")
   async start(
@@ -407,7 +671,12 @@ export class InterviewsController {
     @Req() req: FastifyRequest,
   ) {
     return {
-      data: await this.interviews.collectionCheck(id, interview, body, req.headers.authorization),
+      data: await this.interviews.collectionCheck(
+        id,
+        interview,
+        body,
+        req.headers.authorization,
+      ),
       meta: { requestId: req.id },
     };
   }
@@ -416,7 +685,7 @@ export class InterviewsController {
   async recordingStart(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Param("interviewId", new ParseUUIDPipe()) interview: string,
-    @Body() body: InterviewCollectionDto,
+    @Body() body: RecordingStartDto,
     @Req() req: FastifyRequest,
   ) {
     return {

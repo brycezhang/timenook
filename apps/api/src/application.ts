@@ -1,3 +1,4 @@
+import { Followups, FollowupsController } from "./followups/followups";
 import { Stories, StoriesController } from "./stories/stories";
 import { AdminTasksController } from "./tasks/admin-tasks";
 import {
@@ -330,6 +331,7 @@ export async function createApplication(
         ? [
             RecordingsController,
             StoriesController,
+            FollowupsController,
             RecordingObjectsController,
             ProductionTasksController,
             AdminTasksController,
@@ -364,6 +366,7 @@ export async function createApplication(
         ? [
             Recordings,
             Stories,
+            Followups,
             ProductionTasks,
             {
               provide: TASK_OBJECTS,

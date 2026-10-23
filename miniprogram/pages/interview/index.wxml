@@ -21,6 +21,17 @@
     <view wx:if="{{taskError}}" class="section">{{taskError}}</view>
     <button class="btn secondary section" bindtap="refreshTasks" disabled="{{busy}}">重新查询转写状态</button>
   </view>
+  <view wx:if="{{interview}}" class="section optional-followup">
+    <view class="section" role="status">{{followupStatus || '可选追问可以跳过；等待时仍可继续讲或直接整理。'}}</view>
+    <button class="btn secondary section" bindtap="requestFollowup" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">请求一条可选追问</button>
+    <button class="btn secondary section" bindtap="refreshFollowup" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">查询可选追问</button>
+    <button wx:if="{{followup && followup.task && followup.task.state === 'failed'}}" class="btn secondary section" bindtap="retryFollowup" disabled="{{busy}}">重试本次追问</button>
+    <view wx:if="{{interview && interview.currentQuestion && interview.currentQuestion.source && interview.currentQuestion.source.kind === 'follow-up'}}" class="section">
+      <textarea class="input section" value="{{followupText}}" bindinput="followupText" placeholder="也可以按自己的问法改写这一题" maxlength="2000" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}"/>
+      <button class="btn secondary section" bindtap="rewriteFollowup" disabled="{{busy || !followupText || state === 'recording' || state === 'requesting' || state === 'saving'}}">保存实际改写的问题</button>
+    </view>
+    <button class="btn secondary section" bindtap="skipFollowup" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">跳过追问，继续原问题或整理</button>
+  </view>
   <view wx:if="{{canRecord && state !== 'recording' && state !== 'requesting' && state !== 'saving'}}" class="section">
     <button class="btn secondary" bindtap="selectQuestion" disabled="{{busy}}">{{interview ? '另起一个问题' : '就从这个问题开始'}}</button>
     <button class="btn secondary section" data-kind="free-narration" bindtap="selectQuestion" disabled="{{busy}}">自由讲述</button>

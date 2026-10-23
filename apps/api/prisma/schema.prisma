@@ -572,6 +572,20 @@ model Interview {
   @@map("interviews")
 }
 
+// Actual questions belong to one interview; its immutable starting question stays intact.
+model InterviewActualQuestion {
+ followupTaskId String? @map("followup_task_id") @db.Uuid
+ followupSourceQuestionId String? @map("followup_source_question_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ interviewId String @map("interview_id") @db.Uuid
+ actualQuestionId String @unique @map("actual_question_id") @db.Uuid
+ parentActualQuestionId String? @map("parent_actual_question_id") @db.Uuid
+ sequence Int
+ @@id([projectId,interviewId,actualQuestionId])
+ @@unique([projectId,interviewId,sequence])
+ @@map("interview_actual_questions")
+}
+
 model RecordingIntent {
  id String @id @db.Uuid
  projectId String @map("project_id") @db.Uuid
@@ -896,4 +910,48 @@ model StoryRevision {
  @@unique([projectId,storyId,id,version])
  @@unique([projectId,storyId,id])
  @@map("story_revisions")
+}
+
+model FollowupGeneration {
+ followupVersion Int @map("followup_version")
+ taskId String @id @map("task_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ interviewId String @map("interview_id") @db.Uuid
+ actualQuestionId String @map("actual_question_id") @db.Uuid
+ questionVersion Int @map("question_version")
+ planRevision Int @map("plan_revision")
+ preferenceVersion Int @map("preference_version")
+ input Json
+ result Json?
+ finishReason String? @map("finish_reason")
+ charged Boolean @default(true)
+ transcriptsReadyAt DateTime? @map("transcripts_ready_at") @db.Timestamptz(3)
+ @@unique([projectId,taskId])
+ @@unique([projectId,interviewId,followupVersion])
+ @@unique([projectId,interviewId,actualQuestionId,taskId])
+ @@map("followup_generations")
+}
+model FollowupSource {
+ taskId String @map("task_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ clipId String @map("clip_id") @db.Uuid
+ interviewId String @map("interview_id") @db.Uuid
+ actualQuestionId String @map("actual_question_id") @db.Uuid
+ assetId String @map("asset_id") @db.Uuid
+ sequence Int
+ transcriptionTaskId String @map("transcription_task_id") @db.Uuid
+ inputHash String @map("input_hash") @db.Char(64)
+ transcriptHash String @map("transcript_hash") @db.Char(64)
+ @@id([taskId,clipId])
+ @@unique([taskId,sequence])
+ @@map("followup_sources")
+}
+
+model FollowupSession {
+ projectId String @map("project_id") @db.Uuid
+ interviewId String @map("interview_id") @db.Uuid
+ version Int @default(1)
+ ended Boolean @default(false)
+ @@id([projectId,interviewId])
+ @@map("followup_sessions")
 }

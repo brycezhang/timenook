@@ -32,6 +32,12 @@ function harness(options: { deferSaves?: boolean } = {}) {
     handlers: Record<string, ((v?: any) => void)[]> = {},
     pendingSaves: any[] = [],
     navigation: any[] = [];
+  let now = Date.now();
+  class DeviceDate extends Date {
+    static now() {
+      return now;
+    }
+  }
   let page: any,
     saves = 0,
     failManifest = false,
@@ -39,6 +45,7 @@ function harness(options: { deferSaves?: boolean } = {}) {
   const emit = (event: string, v?: any) =>
     handlers[event]?.forEach((fn) => fn(v));
   runInNewContext(compiled.outputFiles[0].text, {
+    Date: DeviceDate,
     setTimeout,
     clearTimeout,
     setInterval,
@@ -110,6 +117,9 @@ function harness(options: { deferSaves?: boolean } = {}) {
     emit,
     pendingSaves,
     navigation,
+    expireSession() {
+      now = Date.parse(login.session.expiresAt);
+    },
     get saves() {
       return saves;
     },
@@ -181,7 +191,18 @@ async function ready(h: ReturnType<typeof harness>) {
 }
 async function start(h: ReturnType<typeof harness>) {
   const starting = h.page.record();
-  respond(h.requests.shift(), { allowed: true }, 201);
+  respond(
+    h.requests.shift(),
+    {
+      allowed: true,
+      actualQuestionId: (
+        h.page.data.interview.currentQuestion ??
+        h.page.data.interview.actualQuestion
+      ).id,
+      questionVersion: h.page.data.interview.questionVersion ?? 1,
+    },
+    201,
+  );
   await starting;
 }
 test("live recording page saves file and manifest before success and restores the same account's pending file after re-login", async () => {
@@ -385,6 +406,293 @@ test("session expiry during recording authorization clears private content even 
   assert.equal(h.page.data.question, "");
   assert.equal(h.page.data.customText, "");
   assert.equal(h.storage.has(`timenook.session.v1:${base}`), false);
+});
+
+test("a pending recording keeps its opening question when the same interview displays a later question", async (t) => {
+  const h = harness({ deferSaves: true });
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  const starting = h.page.record();
+  const permission = h.requests.shift();
+  assert.equal(permission.data.actualQuestionId, question.id);
+  assert.equal(permission.data.expectedQuestionVersion, 1);
+  respond(
+    permission,
+    { allowed: true, actualQuestionId: question.id, questionVersion: 1 },
+    201,
+  );
+  await starting;
+  h.page.onHide();
+  const laterQuestion = {
+    ...question,
+    id: "88888888-8888-4888-8888-888888888888",
+    snapshot: { text: "那时还有什么想留下？", intent: "本人补充" },
+  };
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      { ...interview, currentQuestion: laterQuestion, questionVersion: 2 },
+    ],
+  });
+  await returning;
+  assert.equal(h.page.data.question, laterQuestion.snapshot.text);
+  h.pendingSaves[0].finish();
+  await tick();
+  assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+  const next = h.page.record();
+  const nextPermission = h.requests.shift();
+  assert.equal(nextPermission.data.actualQuestionId, laterQuestion.id);
+  respond(
+    nextPermission,
+    { allowed: true, actualQuestionId: laterQuestion.id, questionVersion: 2 },
+    201,
+  );
+  await next;
+  await h.page.record();
+  h.pendingSaves[1].finish();
+  await tick();
+  assert.deepEqual(
+    Array.from(h.page.data.localClips, (clip: any) => clip.actualQuestionId),
+    [question.id, laterQuestion.id],
+  );
+  assert.equal(h.saves, 2);
+});
+
+test("uploading an older saved answer sends its original question and refuses a response for the current question", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const saved = h.page.data.localClips[0];
+  const laterQuestion = {
+    ...question,
+    id: "88888888-8888-4888-8888-888888888888",
+    snapshot: { text: "后来您还做了什么？", intent: "本人补充" },
+  };
+  h.page.onHide();
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      { ...interview, currentQuestion: laterQuestion, questionVersion: 2 },
+    ],
+  });
+  await returning;
+  const uploading = h.page.upload({
+    currentTarget: { dataset: { id: saved.clientClipId } },
+  });
+  const intent = h.requests.shift();
+  assert.equal(intent.data.actualQuestionId, question.id);
+  respond(
+    intent,
+    {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      projectId,
+      interviewId,
+      actualQuestionId: laterQuestion.id,
+      clientClipId: saved.clientClipId,
+      bytes: saved.bytes,
+      sha256: saved.sha256,
+      state: "pending",
+      storage: "local-simulator",
+      asset: null,
+    },
+    201,
+  );
+  await uploading;
+  assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+  assert.equal(h.page.data.localClips[0].serverId, undefined);
+  assert.equal(h.page.data.localClips[0].sealed, undefined);
+  assert.equal(h.uploads.length, 0);
+  assert.equal(h.files.size, 1);
+});
+
+test("an old local manifest without a question restores only the immutable interview starting question", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const saved = h.page.data.localClips[0];
+  const manifestKey = [...h.storage.keys()].find((key) =>
+    key.endsWith(interviewId),
+  )!;
+  h.storage.set(manifestKey, [{ ...saved, actualQuestionId: undefined }]);
+  h.page.onHide();
+  const laterQuestion = {
+    ...question,
+    id: "88888888-8888-4888-8888-888888888888",
+    snapshot: { text: "后来您还做了什么？", intent: "本人补充" },
+  };
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      { ...interview, currentQuestion: laterQuestion, questionVersion: 2 },
+    ],
+  });
+  await returning;
+  assert.equal(h.page.data.question, laterQuestion.snapshot.text);
+  assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+  const uploading = h.page.upload({
+    currentTarget: { dataset: { id: saved.clientClipId } },
+  });
+  const intent = h.requests.shift();
+  assert.equal(intent.data.actualQuestionId, question.id);
+  respond(intent, {}, 403);
+  await uploading;
+  assert.equal(h.files.size, 1);
+  assert.equal(h.saves, 1);
+});
+
+test("an old pending upload recovers its question from its verified server intent before sealing", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const saved = h.page.data.localClips[0],
+    serverId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const manifestKey = [...h.storage.keys()].find((key) =>
+    key.endsWith(interviewId),
+  )!;
+  h.storage.set(manifestKey, [
+    { ...saved, actualQuestionId: undefined, serverId },
+  ]);
+  h.page.onHide();
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        currentQuestion: {
+          ...question,
+          id: "88888888-8888-4888-8888-888888888888",
+        },
+        questionVersion: 2,
+      },
+    ],
+  });
+  await returning;
+  const uploading = h.page.upload({
+    currentTarget: { dataset: { id: saved.clientClipId } },
+  });
+  const status = h.requests.shift();
+  assert.equal(
+    status?.url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/clips/${serverId}/status`,
+  );
+  const remote = {
+    id: serverId,
+    projectId,
+    interviewId,
+    actualQuestionId: question.id,
+    clientClipId: saved.clientClipId,
+    bytes: saved.bytes,
+    sha256: saved.sha256,
+    state: "pending",
+    storage: "local-simulator",
+    asset: null,
+  };
+  respond(status, remote, 201);
+  await tick();
+  respond(
+    h.requests.shift(),
+    {
+      url: "/v1/recordings/objects",
+      storage: "local-simulator",
+      fields: {},
+      expiresAt: "2099-01-01T00:00:00Z",
+    },
+    201,
+  );
+  await tick();
+  respond(
+    h.requests.shift(),
+    {
+      ...remote,
+      state: "sealed",
+      asset: {
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        sha256: saved.sha256,
+      },
+    },
+    201,
+  );
+  await uploading;
+  assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+  assert.equal(h.page.data.localClips[0].sealed, true);
+  assert.equal(h.saves, 1);
+  assert.equal(h.files.size, 1);
+});
+
+test("an ambiguous old local answer remains on the device without being assigned to the current question", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const saved = h.page.data.localClips[0];
+  const manifestKey = [...h.storage.keys()].find((key) =>
+    key.endsWith(interviewId),
+  )!;
+  h.storage.set(manifestKey, [
+    {
+      ...saved,
+      actualQuestionId: undefined,
+      serverId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    },
+  ]);
+  h.page.onHide();
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        currentQuestion: {
+          ...question,
+          id: "88888888-8888-4888-8888-888888888888",
+        },
+        questionVersion: 2,
+      },
+    ],
+  });
+  await returning;
+  const uploading = h.page.upload({
+    currentTarget: { dataset: { id: saved.clientClipId } },
+  });
+  const status = h.requests.shift();
+  assert.match(status?.url, /\/status$/);
+  respond(
+    status,
+    {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      projectId,
+      interviewId,
+      actualQuestionId: "88888888-8888-4888-8888-888888888888",
+      clientClipId: "different-file",
+      bytes: saved.bytes,
+      sha256: saved.sha256,
+      state: "pending",
+      storage: "local-simulator",
+      asset: null,
+    },
+    201,
+  );
+  await uploading;
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.page.data.localClips[0].actualQuestionId, undefined);
+  assert.equal(h.page.data.localClips[0].sealed, undefined);
+  assert.equal(h.files.size, 1);
+  assert.match(h.page.data.status, /未确认/);
 });
 
 test("returning during a native save retains its pending owner and retries the same saved file before another clip", async (t) => {
@@ -801,5 +1109,423 @@ test("the story entry preserves the selected assisted interview and blocks recor
   );
   assert.equal(h.requests.length, 0);
   assert.equal(h.uploads.length, 0);
+  h.page.onUnload();
+});
+
+test("optional follow-up waits without blocking recording and saves the actual snapshot before displaying a model question", async () => {
+  const h = harness();
+  await ready(h);
+  const taskId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const requesting = h.page.requestFollowup();
+  assert.equal(
+    h.requests[0].url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/follow-up`,
+  );
+  assert.equal(h.requests[0].data.actualQuestionId, question.id);
+  assert.equal(h.requests[0].data.expectedQuestionVersion, 1);
+  respond(
+    h.requests.shift(),
+    {
+      interviewId,
+      actualQuestionId: question.id,
+      questionVersion: 1,
+      planRevision: 1,
+      task: { id: taskId, state: "queued", errorCode: null },
+      result: null,
+      canFinish: true,
+      usage: 1,
+    },
+    202,
+  );
+  await requesting;
+  assert.equal(h.page.data.busy, false);
+  assert.match(h.page.data.followupStatus, /等待|正在/);
+  assert.equal(h.page.data.question, question.snapshot.text);
+  const refreshing = h.page.refreshFollowup();
+  respond(
+    h.requests.shift(),
+    {
+      interviewId,
+      actualQuestionId: question.id,
+      questionVersion: 1,
+      planRevision: 1,
+      task: { id: taskId, state: "succeeded", errorCode: null },
+      result: {
+        action: "ask",
+        question: "那一年您最记得哪个场景？",
+        intent: "scene",
+        sourceRefs: [],
+        reasonCode: "SCENE_AVAILABLE",
+      },
+      canFinish: true,
+      usage: 1,
+    },
+    201,
+  );
+  await tick();
+  assert.equal(
+    h.requests[0].url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/actual-question`,
+  );
+  assert.equal(h.requests[0].data.followupTaskId, taskId);
+  assert.equal(
+    h.page.data.question,
+    question.snapshot.text,
+    "an uncommitted suggestion must never become the recording question",
+  );
+  const currentQuestion = {
+    ...question,
+    id: taskId,
+    source: { kind: "follow-up", generationTaskId: taskId },
+    snapshot: { text: "那一年您最记得哪个场景？", intent: "scene" },
+  };
+  respond(
+    h.requests.shift(),
+    { ...interview, currentQuestion, questionVersion: 2 },
+    201,
+  );
+  await refreshing;
+  assert.equal(h.page.data.question, currentQuestion.snapshot.text);
+  await start(h);
+  await h.page.record();
+  await tick();
+  assert.equal(h.page.data.localClips[0].actualQuestionId, taskId);
+  h.page.onUnload();
+});
+
+test("a displayed follow-up can be rewritten and skipped while pending audio keeps its original question and a hidden page ignores late status", async () => {
+  const h = harness(),
+    taskId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const displayed = {
+    ...question,
+    id: taskId,
+    source: { kind: "follow-up", generationTaskId: taskId },
+    snapshot: { text: "那一年您最记得哪个场景？", intent: "scene" },
+  };
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      { ...interview, currentQuestion: displayed, questionVersion: 2 },
+    ],
+  });
+  await showing;
+  await start(h);
+  await h.page.record();
+  await tick();
+  assert.equal(h.page.data.localClips[0].actualQuestionId, taskId);
+  h.page.followupText({ detail: { value: "那一年您最记得哪件事？" } });
+  const rewrite = h.page.rewriteFollowup();
+  assert.equal(h.requests[0].data.followupTaskId, taskId);
+  assert.equal(h.requests[0].data.expectedActualQuestionId, taskId);
+  const edited = {
+    ...displayed,
+    id: h.requests[0].data.clientQuestionId,
+    snapshot: { text: "那一年您最记得哪件事？", intent: "scene" },
+  };
+  respond(
+    h.requests.shift(),
+    { ...interview, currentQuestion: edited, questionVersion: 3 },
+    201,
+  );
+  await rewrite;
+  assert.equal(h.page.data.question, edited.snapshot.text);
+  assert.equal(
+    h.page.data.localClips[0].actualQuestionId,
+    taskId,
+    "pending audio cannot be relabelled after rewriting",
+  );
+  const skip = h.page.skipFollowup();
+  assert.equal(
+    h.requests[0].url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/follow-up/finish`,
+  );
+  respond(
+    h.requests.shift(),
+    {
+      interviewId,
+      task: null,
+      result: null,
+      canFinish: true,
+      finishReason: "USER_FINISHED",
+      usage: 1,
+    },
+    201,
+  );
+  await skip;
+  assert.match(h.page.data.followupStatus, /跳过/);
+  const query = h.page.refreshFollowup(),
+    request = h.requests.shift();
+  h.page.onHide();
+  respond(
+    request,
+    {
+      interviewId,
+      task: { id: taskId, state: "succeeded" },
+      result: { action: "ask", question: "迟到的问题？" },
+    },
+    201,
+  );
+  await query;
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.followup, null);
+  assert.equal(h.files.size, 1);
+  h.page.onUnload();
+});
+
+test("a follow-up request crossing exact local expiry clears the private page and preserves pending audio", async () => {
+  const h = harness();
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const manifest = [...h.storage.entries()].find(([key]) =>
+    key.includes("recording"),
+  );
+  assert.ok(manifest);
+  const original = structuredClone(manifest);
+  const request = h.page.requestFollowup();
+  const held = h.requests.shift();
+  assert.equal(h.page.data.busy, true);
+  h.expireSession();
+  respond(
+    held,
+    { interviewId, task: null, result: null, canFinish: true, usage: 0 },
+    202,
+  );
+  await request;
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.followup, null);
+  assert.equal(h.page.data.followupText, "");
+  assert.equal(h.page.stopSessionWatch, undefined);
+  assert.equal(h.page.followupPoll, undefined);
+  assert.deepEqual(
+    [...h.storage.entries()].find(([key]) => key.includes("recording")),
+    original,
+  );
+  assert.equal(h.files.size, 1);
+  h.page.onUnload();
+});
+
+for (const action of [
+  "retry",
+  "rewrite",
+  "skip",
+  "refresh",
+  "display",
+] as const) {
+  test(`a follow-up ${action} crossing exact local expiry clears its owned private page without deleting original audio`, async () => {
+    const h = harness(),
+      taskId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const displayed = {
+      ...question,
+      id: taskId,
+      source: { kind: "follow-up", generationTaskId: taskId },
+      snapshot: { text: "那一年您最记得哪个场景？", intent: "scene" },
+    };
+    h.page.onLoad({ projectId });
+    const showing = h.page.onShow();
+    respond(h.requests.shift(), {
+      ...context,
+      interviews: [
+        { ...interview, currentQuestion: displayed, questionVersion: 2 },
+      ],
+    });
+    await showing;
+    await start(h);
+    await h.page.record();
+    await tick();
+    const manifest = [...h.storage.entries()].find(([key]) =>
+      key.includes("recording"),
+    );
+    assert.ok(manifest);
+    const original = structuredClone(manifest);
+    const view = {
+      interviewId,
+      actualQuestionId: displayed.id,
+      questionVersion: 2,
+      planRevision: 1,
+      task: { id: taskId, state: "failed", errorCode: "PROVIDER_FAILED" },
+      result: null,
+      canFinish: true,
+      usage: 1,
+    };
+    if (action === "retry") {
+      const querying = h.page.refreshFollowup();
+      respond(h.requests.shift(), view, 201);
+      await querying;
+    }
+    h.page.followupText({ detail: { value: "那一年您最记得哪件事？" } });
+    const pending =
+      action === "retry"
+        ? h.page.retryFollowup()
+        : action === "rewrite"
+          ? h.page.rewriteFollowup()
+          : action === "skip"
+            ? h.page.skipFollowup()
+            : h.page.refreshFollowup();
+    let held = h.requests.shift();
+    if (action === "display") {
+      respond(
+        held,
+        {
+          ...view,
+          task: { id: taskId, state: "succeeded" },
+          result: { action: "ask", question: "下一个场景？" },
+        },
+        201,
+      );
+      await tick();
+      held = h.requests.shift();
+      assert.match(held.url, /actual-question$/);
+    }
+    h.expireSession();
+    respond(
+      held,
+      action === "rewrite" || action === "display"
+        ? { ...interview, currentQuestion: displayed, questionVersion: 3 }
+        : view,
+      201,
+    );
+    await pending;
+    assert.equal(h.page.data.busy, false);
+    assert.equal(h.page.data.question, "");
+    assert.equal(h.page.data.interview, null);
+    assert.equal(h.page.data.followup, null);
+    assert.equal(h.page.data.followupText, "");
+    assert.equal(h.page.stopSessionWatch, undefined);
+    assert.equal(h.page.followupPoll, undefined);
+    assert.equal(h.page.timerHandle, undefined);
+    assert.deepEqual(
+      [...h.storage.entries()].find(([key]) => key.includes("recording")),
+      original,
+    );
+    assert.equal(h.files.size, 1);
+    h.page.onUnload();
+  });
+}
+
+for (const outcome of ["success", "network failure"] as const)
+  test(`an old follow-up ${outcome} cannot clear a newer expired account's page or its draft after a project switch`, async () => {
+    const h = harness();
+    await ready(h);
+    const pending = h.page.requestFollowup(),
+      held = h.requests.shift();
+    h.page.onHide();
+    const other = structuredClone(login),
+      nextProject = "99999999-9999-4999-8999-999999999999";
+    other.user.id = "88888888-8888-4888-8888-888888888888";
+    other.session.id = "77777777-7777-4777-8777-777777777777";
+    other.session.token = "c".repeat(43);
+    h.storage.set(`timenook.session.v1:${base}`, other);
+    h.page.onLoad({ projectId: nextProject });
+    const showing = h.page.onShow();
+    respond(h.requests.shift(), {
+      ...context,
+      interviews: [
+        {
+          ...interview,
+          projectId: nextProject,
+          actualQuestion: {
+            ...question,
+            projectId: nextProject,
+            snapshot: { text: "新账号的私人问题", intent: "具体场景" },
+          },
+        },
+      ],
+    });
+    await showing;
+    h.page.customText({ detail: { value: "新账号草稿" } });
+    h.expireSession();
+    if (outcome === "network failure")
+      held.fail({ errMsg: "request:fail timeout" });
+    else
+      respond(
+        held,
+        { interviewId, task: null, result: null, canFinish: true, usage: 0 },
+        202,
+      );
+    await pending;
+    assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), other);
+    assert.equal(h.page.data.question, "新账号的私人问题");
+    assert.equal(h.page.data.interview.projectId, nextProject);
+    assert.equal(h.page.data.customText, "新账号草稿");
+    assert.equal(h.page.data.busy, false);
+    assert.equal(typeof h.page.stopSessionWatch, "function");
+    h.page.onUnload();
+  });
+
+test("an owned follow-up network timeout at its captured exact expiry clears private state while preserving pending audio", async () => {
+  const h = harness();
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const original = structuredClone(
+    [...h.storage.entries()].find(([key]) => key.includes("recording")),
+  );
+  assert.ok(original);
+  const key = `timenook.session.v1:${base}`,
+    identity = structuredClone(h.storage.get(key)) as typeof login;
+  const pending = h.page.requestFollowup(),
+    held = h.requests.shift();
+  assert.equal(held.header.authorization, `Bearer ${identity.session.token}`);
+  h.expireSession();
+  assert.deepEqual(
+    h.storage.get(key),
+    identity,
+    "only the device clock advanced before the network completed",
+  );
+  held.fail({ errMsg: "request:fail timeout" });
+  await pending;
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.followup, null);
+  assert.equal(h.page.data.followupText, "");
+  assert.equal(h.page.stopSessionWatch, undefined);
+  assert.equal(h.page.followupPoll, undefined);
+  assert.equal(h.storage.has(key), false);
+  assert.deepEqual(
+    [...h.storage.entries()].find(([key]) => key.includes("recording")),
+    original,
+  );
+  assert.equal(h.files.size, 1);
+  h.page.onUnload();
+});
+
+test("a follow-up network failure in a valid session retains the private question and original request for recovery", async () => {
+  const h = harness();
+  await ready(h);
+  const pending = h.page.requestFollowup(),
+    held = h.requests.shift(),
+    identity = structuredClone(h.storage.get(`timenook.session.v1:${base}`));
+  held.fail({ errMsg: "request:fail timeout" });
+  await pending;
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.data.question, question.snapshot.text);
+  assert.equal(h.page.data.interview.id, interviewId);
+  assert.equal(h.page.data.canRecord, true);
+  assert.equal(typeof h.page.stopSessionWatch, "function");
+  assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), identity);
+  const recovering = h.page.requestFollowup(),
+    retried = h.requests.shift();
+  assert.ok(held.header["Idempotency-Key"]);
+  assert.equal(
+    retried.header["Idempotency-Key"],
+    held.header["Idempotency-Key"],
+  );
+  assert.equal(retried.data.clientRequestId, held.data.clientRequestId);
+  respond(
+    retried,
+    { interviewId, task: null, result: null, canFinish: true, usage: 0 },
+    202,
+  );
+  await recovering;
+  assert.equal(h.page.data.busy, false);
   h.page.onUnload();
 });

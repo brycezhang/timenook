@@ -1,3 +1,4 @@
+import { optionalFollowupClient } from "../../services/optional-followup";
 import { dataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
 import {
@@ -8,6 +9,7 @@ import {
 import { recordingId } from "../../services/local-audio-recorder";
 import { paymentKey } from "../../services/payments";
 import type {
+  OptionalFollowupView,
   ProductionTaskView,
   RecordingContext,
   RecordingInterview,
@@ -29,6 +31,9 @@ Page({
     localClips: [] as ProbeLocalClip[],
     taskRows: [] as (ProductionTaskView & { label: string })[],
     taskError: "",
+    followup: null as OptionalFollowupView | null,
+    followupStatus: "",
+    followupText: "",
     pendingInterviews: [] as string[],
     interviews: [] as RecordingInterview[],
     interview: null as RecordingInterview | null,
@@ -42,6 +47,11 @@ Page({
     photo: "",
     permission: false,
   },
+  followupPoll: undefined as ReturnType<typeof setTimeout> | undefined,
+  followupSequence: 0,
+  followupRequest: null as { input: string; id: string; key: string } | null,
+  followupEdit: null as { input: string; id: string; key: string } | null,
+  followupEnd: null as { input: string; key: string } | null,
   projectId: "",
   assistedSessionId: "",
   requestedInterviewId: "",
@@ -108,6 +118,7 @@ Page({
     if (dataMode() === "live") await this.refresh();
   },
   onHide() {
+    this.clearFollowup();
     this.stopSessionWatch?.();
     this.stopSessionWatch = undefined;
     this.taskVisible = false;
@@ -155,6 +166,7 @@ Page({
     );
   },
   async refresh() {
+    this.clearFollowup();
     this.storyOwnerContext = "";
     const generation = ++this.generation,
       context = sessionClient.context();
@@ -264,7 +276,7 @@ Page({
     this.storyOwnerContext = context;
     this.setData({
       interview: value,
-      question: value.actualQuestion.snapshot.text,
+      question: (value.currentQuestion ?? value.actualQuestion).snapshot.text,
       state: "idle",
     });
     device.subscribe((snapshot) => {
@@ -431,6 +443,7 @@ Page({
       this.data.state === "saving"
     )
       return;
+    this.clearFollowup();
     const kind = e?.currentTarget?.dataset.kind ?? "plan";
     const source =
       kind === "custom"
@@ -595,16 +608,40 @@ Page({
         if (this.timerHandle) clearInterval(this.timerHandle);
       } else {
         const generation = this.generation,
-          context = sessionClient.context();
+          context = sessionClient.context(),
+          device = this.liveRecorder,
+          interview = this.data.interview!,
+          actualQuestionId = (
+            interview.currentQuestion ?? interview.actualQuestion
+          ).id,
+          questionVersion = interview.questionVersion ?? 1;
+        this.clearFollowup();
         this.setData({ busy: true });
         try {
           const result = await interviewRecordingClient.authorizeStart(
             this.projectId,
-            this.data.interview!.id,
+            interview.id,
+            actualQuestionId,
+            questionVersion,
             this.assistedSessionId || undefined,
           );
-          if (!this.current(generation, context) || !result.allowed) return;
-          this.liveRecorder!.start();
+          if (
+            !this.current(generation, context) ||
+            !result.allowed ||
+            this.liveRecorder !== device ||
+            this.data.interview?.id !== interview.id ||
+            (
+              this.data.interview.currentQuestion ??
+              this.data.interview.actualQuestion
+            ).id !== actualQuestionId
+          )
+            return;
+          if (
+            result.actualQuestionId !== actualQuestionId ||
+            result.questionVersion !== questionVersion
+          )
+            throw new Error("录音问题未确认，请重新查询");
+          device.start(actualQuestionId);
           const began = Date.now();
           this.timerHandle = setInterval(() => {
             const seconds = Math.floor((Date.now() - began) / 1000);
@@ -675,6 +712,337 @@ Page({
   settings() {
     wx.openSetting({});
   },
+  followupText(e: E) {
+    this.setData({ followupText: e.detail.value });
+  },
+  async rewriteFollowup() {
+    if (!this.canFollowup() || !this.data.followupText.trim()) return;
+    const i = this.data.interview!,
+      q = i.currentQuestion ?? i.actualQuestion;
+    if (q.source?.kind !== "follow-up" || !q.source.generationTaskId) return;
+    const body = {
+      expectedVersion: i.questionVersion ?? 1,
+      expectedActualQuestionId: q.id,
+      expectedPlanRevision: this.context?.plan.revision ?? q.planRevision,
+      followupTaskId: q.source.generationTaskId,
+      selfWritten: {
+        text: this.data.followupText.trim(),
+        intent: q.snapshot.intent,
+      },
+      ...(this.assistedSessionId
+        ? { assistedSessionId: this.assistedSessionId }
+        : {}),
+    };
+    const input = JSON.stringify(body);
+    if (this.followupEdit?.input !== input)
+      this.followupEdit = { input, id: recordingId(), key: paymentKey() };
+    const generation = this.generation,
+      context = sessionClient.context(),
+      sequence = ++this.followupSequence;
+    this.setData({ busy: true });
+    try {
+      const displayed = await optionalFollowupClient.display(
+        this.projectId,
+        i.id,
+        { ...body, clientQuestionId: this.followupEdit.id },
+        this.followupEdit.key,
+      );
+      if (
+        !this.current(generation, context) ||
+        sequence !== this.followupSequence
+      )
+        return;
+      if (
+        displayed.id !== i.id ||
+        displayed.currentQuestion.source?.generationTaskId !==
+          q.source.generationTaskId
+      )
+        throw new Error("问题来源未确认");
+      this.setData({
+        interview: displayed,
+        question: displayed.currentQuestion.snapshot.text,
+        followupText: displayed.currentQuestion.snapshot.text,
+        followupStatus: "已保存实际改写的问题；已有录音保留原问题归属。",
+      });
+      this.followupEdit = null;
+    } catch (error) {
+      if (
+        !this.current(generation, context) ||
+        sequence !== this.followupSequence
+      )
+        return;
+      if (this.taskAuthorizationLost(error, generation, context)) return;
+      this.setData({
+        followupStatus: "改写尚未确认；当前问题保持原样，可重新查询或整理。",
+      });
+    } finally {
+      if (
+        this.current(generation, context) &&
+        sequence === this.followupSequence
+      )
+        this.setData({ busy: false });
+    }
+  },
+  async skipFollowup() {
+    if (!this.canFollowup()) return false;
+    const i = this.data.interview!,
+      q = i.currentQuestion ?? i.actualQuestion;
+    const body = {
+        actualQuestionId: q.id,
+        expectedQuestionVersion: i.questionVersion ?? 1,
+        ...(this.assistedSessionId
+          ? { assistedSessionId: this.assistedSessionId }
+          : {}),
+      },
+      input = JSON.stringify({ interviewId: i.id, ...body });
+    if (this.followupEnd?.input !== input)
+      this.followupEnd = { input, key: paymentKey() };
+    const generation = this.generation,
+      context = sessionClient.context();
+    this.clearFollowup();
+    const sequence = this.followupSequence;
+    this.setData({ busy: true });
+    try {
+      await optionalFollowupClient.finish(
+        this.projectId,
+        i.id,
+        body,
+        this.followupEnd.key,
+      );
+      if (
+        !this.current(generation, context) ||
+        sequence !== this.followupSequence
+      )
+        return false;
+      this.followupEnd = null;
+      this.setData({
+        followupStatus: "已跳过追问；可以继续原问题、换题或直接整理。",
+      });
+      return true;
+    } catch (error) {
+      if (
+        !this.current(generation, context) ||
+        sequence !== this.followupSequence
+      )
+        return false;
+      if (this.taskAuthorizationLost(error, generation, context)) return false;
+      this.setData({
+        followupStatus: "结束状态尚未确认；可以重新查询，已保存原声仍可整理。",
+      });
+      return false;
+    } finally {
+      if (
+        this.current(generation, context) &&
+        sequence === this.followupSequence
+      )
+        this.setData({ busy: false });
+    }
+  },
+  async retryFollowup() {
+    const task = this.data.followup?.task;
+    if (!this.canFollowup() || task?.state !== "failed") return;
+    const generation = this.generation,
+      context = sessionClient.context();
+    this.taskRetries[task.id] ??= paymentKey();
+    this.setData({ busy: true });
+    try {
+      await interviewRecordingClient.retryTask(
+        this.projectId,
+        task.id,
+        this.taskRetries[task.id],
+        this.assistedSessionId || undefined,
+      );
+      if (!this.current(generation, context)) return;
+      this.setData({ busy: false });
+      await this.refreshFollowup();
+    } catch (error) {
+      if (!this.current(generation, context)) return;
+      if (this.taskAuthorizationLost(error, generation, context)) return;
+      this.setData({
+        followupStatus: "本次追问暂不能重试；可以跳过或整理，原声仍保留。",
+      });
+    } finally {
+      if (this.current(generation, context)) this.setData({ busy: false });
+    }
+  },
+  clearFollowup() {
+    if (this.followupPoll) clearTimeout(this.followupPoll);
+    this.followupPoll = undefined;
+    ++this.followupSequence;
+    this.followupRequest = null;
+    this.followupEdit = null;
+    this.setData({ followup: null, followupStatus: "", followupText: "" });
+  },
+  canFollowup() {
+    return (
+      dataMode() === "live" &&
+      !!this.data.interview &&
+      !this.data.busy &&
+      this.storyOwnerContext === sessionClient.context() &&
+      !["recording", "requesting", "saving", "device-error"].includes(
+        this.data.state,
+      )
+    );
+  },
+  async requestFollowup() {
+    if (!this.canFollowup()) return;
+    const i = this.data.interview!,
+      q = i.currentQuestion ?? i.actualQuestion;
+    const body = {
+      actualQuestionId: q.id,
+      expectedQuestionVersion: i.questionVersion ?? 1,
+      ...(this.assistedSessionId
+        ? { assistedSessionId: this.assistedSessionId }
+        : {}),
+    };
+    const input = JSON.stringify(body);
+    if (this.followupRequest?.input !== input)
+      this.followupRequest = { input, id: recordingId(), key: paymentKey() };
+    const generation = this.generation,
+      context = sessionClient.context(),
+      sequence = ++this.followupSequence;
+    this.setData({
+      busy: true,
+      followupStatus: "正在请求可选追问；已有原声仍可整理",
+    });
+    try {
+      const view = await optionalFollowupClient.request(
+        this.projectId,
+        i.id,
+        { ...body, clientRequestId: this.followupRequest.id },
+        this.followupRequest.key,
+      );
+      if (
+        !this.current(generation, context) ||
+        sequence !== this.followupSequence
+      )
+        return;
+      this.setData({ followup: view });
+      this.followupRequest = null;
+      this.showFollowupState(view);
+    } catch (error) {
+      if (
+        !this.current(generation, context) ||
+        sequence !== this.followupSequence
+      )
+        return;
+      if (this.taskAuthorizationLost(error, generation, context)) return;
+      this.setData({
+        followupStatus:
+          "追问未能确认；可以继续讲、换题或直接整理，已保存原声仍保留。",
+      });
+    } finally {
+      if (
+        this.current(generation, context) &&
+        sequence === this.followupSequence
+      )
+        this.setData({ busy: false });
+    }
+  },
+  showFollowupState(view: OptionalFollowupView) {
+    if (this.followupPoll) clearTimeout(this.followupPoll);
+    this.followupPoll = undefined;
+    const waiting =
+      view.task &&
+      ["queued", "submitting", "waiting_provider", "waiting_inputs"].includes(
+        view.task.state,
+      );
+    this.setData({
+      followupStatus: waiting
+        ? "正在等待可选追问；可以继续讲或直接整理。"
+        : view.task?.state === "manual_review"
+          ? "追问结果尚未确认；可以跳过或整理，必要时联系服务。"
+          : view.task?.state === "failed"
+            ? "本次追问未完成；可重试本次任务，也可跳过或整理。"
+            : view.result?.action === "finish" || view.finishReason
+              ? "可以先讲到这里，已有原声可以直接整理。"
+              : view.task?.state === "obsolete"
+                ? "旧建议已失效；当前问题和已保存原声仍保留。"
+                : "可选追问状态已确认；可以继续讲、换题或整理。",
+    });
+    if (waiting)
+      this.followupPoll = setTimeout(() => void this.refreshFollowup(), 2000);
+  },
+  async refreshFollowup() {
+    if (!this.canFollowup()) return;
+    if (this.followupPoll) clearTimeout(this.followupPoll);
+    this.followupPoll = undefined;
+    const i = this.data.interview!,
+      q = i.currentQuestion ?? i.actualQuestion;
+    const generation = this.generation,
+      context = sessionClient.context(),
+      sequence = ++this.followupSequence;
+    try {
+      const view = await optionalFollowupClient.status(
+        this.projectId,
+        i.id,
+        this.assistedSessionId || undefined,
+      );
+      if (
+        !this.current(generation, context) ||
+        sequence !== this.followupSequence
+      )
+        return;
+      if (view.interviewId !== i.id) throw new Error("追问来源不匹配");
+      if (view.task?.state === "succeeded" && view.result?.action === "ask") {
+        if (
+          view.actualQuestionId !== q.id ||
+          view.questionVersion !== (i.questionVersion ?? 1) ||
+          !view.planRevision
+        )
+          throw new Error("问题已变化，请重新查询");
+        this.setData({ busy: true });
+        const displayed = await optionalFollowupClient.display(
+          this.projectId,
+          i.id,
+          {
+            clientQuestionId: view.task.id,
+            expectedVersion: i.questionVersion ?? 1,
+            expectedActualQuestionId: q.id,
+            expectedPlanRevision: view.planRevision,
+            followupTaskId: view.task.id,
+            ...(this.assistedSessionId
+              ? { assistedSessionId: this.assistedSessionId }
+              : {}),
+          },
+          `followup-display:${view.task.id}`,
+        );
+        if (
+          !this.current(generation, context) ||
+          sequence !== this.followupSequence
+        )
+          return;
+        if (
+          displayed.id !== i.id ||
+          displayed.currentQuestion.source?.generationTaskId !== view.task.id
+        )
+          throw new Error("问题来源未确认");
+        this.setData({
+          interview: displayed,
+          question: displayed.currentQuestion.snapshot.text,
+          followupText: displayed.currentQuestion.snapshot.text,
+        });
+      }
+      this.setData({ followup: view });
+      this.showFollowupState(view);
+    } catch (error) {
+      if (
+        !this.current(generation, context) ||
+        sequence !== this.followupSequence
+      )
+        return;
+      if (this.taskAuthorizationLost(error, generation, context)) return;
+      this.setData({
+        followupStatus: "追问未能确认；可以继续讲或整理，原声仍保留。",
+      });
+    } finally {
+      if (
+        this.current(generation, context) &&
+        sequence === this.followupSequence
+      )
+        this.setData({ busy: false });
+    }
+  },
   openStory() {
     const interview = this.data.interview,
       context = sessionClient.context();
@@ -690,13 +1058,15 @@ Page({
       )
     )
       return;
+    this.clearFollowup();
     go(
       "story",
       `projectId=${this.projectId}&interviewId=${interview.id}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
     );
   },
-  finish() {
+  async finish() {
     if (dataMode() === "live") {
+      if (this.data.interview && !(await this.skipFollowup())) return;
       go("welcome", `projectId=${this.projectId}`);
       return;
     }

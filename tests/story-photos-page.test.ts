@@ -679,8 +679,13 @@ async function showInterview(h: ReturnType<typeof harness>) {
         id: interview,
         projectId: project,
         actualQuestion: {
+          id: "55555555-5555-4555-8555-555555555555",
+          projectId: project,
+          answerRef: interview,
+          planRevision: 1,
           snapshot: { text: "私人采访问题", intent: "具体场景" },
         },
+        questionVersion: 1,
         clips: [
           { id: "77777777-7777-4777-8777-777777777777", state: "sealed" },
         ],
@@ -774,7 +779,22 @@ test("the active interview clears private state when a hidden photo download's 4
   );
   await tick();
   const starting = h.interviewPage.record();
-  respond(h.requests.shift(), { allowed: true }, 201);
+  const authorization = h.requests.shift();
+  assert.match(authorization.url, /recording-start$/);
+  assert.equal(
+    authorization.data.actualQuestionId,
+    "55555555-5555-4555-8555-555555555555",
+  );
+  assert.equal(authorization.data.expectedQuestionVersion, 1);
+  respond(
+    authorization,
+    {
+      allowed: true,
+      actualQuestionId: authorization.data.actualQuestionId,
+      questionVersion: 1,
+    },
+    201,
+  );
   await starting;
   await h.interviewPage.record();
   await tick();

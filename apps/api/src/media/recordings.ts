@@ -45,6 +45,10 @@ class CollectionDto {
 }
 class ClipDto extends CollectionDto {
   @ApiProperty({ format: "uuid" }) @IsUUID() clientClipId!: string;
+  @ApiProperty({ required: false, format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  actualQuestionId?: string;
   @ApiProperty({ minimum: 1, maximum: 2097152 })
   @IsInt()
   @Min(1)
@@ -185,13 +189,6 @@ export class Recordings implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        await claimRecordingCommand(tx, projectId, actor.operatorUserId, key, {
-          kind: "clip",
-          interviewId,
-          clientClipId: body.clientClipId,
-          bytes: body.bytes,
-          sha256: body.sha256,
-        });
         const interview = await tx.interview.findFirst({
           where: { projectId, id: interviewId },
         });
@@ -202,6 +199,32 @@ export class Recordings implements OnModuleDestroy {
           interview.accessEpoch !== actor.accessEpoch
         )
           throw new ForbiddenException();
+        // Older local manifests only ever recorded the immutable starting question.
+        const actualQuestionId =
+          body.actualQuestionId ?? interview.actualQuestionId;
+        if (
+          !(await tx.interviewActualQuestion.findUnique({
+            where: {
+              projectId_interviewId_actualQuestionId: {
+                projectId,
+                interviewId,
+                actualQuestionId,
+              },
+            },
+          }))
+        )
+          throw new BadRequestException();
+        await claimRecordingCommand(tx, projectId, actor.operatorUserId, key, {
+          kind: "clip",
+          interviewId,
+          clientClipId: body.clientClipId,
+          bytes: body.bytes,
+          sha256: body.sha256,
+          // Preserve pre-T17 idempotency hashes for the original question.
+          ...(actualQuestionId !== interview.actualQuestionId
+            ? { actualQuestionId }
+            : {}),
+        });
         const prior = await tx.recordingIntent.findUnique({
           where: {
             projectId_clientClipId: {
@@ -213,6 +236,7 @@ export class Recordings implements OnModuleDestroy {
         if (prior) {
           if (
             prior.interviewId !== interviewId ||
+            prior.actualQuestionId !== actualQuestionId ||
             prior.bytes !== body.bytes ||
             prior.sha256 !== body.sha256 ||
             prior.storageScope !== this.scope
@@ -233,7 +257,7 @@ export class Recordings implements OnModuleDestroy {
             id: randomUUID(),
             projectId,
             interviewId,
-            actualQuestionId: interview.actualQuestionId,
+            actualQuestionId,
             ...actor,
             clientClipId: body.clientClipId,
             bytes: body.bytes,
