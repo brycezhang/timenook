@@ -1,0 +1,39 @@
+.plan-page {
+  font-size: 40rpx;
+}
+.plan-page .note {
+  font-size: 36rpx;
+  line-height: 1.65;
+}
+.plan-page .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+.plan-page .actions button {
+  flex: 1 1 210rpx;
+  min-height: 96rpx;
+  margin: 0;
+  font-size: 34rpx;
+  padding: 16rpx;
+}
+.plan-page .input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 104rpx;
+  padding: 22rpx;
+  font-size: 38rpx;
+  line-height: 1.6;
+}
+.plan-page textarea {
+  min-height: 180rpx;
+}
+.plan-page .question {
+  padding-top: 24rpx;
+  border-top: 1rpx solid #ded8cb;
+}
+.plan-page button {
+  min-height: 96rpx;
+  white-space: normal;
+}

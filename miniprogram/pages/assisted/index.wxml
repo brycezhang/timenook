@@ -27,5 +27,6 @@
       <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="note">工单 record:{{item.id}}</view><view>{{item.kind === 'withdraw' ? '撤回' : item.kind === 'export' ? '资料导出' : item.kind === 'delete' ? '删除' : '本人账号绑定'}}：{{item.state === 'open' ? '待客服核验' : item.kind === 'rebind' ? '账号绑定已完成' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : '已核验，后续交付或执行待完成'}}</view></view>
     </view>
   </block>
+  <button wx:if="{{participation}}" class="btn secondary section" bindtap="plan" disabled="{{busy}}">编辑个人大纲与问题</button>
   <button class="btn secondary section" bindtap="back">返回本人参与页</button>
 </view>

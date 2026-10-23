@@ -331,6 +331,9 @@ Page({
     save(p);
     home();
   },
+  plan() {
+    go("plan", `projectId=${this.projectId}`);
+  },
   assisted() {
     go("assisted", `projectId=${this.projectId}`);
   },

@@ -76,3 +76,45 @@ export * from "./audio-probe";
 export * from "./catalog";
 export * from "./payments";
 export * from "./participation";
+
+export interface PlanQuestionState {
+  questionKey: string;
+  state: "ready" | "later" | "skipped" | "not-applicable";
+}
+export interface PlanPreferenceDecision {
+  version: number;
+  subjectId: string;
+  operatorUserId: string;
+  method: "self_wechat" | "assisted";
+  assistedSessionId: string | null;
+  blockedTopics: string[];
+  questionStates: PlanQuestionState[];
+  createdAt: string;
+}
+export interface PersonalPlan extends ProjectPlan {
+  subjectDecision: "self" | "assisted" | null;
+  decisionSessionId: string | null;
+  actualQuestions: ActualPlanQuestion[];
+  questionStates: PlanQuestionState[];
+  preferenceHistory: PlanPreferenceDecision[];
+  accessExpiresAt: string | null;
+}
+
+// T14 owns recording/answer creation; this immutable reference survives plan edits.
+export interface ActualPlanQuestion {
+  id: string;
+  projectId: string;
+  planRevision: number;
+  capturedBy: string;
+  questionKey: string | null;
+  starterKind: "photo" | "free-narration" | null;
+  snapshot: PlanQuestion | PlanContent["starters"][number];
+  answerRef: string | null;
+}
+
+// Book freezes this independent token; future-question edits do not change it.
+export interface PlanDirectory {
+  version: number;
+  contentHash: string;
+  chapters: { key: string; title: string; storyRefs: string[] }[];
+}

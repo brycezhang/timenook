@@ -117,11 +117,18 @@ export class IdentityAccess implements OnModuleDestroy {
     };
   }
 
-  async current(authorization?: string): Promise<Account> {
+  async current(
+    authorization?: string,
+    transaction?: Prisma.TransactionClient,
+  ): Promise<Account> {
     const match = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(authorization ?? "");
     if (!match) throw new UnauthorizedException();
-    const session = await this.database.session.findUnique({
-      where: { tokenHash: digest(match[1]) },
+    const tokenHash = digest(match[1]);
+    // A protected transactional command serializes with session revocation.
+    if (transaction)
+      await transaction.$queryRaw`SELECT id FROM sessions WHERE token_hash=${tokenHash} FOR SHARE`;
+    const session = await (transaction ?? this.database).session.findUnique({
+      where: { tokenHash },
     });
     if (
       !session ||

@@ -40,6 +40,8 @@ model Project {
   revisions             PlanRevision[]         @relation("ProjectRevisions")
   currentPlan           PlanRevision           @relation("CurrentPlan", fields: [id, currentRevision], references: [projectId, revision], onDelete: NoAction, onUpdate: NoAction)
   preferences           InterviewPreferences?
+  preferenceDecisions   PlanPreferenceDecision[]
+  directoryVersions     PlanDirectoryVersion[]
 
   @@map("projects")
 }
@@ -52,6 +54,7 @@ model PlanRevision {
   createdBy   String    @map("created_by")
   project     Project   @relation("ProjectRevisions", fields: [projectId], references: [id])
   currentFor  Project[] @relation("CurrentPlan")
+  actualQuestions ActualPlanQuestion[]
 
   @@id([projectId, revision])
   @@map("plan_revisions")
@@ -62,6 +65,7 @@ model InterviewPreferences {
   version       Int      @default(1)
   blockedTopics String[] @default([]) @map("blocked_topics")
   updatedBy     String?  @map("updated_by")
+  questionStates Json @default("[]") @map("question_states")
   project       Project  @relation(fields: [projectId], references: [id])
 
   @@map("interview_preferences")
@@ -504,4 +508,45 @@ model AssistedVersionEvidence {
  @@unique([projectId,idempotencyKey])
  @@unique([projectId,evidenceRef])
  @@map("assisted_version_evidence")
+}
+
+// Append-only subject decisions, separate from future plan wording.
+model PlanPreferenceDecision {
+  projectId String @map("project_id") @db.Uuid
+  version Int
+  subjectId String @map("subject_id") @db.Uuid
+  operatorUserId String @map("operator_user_id") @db.Uuid
+  method String
+  assistedSessionId String? @map("assisted_session_id") @db.Uuid
+  blockedTopics String[] @map("blocked_topics")
+  questionStates Json @map("question_states")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  project Project @relation(fields: [projectId], references: [id])
+  @@id([projectId, version])
+  @@map("plan_preference_decisions")
+}
+
+model ActualPlanQuestion {
+  id String @id @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  planRevision Int @map("plan_revision")
+  capturedBy String @map("captured_by")
+  questionKey String? @map("question_key")
+  starterKind String? @map("starter_kind")
+  snapshot Json
+  answerRef String? @map("answer_ref")
+  revision PlanRevision @relation(fields: [projectId, planRevision], references: [projectId, revision])
+  @@index([projectId])
+  @@map("actual_plan_questions")
+}
+
+model PlanDirectoryVersion {
+  projectId String @map("project_id") @db.Uuid
+  version Int
+  chapters Json
+  contentHash String @map("content_hash") @db.Char(64)
+  createdBy String @map("created_by")
+  project Project @relation(fields: [projectId], references: [id])
+  @@id([projectId, version])
+  @@map("plan_directory_versions")
 }
