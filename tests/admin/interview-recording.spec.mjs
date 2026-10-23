@@ -63,25 +63,9 @@ test.beforeAll(async () => {
   );
   expect(migrated.status, "isolated migrations").toBe(0);
   root = await mkdtemp(join(tmpdir(), "timenook-recording-browser-"));
-  const generated = spawnSync("ffmpeg", [
-    "-v",
-    "error",
-    "-f",
-    "lavfi",
-    "-i",
-    "anullsrc=r=16000:cl=mono",
-    "-t",
-    "1",
-    "-codec:a",
-    "libmp3lame",
-    "-b:a",
-    "48k",
-    "-f",
-    "mp3",
-    "pipe:1",
-  ]);
-  expect(generated.status).toBe(0);
-  audioBase64 = generated.stdout.toString("base64");
+  audioBase64 = readFileSync(
+    resolve("apps/api/test/fixtures/synthetic-1s.mp3"),
+  ).toString("base64");
   const { createApplication } = apiRequire("./dist-test/src/application.js");
   const { paymentConfig, paymentFetch, paid } = apiRequire(
     "./dist-test/test/payment-fixture.js",

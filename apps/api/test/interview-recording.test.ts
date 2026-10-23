@@ -403,26 +403,12 @@ function formUpload(
   });
 }
 
-function syntheticAudio(seconds = 1) {
-  const result = spawnSync("ffmpeg", [
-    "-v",
-    "error",
-    "-f",
-    "lavfi",
-    "-i",
-    "anullsrc=r=16000:cl=mono",
-    "-t",
-    String(seconds),
-    "-codec:a",
-    "libmp3lame",
-    "-b:a",
-    "48k",
-    "-f",
-    "mp3",
-    "pipe:1",
-  ]);
-  assert.equal(result.status, 0, "synthetic MP3 generation");
-  return result.stdout;
+function syntheticAudio(seconds: 1 | 0.5 = 1) {
+  return readFileSync(
+    seconds === 1
+      ? "test/fixtures/synthetic-1s.mp3"
+      : "test/fixtures/synthetic-576ms.mp3",
+  );
 }
 async function interview(p: Awaited<ReturnType<typeof bound>>) {
   data((await choose(p, p.narrator.token, "collection", true)).response);
@@ -1035,7 +1021,7 @@ test("a legitimate short clip can use the remaining frozen quota and concurrent 
   const p = await bound(versionId),
     i = await interview(p),
     base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
-  async function intent(seconds: number) {
+  async function intent(seconds: 1 | 0.5) {
     const audio = syntheticAudio(seconds),
       command = {
         clientClipId: randomUUID(),
