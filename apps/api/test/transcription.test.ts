@@ -877,9 +877,22 @@ test("project supplier budgets bound unknown polling and expose manual takeover 
   const p = await sealedInput(true, versionId),
     original = await task(p),
     previous = providerTransport;
-  let calls = 0;
-  providerTransport = async () => {
-    calls++;
+  const calls: { action: string; requestId: string }[] = [],
+    unattributed: string[] = [];
+  providerTransport = async (input, init) => {
+    const requestId = new Headers(init?.headers).get("X-Api-Request-Id")!;
+    const attempt = await db.taskAttempt.findUnique({ where: { requestId } });
+    if (!attempt) {
+      // Never silently discard an unexpected UUID with no persisted owner.
+      unattributed.push(requestId);
+      throw new Error("Synthetic provider request has no persisted owner");
+    }
+    if (attempt.projectId !== p.projectId) return previous(input, init);
+    // Count every UUID owned by this project, including any erroneous new attempt.
+    calls.push({
+      action: String(input).endsWith("/submit") ? "submit" : "query",
+      requestId,
+    });
     throw new Error("synthetic unknown");
   };
   const runtime = await startProductionWorker(app);
@@ -892,7 +905,14 @@ test("project supplier budgets bound unknown polling and expose manual takeover 
     assert.equal(exhausted.errorCode, "PROVIDER_BUDGET_EXHAUSTED");
     assert.equal(exhausted.retryable, false);
     assert.equal(exhausted.nextAction, "contact_support");
-    assert.equal(calls, 2);
+    assert.deepEqual(unattributed, []);
+    assert.deepEqual(calls, [
+      { action: "submit", requestId: original.providerRequestId },
+      { action: "query", requestId: original.providerRequestId },
+    ]);
+    assert.equal(exhausted.attempts.length, 1);
+    assert.equal(exhausted.attempts[0].requestId, original.providerRequestId);
+    assert.equal(exhausted.attempts[0].polls, 1);
     assert.equal(exhausted.attempts[0].reservedCostFen, 1);
     assert.equal(exhausted.attempts[0].actualCostFen, null);
     assert.equal(
