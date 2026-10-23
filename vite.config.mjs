@@ -15,7 +15,7 @@ export default defineConfig({
     fs: { deny: privateArtifactsDeny },
     proxy: process.env.TIMENOOK_PREVIEW_API_TARGET
       ? {
-          "^/timenook/v1/(recipient-types|packages/current|orders(?:/[a-f0-9-]{36}(?:/(?:payment|close))?)?|participations|invitations/[A-Za-z0-9_-]{43}(?:/requests)?|projects/[a-f0-9-]{36}/(?:participation|binding-requests|care-requests|assisted-sessions|invitations|consents(?:/revoke)?)|binding-requests/[a-f0-9-]{36}/approve)$":
+          "^/timenook/v1/(recipient-types|packages/current|orders(?:/[a-f0-9-]{36}(?:/(?:payment|close))?)?|participations|invitations/[A-Za-z0-9_-]{43}(?:/requests)?|projects/[a-f0-9-]{36}/(?:participation|binding-requests|care-requests|assisted-sessions|plan(?:/preferences)?|invitations|consents(?:/revoke)?)|binding-requests/[a-f0-9-]{36}/approve)$":
             {
               target: process.env.TIMENOOK_PREVIEW_API_TARGET,
               rewrite: (path) => path.replace(/^\/timenook/, ""),

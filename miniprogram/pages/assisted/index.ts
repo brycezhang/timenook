@@ -232,6 +232,9 @@ Page({
         });
     });
   },
+  plan() {
+    go("plan", `projectId=${this.projectId}`);
+  },
   back() {
     go("welcome", `projectId=${this.projectId}`);
   },

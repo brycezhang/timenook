@@ -1,3 +1,7 @@
+import {
+  PersonalPlans,
+  PersonalPlanController,
+} from "./projects/personal-plan-controller";
 import { AdminTermsController } from "./payments/admin-terms-controller";
 import {
   Participation,
@@ -206,13 +210,16 @@ export async function createApplication(
   });
   const module = {
     module: AppModule,
-    controllers: config.audioProbe
-      ? [
-          ProbeController,
-          PrintProbeController,
-          ...(config.aiProbe ? [AiProbeController] : []),
-        ]
-      : [],
+    controllers: [
+      ...(config.participation ? [PersonalPlanController] : []),
+      ...(config.audioProbe
+        ? [
+            ProbeController,
+            PrintProbeController,
+            ...(config.aiProbe ? [AiProbeController] : []),
+          ]
+        : []),
+    ],
     providers: [
       { provide: API_CONFIG, useValue: config },
       Infrastructure,
@@ -238,6 +245,7 @@ export async function createApplication(
       { provide: WECHAT_FETCH, useValue: options.wechatFetch ?? fetch },
       IdentityAccess,
       Participation,
+      PersonalPlans,
       AdminAccess,
       Catalog,
       Orders,

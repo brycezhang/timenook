@@ -967,6 +967,80 @@ export class Participation implements OnModuleDestroy {
       };
     });
   }
+  // Plan callers keep authentication, current purpose/epoch checks and writes
+  // under the same Session -> Project -> Subject lock order.
+  async withPlanAccess<T>(
+    projectId: string,
+    authorization: string | undefined,
+    subjectDecision: { assistedSessionId?: string } | undefined,
+    work: (
+      tx: Prisma.TransactionClient,
+      actor: {
+        userId: string;
+        subjectId: string;
+        method: "self_wechat" | "assisted" | "participant";
+        assistedSessionId?: string;
+        accessExpiresAt: string | null;
+        subjectDecision: "self" | "assisted" | null;
+        decisionSessionId: string | null;
+      },
+    ) => Promise<T>,
+  ): Promise<T> {
+    this.policy();
+    return this.db.$transaction(async (tx) => {
+      const user = await this.identity.current(authorization, tx);
+      const p = await this.project(tx, projectId, true);
+      const subject = await this.subject(tx, projectId);
+      if (user.id !== p.order.buyerId && user.id !== subject.boundUserId)
+        throw new ForbiddenException();
+      const state = await this.status(tx, p, subject, user.id);
+      if (!state.canRead) throw new ForbiddenException();
+      let method: "self_wechat" | "assisted" | "participant" = "participant";
+      if (subjectDecision) {
+        if (subject.boundUserId === user.id) method = "self_wechat";
+        else {
+          if (!subjectDecision.assistedSessionId)
+            throw new ForbiddenException();
+          await this.authorizeAssisted(tx, {
+            projectId,
+            sessionId: subjectDecision.assistedSessionId,
+            operatorUserId: user.id,
+            purpose: "collection",
+          });
+          method = "assisted";
+        }
+      }
+      const sessions = await Promise.all(
+        ["collection", "sharing"].map((purpose) =>
+          this.latestAssisted(tx, projectId, purpose as AssistedPurpose),
+        ),
+      );
+      const expiries = sessions
+        .filter((row) => this.activeAssisted(row, p, subject))
+        .map((row) => row!.expiresAt.getTime());
+      const collectionSession = sessions[0];
+      return work(tx, {
+        userId: user.id,
+        subjectId: subject.id,
+        method,
+        subjectDecision:
+          subject.boundUserId === user.id
+            ? "self"
+            : this.activeAssisted(collectionSession, p, subject)
+              ? "assisted"
+              : null,
+        decisionSessionId: this.activeAssisted(collectionSession, p, subject)
+          ? collectionSession.id
+          : null,
+        ...(method === "assisted"
+          ? { assistedSessionId: subjectDecision!.assistedSessionId }
+          : {}),
+        accessExpiresAt: expiries.length
+          ? new Date(Math.min(...expiries)).toISOString()
+          : null,
+      });
+    });
+  }
   private latestAssisted(
     tx: Prisma.TransactionClient,
     projectId: string,

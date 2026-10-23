@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { Prisma, PrismaClient } from "@prisma/client";
 import type {
   PlanContent,
+  PlanQuestionState,
+  PlanPreferenceDecision,
+  ActualPlanQuestion,
+  PlanDirectory,
   ProjectPlan,
   ProjectPlanRevision,
   TemplateReference,
@@ -85,6 +89,15 @@ export class ProjectPlans {
         await tx.interviewPreferences.create({
           data: { projectId: command.projectId },
         });
+        await tx.planDirectoryVersion.create({
+          data: {
+            projectId: command.projectId,
+            version: 1,
+            chapters: [],
+            contentHash: hash([]),
+            createdBy: command.createdBy,
+          },
+        });
       }
       const project = await tx.project.findUniqueOrThrow({
         where: { id: command.projectId },
@@ -102,9 +115,14 @@ export class ProjectPlans {
     await this.database.$disconnect();
   }
 
-  async getProjectPlan(projectId: string): Promise<ProjectPlan> {
+  async getProjectPlan(
+    projectId: string,
+    transaction?: Prisma.TransactionClient,
+  ): Promise<ProjectPlan> {
     validateProjectId(projectId);
-    return this.database.$transaction((tx) => readPlan(tx, projectId));
+    return transaction
+      ? readPlan(transaction, projectId)
+      : this.database.$transaction((tx) => readPlan(tx, projectId));
   }
 
   async getPlanRevision(
@@ -125,18 +143,21 @@ export class ProjectPlans {
     );
   }
 
-  async revisePlan(command: {
-    projectId: string;
-    expectedVersion: number;
-    createdBy: string;
-    content: PlanContent;
-  }): Promise<ProjectPlan> {
+  async revisePlan(
+    command: {
+      projectId: string;
+      expectedVersion: number;
+      createdBy: string;
+      content: PlanContent;
+    },
+    transaction?: Prisma.TransactionClient,
+  ): Promise<ProjectPlan> {
     validateWrite(command.projectId, command.createdBy);
     validateVersion(command.expectedVersion);
     validateContent(command.content);
     command = { ...command };
     const content = structuredClone(command.content);
-    return this.database.$transaction(async (tx) => {
+    const revise = async (tx: Prisma.TransactionClient) => {
       const updated = await tx.project.updateMany({
         where: {
           id: command.projectId,
@@ -155,17 +176,282 @@ export class ProjectPlans {
         },
       });
       return readPlan(tx, command.projectId);
+    };
+    return transaction
+      ? revise(transaction)
+      : this.database.$transaction(revise);
+  }
+
+  async directory(
+    projectId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<PlanDirectory> {
+    validateProjectId(projectId);
+    await tx.$queryRaw`SELECT id FROM projects WHERE id=${projectId}::uuid FOR UPDATE`;
+    const row = await tx.planDirectoryVersion.findFirst({
+      where: { projectId },
+      orderBy: { version: "desc" },
+    });
+    if (!row) throw new ProjectPlanError("PROJECT_NOT_FOUND");
+    return {
+      version: row.version,
+      contentHash: row.contentHash,
+      chapters: row.chapters as unknown as PlanDirectory["chapters"],
+    };
+  }
+  async reviseDirectory(
+    command: {
+      projectId: string;
+      expectedVersion: number;
+      createdBy: string;
+      chapters: PlanDirectory["chapters"];
+    },
+    tx: Prisma.TransactionClient,
+  ): Promise<PlanDirectory> {
+    validateWrite(command.projectId, command.createdBy);
+    validateVersion(command.expectedVersion);
+    if (!Array.isArray(command.chapters))
+      throw new ProjectPlanError("INVALID_COMMAND");
+    const keys = new Set<string>(),
+      stories = new Set<string>();
+    for (const chapter of command.chapters) {
+      record(chapter, ["key", "title", "storyRefs"]);
+      if (
+        !nonempty(chapter.key) ||
+        !nonempty(chapter.title) ||
+        !stringList(chapter.storyRefs) ||
+        keys.has(chapter.key)
+      )
+        throw new ProjectPlanError("INVALID_COMMAND");
+      keys.add(chapter.key);
+      for (const ref of chapter.storyRefs) {
+        if (stories.has(ref)) throw new ProjectPlanError("INVALID_COMMAND");
+        stories.add(ref);
+      }
+    }
+    const current = await this.directory(command.projectId, tx);
+    if (current.version !== command.expectedVersion)
+      throw new ProjectPlanError("VERSION_CONFLICT");
+    const contentHash = hash(command.chapters);
+    if (current.contentHash === contentHash) return current;
+    await tx.planDirectoryVersion.create({
+      data: {
+        projectId: command.projectId,
+        version: current.version + 1,
+        contentHash,
+        createdBy: command.createdBy,
+        chapters: JSON.parse(JSON.stringify(command.chapters)),
+      },
+    });
+    return {
+      version: current.version + 1,
+      contentHash,
+      chapters: structuredClone(command.chapters),
+    };
+  }
+  async assertDirectoryVersion(
+    projectId: string,
+    expectedVersion: number,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    validateVersion(expectedVersion);
+    if ((await this.directory(projectId, tx)).version !== expectedVersion)
+      throw new ProjectPlanError("VERSION_CONFLICT");
+  }
+
+  async captureActualQuestion(
+    command: {
+      id: string;
+      projectId: string;
+      expectedPlanRevision: number;
+      capturedBy: string;
+      questionKey?: string;
+      starterKind?: "photo" | "free-narration";
+    },
+    tx: Prisma.TransactionClient,
+  ): Promise<ActualPlanQuestion> {
+    validateWrite(command.projectId, command.capturedBy);
+    validateProjectId(command.id);
+    validateVersion(command.expectedPlanRevision);
+    await tx.$queryRaw`SELECT id FROM projects WHERE id=${command.projectId}::uuid FOR UPDATE`;
+    const prior = await tx.actualPlanQuestion.findUnique({
+      where: { id: command.id },
+    });
+    if (prior) {
+      if (
+        prior.projectId !== command.projectId ||
+        prior.planRevision !== command.expectedPlanRevision ||
+        prior.capturedBy !== command.capturedBy ||
+        prior.questionKey !== (command.questionKey ?? null) ||
+        prior.starterKind !== (command.starterKind ?? null)
+      )
+        throw new ProjectPlanError("IDEMPOTENCY_CONFLICT");
+      return actualQuestionView(prior);
+    }
+    const plan = await readPlan(tx, command.projectId);
+    if (plan.revision !== command.expectedPlanRevision)
+      throw new ProjectPlanError("VERSION_CONFLICT");
+    if (!!command.questionKey === !!command.starterKind)
+      throw new ProjectPlanError("INVALID_COMMAND");
+    const snapshot = command.questionKey
+      ? plan.chapters
+          .flatMap((c) => c.questions)
+          .find((q) => q.key === command.questionKey)
+      : plan.starters.find((s) => s.kind === command.starterKind);
+    if (!snapshot) throw new ProjectPlanError("INVALID_COMMAND");
+    if (
+      command.questionKey &&
+      "sensitivityTags" in snapshot &&
+      [command.questionKey, ...snapshot.sensitivityTags].some((topic) =>
+        plan.preferences.blockedTopics.includes(topic),
+      )
+    )
+      throw new ProjectPlanError("INVALID_COMMAND");
+    return actualQuestionView(
+      await tx.actualPlanQuestion.create({
+        data: {
+          id: command.id,
+          projectId: command.projectId,
+          planRevision: command.expectedPlanRevision,
+          capturedBy: command.capturedBy,
+          questionKey: command.questionKey,
+          starterKind: command.starterKind,
+          snapshot: JSON.parse(JSON.stringify(snapshot)),
+        },
+      }),
+    );
+  }
+  async linkActualAnswer(
+    command: { projectId: string; actualQuestionId: string; answerRef: string },
+    tx: Prisma.TransactionClient,
+  ): Promise<ActualPlanQuestion> {
+    validateProjectId(command.projectId);
+    validateProjectId(command.actualQuestionId);
+    if (!nonempty(command.answerRef) || command.answerRef.length > 200)
+      throw new ProjectPlanError("INVALID_COMMAND");
+    await tx.$queryRaw`SELECT id FROM projects WHERE id=${command.projectId}::uuid FOR UPDATE`;
+    const row = await tx.actualPlanQuestion.findUnique({
+      where: { id: command.actualQuestionId },
+    });
+    if (!row || row.projectId !== command.projectId)
+      throw new ProjectPlanError("INVALID_COMMAND");
+    if (row.answerRef && row.answerRef !== command.answerRef)
+      throw new ProjectPlanError("IDEMPOTENCY_CONFLICT");
+    return actualQuestionView(
+      await tx.actualPlanQuestion.update({
+        where: { id: row.id },
+        data: { answerRef: command.answerRef },
+      }),
+    );
+  }
+
+  async readPersonalState(projectId: string, tx: Prisma.TransactionClient) {
+    const preferences = await tx.interviewPreferences.findUniqueOrThrow({
+      where: { projectId },
+    });
+    const history = await tx.planPreferenceDecision.findMany({
+      where: { projectId },
+      orderBy: { version: "asc" },
+    });
+    return {
+      actualQuestions: (
+        await tx.actualPlanQuestion.findMany({
+          where: { projectId },
+          orderBy: { id: "asc" },
+        })
+      ).map(actualQuestionView),
+      questionStates:
+        preferences.questionStates as unknown as PlanQuestionState[],
+      preferenceHistory: history.map(({ projectId: _, createdAt, ...row }) => ({
+        ...row,
+        method: row.method as PlanPreferenceDecision["method"],
+        questionStates: row.questionStates as unknown as PlanQuestionState[],
+        createdAt: createdAt.toISOString(),
+      })),
+    };
+  }
+
+  // Only a caller that verified this subject decision in the same transaction
+  // may use this boundary. Normal plan revisions never write preferences.
+  async decidePreferences(
+    command: {
+      projectId: string;
+      expectedVersion: number;
+      subjectId: string;
+      operatorUserId: string;
+      method: "self_wechat" | "assisted";
+      assistedSessionId?: string;
+      blockedTopics: string[];
+      questionStates: PlanQuestionState[];
+    },
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    validateWrite(command.projectId, command.operatorUserId);
+    validateVersion(command.expectedVersion);
+    if (
+      !stringList(command.blockedTopics) ||
+      new Set(command.blockedTopics).size !== command.blockedTopics.length ||
+      !Array.isArray(command.questionStates) ||
+      new Set(command.questionStates.map((row) => row?.questionKey)).size !==
+        command.questionStates.length
+    )
+      throw new ProjectPlanError("INVALID_COMMAND");
+    const plan = await readPlan(tx, command.projectId);
+    const prior = await tx.interviewPreferences.findUniqueOrThrow({
+      where: { projectId: command.projectId },
+    });
+    const known = new Set([
+      ...plan.chapters.flatMap((chapter) =>
+        chapter.questions.map((q) => q.key),
+      ),
+      ...(prior.questionStates as unknown as PlanQuestionState[]).map(
+        (row) => row.questionKey,
+      ),
+    ]);
+    for (const row of command.questionStates) {
+      record(row, ["questionKey", "state"]);
+      if (
+        !nonempty(row.questionKey) ||
+        !known.has(row.questionKey) ||
+        !["ready", "later", "skipped", "not-applicable"].includes(row.state)
+      )
+        throw new ProjectPlanError("INVALID_COMMAND");
+    }
+    const updated = await tx.interviewPreferences.updateMany({
+      where: { projectId: command.projectId, version: command.expectedVersion },
+      data: {
+        version: { increment: 1 },
+        blockedTopics: command.blockedTopics,
+        questionStates: JSON.parse(JSON.stringify(command.questionStates)),
+        updatedBy: command.operatorUserId,
+      },
+    });
+    if (updated.count !== 1) throw new ProjectPlanError("VERSION_CONFLICT");
+    await tx.planPreferenceDecision.create({
+      data: {
+        projectId: command.projectId,
+        version: command.expectedVersion + 1,
+        subjectId: command.subjectId,
+        operatorUserId: command.operatorUserId,
+        method: command.method,
+        assistedSessionId: command.assistedSessionId,
+        blockedTopics: command.blockedTopics,
+        questionStates: JSON.parse(JSON.stringify(command.questionStates)),
+      },
     });
   }
 
   // Only a caller that has verified the subject or assisted-session evidence
   // may invoke this command, including an explicit decision to unblock topics.
-  async setBlockedTopics(command: {
-    projectId: string;
-    expectedVersion: number;
-    updatedBy: string;
-    blockedTopics: string[];
-  }): Promise<ProjectPlan> {
+  async setBlockedTopics(
+    command: {
+      projectId: string;
+      expectedVersion: number;
+      updatedBy: string;
+      blockedTopics: string[];
+    },
+    transaction?: Prisma.TransactionClient,
+  ): Promise<ProjectPlan> {
     validateWrite(command.projectId, command.updatedBy);
     validateVersion(command.expectedVersion);
     if (
@@ -175,7 +461,7 @@ export class ProjectPlans {
       throw new ProjectPlanError("INVALID_COMMAND");
     }
     command = { ...command, blockedTopics: [...command.blockedTopics] };
-    return this.database.$transaction(async (tx) => {
+    const update = async (tx: Prisma.TransactionClient) => {
       const updated = await tx.interviewPreferences.updateMany({
         where: {
           projectId: command.projectId,
@@ -189,8 +475,28 @@ export class ProjectPlans {
       });
       if (updated.count !== 1) throw new ProjectPlanError("VERSION_CONFLICT");
       return readPlan(tx, command.projectId);
-    });
+    };
+    return transaction
+      ? update(transaction)
+      : this.database.$transaction(update);
   }
+}
+
+function actualQuestionView(row: {
+  id: string;
+  projectId: string;
+  planRevision: number;
+  capturedBy: string;
+  questionKey: string | null;
+  starterKind: string | null;
+  snapshot: Prisma.JsonValue;
+  answerRef: string | null;
+}): ActualPlanQuestion {
+  return {
+    ...row,
+    starterKind: row.starterKind as ActualPlanQuestion["starterKind"],
+    snapshot: row.snapshot as unknown as ActualPlanQuestion["snapshot"],
+  };
 }
 
 async function initializeTemplate(
@@ -276,7 +582,7 @@ function json(content: PlanContent): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(content));
 }
 
-function hash(content: PlanContent): string {
+function hash(content: unknown): string {
   const canonical = JSON.stringify(content, (_key, value: unknown) => {
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
       return Object.fromEntries(

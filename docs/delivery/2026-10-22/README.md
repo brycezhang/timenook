@@ -4,7 +4,7 @@
 
 基于已定稿开发方案，已创建 **[1 个规格父 issue](https://github.com/brycezhang/timenook/issues/1) + 30 个子 tickets**，用 GitHub 原生 blocked-by 关系表示依赖，并按 ready-for-agent / ready-for-human 区分实现和外部决策。每票均可从本页打开完整验收条件。
 
-推进方式：主 Agent 逐票派发实施 subagent；每票完成 TDD、相关测试、审查及代码交付后再启动下一张开发票。外部验收缺失时保留票据未完成；按上游已交付工程产物判断可推进的本地范围，真实验收与上线分别检查。T01 已由 PR #32 合并。部署目标已按 [ADR 0009](../../adr/0009-shared-ecs-api-path.md) 调整为 legal-agent 共用 ECS/域名、`/timenook` 分流。
+推进方式：主 Agent 按 ready frontier 派发实施 subagent；工程依赖已满足且彼此独立的票，可用独立 worktree/分支并行实施。每票分别完成 TDD、相关检查、独立 Standards / Spec 双轴审查与最终提交的 PR CI；合并串行，每次合并后 main CI 全绿，才进行下一票合并并放行依赖者；独立票实施、PR CI 与审查仍可并行。现有 45 条依赖与真实完成口径不变。外部验收缺失时保留票据未完成；按上游已交付工程产物判断可推进的本地范围，真实验收与上线分别检查。T01 已由 PR #32 合并。部署目标已按 [ADR 0009](../../adr/0009-shared-ecs-api-path.md) 调整为 legal-agent 共用 ECS/域名、`/timenook` 分流。
 
 ## 阶段
 

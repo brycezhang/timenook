@@ -5,6 +5,7 @@
     "pages/invite/index",
     "pages/welcome/index",
     "pages/assisted/index",
+    "pages/plan/index",
     "pages/project/index",
     "pages/interview/index",
     "pages/story/index",

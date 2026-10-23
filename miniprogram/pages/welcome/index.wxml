@@ -14,6 +14,7 @@
   <button class="link" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button>
   <button wx:for="{{memberships}}" wx:key="projectId" class="btn secondary section" data-id="{{item.projectId}}" bindtap="openParticipation">{{item.state === 'pending' ? '等待发起人核对' : '查看本人的用途选择'}} · {{item.projectId}}</button>
   <view wx:if="{{participation}}" class="section">
+    <button wx:if="{{participation.canRead}}" class="btn secondary section" bindtap="plan" disabled="{{busy}}">编辑个人大纲与问题</button>
     <button wx:if="{{participation.role === 'initiator'}}" class="btn section" bindtap="assisted">无个人微信？本人在场同机协助</button>
     <view class="small muted">项目：{{participation.projectId}}</view>
     <view class="note section">拒绝或撤回不取消已付款订单，仍可联系服务。已下载到设备的副本无法远程回收。本人入书确认是之后的独立决定。</view>
