@@ -141,7 +141,14 @@ function harness(name: string, options: { clock?: { now: number } } = {}) {
             ? { data, meta: { requestId: "synthetic" } }
             : {
                 error: {
-                  code: statusCode === 409 ? "VERSION_CONFLICT" : "FORBIDDEN",
+                  code:
+                    statusCode === 409
+                      ? "VERSION_CONFLICT"
+                      : statusCode === 503
+                        ? "SERVICE_UNAVAILABLE"
+                        : statusCode === 401
+                          ? "UNAUTHENTICATED"
+                          : "FORBIDDEN",
                 },
                 meta: { requestId: "synthetic" },
               },
@@ -238,6 +245,280 @@ function overview() {
     nextStep: "请核对并确认一篇故事",
     accessExpiresAt: null,
   };
+}
+
+function correctionStory() {
+  const current: any = story();
+  current.revision.reviewItems = ["请本人核对地点"];
+  current.revision.reviewResolutions = [
+    { item: "请本人核对地点", reason: "本人独立核对" },
+  ];
+  current.revision.sourceManifest = [
+    { clipId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+  ];
+  current.revision.audioManifest = current.revision.sourceManifest;
+  current.revision.photoSnapshot = {
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    projectId,
+    interviewId,
+    revision: 1,
+    hash: "b".repeat(64),
+    entries: [
+      {
+        photoId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        caption: "私人照片说明",
+        assets: [],
+      },
+    ],
+  };
+  return current;
+}
+async function openCorrection() {
+  const h = harness("edit-story");
+  h.page.onLoad({ projectId, storyId });
+  const showing = h.page.onShow();
+  h.respond(0, correctionStory());
+  await showing;
+  h.page.paragraphText({
+    currentTarget: { dataset: { index: "0" } },
+    detail: { value: "本人正在校对的私人正文" },
+  });
+  h.page.input({
+    currentTarget: { dataset: { field: "noteText" } },
+    detail: { value: "尚未保存的私人说明" },
+  });
+  return h;
+}
+test("a current correction save 403 clears the private page and its listener without revoking the valid session or deleting pending originals", async () => {
+  const h = await openCorrection();
+  const originalKey = "synthetic-pending-originals",
+    originals = [
+      { path: "only-original-audio" },
+      { path: "only-original-photo" },
+    ];
+  h.storage.set(originalKey, originals);
+  const saving = h.page.save();
+  h.respond(1, undefined, 403);
+  await saving;
+  assert.equal(h.page.data.story, null);
+  assert.equal(h.page.data.title, "");
+  assert.equal(h.page.data.theme, "");
+  assert.equal(h.page.data.body, "");
+  assert.equal(h.page.data.paragraphs.length, 0);
+  assert.equal(h.page.data.notes.length, 0);
+  assert.equal(h.page.data.reviews.length, 0);
+  assert.equal(h.page.data.photoSnapshot, null);
+  assert.equal(h.page.data.audioClips.length, 0);
+  assert.equal(h.page.data.noteText, "");
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.stopSessionWatch, undefined);
+  assert.equal(h.page.command, null);
+  assert.match(h.page.data.error, /访问|授权/);
+  assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), login);
+  assert.deepEqual(h.storage.get(originalKey), originals);
+  assert.equal(h.removed.length, 0);
+  h.page.onUnload();
+});
+
+test("a current photo-snapshot read 403 clears the existing correction draft instead of retaining private photos and audio rows", async () => {
+  const h = await openCorrection();
+  const originalKey = "synthetic-pending-originals",
+    originals = [
+      { path: "only-original-audio" },
+      { path: "only-original-photo" },
+    ];
+  h.storage.set(originalKey, originals);
+  const applying = h.page.applyPhotos();
+  h.respond(1, undefined, 403);
+  await applying;
+  assert.equal(h.page.data.story, null);
+  assert.equal(h.page.data.title, "");
+  assert.equal(h.page.data.theme, "");
+  assert.equal(h.page.data.paragraphs.length, 0);
+  assert.equal(h.page.data.notes.length, 0);
+  assert.equal(h.page.data.reviews.length, 0);
+  assert.equal(h.page.data.photoSnapshot, null);
+  assert.equal(h.page.data.audioClips.length, 0);
+  assert.equal(h.page.data.noteText, "");
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.stopSessionWatch, undefined);
+  assert.equal(h.page.command, null);
+  assert.match(h.page.data.error, /访问|授权/);
+  assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), login);
+  assert.deepEqual(h.storage.get(originalKey), originals);
+  assert.equal(h.removed.length, 0);
+  h.page.onUnload();
+});
+
+async function openSettings() {
+  const h = harness("settings");
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  h.respond(0, overview());
+  await showing;
+  h.page.input({
+    currentTarget: { dataset: { field: "title" } },
+    detail: { value: "本人校对中的私人书名" },
+  });
+  return h;
+}
+test("a current book-title save 403 clears private overview and title without logging out or removing local originals", async () => {
+  const h = await openSettings();
+  const originalKey = "synthetic-pending-originals",
+    originals = [
+      { path: "only-original-audio" },
+      { path: "only-original-photo" },
+    ];
+  h.storage.set(originalKey, originals);
+  const saving = h.page.save();
+  h.respond(1, undefined, 403);
+  await saving;
+  assert.equal(h.page.data.overview, null);
+  assert.equal(h.page.data.title, "");
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.stopSessionWatch, undefined);
+  assert.equal(h.page.command, null);
+  assert.match(h.page.data.error, /访问|授权/);
+  assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), login);
+  assert.deepEqual(h.storage.get(originalKey), originals);
+  assert.equal(h.removed.length, 0);
+  assert.equal(h.routes.length, 0);
+  h.page.onUnload();
+});
+
+for (const surface of ["correction", "photos", "settings"] as const) {
+  for (const outcome of [409, 503, "network"] as const) {
+    test(`a valid-session ${surface} ${outcome} preserves its private draft and original save key for recovery`, async () => {
+      const h =
+        surface === "settings" ? await openSettings() : await openCorrection();
+      const originalKey = "synthetic-pending-originals",
+        originals = [
+          { path: "only-original-audio" },
+          { path: "only-original-photo" },
+        ];
+      h.storage.set(originalKey, originals);
+      let key = "";
+      if (surface === "photos") {
+        const firstSave = h.page.save();
+        key = h.requests[1].header["Idempotency-Key"];
+        h.requests[1].fail({ errMsg: "controlled uncertain save" });
+        await firstSave;
+      }
+      const index = h.requests.length,
+        action = surface === "photos" ? h.page.applyPhotos() : h.page.save();
+      if (surface !== "photos")
+        key = h.requests[index].header["Idempotency-Key"];
+      if (outcome === "network")
+        h.requests[index].fail({ errMsg: "controlled network failure" });
+      else h.respond(index, undefined, outcome);
+      await action;
+      if (surface === "settings") {
+        assert.ok(h.page.data.overview);
+        assert.equal(h.page.data.title, "本人校对中的私人书名");
+      } else {
+        assert.ok(h.page.data.story);
+        assert.equal(h.page.data.paragraphs[0].text, "本人正在校对的私人正文");
+        assert.equal(
+          h.page.data.photoSnapshot.entries[0].caption,
+          "私人照片说明",
+        );
+        assert.equal(h.page.data.audioClips.length, 1);
+        assert.equal(h.page.data.noteText, "尚未保存的私人说明");
+      }
+      assert.equal(h.page.data.busy, false);
+      assert.equal(typeof h.page.stopSessionWatch, "function");
+      assert.equal(h.routes.length, 0);
+      assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), login);
+      assert.deepEqual(h.storage.get(originalKey), originals);
+      assert.equal(h.removed.length, 0);
+      const retryIndex = h.requests.length,
+        retrying = h.page.save();
+      assert.equal(h.requests[retryIndex].header["Idempotency-Key"], key);
+      h.respond(
+        retryIndex,
+        surface === "settings"
+          ? {
+              ...overview(),
+              metadataVersion: 2,
+              bookTitle: "本人校对中的私人书名",
+            }
+          : { ...correctionStory(), version: 2 },
+      );
+      await retrying;
+      h.page.onUnload();
+    });
+  }
+  for (const replacement of ["account", "project"] as const) {
+    test(`an old ${surface} 403 cannot clear a later ${replacement}'s page, listener or pending originals`, async () => {
+      const h =
+        surface === "settings" ? await openSettings() : await openCorrection();
+      const originalKey = "synthetic-pending-originals",
+        originals = [
+          { path: "only-original-audio" },
+          { path: "only-original-photo" },
+        ];
+      h.storage.set(originalKey, originals);
+      const oldRequestIndex = h.requests.length,
+        oldAction = surface === "photos" ? h.page.applyPhotos() : h.page.save();
+      h.page.onHide();
+      const nextIdentity = structuredClone(login);
+      if (replacement === "account") {
+        nextIdentity.user.id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+        nextIdentity.session.id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+        nextIdentity.session.token = "b".repeat(43);
+        h.storage.set(`timenook.session.v1:${base}`, nextIdentity);
+      }
+      const nextProjectId =
+        replacement === "project"
+          ? "99999999-9999-4999-8999-999999999999"
+          : projectId;
+      const nextStory = { ...correctionStory(), projectId: nextProjectId };
+      h.page.onLoad({ projectId: nextProjectId, storyId });
+      const newRequestIndex = h.requests.length,
+        showing = h.page.onShow();
+      h.respond(
+        newRequestIndex,
+        surface === "settings"
+          ? {
+              ...overview(),
+              projectId: nextProjectId,
+              bookTitle: "后来页面的私人书名",
+              stories: [nextStory],
+              interviews: [],
+            }
+          : nextStory,
+      );
+      await showing;
+      h.page.input({
+        currentTarget: { dataset: { field: "title" } },
+        detail: { value: "后来页面尚未保存的新书名" },
+      });
+      h.respond(oldRequestIndex, undefined, 403);
+      await oldAction;
+      assert.equal(h.page.data.title, "后来页面尚未保存的新书名");
+      assert.equal(h.page.data.busy, false);
+      assert.equal(typeof h.page.stopSessionWatch, "function");
+      assert.equal(h.page.data.error, "");
+      if (surface === "settings")
+        assert.equal(h.page.data.overview.projectId, nextProjectId);
+      else {
+        assert.equal(h.page.data.story.projectId, nextProjectId);
+        assert.ok(h.page.data.paragraphs.length);
+        assert.equal(
+          h.page.data.photoSnapshot.entries[0].caption,
+          "私人照片说明",
+        );
+      }
+      assert.deepEqual(
+        h.storage.get(`timenook.session.v1:${base}`),
+        nextIdentity,
+      );
+      assert.deepEqual(h.storage.get(originalKey), originals);
+      assert.equal(h.removed.length, 0);
+      assert.equal(h.routes.length, 0);
+      h.page.onUnload();
+    });
+  }
 }
 
 test("project page distinguishes real optional-followup, transcription and story tasks without counting a followup as a confirmed story", async () => {

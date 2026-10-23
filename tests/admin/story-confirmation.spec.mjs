@@ -1425,3 +1425,113 @@ test("project progress keeps optional follow-up distinct while the same intervie
       .catch(() => {});
   }
 });
+
+for (const action of ["save", "photos", "title"]) {
+  test(`revoked sharing clears private ${action} state while the product session and pending originals stay valid`, async ({
+    browser,
+  }) => {
+    const p = await unboundStory(),
+      page = await openPage(browser, p.operator),
+      path = `/v1/projects/${p.projectId}`;
+    try {
+      const overview = data(
+        await request("GET", `${path}/overview`, p.operator),
+        200,
+      );
+      const url =
+        action === "title"
+          ? `#/settings?projectId=${p.projectId}`
+          : `#/edit-story?projectId=${p.projectId}&storyId=${p.story.id}`;
+      await page.evaluate((url) => {
+        location.hash = url;
+      }, url);
+      const input = page
+        .locator(action === "title" ? ".live-title" : ".live-input")
+        .first();
+      await expect(input).toHaveValue(
+        action === "title" ? overview.bookTitle : p.story.revision.title,
+      );
+      await page.evaluate(() => {
+        localStorage.setItem(
+          "synthetic-only-pending-originals",
+          JSON.stringify({
+            audio: "only-audio-original",
+            photo: "only-photo-original",
+          }),
+        );
+      });
+      const state = data(
+          await request("GET", `${path}/participation`, p.operator),
+          200,
+        ),
+        sessions = data(
+          await request("GET", `${path}/assisted-sessions`, p.operator),
+          200,
+        ).sessions,
+        sharing = sessions.find((session) => session.purpose === "sharing");
+      data(
+        await request("POST", `${path}/assisted-sessions`, p.operator, {
+          purpose: "sharing",
+          granted: false,
+          expectedBindingVersion: state.bindingVersion,
+          expectedAccessEpoch: state.accessEpoch,
+          expectedSessionId: sharing.id,
+          noticeVersion: "synthetic-d08-v1",
+          evidenceRef: `synthetic:本人撤回当前共享-${randomUUID()}`,
+        }),
+      );
+      const suffix =
+          action === "title"
+            ? "/metadata"
+            : action === "photos"
+              ? "/photos"
+              : "/revisions",
+        denied = page.waitForResponse((response) =>
+          response.url().endsWith(suffix),
+        );
+      await page
+        .getByRole("button", {
+          name:
+            action === "title"
+              ? "保存书名"
+              : action === "photos"
+                ? "选用已保存的最新照片清单"
+                : "保存新版本，重新确认",
+          exact: true,
+        })
+        .click();
+      expect((await denied).status()).toBe(403);
+      await expect(
+        page.getByText("当前资料访问已失效，私人内容已清除，请重新查询授权", {
+          exact: true,
+        }),
+      ).toBeVisible();
+      if (action === "title") {
+        await expect(page.locator(".live-title")).toHaveValue("");
+      } else {
+        await expect(page.locator(".live-input")).toHaveCount(0);
+        await expect(page.locator(".live-textarea")).toHaveCount(0);
+        await expect(
+          page.getByText("原声清单与顺序", { exact: true }),
+        ).toHaveCount(0);
+      }
+      expect(
+        (await request("GET", "/v1/users/me", p.operator)).statusCode,
+      ).toBe(200);
+      expect(
+        await page.evaluate(
+          (key) => !!localStorage.getItem(key),
+          `timenook.session.v1:${base}/timenook/v1`,
+        ),
+      ).toBe(true);
+      expect(
+        await page.evaluate(() =>
+          JSON.parse(localStorage.getItem("synthetic-only-pending-originals")),
+        ),
+      ).toEqual({ audio: "only-audio-original", photo: "only-photo-original" });
+      expect(errors).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}

@@ -8,13 +8,17 @@ const correction = ref<StoryView | null>(null),
   correctionParagraphs = ref<{ text: string; sourceRefs: string[] }[]>([]),
   reviewReasons = ref<{ item: string; reason: string }[]>([]);
 let correctionTimer: ReturnType<typeof setTimeout> | undefined;
+let correctionGeneration = 0;
+let intent: { input: string; key: string } | null = null;
 function clearCorrection() {
+  ++correctionGeneration;
   if (correctionTimer) clearTimeout(correctionTimer);
   correctionTimer = undefined;
   correction.value = null;
   correctionTitle.value = "";
   correctionParagraphs.value = [];
   reviewReasons.value = [];
+  intent = null;
 }
 onUnmounted(clearCorrection);
 const props = defineProps<{ csrf: string }>();
@@ -38,7 +42,18 @@ const kindLabel = (kind: string) =>
         : kind === "export"
           ? "本人资料导出申请"
           : "本人删除申请";
-let intent: { input: string; key: string } | null = null;
+function currentCorrection(
+  care: CareCase,
+  generation: number,
+  expires: number,
+) {
+  return (
+    selected.value === care &&
+    correctionGeneration === generation &&
+    Number.isFinite(expires) &&
+    Date.now() < expires
+  );
+}
 async function perform(work: () => Promise<void>) {
   if (busy.value) return;
   busy.value = true;
@@ -82,7 +97,11 @@ async function loadCorrection() {
   if (!care) return;
   await perform(async () => {
     clearCorrection();
+    const generation = correctionGeneration,
+      expires = Date.parse(care.correctionGrant?.expiresAt ?? "");
+    if (!currentCorrection(care, generation, expires)) return;
     const story = await careApi.story(care.id, props.csrf);
+    if (!currentCorrection(care, generation, expires)) return;
     correction.value = story;
     correctionTitle.value = story.revision!.title;
     correctionParagraphs.value = story.revision!.paragraphs.map((p) => ({
@@ -95,12 +114,13 @@ async function loadCorrection() {
         story.revision!.reviewResolutions?.find((r) => r.item === item)
           ?.reason ?? "",
     }));
-    const expires = Date.parse(care.correctionGrant?.expiresAt ?? "");
-    if (Number.isFinite(expires))
-      correctionTimer = setTimeout(
-        clearCorrection,
-        Math.min(2147483647, Math.max(0, expires - Date.now())),
-      );
+    correctionTimer = setTimeout(
+      () => {
+        if (selected.value === care && correctionGeneration === generation)
+          clearCorrection();
+      },
+      Math.min(2147483647, Math.max(0, expires - Date.now())),
+    );
   });
 }
 async function saveCorrection() {
@@ -108,6 +128,12 @@ async function saveCorrection() {
     story = correction.value;
   if (!care || !story) return;
   await perform(async () => {
+    const generation = correctionGeneration,
+      expires = Date.parse(care.correctionGrant?.expiresAt ?? "");
+    if (!currentCorrection(care, generation, expires)) {
+      clearCorrection();
+      return;
+    }
     const reasons = reviewReasons.value.filter((r) => r.reason.trim()),
       input = JSON.stringify({
         revision: story.revision!.id,
@@ -116,7 +142,7 @@ async function saveCorrection() {
         reasons,
       });
     if (intent?.input !== input) intent = { input, key: crypto.randomUUID() };
-    correction.value = await careApi.correct(
+    const corrected = await careApi.correct(
       care.id,
       story,
       correctionTitle.value,
@@ -125,6 +151,12 @@ async function saveCorrection() {
       intent.key,
       props.csrf,
     );
+    if (!currentCorrection(care, generation, expires)) {
+      if (selected.value === care && correctionGeneration === generation)
+        clearCorrection();
+      return;
+    }
+    correction.value = corrected;
     intent = null;
   });
 }

@@ -102,6 +102,18 @@ Page({
       } catch (error) {
         if (
           generation === this.generation &&
+          context === sessionClient.context() &&
+          error instanceof ApiFailure &&
+          error.status === 403
+        ) {
+          this.onHide();
+          this.setData({
+            error: "当前资料访问已失效，私人内容已清除，请重新查询授权",
+          });
+          return;
+        }
+        if (
+          generation === this.generation &&
           context === sessionClient.context()
         )
           this.setData({

@@ -147,6 +147,19 @@ Page({
       this.setData({ error: "账号或访问已变化，请重新查询" });
     }
   },
+  clearDenied(generation: number, context: string, error: unknown) {
+    if (
+      !this.current(generation, context) ||
+      !(error instanceof ApiFailure) ||
+      error.status !== 403
+    )
+      return false;
+    this.onHide();
+    this.setData({
+      error: "当前资料访问已失效，私人内容已清除，请重新查询授权",
+    });
+    return true;
+  },
   input(e: E) {
     this.setData({ [e.currentTarget.dataset.field]: e.detail.value });
   },
@@ -234,6 +247,7 @@ Page({
             : "当前没有已封存照片；保存后故事不附照片",
         });
     } catch (error) {
+      if (this.clearDenied(generation, context, error)) return;
       if (this.current(generation, context))
         this.setData({
           error: error instanceof Error ? error.message : "读取照片失败",
@@ -307,6 +321,7 @@ Page({
         wx.navigateBack();
       }
     } catch (error) {
+      if (this.clearDenied(generation, context, error)) return;
       if (this.current(generation, context))
         this.setData({
           error:
