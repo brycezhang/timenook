@@ -10,7 +10,7 @@ const script = readFileSync("apps/admin/src/views/care.vue", "utf8")
   .split("</script>")[0]
   .replace(/^import .*;\n/gm, "");
 const { code } = await transform(
-  `${script}\nexport {selected, correction, correctionTitle, correctionParagraphs, loadCorrection, saveCorrection};`,
+  `${script}\nexport {selected, correction, correctionTitle, correctionParagraphs, busy, error, loadCorrection, saveCorrection};`,
   { loader: "ts", format: "cjs" },
 );
 const original = {
@@ -28,6 +28,7 @@ function harness() {
   const timers = new Map<number, { at: number; run: () => void }>();
   let nextTimer = 0;
   const unmount: (() => void)[] = [];
+  const emitted: string[] = [];
   const loads: { resolve: (value: unknown) => void }[] = [];
   const saves: {
     key: string;
@@ -42,7 +43,7 @@ function harness() {
     onMounted() {},
     onUnmounted: (fn: () => void) => unmount.push(fn),
     defineProps: () => ({ csrf: "synthetic-csrf" }),
-    defineEmits: () => () => {},
+    defineEmits: () => (event: string) => emitted.push(event),
     careApi: {
       story: () => new Promise((resolve) => loads.push({ resolve })),
       correct: (...args: unknown[]) =>
@@ -76,6 +77,7 @@ function harness() {
     care,
     loads,
     saves,
+    emitted,
     advance(value: number, runTimers = true) {
       now = value;
       if (!runTimers) return;
@@ -174,3 +176,98 @@ test("Care correction keeps a valid failed-save intent for retry and accepts a c
   assert.equal(h.page.correction.value, null);
   h.unmount();
 });
+
+for (const [failure, rejection] of [
+  ["network", new Error("synthetic network failure")],
+  ["HTTP", { error: { code: "UNAVAILABLE" } }],
+] as const) {
+  test(`Care correction clears expired memory after a ${failure} rejection before the timer runs`, async () => {
+    const h = harness();
+    await loaded(h);
+    const saving = h.page.saveCorrection();
+    h.advance(1200, false);
+    h.saves[0].reject(rejection);
+    await saving;
+    assert.equal(h.page.correction.value, null);
+    assert.equal(h.page.correctionTitle.value, "");
+    assert.equal(h.page.correctionParagraphs.value.length, 0);
+    assert.equal(h.page.selected.value, h.care);
+    assert.equal(h.page.busy.value, false);
+    assert.match(h.page.error.value, /操作未确认/);
+    assert.deepEqual(h.emitted, []);
+    h.unmount();
+  });
+}
+
+for (const code of ["FORBIDDEN", "UNAUTHENTICATED"]) {
+  test(`Care correction ignores an old case's late ${code} failure without clearing the later case`, async () => {
+    const h = harness();
+    await loaded(h);
+    const saving = h.page.saveCorrection();
+    const next = {
+      ...h.care,
+      id: "later-case",
+      correctionGrant: { expiresAt: new Date(2000).toISOString() },
+    };
+    const nextStory = { ...original, version: 3 };
+    // Actual SFC/ref ownership boundary only; this does not claim rendered case navigation.
+    h.page.selected.value = next;
+    h.page.correction.value = nextStory;
+    h.page.correctionTitle.value = "后来工单的合成标题";
+    h.page.correctionParagraphs.value = [
+      { text: "后来工单的合成正文", sourceRefs: [] },
+    ];
+    h.advance(1200, false);
+    h.saves[0].reject({ error: { code } });
+    await saving;
+    assert.equal(h.page.selected.value, next);
+    assert.equal(h.page.correction.value, nextStory);
+    assert.equal(h.page.correctionTitle.value, "后来工单的合成标题");
+    assert.equal(
+      h.page.correctionParagraphs.value[0].text,
+      "后来工单的合成正文",
+    );
+    assert.equal(h.page.error.value, "");
+    assert.equal(h.page.busy.value, false);
+    assert.deepEqual(h.emitted, []);
+    h.advance(1300);
+    assert.equal(h.page.correction.value, nextStory);
+    h.unmount();
+  });
+}
+
+test("Care correction ignores an unmounted owner's late rejection", async () => {
+  const h = harness();
+  await loaded(h);
+  const saving = h.page.saveCorrection();
+  h.unmount();
+  h.saves[0].reject({ error: { code: "UNAUTHENTICATED" } });
+  await saving;
+  assert.equal(h.page.correction.value, null);
+  assert.equal(h.page.error.value, "");
+  assert.equal(h.page.busy.value, false);
+  assert.deepEqual(h.emitted, []);
+});
+
+for (const code of ["UNAVAILABLE", "CONFLICT"]) {
+  test(`Care correction retains its valid draft and same request key after ${code}`, async () => {
+    const h = harness();
+    await loaded(h);
+    const saving = h.page.saveCorrection();
+    h.saves[0].reject({ error: { code } });
+    await saving;
+    assert.ok(h.page.correction.value);
+    assert.equal(h.page.correctionTitle.value, original.revision.title);
+    assert.match(
+      h.page.error.value,
+      code === "CONFLICT" ? /绑定或工单已变化/ : /操作未确认/,
+    );
+    const retry = h.page.saveCorrection();
+    assert.equal(h.saves[1].key, h.saves[0].key);
+    h.saves[1].resolve({ ...original, version: 2 });
+    await retry;
+    assert.equal(h.page.correction.value.version, 2);
+    assert.equal(h.page.busy.value, false);
+    h.unmount();
+  });
+}

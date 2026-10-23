@@ -127,38 +127,49 @@ async function saveCorrection() {
   const care = selected.value,
     story = correction.value;
   if (!care || !story) return;
-  await perform(async () => {
-    const generation = correctionGeneration,
-      expires = Date.parse(care.correctionGrant?.expiresAt ?? "");
-    if (!currentCorrection(care, generation, expires)) {
-      clearCorrection();
-      return;
-    }
-    const reasons = reviewReasons.value.filter((r) => r.reason.trim()),
-      input = JSON.stringify({
-        revision: story.revision!.id,
-        title: correctionTitle.value,
-        paragraphs: correctionParagraphs.value,
-        reasons,
-      });
-    if (intent?.input !== input) intent = { input, key: crypto.randomUUID() };
-    const corrected = await careApi.correct(
-      care.id,
-      story,
-      correctionTitle.value,
-      correctionParagraphs.value,
-      reasons,
-      intent.key,
-      props.csrf,
-    );
-    if (!currentCorrection(care, generation, expires)) {
-      if (selected.value === care && correctionGeneration === generation)
+  const generation = correctionGeneration,
+    expires = Date.parse(care.correctionGrant?.expiresAt ?? "");
+  try {
+    await perform(async () => {
+      if (!currentCorrection(care, generation, expires)) {
         clearCorrection();
-      return;
-    }
-    correction.value = corrected;
-    intent = null;
-  });
+        return;
+      }
+      const reasons = reviewReasons.value.filter((r) => r.reason.trim()),
+        input = JSON.stringify({
+          revision: story.revision!.id,
+          title: correctionTitle.value,
+          paragraphs: correctionParagraphs.value,
+          reasons,
+        });
+      if (intent?.input !== input) intent = { input, key: crypto.randomUUID() };
+      try {
+        const corrected = await careApi.correct(
+          care.id,
+          story,
+          correctionTitle.value,
+          correctionParagraphs.value,
+          reasons,
+          intent.key,
+          props.csrf,
+        );
+        if (!currentCorrection(care, generation, expires)) return;
+        correction.value = corrected;
+        intent = null;
+      } catch (failure) {
+        if (selected.value === care && correctionGeneration === generation)
+          throw failure;
+      }
+    });
+  } finally {
+    if (
+      selected.value === care &&
+      correctionGeneration === generation &&
+      Number.isFinite(expires) &&
+      Date.now() >= expires
+    )
+      clearCorrection();
+  }
 }
 async function rebind() {
   const care = selected.value;
