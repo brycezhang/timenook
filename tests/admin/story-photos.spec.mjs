@@ -521,6 +521,133 @@ test("photo starter saves two originals independently, retries one failure and e
   await page.context().close();
 });
 
+test("an actual download 401 clears private material despite device session-cache removal failure and preserves the pending original", async ({
+  browser,
+}) => {
+  const current = await login("synthetic-plan-narrator"),
+    i = data(
+      await request("GET", `/v1/projects/${projectId}/interviews`, current),
+      200,
+    ).interviews[0],
+    page = await openPage(browser, current);
+  await page.goto(
+    `${base}/#/photos?projectId=${projectId}&interviewId=${i.id}`,
+  );
+  await expect(page.getByText(/已保存的照片引用 · 版本 4/)).toBeVisible();
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "选择原照片", exact: true }).click();
+  await (await chooser).setFiles(photoPaths[0]);
+  await expect(
+    page.getByText("本机原文件和清单已保存，尚未封存", { exact: true }),
+  ).toHaveCount(1);
+  await page
+    .getByPlaceholder("这张照片想说明什么？")
+    .first()
+    .fill("不可留屏的私人说明草稿");
+  await page.evaluate(() => {
+    window.photoCleanup = { downloaded: [], removed: [] };
+    const download = window.wx.downloadFile.bind(window.wx),
+      fileSystem = window.wx.getFileSystemManager.bind(window.wx),
+      remove = window.wx.removeStorageSync.bind(window.wx);
+    window.wx.downloadFile = (options) =>
+      download({
+        ...options,
+        success(result) {
+          window.photoCleanup.downloaded.push(result.tempFilePath);
+          options.success?.(result);
+        },
+      });
+    window.wx.getFileSystemManager = () => {
+      const fs = fileSystem();
+      return {
+        ...fs,
+        unlink(options) {
+          fs.unlink({
+            ...options,
+            success(result) {
+              window.photoCleanup.removed.push(options.filePath);
+              options.success?.(result);
+            },
+          });
+        },
+      };
+    };
+    window.wx.removeStorageSync = (key) => {
+      if (key.includes("session.v1"))
+        throw Error("synthetic device session storage unavailable");
+      remove(key);
+    };
+  });
+  expect(
+    (await request("DELETE", `/v1/sessions/${current.session.id}`, current))
+      .statusCode,
+  ).toBe(204);
+  const denied = page.waitForResponse(
+    (r) => /\/assets\/[^/]+\/content$/.test(r.url()) && r.status() === 401,
+  );
+  await page
+    .getByRole("button", { name: "安全查看这张照片", exact: true })
+    .first()
+    .click();
+  await denied;
+  await expect(
+    page.getByText("登录已失效；设备会话缓存清理失败，请重试登录", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator(".photos-page > img")).toHaveCount(0);
+  await expect(page.getByPlaceholder("这张照片想说明什么？")).toHaveCount(0);
+  await expect(page.getByText(/已保存的照片引用/)).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => window.photoCleanup.removed.length))
+    .toBeGreaterThan(0);
+  const device = await page.evaluate(
+    async ({ base }) => {
+      const originals = Object.entries(localStorage)
+        .filter(([key]) => key.startsWith("timenook.photos.v1:"))
+        .flatMap(([, value]) => JSON.parse(value));
+      const db = await new Promise((resolve, reject) => {
+        const open = indexedDB.open("timenook-media", 1);
+        open.onsuccess = () => resolve(open.result);
+        open.onerror = () => reject(open.error);
+      });
+      const originalsExist = await Promise.all(
+        originals.map(
+          ({ path }) =>
+            new Promise((resolve) => {
+              const get = db
+                .transaction("files")
+                .objectStore("files")
+                .get(path);
+              get.onsuccess = () => resolve(get.result instanceof Blob);
+              get.onerror = () => resolve(false);
+            }),
+        ),
+      );
+      db.close();
+      return {
+        sessionPersisted: !!localStorage.getItem(
+          `timenook.session.v1:${base}/timenook/v1`,
+        ),
+        allDeniedPathsRemoved: window.photoCleanup.downloaded.every((path) =>
+          window.photoCleanup.removed.includes(path),
+        ),
+        pendingOriginalCount: originals.length,
+        originalsExist,
+      };
+    },
+    { base },
+  );
+  expect(device).toEqual({
+    sessionPersisted: true,
+    allDeniedPathsRemoved: true,
+    pendingOriginalCount: 1,
+    originalsExist: [true],
+  });
+  expect(errors).toEqual([]);
+  await page.context().close();
+});
+
 test("unsupported photo recovery retains the local original and permission changes clear private previews", async ({
   browser,
 }) => {

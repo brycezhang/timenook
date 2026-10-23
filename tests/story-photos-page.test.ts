@@ -36,6 +36,7 @@ function harness() {
     failManifest = false,
     failPreview = false,
     failPreviewCleanup = false,
+    failSessionRemoval = false,
     chooseOptions: any;
   runInNewContext(compiled.outputFiles[0].text, {
     setTimeout,
@@ -66,7 +67,11 @@ function harness() {
         }
         storage.set(k, structuredClone(v));
       },
-      removeStorageSync: (k: string) => storage.delete(k),
+      removeStorageSync: (k: string) => {
+        if (failSessionRemoval && k.includes("session.v1"))
+          throw Error("device session storage unavailable");
+        storage.delete(k);
+      },
       getAccountInfoSync: () => ({ miniProgram: { appId: "synthetic" } }),
       request: (o: any) => requests.push(o),
       uploadFile: (o: any) => {
@@ -119,6 +124,9 @@ function harness() {
     },
     failPreviewCleanup() {
       failPreviewCleanup = true;
+    },
+    failSessionRemoval() {
+      failSessionRemoval = true;
     },
     get chooseOptions() {
       return chooseOptions;
@@ -644,6 +652,44 @@ test("a current photo-download 401 signs out and clears the private page while r
   assert.ok(originals.every((path: string) => !h.removed.includes(path)));
   h.page.onHide();
 });
+test("a photo-download 401 still clears private material and its temporary image when device session removal fails", async () => {
+  const h = harness(),
+    snapshot = reviewMaterial();
+  await ready(h, snapshot);
+  await choose(h);
+  const originals = h.page.data.photos.map((p: any) => p.path);
+  h.page.caption({
+    currentTarget: { dataset: { id: snapshot.entries[0].photoId } },
+    detail: { value: "设备删除失败时也不可留屏的私人草稿" },
+  });
+  const opening = h.page.preview(event(snapshot.entries[0].photoId));
+  await tick();
+  h.failSessionRemoval();
+  assert.doesNotThrow(() =>
+    h.downloads.shift().success({
+      statusCode: 401,
+      tempFilePath: "denied-session-storage-error",
+    }),
+  );
+  await opening;
+  await tick();
+  assert.equal(h.page.data.snapshot, null);
+  assert.equal(h.page.data.photos.length, 0);
+  assert.equal(h.page.data.previewPath, "");
+  assert.equal(Object.keys(h.page.data.captions).length, 0);
+  assert.ok(h.removed.includes("denied-session-storage-error"));
+  assert.ok(originals.every((path: string) => !h.removed.includes(path)));
+  assert.equal(h.storage.has(`timenook.session.v1:${base}`), true);
+  assert.match(h.page.data.status, /登录已失效.*会话缓存清理失败/);
+  await h.page.onShow();
+  assert.equal(
+    h.requests.length,
+    0,
+    "an invalidated cached token is not reused",
+  );
+  assert.equal(h.page.data.snapshot, null);
+  h.page.onHide();
+});
 test("a previous account's delayed photo-download 401 preserves the new account and its current draft", async () => {
   const h = harness(),
     snapshot = reviewMaterial();
@@ -676,6 +722,7 @@ test("a previous account's delayed photo-download 401 preserves the new account 
     currentTarget: { dataset: { id: snapshot.entries[0].photoId } },
     detail: { value: "新账号说明草稿" },
   });
+  h.failSessionRemoval();
   old.success({ statusCode: 401, tempFilePath: "previous-account-preview" });
   await opening;
   assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), other);
@@ -701,12 +748,10 @@ test("a forbidden photo response clears private material and its temporary image
   const opening = h.page.preview(event(snapshot.entries[0].photoId));
   await tick();
   h.failPreview();
-  h.downloads
-    .shift()
-    .success({
-      statusCode: 403,
-      tempFilePath: "forbidden-unregistered-preview",
-    });
+  h.downloads.shift().success({
+    statusCode: 403,
+    tempFilePath: "forbidden-unregistered-preview",
+  });
   await opening;
   await tick();
   assert.equal(h.page.data.snapshot, null);
@@ -726,12 +771,10 @@ test("a forbidden photo response remains authoritative when cleanup storage fail
   const opening = h.page.preview(event(snapshot.entries[0].photoId));
   await tick();
   h.failPreviewCleanup();
-  h.downloads
-    .shift()
-    .success({
-      statusCode: 403,
-      tempFilePath: "forbidden-cleanup-storage-error",
-    });
+  h.downloads.shift().success({
+    statusCode: 403,
+    tempFilePath: "forbidden-cleanup-storage-error",
+  });
   await opening;
   await tick();
   assert.equal(h.page.data.snapshot, null);

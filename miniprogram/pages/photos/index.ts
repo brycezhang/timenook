@@ -324,7 +324,11 @@ Page({
         this.relevant(g, context)
       ) {
         this.onHide();
-        this.setData({ status: "照片权限已变化，请重新查询" });
+        this.setData({
+          status: sessionClient.sessionCleanupPending()
+            ? "登录已失效；设备会话缓存清理失败，请重试登录"
+            : "照片权限已变化，请重新查询",
+        });
       } else if (this.current(g, context) && op === this.previewGeneration)
         this.setData({
           status: "预览失败，可重新查询；尚未清理的临时图请重试清理",

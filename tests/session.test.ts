@@ -15,6 +15,7 @@ const identity = {
 let storage: Map<string, unknown>;
 let requests: WechatMiniprogram.RequestOption[];
 let downloads: WechatMiniprogram.DownloadFileOption[];
+let failSessionRemoval: boolean;
 let reply: (request: WechatMiniprogram.RequestOption) => void;
 const envelope = (data: unknown) => ({
   data,
@@ -49,6 +50,7 @@ beforeEach(() => {
   storage = new Map([["timenook.frontend.v1", { privateDemo: "unchanged" }]]);
   requests = [];
   downloads = [];
+  failSessionRemoval = false;
   reply = (request) => success(request, 201, envelope(identity));
   (globalThis as { wx?: unknown }).wx = {
     getStorageSync: (key: string) => structuredClone(storage.get(key)),
@@ -56,6 +58,8 @@ beforeEach(() => {
       storage.set(key, structuredClone(value));
     },
     removeStorageSync: (key: string) => {
+      if (failSessionRemoval && key.includes("session.v1"))
+        throw Error("device session storage unavailable");
       storage.delete(key);
     },
     login: (options: WechatMiniprogram.LoginOption) =>
@@ -286,6 +290,7 @@ test("a previous account's delayed photo-download 401 cannot clear the newer log
   };
   reply = (request) => success(request, 201, envelope(other));
   await client.login();
+  failSessionRemoval = true;
   downloadSuccess(downloads[0], {
     statusCode: 401,
     tempFilePath: "previous-account-photo",
@@ -295,4 +300,70 @@ test("a previous account's delayed photo-download 401 cannot clear the newer log
   reply = (request) => success(request, 200, envelope(other.user));
   assert.deepEqual(await client.restore(), other.user);
   assert.deepEqual(storage.get(`timenook.session.v1:${api}`), other);
+});
+
+test("a failed device session removal cannot reuse the rejected token and a successful login recovers cleanup", async () => {
+  const client = new SessionClient(api),
+    photo = "55555555-5555-4555-8555-555555555555",
+    asset = "66666666-6666-4666-8666-666666666666";
+  await client.login();
+  const pending = client.downloadPhoto(
+    identity.user.id,
+    identity.session.id,
+    photo,
+    asset,
+  );
+  failSessionRemoval = true;
+  downloadSuccess(downloads[0], {
+    statusCode: 401,
+    tempFilePath: "denied-storage-error",
+    errMsg: "downloadFile:ok",
+  });
+  assert.equal((await pending).tempFilePath, "denied-storage-error");
+  assert.deepEqual(storage.get(`timenook.session.v1:${api}`), identity);
+  assert.equal(client.sessionCleanupPending(), true);
+  assert.equal(client.context(), "");
+  assert.equal(await client.restore(), null);
+  const count = requests.length;
+  await assert.rejects(client.request("/users/me"), {
+    code: "UNAUTHENTICATED",
+    status: 401,
+  });
+  await assert.rejects(
+    client.downloadPhoto(identity.user.id, identity.session.id, photo, asset),
+    { code: "UNAUTHENTICATED", status: 401 },
+  );
+  await assert.rejects(
+    client.uploadPhoto(
+      {
+        url: "/v1/photos/objects",
+        storage: "local-simulator",
+        fields: {},
+        expiresAt: "2099-01-01T00:00:00Z",
+      },
+      "pending-original",
+    ),
+    { code: "UNAUTHENTICATED", status: 401 },
+  );
+  assert.equal(requests.length, count);
+  assert.equal(downloads.length, 1);
+  await assert.rejects(client.login(), /device session storage unavailable/);
+  assert.equal(client.context(), "");
+  assert.equal(client.sessionCleanupPending(), true);
+  assert.equal(requests.length, count);
+  const other = {
+    ...identity,
+    session: { ...identity.session, token: "b".repeat(43) },
+  };
+  failSessionRemoval = false;
+  await client.logout();
+  assert.equal(client.sessionCleanupPending(), false);
+  assert.equal(client.context(), "");
+  assert.equal(storage.has(`timenook.session.v1:${api}`), false);
+  reply = (request) => success(request, 201, envelope(other));
+  await client.login();
+  assert.equal(client.sessionCleanupPending(), false);
+  assert.deepEqual(storage.get(`timenook.session.v1:${api}`), other);
+  reply = (request) => success(request, 200, envelope(other.user));
+  assert.deepEqual(await client.restore(), other.user);
 });

@@ -49,7 +49,12 @@ function loginResult(value: unknown): value is LoginResult {
 
 export class SessionClient {
   private generation = 0;
+  private invalidatedToken: string | null = null;
+  private cleanupPending = false;
   constructor(private readonly apiBaseUrl: string) {}
+  sessionCleanupPending(): boolean {
+    return this.cleanupPending;
+  }
   context(): string {
     const stored = this.stored();
     return dataMode() === "live" && stored
@@ -69,6 +74,7 @@ export class SessionClient {
     this.generation++;
     const stored = this.stored();
     wx.removeStorageSync(this.storageKey);
+    this.cleanupPending = false;
     if (stored) {
       try {
         await this.send<void>(
@@ -116,7 +122,7 @@ export class SessionClient {
         generation === this.generation &&
         this.stored()?.session.token === stored.session.token
       )
-        wx.removeStorageSync(this.storageKey);
+        this.invalidate(stored.session.token);
       throw error;
     }
   }
@@ -151,7 +157,7 @@ export class SessionClient {
               dataMode() === "live" &&
               this.stored()?.session.token === stored.session.token
             )
-              wx.removeStorageSync(this.storageKey);
+              this.invalidate(stored.session.token);
             // The media owner still needs this path to remove denied or stale bytes.
             resolve(result);
           },
@@ -204,7 +210,7 @@ export class SessionClient {
     if (this.stored()?.session.token !== stored.session.token)
       throw new ApiFailure("STALE_RESPONSE");
     if (result < 200 || result >= 300) {
-      if (result === 401) wx.removeStorageSync(this.storageKey);
+      if (result === 401) this.invalidate(stored.session.token);
       throw new ApiFailure(
         result === 401 ? "UNAUTHENTICATED" : "UPLOAD_FAILED",
         result,
@@ -224,9 +230,20 @@ export class SessionClient {
   private stored(): LoginResult | null {
     const value: unknown = wx.getStorageSync(this.storageKey);
     return loginResult(value) &&
+      value.session.token !== this.invalidatedToken &&
       Date.parse(value.session.expiresAt) > Date.now()
       ? value
       : null;
+  }
+  private invalidate(token: string) {
+    // Fail closed even if the device cannot remove its persisted session.
+    this.invalidatedToken = token;
+    try {
+      wx.removeStorageSync(this.storageKey);
+      this.cleanupPending = false;
+    } catch {
+      this.cleanupPending = true;
+    }
   }
   private assertCurrent(generation: number) {
     if (generation !== this.generation || dataMode() !== "live")
@@ -237,6 +254,7 @@ export class SessionClient {
     const generation = ++this.generation;
     setDataMode("live");
     wx.removeStorageSync(this.storageKey);
+    this.cleanupPending = false;
     this.checkBaseUrl();
     const code = await new Promise<string>((resolve, reject) =>
       wx.login({
@@ -270,6 +288,7 @@ export class SessionClient {
       throw error;
     }
     wx.setStorageSync(this.storageKey, result);
+    this.invalidatedToken = null;
     return result;
   }
 
