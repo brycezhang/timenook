@@ -647,3 +647,81 @@ model RecordingCommand {
  @@id([projectId,operatorUserId,idempotencyKey])
  @@map("recording_commands")
 }
+
+model PhotoIntent {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ interviewId String @map("interview_id") @db.Uuid
+ actualQuestionId String @map("actual_question_id") @db.Uuid
+ clientPhotoId String @map("client_photo_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ operatorUserId String @map("operator_user_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ method String
+ assistedSessionId String? @map("assisted_session_id") @db.Uuid
+ storageScope String @map("storage_scope")
+ bytes Int
+ sha256 String @db.Char(64)
+ state String @default("pending")
+ reservedCount Int @default(1) @map("reserved_count")
+ consumedCount Int @default(0) @map("consumed_count")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([projectId,clientPhotoId])
+ @@unique([projectId,id])
+ @@unique([projectId,interviewId,id])
+ @@map("photo_intents")
+}
+
+model PhotoAsset {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ intentId String @map("intent_id") @db.Uuid
+ parentId String? @map("parent_id") @db.Uuid
+ kind String
+ processingVersion String @map("processing_version")
+ storage String
+ store String
+ storageScope String @map("storage_scope")
+ objectKey String @map("object_key")
+ bytes Int
+ sha256 String @db.Char(64)
+ mime String
+ width Int
+ height Int
+ metadata Json
+ @@unique([projectId,id])
+ @@unique([projectId,intentId,id])
+ @@unique([intentId,kind,processingVersion])
+ @@unique([storageScope,objectKey])
+ @@map("photo_assets")
+}
+
+model PhotoSnapshot {
+ commandKey String? @map("command_key")
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ interviewId String @map("interview_id") @db.Uuid
+ revision Int
+ hash String @db.Char(64)
+ operatorUserId String @map("operator_user_id") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([projectId,operatorUserId,commandKey])
+ @@unique([projectId,interviewId,revision])
+ @@unique([projectId,interviewId,id])
+ @@map("photo_snapshots")
+}
+model PhotoReference {
+ snapshotId String @map("snapshot_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ interviewId String @map("interview_id") @db.Uuid
+ photoId String @map("photo_id") @db.Uuid
+ position Int
+ caption String
+ originalId String @map("original_id") @db.Uuid
+ previewId String @map("preview_id") @db.Uuid
+ printId String @map("print_id") @db.Uuid
+ @@id([snapshotId,position])
+ @@unique([snapshotId,photoId])
+ @@map("photo_references")
+}

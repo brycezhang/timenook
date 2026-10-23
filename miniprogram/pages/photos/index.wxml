@@ -1,0 +1,29 @@
+<view class="photos-page">
+ <view class="title">看着照片，讲一段往事</view>
+ <view class="section" role="status">{{status}}</view>
+ <button class="btn section" bindtap="choose" disabled="{{busy}}">选择原照片</button>
+ <view class="section">每张照片单独保存和上传。请先等到“本机已保存”，再离开页面。</view>
+ <view wx:for="{{photos}}" wx:key="clientPhotoId" class="photo-card section">
+  <view>照片 {{index + 1}}</view>
+  <image wx:if="{{item.path && item.state !== 'save-error'}}" class="photo-preview section" src="{{item.path}}" mode="aspectFit"/>
+  <view class="section">{{item.message}}</view>
+  <button wx:if="{{item.state === 'save-error'}}" class="btn secondary section" data-id="{{item.clientPhotoId}}" bindtap="retrySave">重试本机保存</button>
+  <button wx:if="{{item.state !== 'save-error' && !item.released}}" class="btn secondary section" data-id="{{item.clientPhotoId}}" bindtap="upload" disabled="{{item.state === 'saving' || item.state === 'uploading' || item.state === 'verifying'}}">{{item.state === 'sealed' ? '查询封存结果' : '单独上传或重试'}}</button>
+  <button wx:if="{{item.state === 'failed' && item.serverId && !item.released}}" class="btn secondary section" data-id="{{item.clientPhotoId}}" bindtap="release">取消预留，保留原文件</button>
+ </view>
+ <image wx:if="{{previewPath}}" class="photo-preview section" src="{{previewPath}}" mode="aspectFit"/>
+ <view wx:if="{{snapshot}}" class="section">
+  <view>已保存的照片引用 · 版本 {{snapshot.revision}}</view>
+  <view wx:for="{{snapshot.entries}}" wx:key="photoId" class="photo-card section">
+   <view>入选照片 {{index + 1}}</view>
+   <button class="btn secondary section" bindtap="preview" data-id="{{item.photoId}}" disabled="{{busy}}">安全查看这张照片</button>
+   <view wx:if="{{item.caption}}" class="section">{{item.caption}}</view>
+   <input class="input section" maxlength="1000" placeholder="这张照片想说明什么？" data-id="{{item.photoId}}" bindinput="caption" disabled="{{busy}}"/>
+   <button class="btn secondary section" bindtap="saveCaption" data-id="{{item.photoId}}" disabled="{{busy}}">保存这张照片的说明</button>
+   <button wx:if="{{index > 0}}" class="btn secondary section" bindtap="moveUp" data-id="{{item.photoId}}" disabled="{{busy}}">往前放一张</button>
+  </view>
+ </view>
+ <button wx:if="{{hasDraft}}" class="btn secondary section" bindtap="discardDrafts" disabled="{{busy}}">放弃说明草稿并重新查询</button>
+ <button class="btn secondary section" bindtap="onShow" disabled="{{busy}}">重新查询与恢复</button>
+ <button class="btn section" bindtap="back">返回采访，开始说</button>
+</view>

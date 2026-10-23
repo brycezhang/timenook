@@ -127,3 +127,4 @@ export interface PlanDirectory {
   chapters: { key: string; title: string; storyRefs: string[] }[];
 }
 export * from "./recording";
+export * from "./photos";

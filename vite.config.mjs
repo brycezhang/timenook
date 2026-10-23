@@ -20,6 +20,11 @@ export default defineConfig({
               target: process.env.TIMENOOK_PREVIEW_API_TARGET,
               rewrite: (path) => path.replace(/^\/timenook/, ""),
             },
+          "^/timenook/v1/(?:photos/objects|projects/[a-f0-9-]{36}/interviews/[a-f0-9-]{36}/photos(?:/(?:context|materials(?:/[a-f0-9-]{36})?)|/[a-f0-9-]{36}/(?:upload|seal|status|release|crop|content/(?:original|preview|thumbnail|print)|assets/[a-f0-9-]{36}/content))?)$":
+            {
+              target: process.env.TIMENOOK_PREVIEW_API_TARGET,
+              rewrite: (path) => path.replace(/^\/timenook/, ""),
+            },
         }
       : undefined,
   },

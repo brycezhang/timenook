@@ -12,6 +12,29 @@ export function temporaryFile(blob: Blob) {
   temporary.set(id, blob);
   return id;
 }
+export async function removeBlob(path: string) {
+  if (temporary.delete(path)) {
+    URL.revokeObjectURL(path);
+    return;
+  }
+  if (path.startsWith("blob:")) {
+    URL.revokeObjectURL(path);
+    return;
+  }
+  if (!path.startsWith("local-media:") && !path.startsWith("local-data:"))
+    throw Error("Invalid local file");
+  const db = await openDb();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("files", "readwrite");
+      tx.objectStore("files").delete(path);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
 export async function saveBlob(path: string) {
   const blob = temporary.get(path);
   if (!blob) throw Error("临时文件已失效");

@@ -1,4 +1,10 @@
 import {
+  Photos,
+  PhotosController,
+  PhotoObjectsController,
+  PHOTO_OBJECTS,
+} from "./media/photos";
+import {
   Recordings,
   RecordingsController,
   RecordingObjectsController,
@@ -136,6 +142,19 @@ export async function createApplication(
   } = {},
 ): Promise<NestFastifyApplication> {
   if (
+    config.photos &&
+    (config.environment !== "test" ||
+      config.photos.mode !== "synthetic-local" ||
+      !config.recording ||
+      ![
+        config.photos.placement.widthMm,
+        config.photos.placement.heightMm,
+      ].every((n) => Number.isFinite(n) && n >= 1 && n <= 300))
+  )
+    throw new ConfigurationError(
+      "Photos require isolated recording and explicit candidate placement",
+    );
+  if (
     config.recording &&
     (config.environment !== "test" ||
       config.recording.mode !== "synthetic-local" ||
@@ -232,7 +251,7 @@ export async function createApplication(
   if (config.audioProbe || config.recording)
     await adapter.getInstance().register(multipart, {
       limits: {
-        fileSize: 2097152,
+        fileSize: config.photos ? 16777216 : 2097152,
         fields: 3,
         files: 1,
         parts: 4,
@@ -248,6 +267,7 @@ export async function createApplication(
       ...(config.participation
         ? [PersonalPlanController, InterviewsController]
         : []),
+      ...(config.photos ? [PhotosController, PhotoObjectsController] : []),
       ...(config.recording
         ? [RecordingsController, RecordingObjectsController]
         : []),
@@ -262,6 +282,19 @@ export async function createApplication(
     providers: [
       { provide: API_CONFIG, useValue: config },
       Infrastructure,
+      ...(config.photos
+        ? [
+            Photos,
+            {
+              provide: PHOTO_OBJECTS,
+              useValue:
+                options.recordingObjects ??
+                (config.recording!.oss
+                  ? new OssProbeObjects(config.recording!.oss)
+                  : new LocalProbeObjects(config.recording!.storageRoot)),
+            },
+          ]
+        : []),
       ...(config.recording
         ? [
             Recordings,

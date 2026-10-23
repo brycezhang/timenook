@@ -120,9 +120,44 @@ export class SessionClient {
       throw error;
     }
   }
+
+  async downloadPhoto(
+    projectId: string,
+    interviewId: string,
+    photoId: string,
+    assetId: string,
+  ) {
+    if (
+      ![projectId, interviewId, photoId, assetId].every((id) =>
+        /^[a-f0-9-]{36}$/.test(id),
+      )
+    )
+      throw new ApiFailure("INVALID_RESPONSE");
+    const stored = this.stored();
+    if (dataMode() !== "live" || !stored)
+      throw new ApiFailure("UNAUTHENTICATED", 401);
+    this.checkBaseUrl();
+    return new Promise<WechatMiniprogram.DownloadFileSuccessCallbackResult>(
+      (resolve, reject) =>
+        wx.downloadFile({
+          url: `${this.apiBaseUrl}/projects/${projectId}/interviews/${interviewId}/photos/${photoId}/assets/${assetId}/content`,
+          header: { authorization: `Bearer ${stored.session.token}` },
+          timeout: 15000,
+          success: resolve,
+          fail: () => reject(new ApiFailure("NETWORK_ERROR")),
+        }),
+    );
+  }
+  async uploadPhoto(
+    form: import("../../packages/contracts/src/audio-probe").ProbeUploadForm,
+    filePath: string,
+  ) {
+    return this.uploadRecording(form, filePath, "photos");
+  }
   async uploadRecording(
     form: import("../../packages/contracts/src/audio-probe").ProbeUploadForm,
     filePath: string,
+    kind: "recordings" | "photos" = "recordings",
   ): Promise<void> {
     const generation = this.generation,
       stored = this.stored();
@@ -130,8 +165,7 @@ export class SessionClient {
       throw new ApiFailure("UNAUTHENTICATED", 401);
     this.checkBaseUrl();
     const local =
-      form.storage === "local-simulator" &&
-      form.url === "/v1/recordings/objects";
+      form.storage === "local-simulator" && form.url === `/v1/${kind}/objects`;
     const oss =
       form.storage === "oss" &&
       /^https:\/\/[a-z0-9-]+\.oss-[a-z0-9-]+\.aliyuncs\.com$/.test(form.url);

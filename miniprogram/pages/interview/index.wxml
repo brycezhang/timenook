@@ -3,6 +3,7 @@
   <view class="section" role="status">{{status}}</view>
   <view wx:if="{{question}}" class="interview-question section">{{question}}</view>
   <view wx:if="{{interview}}" class="section">
+    <button class="btn secondary section" bindtap="photos" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">查看照片或事后补图</button>
     <view class="record-timer">{{timer}}</view>
     <button class="btn" bindtap="record" disabled="{{busy || state === 'saving' || (!canRecord && state !== 'recording') || state === 'device-error'}}">{{state === 'recording' || state === 'requesting' ? '说完了，停止录音' : '开始说'}}</button>
     <button wx:if="{{state === 'device-error'}}" class="btn secondary section" bindtap="retry">重试保存本机文件</button>

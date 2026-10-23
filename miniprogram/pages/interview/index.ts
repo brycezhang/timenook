@@ -234,6 +234,17 @@ Page({
     });
     await device.restore();
   },
+  photos() {
+    const interview = this.data.interview;
+    if (
+      !interview ||
+      ["recording", "requesting", "saving"].includes(this.data.state)
+    )
+      return;
+    wx.navigateTo({
+      url: `/pages/photos/index?projectId=${encodeURIComponent(this.projectId)}&interviewId=${encodeURIComponent(interview.id)}${this.assistedSessionId ? `&assistedSessionId=${encodeURIComponent(this.assistedSessionId)}` : ""}`,
+    });
+  },
   async selectQuestion(e?: E) {
     if (
       !this.context ||
@@ -293,6 +304,7 @@ Page({
       this.selection = null;
       this.setData({ pendingInterviews: ids });
       await this.attach(selected, generation, context);
+      if (kind === "photo") this.photos();
     } catch (error) {
       if (generation === this.generation && dataMode() === "live") {
         if (
