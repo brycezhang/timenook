@@ -10,6 +10,8 @@ export interface ApiConfig {
   redisUrl: string;
   wechat?: { appId: string; secret: string };
   payments?: WechatPayConfig;
+  // No production D08 approval exists. This mode only exercises isolated tests.
+  participation?: { mode: "synthetic-d08" };
   sessionTtlSeconds?: number;
   redisKeyPrefix?: string;
   loginLimitPerMinute?: number;

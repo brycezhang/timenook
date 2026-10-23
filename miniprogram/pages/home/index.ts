@@ -85,6 +85,9 @@ Page({
   orders() {
     go("order");
   },
+  participation() {
+    go("welcome");
+  },
   catalog() {
     go("purchase");
   },

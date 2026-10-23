@@ -29,6 +29,7 @@ model OutlineTemplateVersion {
 }
 
 model Project {
+  accessEpoch Int @default(0) @map("access_epoch")
   orderId String? @unique @map("order_id") @db.Uuid
   id                    String                 @id @db.Uuid
   createdBy             String                 @map("created_by")
@@ -308,6 +309,8 @@ model PaymentTransaction {
  @@map("payment_transactions")
 }
 model ProjectSubject {
+ boundUserId String? @map("bound_user_id") @db.Uuid
+ bindingVersion Int @default(0) @map("binding_version")
  id String @id @db.Uuid
  projectId String @unique @map("project_id") @db.Uuid
  name String?
@@ -349,4 +352,101 @@ model ProjectServiceEvent {
  @@id([projectId,eventId])
  @@index([projectId,occurredAt])
  @@map("project_service_events")
+}
+
+model Invitation {
+  id         String    @id @db.Uuid
+  projectId  String    @map("project_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.Char(64)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@map("invitations")
+}
+
+model BindingRequest {
+  id              String  @id @db.Uuid
+  invitationId    String  @map("invitation_id") @db.Uuid
+  applicantUserId String  @map("applicant_user_id") @db.Uuid
+  state           String  @default("pending")
+  approvedBy      String? @map("approved_by") @db.Uuid
+  noticeVersion   String  @map("notice_version")
+  evidenceRef     String  @map("evidence_ref")
+
+  @@unique([invitationId, applicantUserId])
+  @@map("binding_requests")
+}
+
+model ParticipationCommand {
+  projectId      String @map("project_id") @db.Uuid
+  action         String
+  key            String
+  operatorId     String @map("operator_id") @db.Uuid
+  requestHash    String @map("request_hash") @db.Char(64)
+  bindingVersion Int    @map("binding_version")
+  accessEpoch    Int    @map("access_epoch")
+
+  @@id([projectId, action, key])
+  @@map("participation_commands")
+}
+
+model ConsentRecord {
+  id             String   @id @db.Uuid
+  sequence       Int      @unique @default(autoincrement())
+  projectId      String   @map("project_id") @db.Uuid
+  subjectId      String   @map("subject_id") @db.Uuid
+  bindingVersion Int      @map("binding_version")
+  accessEpoch    Int      @map("access_epoch")
+  operatorUserId String   @map("operator_user_id") @db.Uuid
+  granteeUserId  String?  @map("grantee_user_id") @db.Uuid
+  purpose        String
+  granted        Boolean
+  noticeVersion  String   @map("notice_version")
+  method         String
+  evidenceRef    String   @map("evidence_ref")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([projectId, bindingVersion])
+  @@map("consent_records")
+}
+
+model CareRequest {
+  id                   String   @id @db.Uuid
+  projectId            String   @map("project_id") @db.Uuid
+  requesterId          String   @map("requester_id") @db.Uuid
+  targetUserId         String   @map("target_user_id") @db.Uuid
+  sourceBindingVersion Int      @map("source_binding_version")
+  idempotencyKey       String   @map("idempotency_key")
+  requestHash          String   @map("request_hash") @db.Char(64)
+  kind                 String
+  state                String   @default("open")
+  completedBy          String?  @map("completed_by") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([projectId, requesterId, idempotencyKey])
+  @@index([projectId, createdAt])
+  @@map("care_requests")
+}
+
+model BindingChange {
+  id                   String   @id @db.Uuid
+  projectId            String   @map("project_id") @db.Uuid
+  subjectId            String   @map("subject_id") @db.Uuid
+  fromUserId           String?  @map("from_user_id") @db.Uuid
+  toUserId             String   @map("to_user_id") @db.Uuid
+  sourceBindingVersion Int      @map("source_binding_version")
+  bindingVersion       Int      @map("binding_version")
+  accessEpoch          Int      @map("access_epoch")
+  operatorId           String   @map("operator_id") @db.Uuid
+  operatorRealm        String   @map("operator_realm")
+  supportCaseId        String?  @map("support_case_id") @db.Uuid
+  noticeVersion        String   @map("notice_version")
+  method               String
+  evidenceRef          String   @map("evidence_ref")
+  requestId            String   @map("request_id")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([projectId, bindingVersion])
+  @@map("binding_changes")
 }

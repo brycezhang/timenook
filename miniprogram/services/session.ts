@@ -120,6 +120,13 @@ export class SessionClient {
       throw error;
     }
   }
+  async publicRequest<T>(path: string): Promise<T> {
+    if (dataMode() !== "live") throw new ApiFailure("DEMO_MODE");
+    const generation = this.generation;
+    const result = await this.send<T>(path, "GET");
+    this.assertCurrent(generation);
+    return result;
+  }
   private get storageKey() {
     return `timenook.session.v1:${this.apiBaseUrl}`;
   }

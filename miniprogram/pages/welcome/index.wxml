@@ -1,3 +1,39 @@
+<view wx:if="{{mode === 'live'}}" class="page">
+  <view class="title">本人参与与资料用途</view>
+  <view class="soft section">隔离合成验证 · 当前告知和核验证据仅供工程测试；真实服务规则待冻结。</view>
+  <view wx:if="{{accountId}}" class="small muted section">当前账号：{{accountId}}</view>
+  <view wx:if="{{status}}" class="soft section">{{status}}</view>
+  <view wx:if="{{invitation}}" class="paper section">
+    <view class="section-title">{{invitation.inviter}} 邀请你</view>
+    <view wx:for="{{invitation.process}}" wx:key="*this" class="section">{{index + 1}}. {{item}}</view>
+    <view class="note section">{{invitation.choice}}</view>
+    <view class="note section">申请只表示愿意参与，须发起人核对后绑定。采集保存、AI 处理和向发起人共享各自选择；哪些故事入书需之后另行确认。</view>
+    <button wx:if="{{loggedIn}}" class="btn section" bindtap="accept" disabled="{{busy || invitation.policyStatus !== 'synthetic-only'}}">已读说明，申请本人参与</button>
+  </view>
+  <button wx:if="{{!loggedIn}}" class="btn section" bindtap="loginLive" disabled="{{busy}}">微信登录后参与</button>
+  <button class="link" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button>
+  <button wx:for="{{memberships}}" wx:key="projectId" class="btn secondary section" data-id="{{item.projectId}}" bindtap="openParticipation">{{item.state === 'pending' ? '等待发起人核对' : '查看本人的用途选择'}} · {{item.projectId}}</button>
+  <view wx:if="{{participation}}" class="section">
+    <view class="small muted">项目：{{participation.projectId}}</view>
+    <view class="note section">拒绝或撤回不取消已付款订单，仍可联系服务。已下载到设备的副本无法远程回收。本人入书确认是之后的独立决定。</view>
+    <view wx:if="{{participation.role === 'narrator'}}">
+      <view wx:for="{{participation.choices}}" wx:key="purpose" class="paper section">
+        <view>{{item.purpose === 'collection' ? '采集并保存讲述和照片' : item.purpose === 'ai' ? '交由AI处理素材' : '向本项目发起人共享资料'}}</view>
+        <view class="note">{{item.granted === null ? '尚未选择' : item.granted ? '已同意' : '已拒绝或撤回'}}</view>
+        <button class="btn secondary section" data-purpose="{{item.purpose}}" data-granted="true" bindtap="chooseConsent" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">同意此用途</button>
+        <button class="link" data-purpose="{{item.purpose}}" data-granted="false" bindtap="chooseConsent" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">{{item.granted ? '撤回此用途' : '拒绝此用途'}}</button>
+      </view>
+      <view class="soft section">{{participation.canCollect ? '已授权采集，录音功能待后续接入。' : '未获采集许可，不能开始录音。'}}{{participation.canProcessAi ? '已单独授权AI处理。' : 'AI处理未获许可。'}}</view>
+    </view>
+    <view class="paper section"><view class="section-title">联系服务与账号换绑</view><view class="note section">目标账号先微信登录，再提供其账号编号。客服核验本人后换绑；新账号须重新选择资料用途。</view>
+      <input class="input section" placeholder="目标账号编号" value="{{targetUserId}}" bindinput="targetInput" disabled="{{busy}}"/>
+      <button class="btn secondary section" bindtap="requestRebind" disabled="{{busy || !targetUserId || participation.bindingVersion === 0 || participation.policyStatus !== 'synthetic-only'}}">提交客服换绑申请</button>
+      <view wx:if="{{supportCaseRef}}" class="note section">工单：{{supportCaseRef}}</view>
+    </view>
+  </view>
+  <button class="link" bindtap="back">返回首页</button>
+</view>
+<block wx:else="">
 <view wx:if="{{missing}}" class="page"
   ><view class="title">这是一张示例邀请</view
   ><view class="subtitle"
@@ -46,3 +82,4 @@
     <image class="icon" src="/assets/icons/arrow-right-light.svg" /></button
   ><button class="link" bindtap="back">暂时不参加</button></view
 >
+</block>

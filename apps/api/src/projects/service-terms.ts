@@ -229,15 +229,20 @@ export class ProjectServiceTerms {
     };
     return transaction ? write(transaction) : this.database.$transaction(write);
   }
-  async read(projectId: string, at = this.now()) {
-    const row = await this.database.projectServiceTerms.findUnique({
+  async read(
+    projectId: string,
+    at = this.now(),
+    transaction?: Prisma.TransactionClient,
+  ) {
+    const database = transaction ?? this.database;
+    const row = await database.projectServiceTerms.findUnique({
       where: { projectId },
     });
     if (!row) throw new NotFoundException();
     const policy = fixedPolicy(row.policy);
     if (!policy)
       return { policyStatus: "pending", deleteData: false, canRecord: false };
-    const events = await this.database.projectServiceEvent.findMany({
+    const events = await database.projectServiceEvent.findMany({
       where: { projectId, occurredAt: { lte: at } },
     });
     const participation =

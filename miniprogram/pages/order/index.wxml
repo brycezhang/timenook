@@ -6,7 +6,7 @@
  <view wx:if="{{!loading && !orders.length && !paymentError}}" class="section">当前账号还没有订单。</view>
  <button wx:for="{{orders}}" wx:key="id" class="btn secondary section" data-id="{{item.id}}" bindtap="chooseOrder">{{item.bookTitle}} · 送给{{item.recipient.relationshipLabel}}</button>
  <view wx:if="{{activeOrder}}" class="paper section"><view class="section-title">{{activeOrder.bookTitle}}</view><view class="note">{{paymentStatus}}</view><view class="small muted">订单：{{activeOrder.outTradeNo}}</view>
- <view wx:if="{{activeOrder.project}}" class="section"><view>首本制作权益：1本</view><view class="note">项目已恢复。付款不代表讲述者已授权；邀请与资料服务仍待后续接入。</view><view class="small muted">项目：{{activeOrder.project.id}}</view></view></view>
+ <view wx:if="{{activeOrder.project}}" class="section"><view>首本制作权益：1本</view><view class="note">项目已恢复。付款不代表讲述者已授权；请邀请本人分别选择资料用途。</view><view class="small muted">项目：{{activeOrder.project.id}}</view><button class="btn secondary section" bindtap="invite">邀请与参与管理</button></view></view>
  <view wx:if="{{activeOrder && activeOrder.state === 'pending'}}" class="section"><button class="btn" disabled="{{loading}}" bindtap="retryPayment">继续本地验证并查询</button><button class="link" disabled="{{loading}}" bindtap="closeOrder">关闭此验证订单</button></view>
  <button class="btn secondary section" bindtap="catalog">查看套餐与赠礼称呼</button>
 </view>
