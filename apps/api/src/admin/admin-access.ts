@@ -31,6 +31,8 @@ import { decryptSecret, hashPassword, verifyPassword } from "./secrets";
 const COOKIE = "__Secure-timenook_admin";
 const PATH = "/timenook/v1/admin";
 const ROUTE_ACTIONS: Record<string, string> = {
+  "GET /v1/admin/tasks": "tasks.list",
+  "POST /v1/admin/projects/:id/tasks/:taskId/retry": "tasks.retry",
   "GET /v1/admin/care-requests": "care.list",
   "GET /v1/admin/care-requests/:id": "care.read",
   "POST /v1/admin/projects/:id/rebind": "care.rebind",

@@ -507,3 +507,66 @@ test("a delayed seal completion merges its clip state without removing a later s
   assert.equal(h.page.data.localClips.length, 2);
   assert.equal(h.files.size, 2);
 });
+
+test("the interview page restores transcription state, stops polling in background and refreshes immediately on return", async () => {
+  const h = harness();
+  h.page.onLoad({ projectId });
+  const restored = {
+    ...interview,
+    clips: [
+      {
+        id: "77777777-7777-4777-8777-777777777777",
+        clientClipId: "88888888-8888-4888-8888-888888888888",
+        state: "sealed",
+      },
+    ],
+  };
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [restored] });
+  await showing;
+  await tick();
+  const status = h.requests.shift();
+  assert.equal(status?.url, `${base}/projects/${projectId}/tasks/status`);
+  respond(
+    status,
+    [
+      {
+        id: "99999999-9999-4999-8999-999999999999",
+        projectId,
+        state: "waiting_provider",
+        retryable: false,
+        nextAction: "leave_and_return",
+      },
+    ],
+    201,
+  );
+  await tick();
+  assert.match(h.page.data.taskRows[0].label, /转写中.*离开/);
+  assert.ok(h.page.taskPollHandle);
+  h.page.onHide();
+  assert.equal(h.page.taskPollHandle, undefined);
+  assert.equal(h.page.data.taskRows.length, 0);
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [restored] });
+  await returning;
+  await tick();
+  const refresh = h.requests.shift();
+  assert.equal(refresh?.url, `${base}/projects/${projectId}/tasks/status`);
+  respond(
+    refresh,
+    [
+      {
+        id: "99999999-9999-4999-8999-999999999999",
+        projectId,
+        state: "no_speech",
+        retryable: false,
+        nextAction: "record_again",
+      },
+    ],
+    201,
+  );
+  await tick();
+  assert.match(h.page.data.taskRows[0].label, /无有效语音.*补录/);
+  assert.equal(h.page.taskPollHandle, undefined);
+  h.page.onUnload();
+});

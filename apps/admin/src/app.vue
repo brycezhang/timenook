@@ -14,6 +14,7 @@ import Runtime from "./views/runtime.vue";
 import Catalog from "./views/catalog.vue";
 import ServiceTerms from "./views/service-terms.vue";
 import Care from "./views/care.vue";
+import Tasks from "./views/tasks.vue";
 const view = ref("runtime");
 const state = ref<AdminState | null>(null),
   secret = ref(""),
@@ -132,7 +133,7 @@ onMounted(() => {
       role="alert"
     />
     <nav
-      v-if="canReadCatalog || canManageTerms || canManageCare"
+      v-if="canReadCatalog || canManageTerms || canManageCare || canReadRuntime"
       class="catalog-navigation"
     >
       <Button
@@ -150,6 +151,12 @@ onMounted(() => {
         :type="view === 'terms' ? 'primary' : 'default'"
         @click="view = 'terms'"
         >服务期限</Button
+      >
+      <Button
+        v-if="canReadRuntime"
+        :type="view === 'tasks' ? 'primary' : 'default'"
+        @click="view = 'tasks'"
+        >转写任务</Button
       >
       <Button
         v-if="canManageCare"
@@ -180,6 +187,16 @@ onMounted(() => {
     <Care
       v-else-if="view === 'care' && canManageCare"
       :csrf="state.csrfToken"
+      @expired="
+        perform(async () => {
+          throw { error: { code: 'UNAUTHENTICATED' } };
+        })
+      "
+    />
+    <Tasks
+      v-else-if="view === 'tasks' && canReadRuntime"
+      :csrf="state.csrfToken"
+      :permissions="state.operator!.permissions"
       @expired="
         perform(async () => {
           throw { error: { code: 'UNAUTHENTICATED' } };

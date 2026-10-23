@@ -8,6 +8,7 @@ import {
 import { recordingId } from "../../services/local-audio-recorder";
 import { paymentKey } from "../../services/payments";
 import type {
+  ProductionTaskView,
   RecordingContext,
   RecordingInterview,
 } from "../../../packages/contracts/src";
@@ -26,6 +27,8 @@ Page({
     busy: false,
     canRecord: false,
     localClips: [] as ProbeLocalClip[],
+    taskRows: [] as (ProductionTaskView & { label: string })[],
+    taskError: "",
     pendingInterviews: [] as string[],
     interviews: [] as RecordingInterview[],
     interview: null as RecordingInterview | null,
@@ -50,6 +53,11 @@ Page({
     key: string;
     clientInterviewId: string;
   } | null,
+  taskPollHandle: undefined as ReturnType<typeof setTimeout> | undefined,
+  taskSequence: 0,
+  taskVisible: false,
+  taskDelay: 2000,
+  taskRetries: {} as Record<string, string>,
   timerHandle: undefined as ReturnType<typeof setInterval> | undefined,
   onLoad(q) {
     if (dataMode() === "live") {
@@ -81,9 +89,16 @@ Page({
     if (q.photo === "1") this.pickPhoto();
   },
   async onShow() {
+    this.taskVisible = true;
     if (dataMode() === "live") await this.refresh();
   },
   onHide() {
+    this.taskVisible = false;
+    if (this.taskPollHandle) clearTimeout(this.taskPollHandle);
+    this.taskPollHandle = undefined;
+    ++this.taskSequence;
+    this.taskRetries = {};
+    this.setData({ taskRows: [], taskError: "" });
     if (dataMode() === "live") {
       ++this.generation;
       this.liveRecorder?.stop();
@@ -124,7 +139,12 @@ Page({
   async refresh() {
     const generation = ++this.generation,
       context = sessionClient.context();
+    if (this.taskPollHandle) clearTimeout(this.taskPollHandle);
+    this.taskPollHandle = undefined;
+    this.taskDelay = 2000;
     this.setData({
+      taskRows: [],
+      taskError: "",
       busy: true,
       status: "正在查询当前权限与保存状态",
       question: "",
@@ -178,8 +198,14 @@ Page({
           active,
           this.assistedSessionId || undefined,
         );
-      if (selected && this.current(generation, context))
+      if (selected && this.current(generation, context)) {
         await this.attach(selected, generation, context);
+        if (
+          selected.clips.some((clip) => clip.state === "sealed") ||
+          this.data.localClips.some((clip) => clip.sealed)
+        )
+          void this.refreshTasks();
+      }
     } catch (error) {
       if (generation === this.generation) {
         this.liveRecorder?.unsubscribe();
@@ -225,14 +251,118 @@ Page({
         clearInterval(this.timerHandle);
         this.timerHandle = undefined;
       }
-      if (this.current(generation, context))
+      if (this.current(generation, context)) {
         this.setData({
           state: snapshot.stage,
           status: snapshot.message,
           localClips: snapshot.clips,
         });
+        if (snapshot.stage === "sealed") void this.refreshTasks();
+      }
     });
     await device.restore();
+  },
+  async refreshTasks() {
+    if (!this.taskVisible || dataMode() !== "live" || !this.data.interview)
+      return;
+    if (this.taskPollHandle) clearTimeout(this.taskPollHandle);
+    this.taskPollHandle = undefined;
+    const generation = this.generation,
+      context = sessionClient.context(),
+      sequence = ++this.taskSequence,
+      interviewId = this.data.interview.id;
+    try {
+      const rows = await interviewRecordingClient.taskStatus(
+        this.projectId,
+        interviewId,
+        this.assistedSessionId || undefined,
+      );
+      if (
+        !this.taskVisible ||
+        !this.current(generation, context) ||
+        sequence !== this.taskSequence
+      )
+        return;
+      if (rows.some((row) => row.projectId !== this.projectId))
+        throw new Error("转写状态不匹配");
+      const taskRows = rows.map((row) => ({
+        ...row,
+        label:
+          row.errorCode === "AI_AUTHORIZATION_REQUIRED"
+            ? "原声已保存；等待本人选择 AI 处理授权，可以先离开。"
+            : row.state === "succeeded"
+              ? "转写完成；原声与正式转录已保存。"
+              : row.state === "no_speech"
+                ? "无有效语音；可以回听原声、继续补录或换个问题。"
+                : row.state === "failed"
+                  ? row.retryable
+                    ? "转写未完成；已保存原声，可以按原任务重试。"
+                    : "转写未完成；原声仍保留，请联系服务继续处理。"
+                  : row.state === "manual_review"
+                    ? "转写需要人工接管；原声仍保留，请联系服务。"
+                    : row.state === "invalidated"
+                      ? "本次处理授权已失效，请重新查询权限或联系服务。"
+                      : "转写中；原声已保存，可以离开，返回后继续查询。",
+      }));
+      this.setData({ taskRows, taskError: "" });
+      if (
+        rows.some((row) =>
+          ["queued", "waiting_provider", "submitting"].includes(row.state),
+        )
+      ) {
+        this.taskPollHandle = setTimeout(
+          () => void this.refreshTasks(),
+          this.taskDelay,
+        );
+        this.taskDelay = Math.min(10000, this.taskDelay * 2);
+      }
+    } catch (error) {
+      if (
+        !this.taskVisible ||
+        !this.current(generation, context) ||
+        sequence !== this.taskSequence
+      )
+        return;
+      this.setData({
+        taskRows:
+          error instanceof ApiFailure &&
+          (error.status === 401 || error.status === 403)
+            ? []
+            : this.data.taskRows,
+        taskError: "转写状态未能确认；原声仍保留，请重新查询。",
+      });
+    }
+  },
+  async retryTranscription(e: E) {
+    const id = e.currentTarget.dataset.id;
+    if (
+      this.data.busy ||
+      !this.data.taskRows.some((row) => row.id === id && row.retryable)
+    )
+      return;
+    const generation = this.generation,
+      context = sessionClient.context();
+    this.taskRetries[id] ??= paymentKey();
+    this.setData({ busy: true, taskError: "" });
+    try {
+      await interviewRecordingClient.retryTask(
+        this.projectId,
+        id,
+        this.taskRetries[id],
+        this.assistedSessionId || undefined,
+      );
+      if (!this.current(generation, context)) return;
+      delete this.taskRetries[id];
+      this.taskDelay = 2000;
+      await this.refreshTasks();
+    } catch {
+      if (this.current(generation, context))
+        this.setData({
+          taskError: "重试结果未确认，请重新查询；相同任务保留原请求。",
+        });
+    } finally {
+      if (this.current(generation, context)) this.setData({ busy: false });
+    }
   },
   async selectQuestion(e?: E) {
     if (
