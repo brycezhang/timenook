@@ -128,3 +128,4 @@ export interface PlanDirectory {
 }
 export * from "./recording";
 export * from "./photos";
+export * from "./tasks";

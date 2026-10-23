@@ -725,3 +725,100 @@ model PhotoReference {
  @@unique([snapshotId,photoId])
  @@map("photo_references")
 }
+
+model ProductionTask {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ clipId String @map("clip_id") @db.Uuid
+ assetId String @map("asset_id") @db.Uuid
+ sealedInputId String @unique @map("sealed_input_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ inputHash String @map("input_hash") @db.Char(64)
+ kind String @default("transcribe_audio")
+ processingGrant Json? @map("processing_grant")
+ configuration Json
+ configurationHash String @map("configuration_hash") @db.Char(64)
+ providerRequestId String @unique @map("provider_request_id") @db.Uuid
+ deadline DateTime? @db.Timestamptz(3)
+ providerCode String? @map("provider_code")
+ errorCode String? @map("error_code")
+ completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+ failedAt DateTime? @map("failed_at") @db.Timestamptz(3)
+ submittedAt DateTime? @map("submitted_at") @db.Timestamptz(3)
+ leaseUntil DateTime? @map("lease_until") @db.Timestamptz(3)
+ fence Int @default(0)
+ nextRunAt DateTime @default(now()) @map("next_run_at") @db.Timestamptz(3)
+ state String @default("queued")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([projectId,clipId,kind])
+ @@unique([projectId,id])
+ @@map("production_tasks")
+}
+model TaskQuotaIntent {
+ clipId String @map("clip_id") @db.Uuid
+ taskId String @id @map("task_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ recordingIntentId String @unique @map("recording_intent_id") @db.Uuid
+ consumedMs Int @map("consumed_ms")
+ @@map("task_quota_intents")
+}
+model TaskOutbox {
+ id String @id @db.Uuid
+ taskId String @unique @map("task_id") @db.Uuid
+ deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(3)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@map("task_outbox")
+}
+
+model FormalTranscript {
+ taskId String @id @map("task_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ clipId String @unique @map("clip_id") @db.Uuid
+ inputHash String @map("input_hash") @db.Char(64)
+ text String
+ sha256 String @db.Char(64)
+ providerRequestId String @map("provider_request_id") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@map("formal_transcripts")
+}
+
+model TaskAttempt {
+ requestId String @id @map("request_id") @db.Uuid
+ taskId String @map("task_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ number Int
+ configuration Json
+ configurationHash String @map("configuration_hash") @db.Char(64)
+ state String
+ submittedAt DateTime @map("submitted_at") @db.Timestamptz(3)
+ polls Int @default(0)
+ reservedCostFen Int @map("reserved_cost_fen")
+ actualCostFen Int? @map("actual_cost_fen")
+ providerCode String? @map("provider_code")
+ @@unique([taskId,number])
+ @@map("task_attempts")
+}
+model TaskRetryCommand {
+ projectId String @map("project_id") @db.Uuid
+ taskId String @map("task_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ actorRealm String @map("actor_realm")
+ key String
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@id([taskId,actorRealm,actorId,key])
+ @@map("task_retry_commands")
+}
+
+model TaskAttemptObservation {
+ requestId String @map("request_id") @db.Uuid
+ fence Int
+ action String
+ state String
+ providerCode String? @map("provider_code")
+ superseded Boolean
+ observedAt DateTime @default(now()) @map("observed_at") @db.Timestamptz(3)
+ @@id([requestId,fence])
+ @@map("task_attempt_observations")
+}

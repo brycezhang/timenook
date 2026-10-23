@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   Controller,
@@ -555,7 +556,9 @@ export class Participation implements OnModuleDestroy {
         throw new ConflictException();
       const updated = await tx.project.update({
         where: { id },
-        data: { accessEpoch: { increment: 1 } },
+        // New positive purpose choices do not revoke existing capabilities.
+        // Withdrawals advance the revocation fence and cannot revive old work.
+        data: { accessEpoch: body.granted ? p.accessEpoch : { increment: 1 } },
       });
       await tx.consentRecord.create({
         data: {
@@ -1092,6 +1095,84 @@ export class Participation implements OnModuleDestroy {
         ...(method === "assisted" ? { assistedSessionId } : {}),
       });
     });
+  }
+
+  // Background processing has no user session to inherit. Its first current
+  // purpose grant is frozen by the task owner; later claims and result writes
+  // must still match those actual assisted sessions, including their expiry.
+  async processingGrant(
+    tx: Prisma.TransactionClient,
+    input: {
+      projectId: string;
+      subjectId: string;
+      bindingVersion: number;
+      accessEpoch: number;
+      sourceAssistedSessionId?: string | null;
+      processingGrant?: Prisma.JsonValue;
+    },
+  ): Promise<Prisma.JsonObject | null> {
+    this.policy();
+    const p = await this.project(tx, input.projectId, true);
+    const subject = await this.subject(tx, input.projectId);
+    if (
+      subject.id !== input.subjectId ||
+      subject.bindingVersion !== input.bindingVersion ||
+      p.accessEpoch !== input.accessEpoch
+    )
+      return null;
+    const terms = await this.terms.read(p.id, undefined, tx);
+    if (
+      terms.retention?.originalAudio?.state === "expired" ||
+      terms.retention?.transcripts?.state === "expired"
+    )
+      return null;
+    let grant: Prisma.JsonObject;
+    if (subject.boundUserId) {
+      if (
+        !(await this.status(tx, p, subject, subject.boundUserId)).canProcessAi
+      )
+        return null;
+      grant = { method: "self_wechat" };
+    } else {
+      const collection = await this.latestAssisted(tx, p.id, "collection");
+      const ai = await this.latestAssisted(tx, p.id, "ai");
+      if (
+        !this.activeAssisted(collection, p, subject) ||
+        !this.activeAssisted(ai, p, subject) ||
+        (input.sourceAssistedSessionId &&
+          collection.id !== input.sourceAssistedSessionId)
+      )
+        return null;
+      await this.authorizeAssisted(tx, {
+        projectId: p.id,
+        sessionId: collection.id,
+        operatorUserId: collection.operatorUserId,
+        purpose: "collection",
+      });
+      await this.authorizeAssisted(tx, {
+        projectId: p.id,
+        sessionId: ai.id,
+        operatorUserId: ai.operatorUserId,
+        purpose: "ai",
+      });
+      grant = {
+        method: "assisted",
+        collectionSessionId: collection.id,
+        aiSessionId: ai.id,
+      };
+    }
+    if (
+      input.processingGrant &&
+      !isDeepStrictEqual(input.processingGrant, grant)
+    )
+      return null;
+    return grant;
+  }
+  async processingAllowed(
+    tx: Prisma.TransactionClient,
+    input: Parameters<Participation["processingGrant"]>[1],
+  ) {
+    return !!(await this.processingGrant(tx, input));
   }
 
   private latestAssisted(

@@ -321,7 +321,7 @@ test("bound project home reaches the actual recording page, seals a file and ret
     .getByRole("button", { name: "查询并上传原文件", exact: true })
     .click();
   await expect(
-    page.getByText("本地模拟封存完成；真实云端尚待验收，文字处理尚未开始", {
+    page.getByText("本地模拟封存完成；转写状态可查询，真实云端尚待验收", {
       exact: true,
     }),
   ).toBeVisible();
@@ -363,12 +363,10 @@ test("bound project home reaches the actual recording page, seals a file and ret
       .locator("#phone")
       .evaluate((n) => n.getBoundingClientRect().width),
   ).toBe(390);
-  test
-    .info()
-    .annotations.push({
-      type: "engineering-path-ms",
-      description: String(Math.round(elapsed)),
-    });
+  test.info().annotations.push({
+    type: "engineering-path-ms",
+    description: String(Math.round(elapsed)),
+  });
   expect(errors).toEqual([]);
   await page.context().close();
 });

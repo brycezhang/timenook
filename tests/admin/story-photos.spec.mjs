@@ -13,6 +13,7 @@ const sharp = apiRequire("sharp");
 let photoPaths, sourcePhoto;
 const schema = `t16_browser_${randomUUID().replaceAll("-", "")}`;
 let api,
+  runtime,
   preview,
   databaseUrl,
   projectId,
@@ -24,6 +25,8 @@ let api,
   latestPage;
 const errors = [];
 const network = [];
+const acceptedRequests = new Set();
+const providerCalls = [];
 const base = "http://127.0.0.1:5178";
 const data = (r, status = 201) => {
   expect(r.statusCode, r.body).toBe(status);
@@ -86,6 +89,19 @@ test.beforeAll(async () => {
     resolve("apps/api/test/fixtures/synthetic-1s.mp3"),
   ).toString("base64");
   const { createApplication } = apiRequire("./dist-test/src/application.js");
+  const { LocalProbeObjects } = apiRequire(
+    "./dist-test/src/probe/local-objects.js",
+  );
+  class Objects extends LocalProbeObjects {
+    async asrSource(key) {
+      await this.read(key);
+      return {
+        url: `https://synthetic.oss-cn-shanghai.aliyuncs.com/${key}?synthetic=private`,
+        expiresAt: new Date(Date.now() + 120000).toISOString(),
+        credentialsExpireAt: new Date(Date.now() + 180000).toISOString(),
+      };
+    }
+  }
   const { paymentConfig, paymentFetch, paid } = apiRequire(
     "./dist-test/test/payment-fixture.js",
   );
@@ -101,6 +117,18 @@ test.beforeAll(async () => {
       payments: paymentConfig,
       participation: { mode: "synthetic-d08" },
       recording: { mode: "synthetic-local", storageRoot: root },
+      transcription: {
+        mode: "synthetic-local",
+        configVersion: "synthetic-t16-browser-combined",
+        doubao: {
+          apiKey: "synthetic-t16-key",
+          resourceId: "synthetic-t16-resource",
+          fetchWindowSeconds: 60,
+        },
+        pollIntervalMs: 0,
+        submissionReservationFen: 1,
+        deadlineMs: 600000,
+      },
       photos: {
         mode: "synthetic-local",
         placement: { widthMm: 100, heightMm: 150 },
@@ -108,6 +136,27 @@ test.beforeAll(async () => {
     },
     {
       paymentFetch,
+      recordingObjects: new Objects(root),
+      aiFetch: async (input, init) => {
+        const action = String(input).endsWith("/submit") ? "submit" : "query",
+          id = new Headers(init.headers).get("X-Api-Request-Id");
+        providerCalls.push({ action, id });
+        if (action === "submit") acceptedRequests.add(id);
+        if (!acceptedRequests.has(id))
+          return new Response("{}", {
+            status: 404,
+            headers: { "X-Api-Status-Code": "45000001" },
+          });
+        return new Response(
+          action === "submit"
+            ? "{}"
+            : JSON.stringify({
+                task_id: id,
+                result: { text: "照片里的旧屋还在记忆里。" },
+              }),
+          { headers: { "X-Api-Status-Code": "20000000" } },
+        );
+      },
       wechatFetch: async (input) =>
         new Response(
           JSON.stringify({
@@ -197,6 +246,9 @@ test.beforeAll(async () => {
       }),
     );
   }
+  runtime = await apiRequire(
+    "./dist-test/src/tasks/worker.js",
+  ).startProductionWorker(api);
   await api.listen(3426, "127.0.0.1");
   preview = spawn(
     process.execPath,
@@ -232,6 +284,7 @@ test.afterAll(async () => {
       preview.once("exit", r);
       preview.kill("SIGTERM");
     });
+  await runtime?.close();
   await api?.close();
   if (root) await rm(root, { recursive: true, force: true });
   if (databaseUrl) {
@@ -325,6 +378,23 @@ async function openPage(
     { session, base, audioBase64 },
   );
   return page;
+}
+async function wake(taskId) {
+  const delivered = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      runtime.worker.off("completed", completed);
+      reject(Error("combined browser Worker delivery timed out"));
+    }, 5000);
+    const completed = (job) => {
+      if (job.id !== taskId) return;
+      clearTimeout(timer);
+      runtime.worker.off("completed", completed);
+      resolve();
+    };
+    runtime.worker.on("completed", completed);
+  });
+  await runtime.recoverDue();
+  await delivered;
 }
 
 test("photo starter saves two originals independently, retries one failure and edits private material snapshots through real HTTP", async ({
@@ -493,6 +563,44 @@ test("photo starter saves two originals independently, retries one failure and e
     200,
   );
   expect(recorded.clips).toHaveLength(1);
+  await expect(
+    page.getByText("转写中；原声已保存，可以离开，返回后继续查询。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const tasks = data(
+    await request("GET", `/v1/projects/${projectId}/tasks`, narrator),
+    200,
+  );
+  expect(tasks).toHaveLength(1);
+  expect(tasks[0].state).toBe("queued");
+  const participation = data(
+    await request("GET", `/v1/projects/${projectId}/participation`, narrator),
+    200,
+  );
+  data(
+    await request("POST", `/v1/projects/${projectId}/consents`, narrator, {
+      purpose: "ai",
+      granted: true,
+      noticeVersion: "synthetic-d08-v1",
+      evidenceRef: "synthetic:browser后补AI许可",
+      expectedBindingVersion: participation.bindingVersion,
+      expectedAccessEpoch: participation.accessEpoch,
+    }),
+  );
+  expect(
+    data(
+      await request("GET", `/v1/projects/${projectId}/participation`, narrator),
+      200,
+    ).accessEpoch,
+  ).toBe(participation.accessEpoch);
+  await wake(tasks[0].id);
+  expect(
+    data(
+      await request("GET", `/v1/projects/${projectId}/tasks`, narrator),
+      200,
+    )[0].state,
+  ).toBe("waiting_provider");
   await page
     .getByRole("button", { name: "查看照片或事后补图", exact: true })
     .click();
@@ -517,6 +625,107 @@ test("photo starter saves two originals independently, retries one failure and e
     200,
   );
   expect(recordedAgain.clips).toEqual(recorded.clips);
+  await wake(tasks[0].id);
+  const completed = data(
+    await request("GET", `/v1/projects/${projectId}/tasks`, narrator),
+    200,
+  );
+  expect(completed).toHaveLength(1);
+  expect(completed[0].id).toBe(tasks[0].id);
+  expect(completed[0].state).toBe("succeeded");
+  expect(completed[0].queuedAt).toBe(tasks[0].queuedAt);
+  expect(completed[0].recordingUsageMs).toBe(1080);
+  expect(completed[0].originalTranscript.text).toBe("照片里的旧屋还在记忆里。");
+  expect(providerCalls).toEqual([
+    { action: "submit", id: tasks[0].providerRequestId },
+    { action: "query", id: tasks[0].providerRequestId },
+  ]);
+  await page
+    .getByRole("button", { name: "返回采访，开始说", exact: true })
+    .click();
+  await expect(
+    page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "/tmp/timenook-t16-combined-transcription-390.png",
+  });
+  expect(
+    network.filter(
+      ([path, status]) => path.includes("/tasks") && status === 404,
+    ),
+  ).toEqual([]);
+  expect(errors).toEqual([]);
+  await page.context().close();
+});
+
+test("the combined interview clears private task state after an actual status 401 and retains its pending recording", async ({
+  browser,
+}) => {
+  const current = await login("synthetic-plan-narrator"),
+    page = await openPage(browser, current);
+  await page.goto(`${base}/#/interview?projectId=${projectId}`);
+  await expect(
+    page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "开始说", exact: true }).click();
+  await page
+    .getByRole("button", { name: "说完了，停止录音", exact: true })
+    .click();
+  await expect(
+    page.getByText("本机文件已保存，尚待封存", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByPlaceholder("想讲的问题", { exact: true })
+    .fill("私人采访草稿");
+  expect(
+    (await request("DELETE", `/v1/sessions/${current.session.id}`, current))
+      .statusCode,
+  ).toBe(204);
+  const denied = page.waitForResponse(
+    (r) => r.url().endsWith("/tasks/status") && r.status() === 401,
+  );
+  await page
+    .getByRole("button", { name: "重新查询转写状态", exact: true })
+    .click();
+  await denied;
+  await expect(
+    page.getByText("当前权限已失效，请重新查询或登录；本机原文件仍保留", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "开始说", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByPlaceholder("想讲的问题", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "重新查询与恢复", exact: true }),
+  ).toBeEnabled();
+  const retained = await page.evaluate(
+    ({ base }) => {
+      const clips = Object.entries(localStorage)
+        .filter(
+          ([key, value]) =>
+            key.startsWith("timenook.recording.v1:") &&
+            Array.isArray(JSON.parse(value)),
+        )
+        .flatMap(([, value]) => JSON.parse(value));
+      return {
+        sessionPresent: !!localStorage.getItem(
+          `timenook.session.v1:${base}/timenook/v1`,
+        ),
+        pending: clips.filter((clip) => !clip.sealed && !!clip.path).length,
+      };
+    },
+    { base },
+  );
+  expect(retained).toEqual({ sessionPresent: false, pending: 1 });
   expect(errors).toEqual([]);
   await page.context().close();
 });

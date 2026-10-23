@@ -3,6 +3,7 @@ import { sessionClient } from "./session";
 import { API_BASE_URL } from "../config";
 import { paymentKey } from "./payments";
 import type {
+  ProductionTaskView,
   RecordingClip,
   RecordingContext,
   RecordingInterview,
@@ -15,6 +16,33 @@ export function recordingPartition(projectId: string) {
   return `timenook.recording.v1:${API_BASE_URL}:${appId}:${account}:${projectId}`;
 }
 export const interviewRecordingClient = {
+  taskStatus(
+    projectId: string,
+    interviewId: string,
+    assistedSessionId?: string,
+  ) {
+    return sessionClient.request<ProductionTaskView[]>(
+      `/projects/${projectId}/tasks/status`,
+      {
+        key: paymentKey(),
+        data: {
+          interviewId,
+          ...(assistedSessionId ? { assistedSessionId } : {}),
+        },
+      },
+    );
+  },
+  retryTask(
+    projectId: string,
+    taskId: string,
+    key: string,
+    assistedSessionId?: string,
+  ) {
+    return sessionClient.request<ProductionTaskView>(
+      `/projects/${projectId}/tasks/${taskId}/retry`,
+      { key, data: assistedSessionId ? { assistedSessionId } : {} },
+    );
+  },
   authorizeStart(projectId: string, id: string, assistedSessionId?: string) {
     return sessionClient.request<{ allowed: boolean }>(
       `/projects/${projectId}/interviews/${id}/recording-start`,
@@ -168,8 +196,8 @@ export class InterviewRecorder extends LocalAudioRecorder {
       this.update(
         "sealed",
         result.storage === "oss"
-          ? "云端已保存；文字处理尚未开始"
-          : "本地模拟封存完成；真实云端尚待验收，文字处理尚未开始",
+          ? "云端已保存；可以离开，转写状态可重新查询"
+          : "本地模拟封存完成；转写状态可查询，真实云端尚待验收",
       );
     } catch (error) {
       this.update(

@@ -507,3 +507,251 @@ test("a delayed seal completion merges its clip state without removing a later s
   assert.equal(h.page.data.localClips.length, 2);
   assert.equal(h.files.size, 2);
 });
+
+test("the interview page restores transcription state, stops polling in background and refreshes immediately on return", async () => {
+  const h = harness();
+  h.page.onLoad({ projectId });
+  const restored = {
+    ...interview,
+    clips: [
+      {
+        id: "77777777-7777-4777-8777-777777777777",
+        clientClipId: "88888888-8888-4888-8888-888888888888",
+        state: "sealed",
+      },
+    ],
+  };
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [restored] });
+  await showing;
+  await tick();
+  const status = h.requests.shift();
+  assert.equal(status?.url, `${base}/projects/${projectId}/tasks/status`);
+  respond(
+    status,
+    [
+      {
+        id: "99999999-9999-4999-8999-999999999999",
+        projectId,
+        state: "waiting_provider",
+        retryable: false,
+        nextAction: "leave_and_return",
+      },
+    ],
+    201,
+  );
+  await tick();
+  assert.match(h.page.data.taskRows[0].label, /转写中.*离开/);
+  assert.ok(h.page.taskPollHandle);
+  h.page.onHide();
+  assert.equal(h.page.taskPollHandle, undefined);
+  assert.equal(h.page.data.taskRows.length, 0);
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [restored] });
+  await returning;
+  await tick();
+  const refresh = h.requests.shift();
+  assert.equal(refresh?.url, `${base}/projects/${projectId}/tasks/status`);
+  respond(
+    refresh,
+    [
+      {
+        id: "99999999-9999-4999-8999-999999999999",
+        projectId,
+        state: "no_speech",
+        retryable: false,
+        nextAction: "record_again",
+      },
+    ],
+    201,
+  );
+  await tick();
+  assert.match(h.page.data.taskRows[0].label, /无有效语音.*补录/);
+  assert.equal(h.page.taskPollHandle, undefined);
+  h.page.onUnload();
+});
+
+const taskId = "99999999-9999-4999-8999-999999999999";
+async function restoredTaskPage() {
+  const h = harness();
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  h.page.onHide();
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        clips: [
+          { id: "77777777-7777-4777-8777-777777777777", state: "sealed" },
+        ],
+      },
+    ],
+  });
+  await showing;
+  await tick();
+  respond(
+    h.requests.shift(),
+    [
+      {
+        id: taskId,
+        projectId,
+        state: "failed",
+        retryable: true,
+        nextAction: "retry",
+      },
+    ],
+    201,
+  );
+  await tick();
+  h.page.customText({ detail: { value: "私人采访草稿" } });
+  return h;
+}
+
+test("current task-status 401 clears private interview content and stops polling while keeping the only pending recording", async (t) => {
+  const h = await restoredTaskPage();
+  t.after(() => h.page.onUnload());
+  const querying = h.page.refreshTasks();
+  respond(h.requests.shift(), undefined, 401);
+  await querying;
+  assert.equal(h.storage.has(`timenook.session.v1:${base}`), false);
+  assert.equal(h.page.data.taskRows.length, 0);
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.customText, "");
+  assert.equal(h.page.data.canRecord, false);
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.taskPollHandle, undefined);
+  assert.equal(h.files.size, 1);
+  assert.ok(
+    [...h.storage.values()].some(
+      (value) =>
+        Array.isArray(value) &&
+        value.some((clip) => clip.path === "saved-audio-1"),
+    ),
+  );
+});
+
+test("current transcription-retry 401 clears private interview content and releases busy without deleting the pending recording", async (t) => {
+  const h = await restoredTaskPage();
+  t.after(() => h.page.onUnload());
+  const retrying = h.page.retryTranscription({
+    currentTarget: { dataset: { id: taskId } },
+  });
+  respond(h.requests.shift(), undefined, 401);
+  await retrying;
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.data.taskRows.length, 0);
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.customText, "");
+  assert.equal(h.page.data.canRecord, false);
+  assert.equal(h.files.size, 1);
+  assert.equal(h.storage.has(`timenook.session.v1:${base}`), false);
+});
+
+test("a current-session 401 still clears private task content when a newer status query is already pending", async (t) => {
+  const h = await restoredTaskPage();
+  t.after(() => h.page.onUnload());
+  const earlier = h.page.refreshTasks(),
+    first = h.requests.shift(),
+    latest = h.page.refreshTasks(),
+    second = h.requests.shift();
+  respond(first, undefined, 401);
+  await earlier;
+  respond(
+    second,
+    [
+      {
+        id: taskId,
+        projectId,
+        state: "succeeded",
+        retryable: false,
+        nextAction: "continue",
+      },
+    ],
+    201,
+  );
+  await latest;
+  assert.equal(h.page.data.taskRows.length, 0);
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.customText, "");
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.files.size, 1);
+});
+
+for (const action of ["status", "retry"]) {
+  test(`an old task ${action} 401 cannot clear the new account's interview, task state or draft`, async (t) => {
+    const h = await restoredTaskPage();
+    t.after(() => h.page.onUnload());
+    const old =
+        action === "status"
+          ? h.page.refreshTasks()
+          : h.page.retryTranscription({
+              currentTarget: { dataset: { id: taskId } },
+            }),
+      held = h.requests.shift();
+    h.page.onHide();
+    const nextProject = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      other = {
+        user: { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+        session: {
+          ...login.session,
+          id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          token: "c".repeat(43),
+        },
+      };
+    h.storage.set(`timenook.session.v1:${base}`, other);
+    h.page.onLoad({ projectId: nextProject });
+    const showing = h.page.onShow();
+    respond(h.requests.shift(), {
+      ...context,
+      interviews: [
+        {
+          ...interview,
+          projectId: nextProject,
+          actualQuestion: {
+            ...question,
+            projectId: nextProject,
+            snapshot: { text: "新账号的私人问题", intent: "具体场景" },
+          },
+          clips: [
+            { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", state: "sealed" },
+          ],
+        },
+      ],
+    });
+    await showing;
+    await tick();
+    respond(
+      h.requests.shift(),
+      [
+        {
+          id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          projectId: nextProject,
+          state: "succeeded",
+          retryable: false,
+          nextAction: "continue",
+        },
+      ],
+      201,
+    );
+    await tick();
+    h.page.customText({ detail: { value: "新账号草稿" } });
+    respond(held, undefined, 401);
+    await old;
+    assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), other);
+    assert.equal(h.page.data.interview.projectId, nextProject);
+    assert.equal(h.page.data.question, "新账号的私人问题");
+    assert.equal(h.page.data.customText, "新账号草稿");
+    assert.equal(h.page.data.taskRows[0].projectId, nextProject);
+    assert.equal(h.page.data.taskRows[0].state, "succeeded");
+    assert.equal(h.page.data.canRecord, true);
+    assert.equal(h.page.data.busy, false);
+    assert.equal(h.files.size, 1);
+  });
+}

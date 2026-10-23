@@ -14,12 +14,51 @@ import { LocalProbeObjects } from "../src/probe/local-objects";
 import { createApplication, createOpenApiDocument } from "../src/application";
 import type { ApiConfig } from "../src/config";
 import { paymentConfig, paymentFetch, paid, callback } from "./payment-fixture";
+import { startProductionWorker } from "../src/tasks/worker";
 const schema = `t16_${randomUUID().replaceAll("-", "")}`;
 let config: ApiConfig;
 let root: string;
 let app: Awaited<ReturnType<typeof createApplication>>;
 let db: PrismaClient;
 const packageId = randomUUID();
+const acceptedRequests = new Set<string>();
+const providerCalls: { action: string; id: string }[] = [];
+const aiFetch: typeof fetch = async (input, init) => {
+  const action = String(input).endsWith("/submit") ? "submit" : "query",
+    id = new Headers(init?.headers).get("X-Api-Request-Id")!;
+  providerCalls.push({ action, id });
+  if (action === "submit") acceptedRequests.add(id);
+  if (!acceptedRequests.has(id))
+    return new Response("{}", {
+      status: 404,
+      headers: { "X-Api-Status-Code": "45000001" },
+    });
+  return new Response(
+    action === "submit"
+      ? "{}"
+      : JSON.stringify({
+          task_id: id,
+          result: { text: "照片里是那年的旧屋。" },
+        }),
+    { headers: { "X-Api-Status-Code": "20000000" } },
+  );
+};
+class AsrObjects extends LocalProbeObjects {
+  async asrSource(key: string, _seconds: number) {
+    await this.read(key);
+    return {
+      url: `https://synthetic.oss-cn-shanghai.aliyuncs.com/${key}?synthetic=private`,
+      expiresAt: new Date(Date.now() + 120000).toISOString(),
+      credentialsExpireAt: new Date(Date.now() + 180000).toISOString(),
+    };
+  }
+}
+const fixtureOptions = () => ({
+  wechatFetch,
+  paymentFetch,
+  aiFetch,
+  recordingObjects: new AsrObjects(root),
+});
 const wechatFetch: typeof fetch = async (input) =>
   new Response(
     JSON.stringify({
@@ -56,6 +95,18 @@ before(async () => {
     wechat: { appId: "synthetic-timenook", secret: "synthetic-secret" },
     payments: paymentConfig,
     participation: { mode: "synthetic-d08" },
+    transcription: {
+      mode: "synthetic-local",
+      configVersion: "synthetic-t16-combined",
+      doubao: {
+        apiKey: "synthetic-t16-key",
+        resourceId: "synthetic-t16-resource",
+        fetchWindowSeconds: 60,
+      },
+      pollIntervalMs: 0,
+      submissionReservationFen: 1,
+      deadlineMs: 600000,
+    },
   };
   for (const label of ["fresh", "replay"]) {
     const migrated = spawnSync(
@@ -101,7 +152,7 @@ before(async () => {
       active: true,
     },
   });
-  app = await createApplication(config, { wechatFetch, paymentFetch });
+  app = await createApplication(config, fixtureOptions());
 });
 after(async () => {
   await app?.close();
@@ -462,6 +513,164 @@ test("adding, describing and reordering photos creates immutable material snapsh
   assert.deepEqual(restored.clips, []);
 });
 
+test("photo intents survive ordinary AI and sharing grants while the same app seals audio and restores its real Worker transcription", async () => {
+  const p = await interview(),
+    bytes = await sharp({
+      create: { width: 60, height: 40, channels: 3, background: "#247b93" },
+    })
+      .png()
+      .toBuffer(),
+    photo = await reserve(p, bytes),
+    beforeGrant = await state(p, p.narrator.token);
+  await upload(p, photo, bytes);
+  data((await choose(p, p.narrator.token, "ai", true)).response);
+  assert.equal(
+    (await state(p, p.narrator.token)).accessEpoch,
+    beforeGrant.accessEpoch,
+  );
+  data(
+    await request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
+  );
+  const firstSnapshot = data(
+    await request("GET", p.base, p.narrator.token),
+    200,
+  ).snapshot;
+  const audio = readFileSync("test/fixtures/synthetic-1s.mp3"),
+    clipsBase = `/v1/projects/${p.projectId}/interviews/${p.interview.id}/clips`,
+    clip = data(
+      await request("POST", clipsBase, p.narrator.token, {
+        clientClipId: randomUUID(),
+        bytes: audio.length,
+        sha256: createHash("sha256").update(audio).digest("hex"),
+      }),
+    );
+  await upload({ ...p, base: clipsBase }, clip, audio);
+  const sealed = data(
+      await request(
+        "POST",
+        `${clipsBase}/${clip.id}/seal`,
+        p.narrator.token,
+        {},
+      ),
+    ),
+    taskView = async () =>
+      data(
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/tasks`,
+          p.narrator.token,
+        ),
+        200,
+      ),
+    [originalTask] = await taskView(),
+    recorded = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/interviews/${p.interview.id}`,
+        p.narrator.token,
+      ),
+      200,
+    );
+  assert.equal(originalTask.inputHash, sealed.sha256);
+  assert.equal(originalTask.state, "queued");
+  assert.equal(originalTask.recordingUsageMs, 1080);
+  const wake = async (
+    runtime: Awaited<ReturnType<typeof startProductionWorker>>,
+  ) => {
+    const delivery = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        runtime.worker.off("completed", completed);
+        reject(Error("combined Worker delivery did not complete"));
+      }, 5000);
+      const completed = (job: { id?: string }) => {
+        if (job.id !== originalTask.id) return;
+        clearTimeout(timer);
+        runtime.worker.off("completed", completed);
+        resolve();
+      };
+      runtime.worker.on("completed", completed);
+    });
+    await runtime.recoverDue();
+    await delivery;
+  };
+  let runtime = await startProductionWorker(app);
+  try {
+    await wake(runtime);
+    assert.equal((await taskView())[0].state, "waiting_provider");
+    const added = await reserve(p, bytes);
+    await upload(p, added, bytes);
+    data((await choose(p, p.narrator.token, "sharing", true)).response);
+    assert.equal(
+      (await state(p, p.narrator.token)).accessEpoch,
+      beforeGrant.accessEpoch,
+    );
+    data(
+      await request("POST", `${p.base}/${added.id}/seal`, p.narrator.token, {}),
+    );
+    await runtime.close();
+    runtime = await startProductionWorker(app);
+    await wake(runtime);
+    const [finished] = await taskView();
+    assert.equal(finished.id, originalTask.id);
+    assert.equal(finished.state, "succeeded");
+    assert.equal(finished.queuedAt, originalTask.queuedAt);
+    assert.equal(finished.recordingUsageMs, 1080);
+    assert.equal(finished.attempts.length, 1);
+    assert.equal(finished.originalTranscript.text, "照片里是那年的旧屋。");
+    assert.equal(finished.originalTranscript.inputHash, sealed.sha256);
+    assert.deepEqual(
+      providerCalls.filter(
+        (call) => call.id === originalTask.providerRequestId,
+      ),
+      [
+        { action: "submit", id: originalTask.providerRequestId },
+        { action: "query", id: originalTask.providerRequestId },
+      ],
+    );
+    assert.equal((await taskView()).length, 1);
+    assert.equal(
+      data(await request("GET", p.base, p.narrator.token), 200).snapshot
+        .revision,
+      2,
+    );
+    assert.deepEqual(
+      data(
+        await request(
+          "GET",
+          `${p.base}/materials/${firstSnapshot.id}`,
+          p.narrator.token,
+        ),
+        200,
+      ),
+      firstSnapshot,
+    );
+    assert.deepEqual(
+      data(
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/interviews/${p.interview.id}`,
+          p.narrator.token,
+        ),
+        200,
+      ).clips,
+      recorded.clips,
+    );
+    const content = await request(
+      "GET",
+      `${p.base}/${photo.id}/content/original`,
+      p.narrator.token,
+    );
+    assert.equal(content.statusCode, 200);
+    assert.deepEqual(content.rawPayload, bytes);
+  } finally {
+    await runtime.close();
+  }
+  await app.close();
+  app = await createApplication(config, fixtureOptions());
+  assert.equal((await taskView())[0].id, originalTask.id);
+  assert.equal((await taskView())[0].state, "succeeded");
+});
+
 test("a bounded crop creates new derivative references and preserves the original and old snapshot", async () => {
   const p = await interview(),
     bytes = await sharp({
@@ -601,7 +810,7 @@ test("final objects survive a database rollback and app restart without duplicat
   assert.equal(pending.state, "pending");
   assert.deepEqual(pending.assets, []);
   await app.close();
-  app = await createApplication(config, { wechatFetch, paymentFetch });
+  app = await createApplication(config, fixtureOptions());
   const results = await Promise.all([
     request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
     request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
@@ -636,8 +845,7 @@ test("revocation during image I/O prevents late activation and private bytes aft
     }
   }
   const other = await createApplication(config, {
-    wechatFetch,
-    paymentFetch,
+    ...fixtureOptions(),
     recordingObjects: new RevokingObjects(root),
   });
   try {
@@ -678,8 +886,7 @@ test("revocation during image I/O prevents late activation and private bytes aft
     }
   }
   const reading = await createApplication(config, {
-    wechatFetch,
-    paymentFetch,
+    ...fixtureOptions(),
     recordingObjects: new ReadRevokingObjects(root),
   });
   try {
@@ -739,7 +946,7 @@ test("real database ownership constraints reject photos and immutable references
 test("photo routes remain disabled by default and synthetic configuration is rejected in production", async () => {
   const inactive = await createApplication(
     { ...config, photos: undefined },
-    { wechatFetch, paymentFetch },
+    fixtureOptions(),
   );
   try {
     assert.equal(
@@ -762,7 +969,7 @@ test("photo routes remain disabled by default and synthetic configuration is rej
   await assert.rejects(
     createApplication(
       { ...config, environment: "production" },
-      { wechatFetch, paymentFetch },
+      fixtureOptions(),
     ),
   );
   assert.ok(

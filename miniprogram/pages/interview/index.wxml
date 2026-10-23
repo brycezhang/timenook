@@ -11,7 +11,15 @@
       <view>{{item.sealed ? '封存已确认，本机副本仍保留' : '本机文件已保存，尚待封存'}}</view>
       <button class="btn secondary section" bindtap="upload" data-id="{{item.clientClipId}}" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">{{item.sealed ? '查询封存结果' : '查询并上传原文件'}}</button>
     </view>
-    <view wx:for="{{interview.clips}}" wx:key="id" class="section">{{item.state === 'sealed' ? '此采访已有封存片段；文字处理尚未开始' : '此采访有待完成的上传意图'}}</view>
+    <view wx:for="{{interview.clips}}" wx:key="id" class="section">{{item.state === 'sealed' ? '此采访已有封存片段；转写状态可查询' : '此采访有待完成的上传意图'}}</view>
+  </view>
+  <view wx:if="{{taskRows.length || taskError}}" class="section" role="status">
+    <view wx:for="{{taskRows}}" wx:key="id" class="soft section">
+      <view>{{item.label}}</view>
+      <button wx:if="{{item.retryable}}" class="btn secondary section" data-id="{{item.id}}" bindtap="retryTranscription" disabled="{{busy}}">重试这段转写</button>
+    </view>
+    <view wx:if="{{taskError}}" class="section">{{taskError}}</view>
+    <button class="btn secondary section" bindtap="refreshTasks" disabled="{{busy}}">重新查询转写状态</button>
   </view>
   <view wx:if="{{canRecord && state !== 'recording' && state !== 'requesting' && state !== 'saving'}}" class="section">
     <button class="btn secondary" bindtap="selectQuestion" disabled="{{busy}}">{{interview ? '另起一个问题' : '就从这个问题开始'}}</button>
