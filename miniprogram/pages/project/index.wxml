@@ -1,3 +1,14 @@
+<view wx:if="{{mode === 'live'}}" class="page live-project">
+ <view class="title">我的人生项目</view><view class="section">{{status}}</view>
+ <view wx:if="{{participation}}" class="section">
+  <button class="btn" bindtap="record" disabled="{{busy || !participation.canCollect}}">开始一段讲述</button>
+  <button wx:if="{{participation.canRead}}" class="btn secondary section" bindtap="plan">个人大纲与问题</button>
+  <view wx:if="{{!participation.canCollect}}" class="section">当前不能新录音；已保存资料仍按当前用途与期限恢复。</view>
+ </view>
+ <button wx:for="{{interviews}}" wx:key="id" class="btn secondary section" data-id="{{item.id}}" bindtap="resume">继续：{{item.actualQuestion.snapshot.text}}</button>
+ <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">重新查询项目</button>
+</view>
+<block wx:else="">
 <view class="page with-tabs"
   ><view class="project-head"
     ><view class="grow"
@@ -85,3 +96,5 @@
     ></button
   ></view
 >
+
+</block>

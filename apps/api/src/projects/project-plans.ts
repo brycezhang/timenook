@@ -267,6 +267,11 @@ export class ProjectPlans {
       capturedBy: string;
       questionKey?: string;
       starterKind?: "photo" | "free-narration";
+      selfWritten?: {
+        text: string;
+        intent: string;
+        rewritesQuestionKey?: string;
+      };
     },
     tx: Prisma.TransactionClient,
   ): Promise<ActualPlanQuestion> {
@@ -283,7 +288,14 @@ export class ProjectPlans {
         prior.planRevision !== command.expectedPlanRevision ||
         prior.capturedBy !== command.capturedBy ||
         prior.questionKey !== (command.questionKey ?? null) ||
-        prior.starterKind !== (command.starterKind ?? null)
+        prior.starterKind !== (command.starterKind ?? null) ||
+        JSON.stringify(
+          normalizeWritten(
+            prior.source
+              ? (prior.source as Prisma.JsonObject).input
+              : undefined,
+          ),
+        ) !== JSON.stringify(normalizeWritten(command.selfWritten))
       )
         throw new ProjectPlanError("IDEMPOTENCY_CONFLICT");
       return actualQuestionView(prior);
@@ -291,13 +303,45 @@ export class ProjectPlans {
     const plan = await readPlan(tx, command.projectId);
     if (plan.revision !== command.expectedPlanRevision)
       throw new ProjectPlanError("VERSION_CONFLICT");
-    if (!!command.questionKey === !!command.starterKind)
+    if (
+      [command.questionKey, command.starterKind, command.selfWritten].filter(
+        Boolean,
+      ).length !== 1
+    )
       throw new ProjectPlanError("INVALID_COMMAND");
-    const snapshot = command.questionKey
+    const custom = command.selfWritten;
+    if (custom) {
+      record(custom, [
+        "text",
+        "intent",
+        ...(custom.rewritesQuestionKey !== undefined
+          ? ["rewritesQuestionKey"]
+          : []),
+      ]);
+      if (
+        !nonempty(custom.text) ||
+        custom.text.length > 2000 ||
+        !nonempty(custom.intent) ||
+        custom.intent.length > 500 ||
+        (custom.rewritesQuestionKey !== undefined &&
+          !nonempty(custom.rewritesQuestionKey))
+      )
+        throw new ProjectPlanError("INVALID_COMMAND");
+    }
+    const original = custom?.rewritesQuestionKey
       ? plan.chapters
           .flatMap((c) => c.questions)
-          .find((q) => q.key === command.questionKey)
-      : plan.starters.find((s) => s.kind === command.starterKind);
+          .find((q) => q.key === custom.rewritesQuestionKey)
+      : undefined;
+    if (custom?.rewritesQuestionKey && !original)
+      throw new ProjectPlanError("INVALID_COMMAND");
+    const snapshot = custom
+      ? { text: custom.text, intent: custom.intent }
+      : command.questionKey
+        ? plan.chapters
+            .flatMap((c) => c.questions)
+            .find((q) => q.key === command.questionKey)
+        : plan.starters.find((s) => s.kind === command.starterKind);
     if (!snapshot) throw new ProjectPlanError("INVALID_COMMAND");
     if (
       command.questionKey &&
@@ -317,6 +361,22 @@ export class ProjectPlans {
           questionKey: command.questionKey,
           starterKind: command.starterKind,
           snapshot: JSON.parse(JSON.stringify(snapshot)),
+          ...(custom
+            ? {
+                source: JSON.parse(
+                  JSON.stringify({
+                    kind: "self-written",
+                    input: custom,
+                    ...(original
+                      ? {
+                          rewritesQuestionKey: custom.rewritesQuestionKey,
+                          original,
+                        }
+                      : {}),
+                  }),
+                ),
+              }
+            : {}),
         },
       }),
     );
@@ -482,6 +542,20 @@ export class ProjectPlans {
   }
 }
 
+function normalizeWritten(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const v = value as {
+    text?: unknown;
+    intent?: unknown;
+    rewritesQuestionKey?: unknown;
+  };
+  return {
+    text: v.text,
+    intent: v.intent,
+    rewritesQuestionKey: v.rewritesQuestionKey,
+  };
+}
+
 function actualQuestionView(row: {
   id: string;
   projectId: string;
@@ -490,12 +564,16 @@ function actualQuestionView(row: {
   questionKey: string | null;
   starterKind: string | null;
   snapshot: Prisma.JsonValue;
+  source: Prisma.JsonValue | null;
   answerRef: string | null;
 }): ActualPlanQuestion {
   return {
     ...row,
     starterKind: row.starterKind as ActualPlanQuestion["starterKind"],
     snapshot: row.snapshot as unknown as ActualPlanQuestion["snapshot"],
+    source: (row.source ?? {
+      kind: row.questionKey ? "plan" : row.starterKind,
+    }) as unknown as ActualPlanQuestion["source"],
   };
 }
 

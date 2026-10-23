@@ -1,4 +1,4 @@
-import { recordingLease } from "./recording-lease";
+import { LocalAudioRecorder } from "./local-audio-recorder";
 import type {
   ProbeSession,
   ProbeLocalClip,
@@ -7,32 +7,8 @@ import type {
   ProbeUploadForm,
 } from "../../packages/contracts/src/audio-probe";
 
-function uuid() {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const n = Math.floor(Math.random() * 16);
-    return (c === "x" ? n : (n & 3) | 8).toString(16);
-  });
-}
-/** Controlled S0 identity, never reads or writes the product/demo account stores. */
-export class AudioProbeClient {
-  private readonly manager = wx.getRecorderManager();
-  private current: ProbeSnapshot = {
-    hasPendingSave: false,
-    stage: "idle",
-    message: "只用于合成音频或已获同意的测试样本",
-    clips: [],
-  };
-  private listener?: (snapshot: ProbeSnapshot) => void;
-  private active = false;
-  private stopRequested = false;
-  private saving = false;
-  private pending?: {
-    clientClipId: string;
-    tempFilePath: string;
-    duration: number;
-    savedPath?: string;
-  };
-  private clipId = "";
+/** Controlled S0 identity, separate from product accounts/projects. */
+export class AudioProbeClient extends LocalAudioRecorder {
   private uploading = false;
   private playbackGeneration = 0;
   private player?: WechatMiniprogram.InnerAudioContext;
@@ -43,54 +19,9 @@ export class AudioProbeClient {
     private readonly session: ProbeSession,
     private readonly enabled: boolean,
   ) {
-    this.manager.onStart(() => {
-      if (!recordingLease.owns(this) || !this.active) return;
-      if (this.stopRequested) {
-        this.manager.stop();
-        return;
-      }
-      this.update("recording", "录音中；尚未保存，请勿强行退出");
-    });
-    this.manager.onStop((value) => {
-      if (!this.active || !recordingLease.owns(this)) return;
-      recordingLease.release(this);
-      this.active = false;
-      this.pending = { ...value, clientClipId: this.clipId };
-      void this.retrySave();
-    });
-    this.manager.onError(() => {
-      if (!this.active || !recordingLease.owns(this)) return;
-      recordingLease.release(this);
-      this.active = false;
-      this.update(
-        "device-error",
-        "未取得录音；检查麦克风权限后重试，未承诺保存本次声音",
-      );
-    });
-    this.manager.onInterruptionBegin(() => this.stop());
+    super(`timenook.probe.v1:${base}:${session.id}`);
   }
-  private get key() {
-    return `timenook.probe.v1:${this.base}:${this.session.id}`;
-  }
-  snapshot(): ProbeSnapshot {
-    return {
-      ...this.current,
-      hasPendingSave: !!this.pending,
-      clips: this.current.clips.map((c) => ({ ...c })),
-    };
-  }
-  unsubscribe() {
-    this.listener = undefined;
-  }
-  subscribe(listener: (snapshot: ProbeSnapshot) => void) {
-    this.listener = listener;
-    listener(this.snapshot());
-  }
-  private update(stage: ProbeSnapshot["stage"], message: string) {
-    this.current = { ...this.current, stage, message };
-    this.listener?.(this.snapshot());
-  }
-  private check() {
+  protected check() {
     if (
       !this.enabled ||
       !/^(?:https:\/\/[A-Za-z0-9.-]+(?::\d+)?|http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?)(?:\/[A-Za-z0-9_-]+)*\/v1$/.test(
@@ -102,123 +33,15 @@ export class AudioProbeClient {
       throw new Error("测试权限已过期");
   }
   start() {
-    this.check();
     if (this.uploading) {
       this.update(this.current.stage, "正在上传或校验，请完成后再录音");
       return;
     }
-    if (
-      this.active ||
-      this.pending ||
-      this.saving ||
-      !recordingLease.acquire(this)
-    )
-      return;
-    this.clipId = uuid();
-    this.active = true;
-    this.stopRequested = false;
-    this.update("requesting", "正在请求麦克风权限");
-    this.manager.start({
-      duration: 300000,
-      sampleRate: 16000,
-      numberOfChannels: 1,
-      encodeBitRate: 48000,
-      format: "mp3",
-    });
-  }
-  stop() {
-    if (this.active) {
-      this.stopRequested = true;
-      if (this.current.stage === "recording") this.manager.stop();
-    }
-  }
-  async retrySave() {
-    if (!this.pending || this.saving) return;
-    this.saving = true;
-    this.update("saving", "正在保存本机文件，请先别退出");
-    try {
-      const pending = this.pending;
-      pending.savedPath ??= await new Promise<string>((resolve, reject) =>
-        wx
-          .getFileSystemManager()
-          .saveFile({
-            tempFilePath: pending.tempFilePath,
-            success: (r) => resolve(r.savedFilePath),
-            fail: reject,
-          }),
-      );
-      const info =
-        await new Promise<WechatMiniprogram.GetFileInfoSuccessCallbackResult>(
-          (resolve, reject) =>
-            wx
-              .getFileSystemManager()
-              .getFileInfo({
-                filePath: pending.savedPath!,
-                digestAlgorithm: "sha256",
-                success: resolve,
-                fail: reject,
-              }),
-        );
-      if (
-        !/^[0-9a-f]{64}$/.test(info.digest) ||
-        info.size < 1 ||
-        info.size > 2097152
-      )
-        throw new Error("Invalid saved audio");
-      const clip: ProbeLocalClip = {
-        clientClipId: pending.clientClipId,
-        path: pending.savedPath,
-        durationMs: pending.duration,
-        bytes: info.size,
-        sha256: info.digest,
-      };
-      const clips = [
-        ...this.current.clips.filter(
-          (c) => c.clientClipId !== clip.clientClipId,
-        ),
-        clip,
-      ];
-      wx.setStorageSync(this.key, clips);
-      this.current.clips = clips;
-      this.pending = undefined;
-      this.update("local", "已保存在本机；尚未上传封存");
-    } catch {
-      this.update("device-error", "还没有保存成功，请先别退出。点击重试保存。");
-    } finally {
-      this.saving = false;
-    }
+    super.start();
   }
   async restore() {
     await this.stopPlayback();
-    const stored: unknown = wx.getStorageSync(this.key);
-    const clips: ProbeLocalClip[] = [];
-    if (Array.isArray(stored))
-      for (const clip of stored) {
-        if (
-          !clip ||
-          typeof clip.path !== "string" ||
-          !/^[0-9a-f-]{36}$/.test(clip.clientClipId) ||
-          !/^[0-9a-f]{64}$/.test(clip.sha256)
-        )
-          continue;
-        const exists = await new Promise<boolean>((resolve) =>
-          wx
-            .getFileSystemManager()
-            .access({
-              path: clip.path,
-              success: () => resolve(true),
-              fail: () => resolve(false),
-            }),
-        );
-        if (exists) clips.push(clip);
-      }
-    this.current.clips = clips;
-    this.update(
-      clips.length ? "local" : "idle",
-      clips.length
-        ? "仅恢复实际存在的本机片段；可重试上传"
-        : "没有找到已保存片段；强杀前未保存的声音无法恢复",
-    );
+    await super.restore();
   }
   private send<T>(path: string, data?: object): Promise<T> {
     this.check();
@@ -267,7 +90,7 @@ export class AudioProbeClient {
       )
         throw new Error("封存响应不匹配");
       clip.serverId = remote.id;
-      wx.setStorageSync(this.key, this.current.clips);
+      this.commitClip(clip);
       if (remote.state !== "sealed") {
         const form = await this.send<ProbeUploadForm>(
           `/clips/${remote.id}/upload`,
@@ -312,7 +135,7 @@ export class AudioProbeClient {
           throw new Error("尚未封存");
       }
       clip.sealed = true;
-      wx.setStorageSync(this.key, this.current.clips);
+      this.commitClip(clip);
       this.update(
         "sealed",
         remote.storage === "oss"
@@ -354,13 +177,11 @@ export class AudioProbeClient {
       for (const path of cache)
         if (typeof path === "string") {
           const exists = await new Promise<boolean>((resolve) =>
-            wx
-              .getFileSystemManager()
-              .access({
-                path,
-                success: () => resolve(true),
-                fail: () => resolve(false),
-              }),
+            wx.getFileSystemManager().access({
+              path,
+              success: () => resolve(true),
+              fail: () => resolve(false),
+            }),
           );
           if (exists) await this.removeCache(path);
           else
@@ -422,14 +243,12 @@ export class AudioProbeClient {
       const info =
         await new Promise<WechatMiniprogram.GetFileInfoSuccessCallbackResult>(
           (resolve, reject) =>
-            wx
-              .getFileSystemManager()
-              .getFileInfo({
-                filePath: path!,
-                digestAlgorithm: "sha256",
-                success: resolve,
-                fail: reject,
-              }),
+            wx.getFileSystemManager().getFileInfo({
+              filePath: path!,
+              digestAlgorithm: "sha256",
+              success: resolve,
+              fail: reject,
+            }),
         );
       if (
         info.digest !== clip.sha256 ||

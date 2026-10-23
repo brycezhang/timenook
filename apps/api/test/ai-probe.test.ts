@@ -245,6 +245,10 @@ async function ossFixture() {
     .persist()
     .get(/\/(staging|sealed)\//)
     .reply(200, bytes)
+    .put(/\/staging\//, bytes)
+    .reply(200, "", { etag: '"synthetic"' })
+    .delete(/\/staging\//)
+    .reply(204)
     .put(/\/sealed\//)
     .reply(
       200,

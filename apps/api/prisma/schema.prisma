@@ -318,6 +318,7 @@ model ProjectSubject {
  id String @id @db.Uuid
  projectId String @unique @map("project_id") @db.Uuid
  name String?
+ @@unique([projectId, id])
  @@map("project_subjects")
 }
 model FirstCopyEntitlement {
@@ -533,10 +534,12 @@ model ActualPlanQuestion {
   capturedBy String @map("captured_by")
   questionKey String? @map("question_key")
   starterKind String? @map("starter_kind")
+  source Json?
   snapshot Json
   answerRef String? @map("answer_ref")
   revision PlanRevision @relation(fields: [projectId, planRevision], references: [projectId, revision])
   @@index([projectId])
+  @@unique([projectId, id])
   @@map("actual_plan_questions")
 }
 
@@ -549,4 +552,98 @@ model PlanDirectoryVersion {
   project Project @relation(fields: [projectId], references: [id])
   @@id([projectId, version])
   @@map("plan_directory_versions")
+}
+
+model Interview {
+  id String @id @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  clientInterviewId String @map("client_interview_id") @db.Uuid
+  actualQuestionId String @unique @map("actual_question_id") @db.Uuid
+  subjectId String @map("subject_id") @db.Uuid
+  operatorUserId String @map("operator_user_id") @db.Uuid
+  bindingVersion Int @map("binding_version")
+  accessEpoch Int @map("access_epoch")
+  method String
+  assistedSessionId String? @map("assisted_session_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  @@unique([projectId, clientInterviewId])
+  @@unique([projectId, id])
+  @@unique([projectId, id, actualQuestionId])
+  @@map("interviews")
+}
+
+model RecordingIntent {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ interviewId String @map("interview_id") @db.Uuid
+ actualQuestionId String @map("actual_question_id") @db.Uuid
+ clientClipId String @map("client_clip_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ operatorUserId String @map("operator_user_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ method String
+ assistedSessionId String? @map("assisted_session_id") @db.Uuid
+ storageScope String @map("storage_scope")
+ bytes Int
+ sha256 String @db.Char(64)
+ state String @default("pending")
+ reservedMs Int @map("reserved_ms")
+ consumedMs Int @default(0) @map("consumed_ms")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([projectId,clientClipId])
+ @@unique([projectId,id])
+ @@unique([projectId,interviewId,actualQuestionId,id])
+ @@map("recording_intents")
+}
+model RecordingAsset {
+ id String @id @db.Uuid
+ storage String
+ store String
+ projectId String @map("project_id") @db.Uuid
+ storageScope String @map("storage_scope")
+ objectKey String @map("object_key")
+ bytes Int
+ sha256 String @db.Char(64)
+ durationMs Int @map("duration_ms")
+ mime String @default("audio/mpeg")
+ @@unique([projectId,id])
+ @@unique([storageScope,objectKey])
+ @@map("recording_assets")
+}
+model RecordingClip {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ interviewId String @map("interview_id") @db.Uuid
+ actualQuestionId String @map("actual_question_id") @db.Uuid
+ intentId String @unique @map("intent_id") @db.Uuid
+ assetId String @unique @map("asset_id") @db.Uuid
+ clientClipId String @map("client_clip_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ operatorUserId String @map("operator_user_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ method String
+ assistedSessionId String? @map("assisted_session_id") @db.Uuid
+ sequence Int
+ @@unique([projectId,id])
+ @@unique([projectId,clientClipId])
+ @@unique([interviewId,sequence])
+ @@map("recording_clips")
+}
+model SealedInput {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ clipId String @unique @map("clip_id") @db.Uuid
+ kind String @default("sealed-input")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@map("sealed_inputs")
+}
+model RecordingCommand {
+ projectId String @map("project_id") @db.Uuid
+ operatorUserId String @map("operator_user_id") @db.Uuid
+ idempotencyKey String @map("idempotency_key")
+ requestHash String @map("request_hash") @db.Char(64)
+ @@id([projectId,operatorUserId,idempotencyKey])
+ @@map("recording_commands")
 }

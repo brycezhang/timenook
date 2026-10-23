@@ -1041,6 +1041,59 @@ export class Participation implements OnModuleDestroy {
       });
     });
   }
+  // Collection does not require sharing or AI. The real session is locked
+  // before the project/subject; callers commit protected facts in this tx.
+  async withCollectionAccess<T>(
+    projectId: string,
+    authorization: string | undefined,
+    assistedSessionId: string | undefined,
+    work: (
+      tx: Prisma.TransactionClient,
+      actor: {
+        subjectId: string;
+        operatorUserId: string;
+        bindingVersion: number;
+        accessEpoch: number;
+        method: "self_wechat" | "assisted";
+        assistedSessionId?: string;
+      },
+    ) => Promise<T>,
+    mode: "record" | "existing" = "record",
+  ): Promise<T> {
+    this.policy();
+    return this.db.$transaction(async (tx) => {
+      const user = await this.identity.current(authorization, tx);
+      const p = await this.project(tx, projectId, true);
+      const subject = await this.subject(tx, projectId);
+      let method: "self_wechat" | "assisted";
+      if (subject.boundUserId === user.id) {
+        const state = await this.status(tx, p, subject, user.id);
+        if (!(mode === "record" ? state.canCollect : state.canRead))
+          throw new ForbiddenException();
+        method = "self_wechat";
+      } else {
+        if (!assistedSessionId || user.id !== p.order.buyerId)
+          throw new ForbiddenException();
+        await this.authorizeAssisted(tx, {
+          projectId,
+          sessionId: assistedSessionId,
+          operatorUserId: user.id,
+          purpose: "collection",
+          requireRecording: mode === "record",
+        });
+        method = "assisted";
+      }
+      return work(tx, {
+        subjectId: subject.id,
+        operatorUserId: user.id,
+        bindingVersion: subject.bindingVersion,
+        accessEpoch: p.accessEpoch,
+        method,
+        ...(method === "assisted" ? { assistedSessionId } : {}),
+      });
+    });
+  }
+
   private latestAssisted(
     tx: Prisma.TransactionClient,
     projectId: string,
@@ -1078,6 +1131,7 @@ export class Participation implements OnModuleDestroy {
       sessionId: string;
       operatorUserId: string;
       purpose: (typeof ASSISTED_PURPOSES)[number];
+      requireRecording?: boolean;
     },
   ) {
     this.policy();
@@ -1092,6 +1146,7 @@ export class Participation implements OnModuleDestroy {
       throw new ForbiddenException();
     if (
       command.purpose === "collection" &&
+      command.requireRecording !== false &&
       !(await this.terms.read(p.id, undefined, tx)).canRecord
     )
       throw new ForbiddenException();

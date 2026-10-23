@@ -15,5 +15,7 @@ export function livePageAllowed(page: string): boolean {
     "welcome",
     "assisted",
     "plan",
+    "interview",
+    "project",
   ].includes(page);
 }

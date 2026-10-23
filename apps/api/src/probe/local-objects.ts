@@ -21,6 +21,8 @@ export interface ProbeObjects {
     expiresAt: Date,
   ): Promise<ProbeUploadForm>;
   put(key: string, bytes: Buffer): Promise<void>;
+  /** Server-only immutable input snapshot; never a client upload capability. */
+  putSnapshot(key: string, bytes: Buffer): Promise<void>;
   read(key: string): Promise<Buffer>;
   copy(source: string, target: string): Promise<void>;
   remove(key: string): Promise<void>;
@@ -36,6 +38,18 @@ export class LocalProbeObjects implements ProbeObjects {
     const path = this.path(key);
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     await writeFile(path, bytes, { mode: 0o600 });
+  }
+  async putSnapshot(key: string, bytes: Buffer) {
+    if (
+      !/^staging\/[0-9a-f-]{36}\.mp3$/.test(key) ||
+      !Buffer.isBuffer(bytes) ||
+      bytes.length < 1 ||
+      bytes.length > 2097152
+    )
+      throw new Error("Invalid server audio snapshot");
+    const path = this.path(key);
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await writeFile(path, bytes, { mode: 0o600, flag: "wx" });
   }
   async read(key: string) {
     const path = this.path(key);
