@@ -155,7 +155,7 @@ export class ProductionTasks implements OnModuleDestroy {
     task: ProductionTask,
     errorCode = "AUTHORIZATION_CHANGED",
   ) {
-    await tx.productionTask.updateMany({
+    const invalidated = await tx.productionTask.updateMany({
       where: {
         id: task.id,
         fence: task.fence,
@@ -168,6 +168,10 @@ export class ProductionTasks implements OnModuleDestroy {
         fence: { increment: 1 },
       },
     });
+    if (invalidated.count)
+      await tx.taskAttempt.deleteMany({
+        where: { requestId: task.providerRequestId, state: "preparing" },
+      });
   }
   private storageMatches(asset: RecordingAsset) {
     const recording = this.config.recording!;
@@ -213,6 +217,27 @@ export class ProductionTasks implements OnModuleDestroy {
       cost: count("costCap", "fen"),
     };
   }
+  private async providerCapacity(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    budget: { submissions: number; polls: number; cost: number },
+    action: "new_submission" | "prepared_submission" | "query",
+  ) {
+    const total = await tx.taskAttempt.aggregate({
+      where: { projectId },
+      _sum: { polls: true, reservedCostFen: true },
+      _count: true,
+    });
+    if (action === "query") return (total._sum.polls ?? 0) < budget.polls;
+    // Preparing attempts already hold their one submission/cost reservation.
+    const additional = action === "new_submission" ? 1 : 0;
+    return (
+      total._count + additional <= budget.submissions &&
+      (total._sum.reservedCostFen ?? 0) +
+        additional * this.config.transcription!.submissionReservationFen <=
+        budget.cost
+    );
+  }
   private async claim(id: string) {
     const initial = await this.db.productionTask.findUnique({ where: { id } });
     if (!initial) return null;
@@ -241,6 +266,9 @@ export class ProductionTasks implements OnModuleDestroy {
             leaseUntil: null,
           },
         });
+        await tx.taskAttempt.deleteMany({
+          where: { requestId: task.providerRequestId, state: "preparing" },
+        });
         return null;
       }
       if (!permitted) {
@@ -252,7 +280,11 @@ export class ProductionTasks implements OnModuleDestroy {
         else
           await tx.productionTask.update({
             where: { id },
-            data: { errorCode: "AI_AUTHORIZATION_REQUIRED" },
+            data: {
+              errorCode: "AI_AUTHORIZATION_REQUIRED",
+              // Let other due projects advance while this purpose is pending.
+              nextRunAt: new Date(Date.now() + 1000),
+            },
           });
         return null;
       }
@@ -282,19 +314,18 @@ export class ProductionTasks implements OnModuleDestroy {
       const attempt = await tx.taskAttempt.findUnique({
         where: { requestId: task.providerRequestId },
       });
-      const totals = await tx.taskAttempt.aggregate({
-        where: { projectId: task.projectId },
-        _sum: { polls: true, reservedCostFen: true },
-        _count: true,
-      });
-      const submit = !attempt;
+      const submit = !attempt || attempt.state === "preparing";
       if (
-        submit
-          ? totals._count >= budget.submissions ||
-            (totals._sum.reservedCostFen ?? 0) +
-              this.config.transcription!.submissionReservationFen >
-              budget.cost
-          : (totals._sum.polls ?? 0) >= budget.polls
+        !(await this.providerCapacity(
+          tx,
+          task.projectId,
+          budget,
+          submit
+            ? attempt
+              ? "prepared_submission"
+              : "new_submission"
+            : "query",
+        ))
       ) {
         await tx.productionTask.update({
           where: { id },
@@ -306,7 +337,7 @@ export class ProductionTasks implements OnModuleDestroy {
         });
         return null;
       }
-      if (submit)
+      if (!attempt)
         await tx.taskAttempt.create({
           data: {
             requestId: task.providerRequestId,
@@ -315,13 +346,13 @@ export class ProductionTasks implements OnModuleDestroy {
             number: (await tx.taskAttempt.count({ where: { taskId: id } })) + 1,
             configuration: task.configuration as Prisma.InputJsonObject,
             configurationHash: task.configurationHash,
-            state: "submitting",
+            state: "preparing",
             submittedAt: new Date(),
             reservedCostFen:
               this.config.transcription!.submissionReservationFen,
           },
         });
-      else
+      else if (!submit)
         await tx.taskAttempt.update({
           where: { requestId: task.providerRequestId },
           data: { polls: { increment: 1 } },
@@ -373,6 +404,9 @@ export class ProductionTasks implements OnModuleDestroy {
           errorCode: "DEADLINE_EXCEEDED",
           leaseUntil: null,
         },
+      });
+      await tx.taskAttempt.deleteMany({
+        where: { requestId: row.providerRequestId, state: "preparing" },
       });
       return false;
     }
@@ -429,8 +463,20 @@ export class ProductionTasks implements OnModuleDestroy {
           );
         }
       }
-      if (!(await this.db.$transaction((tx) => this.currentClaim(tx, task))))
-        return;
+      const maySend = await this.db.$transaction(async (tx) => {
+        if (!(await this.currentClaim(tx, task))) return false;
+        if (submit) {
+          // Only this current owner can cross the durable transport boundary.
+          // A crash after this mark is uncertain and must query the original UUID.
+          const marked = await tx.taskAttempt.updateMany({
+            where: { requestId: task.providerRequestId, state: "preparing" },
+            data: { state: "submitting" },
+          });
+          return marked.count === 1;
+        }
+        return true;
+      });
+      if (!maySend) return;
       result = submit
         ? await this.asr!.submit(task.providerRequestId, source!)
         : await this.asr!.query(task.providerRequestId);
@@ -552,17 +598,16 @@ export class ProductionTasks implements OnModuleDestroy {
     const attempt = await tx.taskAttempt.findUnique({
       where: { requestId: task.providerRequestId },
     });
-    const total = await tx.taskAttempt.aggregate({
-      where: { projectId: task.projectId },
-      _sum: { polls: true, reservedCostFen: true },
-      _count: true,
-    });
-    return !attempt || attempt.state === "failed"
-      ? total._count < budget.submissions &&
-          (total._sum.reservedCostFen ?? 0) +
-            this.config.transcription.submissionReservationFen <=
-            budget.cost
-      : (total._sum.polls ?? 0) < budget.polls;
+    return this.providerCapacity(
+      tx,
+      task.projectId,
+      budget,
+      !attempt || attempt.state === "failed"
+        ? "new_submission"
+        : attempt.state === "preparing"
+          ? "prepared_submission"
+          : "query",
+    );
   }
   async retryIn(
     tx: Prisma.TransactionClient,

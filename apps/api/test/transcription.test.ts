@@ -368,9 +368,15 @@ async function interview(p: Awaited<ReturnType<typeof bound>>, ai = true) {
 
 async function sealedInput(ai = true, versionId = packageId) {
   const p = await bound(versionId),
-    i = await interview(p, ai),
-    audio = syntheticAudio();
-  const base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
+    i = await interview(p, ai);
+  return sealedClip(p, i.id);
+}
+async function sealedClip(
+  p: Awaited<ReturnType<typeof bound>>,
+  interviewId: string,
+) {
+  const audio = syntheticAudio();
+  const base = `/v1/projects/${p.projectId}/interviews/${interviewId}/clips`;
   const clip = data(
     await request("POST", base, p.narrator.token, {
       clientClipId: randomUUID(),
@@ -388,7 +394,7 @@ async function sealedInput(ai = true, versionId = packageId) {
   const sealed = data(
     await request("POST", `${base}/${clip.id}/seal`, p.narrator.token, {}),
   );
-  return { ...p, interviewId: i.id, base, clip, sealed };
+  return { ...p, interviewId, base, clip, sealed };
 }
 test("a sealed recording restores one durable transcription task across replay without another user charge", async () => {
   const p = await sealedInput();
@@ -441,12 +447,13 @@ async function wake(
   runtime: Awaited<ReturnType<typeof startProductionWorker>>,
   id: string,
   event: "completed" | "failed" = "completed",
+  timeoutMs = 4000,
 ) {
   const completed = new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
       runtime.worker.off(event, onComplete);
       reject(new Error("Worker did not complete the scheduled delivery"));
-    }, 4000);
+    }, timeoutMs);
     const onComplete = (job: { id?: string }) => {
       if (job.id === id) {
         clearTimeout(timer);
@@ -474,6 +481,11 @@ test("granting AI after cloud save processes the same task without invalidating 
     assert.equal((await task(p)).state, "queued");
     assert.equal((await task(p)).errorCode, "AI_AUTHORIZATION_REQUIRED");
     data((await choose(p, p.narrator.token, "ai", true)).response);
+    // The next authorization recheck is due; no wall-clock TTL sleep is needed.
+    await db.productionTask.update({
+      where: { id: original.id },
+      data: { nextRunAt: new Date() },
+    });
     await wake(runtime, original.id);
     const ready = await task(p);
     assert.equal(ready.id, original.id);
@@ -591,43 +603,134 @@ test("a transport-unknown submission queries its original UUID and no speech ask
   }
 });
 
-test("a superseded Worker cannot submit after its source operation outlives the database lease", async () => {
+test(
+  "a Worker whose source preparation naturally outlives its lease recovers by first submitting the same UUID",
+  { timeout: 45000 },
+  async () => {
+    const p = await sealedInput(),
+      original = await task(p),
+      previous = providerTransport;
+    const requests: { action: string; id: string }[] = [],
+      submitted = new Set<string>();
+    let delayed = false;
+    sourceGate = async (key) => {
+      if (key.includes(p.clip.id) && !delayed) {
+        delayed = true;
+        // Exercise the real persisted 30-second lease without editing its owner or expiry.
+        await new Promise((resolve) => setTimeout(resolve, 31000));
+      }
+    };
+    providerTransport = async (input, init) => {
+      const action = String(input).endsWith("/submit") ? "submit" : "query";
+      const id = new Headers(init?.headers).get("X-Api-Request-Id")!;
+      if (id !== original.providerRequestId) return previous(input, init);
+      requests.push({ action, id });
+      if (action === "submit") submitted.add(id);
+      if (action === "query" && !submitted.has(id))
+        return new Response("{}", {
+          status: 404,
+          headers: { "X-Api-Status-Code": "45000001" },
+        });
+      return previous(input, init);
+    };
+    const runtime = await startProductionWorker(app);
+    try {
+      await wake(runtime, original.id, "completed", 40000);
+      assert.equal(delayed, true);
+      assert.deepEqual(requests, []); // The expired owner never entered provider transport.
+      await wake(runtime, original.id);
+      assert.deepEqual(requests, [
+        { action: "submit", id: original.providerRequestId },
+      ]);
+      assert.equal((await task(p)).state, "waiting_provider");
+      await wake(runtime, original.id);
+      assert.deepEqual(requests, [
+        { action: "submit", id: original.providerRequestId },
+        { action: "query", id: original.providerRequestId },
+      ]);
+      const current = await task(p);
+      assert.equal(current.state, "succeeded");
+      assert.equal(current.providerRequestId, original.providerRequestId);
+      assert.equal(current.configurationVersion, original.configurationVersion);
+      assert.equal(current.inputHash, original.inputHash);
+      assert.equal(current.queuedAt, original.queuedAt);
+      assert.equal(current.recordingUsageMs, 1080);
+      assert.equal(current.attempts.length, 1);
+      assert.equal(current.attempts[0].reservedCostFen, 1);
+      assert.equal(current.attempts[0].polls, 1);
+      assert.equal(current.attempts[0].actualCostFen, null);
+    } finally {
+      sourceGate = async () => {};
+      providerTransport = previous;
+      await runtime.close();
+    }
+  },
+);
+
+test("withdrawal during source preparation releases only its unused provider reservation", async () => {
   const p = await sealedInput(),
     original = await task(p),
-    tasks = app.get(ProductionTasks);
-  let entered!: () => void,
-    release!: () => void,
-    blocked = false;
+    previous = providerTransport;
+  let entered!: () => void, release!: () => void;
   const atSource = new Promise<void>((resolve) => (entered = resolve)),
     gate = new Promise<void>((resolve) => (release = resolve));
   sourceGate = async (key) => {
-    if (key.includes(p.clip.id) && !blocked) {
-      blocked = true;
+    if (key.includes(p.clip.id)) {
       entered();
       await gate;
     }
   };
-  const old = tasks.run(original.id);
+  const requests: string[] = [];
+  providerTransport = async (input, init) => {
+    const id = new Headers(init?.headers).get("X-Api-Request-Id")!;
+    requests.push(id);
+    return previous(input, init);
+  };
+  const runtime = await startProductionWorker(app);
   try {
+    const delivery = wake(runtime, original.id);
     await atSource;
-    await db.productionTask.update({
-      where: { id: original.id },
-      data: { leaseUntil: new Date("2000-01-01T00:00:00Z") },
-    });
-    await tasks.run(original.id);
+    assert.equal((await task(p)).attempts[0].reservedCostFen, 1);
+    data((await choose(p, p.narrator.token, "ai", false)).response);
     release();
-    await old;
-    assert.equal((await task(p)).state, "succeeded");
-    assert.equal(
-      providerRequests.filter(
-        (r) => r.action === "submit" && r.audioUrl?.includes(p.clip.id),
-      ).length,
-      0,
+    await delivery;
+    const invalidated = await task(p);
+    assert.equal(invalidated.state, "invalidated");
+    assert.equal(invalidated.attempts.length, 0);
+    assert.equal(invalidated.queuedAt, original.queuedAt);
+    assert.equal(invalidated.recordingUsageMs, 1080);
+    assert.ok(!requests.includes(original.providerRequestId));
+    // New current authorization can create new material, but cannot revive the old task.
+    sourceGate = async () => {};
+    const i = await interview(p);
+    await sealedClip(p, i.id);
+    const current = data(
+      await request(
+        "POST",
+        `/v1/projects/${p.projectId}/tasks/status`,
+        p.narrator.token,
+        { interviewId: i.id },
+      ),
+    )[0];
+    assert.ok(current);
+    await wake(runtime, current.id);
+    const after = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/tasks/${current.id}`,
+        p.narrator.token,
+      ),
+      200,
     );
+    assert.equal(after.state, "waiting_provider");
+    assert.equal(after.attempts.length, 1);
+    assert.equal(after.attempts[0].reservedCostFen, 1);
+    assert.equal((await task(p)).state, "invalidated");
   } finally {
     release();
     sourceGate = async () => {};
-    await old;
+    providerTransport = previous;
+    await runtime.close();
   }
 });
 
@@ -1161,6 +1264,42 @@ test("a durable task deadline moves to manual takeover without sending or resett
     ).statusCode,
     409,
   );
+  const preparing = await sealedInput(),
+    before = await task(preparing);
+  let entered!: () => void, release!: () => void;
+  const atSource = new Promise<void>((resolve) => (entered = resolve)),
+    gate = new Promise<void>((resolve) => (release = resolve));
+  sourceGate = async (key) => {
+    if (key.includes(preparing.clip.id)) {
+      entered();
+      await gate;
+    }
+  };
+  const runtime = await startProductionWorker(app);
+  try {
+    const delivery = wake(runtime, before.id);
+    await atSource;
+    assert.equal((await task(preparing)).attempts[0].reservedCostFen, 1);
+    await db.productionTask.update({
+      where: { id: before.id },
+      data: { deadline: new Date("2000-01-01T00:00:00Z") },
+    });
+    release();
+    await delivery;
+    const stopped = await task(preparing);
+    assert.equal(stopped.state, "manual_review");
+    assert.equal(stopped.errorCode, "DEADLINE_EXCEEDED");
+    assert.equal(stopped.attempts.length, 0);
+    assert.equal(stopped.queuedAt, before.queuedAt);
+    assert.equal(
+      providerRequests.filter((r) => r.id === before.providerRequestId).length,
+      0,
+    );
+  } finally {
+    release();
+    sourceGate = async () => {};
+    await runtime.close();
+  }
 });
 
 async function assisted(
@@ -1526,5 +1665,83 @@ test("a Worker configured for another object storage scope cannot submit a saved
   } finally {
     await other.close();
     await rm(otherRoot, { recursive: true, force: true });
+  }
+});
+
+test("a full due batch waiting for AI authorization does not starve another authorized project's recording", async () => {
+  const waiting = await sealedInput(false);
+  for (let index = 1; index < 100; index++)
+    await sealedClip(waiting, waiting.interviewId);
+  const eligible = await sealedInput(),
+    original = await task(eligible);
+  // Fixed due instants isolate this scheduling scenario from other test tasks.
+  await db.productionTask.updateMany({
+    where: { projectId: waiting.projectId },
+    data: { nextRunAt: new Date("2000-01-01T00:00:00Z") },
+  });
+  await db.productionTask.update({
+    where: { id: original.id },
+    data: { nextRunAt: new Date("2001-01-01T00:00:00Z") },
+  });
+  const runtime = await startProductionWorker(app);
+  async function drainDue() {
+    let expected = Infinity,
+      completed = 0,
+      finish!: () => void;
+    const drained = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error("Due batch did not finish")),
+        10000,
+      );
+      finish = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+    });
+    const onComplete = () => {
+      if (++completed >= expected) finish();
+    };
+    runtime.worker.on("completed", onComplete);
+    try {
+      expected = await runtime.recoverDue();
+      if (completed >= expected) finish();
+      await drained;
+      return expected;
+    } finally {
+      runtime.worker.off("completed", onComplete);
+    }
+  }
+  try {
+    assert.equal(await drainDue(), 100);
+    await drainDue();
+    const current = await task(eligible);
+    assert.equal(current.state, "waiting_provider");
+    assert.equal(current.providerRequestId, original.providerRequestId);
+    assert.equal(current.queuedAt, original.queuedAt);
+    assert.equal(current.recordingUsageMs, 1080);
+    assert.equal(
+      providerRequests.filter(
+        (r) => r.id === original.providerRequestId && r.action === "submit",
+      ).length,
+      1,
+    );
+    const waitingTasks = data(
+      await request(
+        "GET",
+        `/v1/projects/${waiting.projectId}/tasks`,
+        waiting.narrator.token,
+      ),
+      200,
+    );
+    assert.equal(waitingTasks.length, 100);
+    assert.ok(
+      waitingTasks.every(
+        (row: { state: string; errorCode: string }) =>
+          row.state === "queued" &&
+          row.errorCode === "AI_AUTHORIZATION_REQUIRED",
+      ),
+    );
+  } finally {
+    await runtime.close();
   }
 });
