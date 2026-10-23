@@ -1,3 +1,5 @@
+<block wx:if="{{live}}"><view class="page with-tabs live-book"><view class="title">{{overview ? overview.bookTitle : '我的人生书'}}</view><view wx:if="{{status}}" class="section">{{status}}</view><block wx:if="{{overview}}"><view class="section">{{overview.summary.confirmed}} 篇本人已确认 · {{overview.summary.included}} 篇允许入书</view><view class="section">{{overview.nextStep}}</view><button class="btn secondary section" bindtap="settings">修改书名</button><view class="section">当前允许入书的故事</view><button wx:for="{{liveStories}}" wx:key="id" class="btn secondary section" data-id="{{item.id}}" bindtap="story">{{item.revision ? item.revision.title : '故事'}}</button><view wx:if="{{!liveStories.length}}" class="section">还没有本人已确认并允许入书的故事。</view><view class="section">这里显示当前故事许可状态；书稿预览与制作尚未开放。</view><button class="btn section" bindtap="project">返回项目，核对故事</button></block><button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">重新查询</button></view><view class="tabs live-tabs"><button class="tab" bindtap="project"><text class="tab-label">{{overview ? overview.bookTitle : '项目'}}</text></button><button class="tab active" bindtap="book">成书</button><button class="tab" bindtap="account">我的</button></view></block>
+<block wx:else="">
 <view class="book-page with-tabs"
   ><view class="book-heading center"
     ><view class="title">让故事，成为一本书</view
@@ -77,3 +79,4 @@
     ></button
   ></view
 >
+</block>

@@ -19,5 +19,9 @@ export function livePageAllowed(page: string): boolean {
     "photos",
     "story",
     "project",
+    "edit-story",
+    "settings",
+    "book",
+    "account",
   ].includes(page);
 }

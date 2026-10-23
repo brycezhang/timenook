@@ -471,19 +471,22 @@ export class Interviews implements OnModuleDestroy {
       projectId,
       authorization,
       undefined,
-      async (tx) => ({
-        canRecord: (await this.terms.read(projectId, undefined, tx)).canRecord,
-        plan: await this.recordingPlan(projectId, tx),
-        interviews: await Promise.all(
-          (
-            await tx.interview.findMany({
-              where: { projectId },
-              orderBy: { createdAt: "desc" },
-            })
-          ).map((i) => this.view(tx, projectId, i.id)),
-        ),
-      }),
+      (tx) => this.listIn(tx, projectId),
     );
+  }
+  async listIn(tx: Prisma.TransactionClient, projectId: string) {
+    return {
+      canRecord: (await this.terms.read(projectId, undefined, tx)).canRecord,
+      plan: await this.recordingPlan(projectId, tx),
+      interviews: await Promise.all(
+        (
+          await tx.interview.findMany({
+            where: { projectId },
+            orderBy: { createdAt: "desc" },
+          })
+        ).map((i) => this.view(tx, projectId, i.id)),
+      ),
+    };
   }
   context(
     projectId: string,

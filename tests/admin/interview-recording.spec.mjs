@@ -298,10 +298,30 @@ test("bound project home reaches the actual recording page, seals a file and ret
 }) => {
   const page = await openPage(browser, narrator);
   await page.goto(`${base}/#/welcome?projectId=${projectId}`);
+  const overviewLoaded = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      response.url().endsWith(`/v1/projects/${projectId}/overview`),
+  );
   await page
     .getByRole("button", { name: "进入本人参与的项目", exact: true })
     .click();
-  await expect(page.getByText("我的人生项目", { exact: true })).toBeVisible();
+  const overviewResponse = await overviewLoaded;
+  expect(overviewResponse.status()).toBe(200);
+  const overviewEnvelope = await overviewResponse.json();
+  expect(overviewEnvelope.error).toBeUndefined();
+  const overview = overviewEnvelope.data;
+  expect(overview.projectId).toBe(projectId);
+  expect(overview.bookTitle).toBe("我的时光手记");
+  const title = page.locator(".live-project > .title");
+  await expect(title).toHaveCount(1);
+  await expect(title).toHaveText(overview.bookTitle);
+  await expect(
+    page.getByText(
+      `${overview.summary.pending} 篇待本人确认 · ${overview.summary.confirmed} 篇已确认 · ${overview.summary.included} 篇允许入书`,
+      { exact: true },
+    ),
+  ).toBeVisible();
   const began = performance.now();
   await page.getByRole("button", { name: "开始一段讲述", exact: true }).click();
   await page
@@ -332,6 +352,10 @@ test("bound project home reaches the actual recording page, seals a file and ret
     200,
   );
   expect(context.interviews[0].clips).toHaveLength(1);
+  expect(context.interviews[0].clips[0].state).toBe("sealed");
+  expect(context.interviews[0].clips[0].actualQuestionId).toBe(
+    context.interviews[0].currentQuestion.id,
+  );
   expect(context.interviews[0].usage.consumedMs).toBe(1080);
   await page.screenshot({ path: "/tmp/timenook-t14-recording-390.png" });
   const sizes = await page
@@ -353,7 +377,12 @@ test("bound project home reaches the actual recording page, seals a file and ret
   await page
     .getByRole("button", { name: "进入本人参与的项目", exact: true })
     .click();
-  await page.getByRole("button", { name: /继续：/ }).click();
+  await page
+    .getByRole("button", {
+      name: `继续：${context.interviews[0].currentQuestion.snapshot.text}`,
+      exact: true,
+    })
+    .click();
   await expect(
     page.getByText("封存已确认，本机副本仍保留", { exact: true }),
   ).toBeVisible();

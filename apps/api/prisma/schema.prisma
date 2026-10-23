@@ -29,6 +29,9 @@ model OutlineTemplateVersion {
 }
 
 model Project {
+ bookTitle String? @map("book_title")
+ metadataVersion Int @default(0) @map("metadata_version")
+
   accessEpoch Int @default(0) @map("access_epoch")
   orderId String? @unique @map("order_id") @db.Uuid
   id                    String                 @id @db.Uuid
@@ -892,6 +895,20 @@ model StoryCommand {
 }
 
 model StoryRevision {
+ photoSnapshotId String? @map("photo_snapshot_id") @db.Uuid
+ photoInterviewId String? @map("photo_interview_id") @db.Uuid
+ photoSnapshot Json? @map("photo_snapshot")
+
+ notes Json @default("[]")
+ audioManifest Json? @map("audio_manifest")
+
+ operatorId String? @map("operator_id")
+ operatorRealm String? @map("operator_realm")
+ commandKey String? @map("command_key")
+ requestHash String? @map("request_hash") @db.Char(64)
+
+ reviewResolutions Json @default("[]") @map("review_resolutions")
+
  id String @id @db.Uuid
  projectId String @map("project_id") @db.Uuid
  storyId String @map("story_id") @db.Uuid
@@ -909,6 +926,7 @@ model StoryRevision {
  @@unique([storyId,version])
  @@unique([projectId,storyId,id,version])
  @@unique([projectId,storyId,id])
+ @@unique([projectId,storyId,operatorRealm,operatorId,commandKey])
  @@map("story_revisions")
 }
 
@@ -954,4 +972,70 @@ model FollowupSession {
  ended Boolean @default(false)
  @@id([projectId,interviewId])
  @@map("followup_sessions")
+}
+
+model StoryDecision {
+ contentKind String @default("story") @map("content_kind")
+ id String @id @db.Uuid
+ sequence Int @unique @default(autoincrement())
+ projectId String @map("project_id") @db.Uuid
+ storyId String @map("story_id") @db.Uuid
+ revisionId String @map("revision_id") @db.Uuid
+ contentHash String @map("content_hash") @db.Char(64)
+ subjectId String @map("subject_id") @db.Uuid
+ operatorUserId String @map("operator_user_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ method String
+ noticeVersion String @map("notice_version")
+ evidenceRef String @map("evidence_ref")
+ confirmed Boolean
+ allowInBook Boolean @map("allow_in_book")
+ idempotencyKey String @map("idempotency_key")
+ requestHash String @map("request_hash") @db.Char(64)
+ assistedEvidenceId String? @map("assisted_evidence_id") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([projectId,storyId,operatorUserId,idempotencyKey])
+ @@unique([projectId,evidenceRef])
+ @@map("story_decisions")
+}
+
+model StoryRevisionAudio {
+ projectId String @map("project_id") @db.Uuid
+ storyId String @map("story_id") @db.Uuid
+ revisionId String @map("revision_id") @db.Uuid
+ generationTaskId String @map("generation_task_id") @db.Uuid
+ clipId String @map("clip_id") @db.Uuid
+ position Int
+ @@id([revisionId,position])
+ @@unique([revisionId,clipId])
+ @@map("story_revision_audio")
+}
+
+
+
+model ProjectMetadataCommand {
+ projectId String @map("project_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ key String
+ requestHash String @map("request_hash") @db.Char(64)
+ @@id([projectId,actorId,key])
+ @@map("project_metadata_commands")
+}
+
+model StoryCareGrant {
+ caseId String @id @map("case_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ storyId String @map("story_id") @db.Uuid
+ revisionId String @map("revision_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ operatorUserId String @map("operator_user_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+ noticeVersion String @map("notice_version")
+ evidenceRef String @map("evidence_ref")
+ requestHash String @map("request_hash") @db.Char(64)
+ @@unique([projectId,evidenceRef])
+ @@map("story_care_grants")
 }

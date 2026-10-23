@@ -4,10 +4,18 @@ import { storyClient } from "../../services/stories";
 import { clearStoryAudio, privateStoryAudio } from "../../services/story-audio";
 import { recordingPartition } from "../../services/interview-recording";
 import { paymentKey } from "../../services/payments";
+import { projectOverviewClient } from "../../services/project-overview";
 import type { StoryView, StoryContext } from "../../../packages/contracts/src";
 function stage(story: StoryView | null) {
+  if (story?.decision?.confirmed)
+    return story.decision.allowInBook
+      ? "本人已确认这版，允许入书"
+      : "本人已确认这版，暂不入书";
   const task = story?.task;
-  if (!task) return "录音保存后，可以整理这段讲述";
+  if (!task)
+    return story?.revision
+      ? "故事已整理，待本人核对"
+      : "录音保存后，可以整理这段讲述";
   return task.state === "waiting_inputs"
     ? task.errorCode === "DEPENDENCY_FAILED"
       ? "有录音转写失败，原声已保存"
@@ -47,7 +55,9 @@ let audio: WechatMiniprogram.InnerAudioContext | null = null;
 Page({
   projectId: "",
   interviewId: "",
+  storyId: "",
   assistedSessionId: "",
+  confirmationSessionId: "",
   generation: 0,
   visible: false,
   ownerContext: "",
@@ -55,7 +65,18 @@ Page({
   liveAudio: null as WechatMiniprogram.InnerAudioContext | null,
   stopSessionWatch: undefined as (() => void) | undefined,
   poll: undefined as ReturnType<typeof setTimeout> | undefined,
+  decisionCommand: null as { input: string; key: string } | null,
+  careCommand: null as { input: string; key: string } | null,
   data: {
+    careExpiry: "",
+    careEvidence: "",
+    careStatus: "",
+    decisionReady: false,
+    canDecide: false,
+    confirmedChoice: null as boolean | null,
+    includeChoice: null as boolean | null,
+    evidence: "",
+    decisionStatus: "",
     audioBusy: false,
     audioError: "",
     playingClipId: "",
@@ -80,7 +101,11 @@ Page({
     if (dataMode() === "live") {
       this.projectId = q.projectId || "";
       this.interviewId = q.interviewId || "";
-      this.assistedSessionId = q.assistedSessionId || "";
+      this.storyId = q.storyId || "";
+      this.assistedSessionId = this.storyId ? "" : q.assistedSessionId || "";
+      this.confirmationSessionId = this.storyId
+        ? q.assistedSessionId || ""
+        : "";
       this.setData({ live: true });
       return;
     }
@@ -113,6 +138,15 @@ Page({
         privateError: "",
         stage: "正在查询保存与整理状态",
         busy: false,
+        decisionReady: false,
+        canDecide: false,
+        confirmedChoice: null,
+        includeChoice: null,
+        evidence: "",
+        decisionStatus: "",
+        careExpiry: "",
+        careEvidence: "",
+        careStatus: "",
       });
       try {
         await this.stopLiveAudio();
@@ -125,7 +159,7 @@ Page({
         return;
       }
       if (!this.currentLive(generation, context)) return;
-      if (!context || !this.projectId || !this.interviewId) {
+      if (!context || !this.projectId || (!this.interviewId && !this.storyId)) {
         this.setData({ stage: "请登录并从本次采访进入故事" });
         return;
       }
@@ -145,9 +179,20 @@ Page({
       this.stopSessionWatch = undefined;
       void this.stopLiveAudio().catch(() => {});
       this.visible = false;
+      this.decisionCommand = null;
+      this.careCommand = null;
       ++this.generation;
       if (this.poll) clearTimeout(this.poll);
       this.setData({
+        careExpiry: "",
+        careEvidence: "",
+        careStatus: "",
+        decisionReady: false,
+        canDecide: false,
+        confirmedChoice: null,
+        includeChoice: null,
+        evidence: "",
+        decisionStatus: "",
         story: null,
         liveParagraphs: [],
         canOrganize: false,
@@ -180,6 +225,17 @@ Page({
     error: unknown,
     fallback: string,
   ) {
+    if (
+      generation === this.generation &&
+      this.visible &&
+      this.ownerContext === context &&
+      sessionClient.context() !== context &&
+      sessionClient.context()
+    ) {
+      this.onHide();
+      this.setData({ stage: "账号已变化，原页面私人内容已清除，请重新进入" });
+      return;
+    }
     if (!this.currentLive(generation, context, true)) return;
     const denied =
       !sessionClient.context() ||
@@ -194,40 +250,62 @@ Page({
     generation ??= this.generation;
     context ??= this.ownerContext;
     if (this.poll) clearTimeout(this.poll);
-    this.setData({ busy: true, error: "" });
+    this.setData({
+      busy: true,
+      error: "",
+      decisionReady: false,
+      canDecide: false,
+      confirmedChoice: null,
+      includeChoice: null,
+      evidence: "",
+      careEvidence: "",
+      careExpiry: "",
+      decisionStatus: "",
+      careStatus: "",
+    });
     try {
+      let loaded: StoryView | undefined;
+      if (this.storyId) {
+        loaded = await storyClient.read(this.projectId, this.storyId);
+        if (!this.currentLive(generation, context)) return;
+        this.interviewId = loaded.interviewId;
+      }
       const local: unknown = wx.getStorageSync(
           `${recordingPartition(this.projectId)}:${this.interviewId}`,
         ),
         pendingLocal =
           Array.isArray(local) && local.some((c) => !c || c.sealed !== true);
-      const result = await storyClient.context(
-        this.projectId,
-        this.interviewId,
-        this.assistedSessionId || undefined,
-      );
+      const result = loaded
+        ? null
+        : await storyClient.context(
+            this.projectId,
+            this.interviewId,
+            this.assistedSessionId || undefined,
+          );
       if (!this.currentLive(generation, context)) return;
       this.setData({
         context: result,
-        story: result.story,
+        story: loaded ?? result?.story ?? null,
         liveParagraphs: [],
         pendingLocal,
-        stage: stage(result.story),
+        stage: stage(loaded ?? result?.story ?? null),
         saveWarning:
-          pendingLocal || !result.cloudSaved
+          !loaded && (pendingLocal || !result?.cloudSaved)
             ? "还有录音没有云端保存，请回采访页恢复"
             : "",
         retryable: false,
         canOrganize:
-          result.cloudSaved &&
+          !!result?.cloudSaved &&
           !pendingLocal &&
           (!result.story?.task ||
             ["obsolete", "succeeded"].includes(result.story.task.state) ||
             result.clipCount !== result.story.task.sources.length),
       });
-      if (result.story) {
+      if (loaded || result?.story) {
         try {
-          const full = await storyClient.read(this.projectId, result.story.id);
+          const full =
+            loaded ??
+            (await storyClient.read(this.projectId, result!.story!.id));
           if (!this.currentLive(generation, context)) return;
           this.setData({
             story: full,
@@ -242,7 +320,11 @@ Page({
                       s.transcript &&
                       ref === `transcript:${s.clipId}:${s.transcript.sha256}`,
                   );
-                  return index >= 0 ? `第 ${index + 1} 段原声` : "原声来源";
+                  return index >= 0
+                    ? `第 ${index + 1} 段原声`
+                    : ref.startsWith("note:")
+                      ? "校对说明"
+                      : "原声来源";
                 })
                 .join("、"),
             })),
@@ -259,7 +341,7 @@ Page({
             this.currentLive(generation, context)
           ) {
             this.setData({
-              story: result.story,
+              story: result?.story ?? null,
               privateError: "正文暂时不可查看，请核对讲述者的共享授权",
             });
           } else throw error;
@@ -361,6 +443,193 @@ Page({
   refresh() {
     if (!this.data.busy) void this.refreshLive();
   },
+  async prepareDecision() {
+    if (this.data.busy || !this.data.story?.revision) return;
+    const generation = this.generation,
+      context = this.ownerContext;
+    this.setData({ busy: true, decisionStatus: "" });
+    try {
+      const overview = await projectOverviewClient.read(this.projectId);
+      if (!this.currentLive(generation, context)) return;
+      this.setData({
+        decisionReady: true,
+        canDecide: overview.canDecide || !!this.confirmationSessionId,
+        confirmedChoice: null,
+        includeChoice: null,
+        evidence: "",
+        decisionStatus:
+          overview.canDecide || this.confirmationSessionId
+            ? "请本人分别选择，并记录本次独立说明"
+            : "当前账号只能协助校对；本人确认请使用讲述者账号或当次故事确认协助",
+      });
+    } catch (error) {
+      this.liveFailure(
+        generation,
+        context,
+        error,
+        "查询本人确认权限失败，请重试",
+      );
+    } finally {
+      if (this.currentLive(generation, context, true))
+        this.setData({ busy: false });
+    }
+  },
+  chooseConfirmation(e: E) {
+    this.setData({ confirmedChoice: e.currentTarget.dataset.value === "true" });
+  },
+  chooseInclusion(e: E) {
+    this.setData({ includeChoice: e.currentTarget.dataset.value === "true" });
+  },
+  decisionEvidence(e: E) {
+    this.setData({ evidence: e.detail.value });
+  },
+  async decideLive() {
+    const current = this.data.story,
+      revision = current?.revision;
+    if (this.data.busy || !current || !revision || !this.data.canDecide) return;
+    if (
+      this.data.confirmedChoice === null ||
+      this.data.includeChoice === null ||
+      !/^[^\r\n]{3,160}$/.test(this.data.evidence.trim())
+    ) {
+      this.setData({
+        decisionStatus:
+          "请本人分别选择内容确认与入书许可，并填写 3 至 160 字的本次独立说明（单行）",
+      });
+      return;
+    }
+    if (this.data.includeChoice && !this.data.confirmedChoice) {
+      this.setData({ decisionStatus: "未确认的故事不能允许入书" });
+      return;
+    }
+    const input = {
+      revisionId: revision.id,
+      contentHash: revision.contentHash,
+      expectedVersion: current.version,
+      confirmed: this.data.confirmedChoice,
+      allowInBook: this.data.includeChoice,
+      evidenceRef: `synthetic:${this.data.evidence.trim()}`,
+      ...(this.confirmationSessionId
+        ? { assistedSessionId: this.confirmationSessionId }
+        : {}),
+    };
+    const serialized = JSON.stringify(input);
+    if (this.decisionCommand?.input !== serialized)
+      this.decisionCommand = { input: serialized, key: paymentKey() };
+    const generation = this.generation,
+      context = this.ownerContext;
+    this.setData({ busy: true, decisionStatus: "" });
+    try {
+      const result = await storyClient.decide(
+        this.projectId,
+        current.id,
+        input,
+        this.decisionCommand!.key,
+      );
+      if (!this.currentLive(generation, context)) return;
+      this.decisionCommand = null;
+      this.setData({
+        story: result,
+        stage: stage(result),
+        evidence: "",
+        decisionReady: false,
+        decisionStatus: result.decision?.confirmed
+          ? result.decision.allowInBook
+            ? "本人已确认，允许这版入书"
+            : "本人已确认，这版暂不入书"
+          : "本人已撤回这版确认与入书许可",
+      });
+    } catch (error) {
+      if (this.currentLive(generation, context))
+        this.setData({
+          decisionStatus:
+            error instanceof ApiFailure && error.status === 409
+              ? "版本或核对状态已变化，请刷新并重新核对；本次决定未确认"
+              : "本次决定未确认，请重新查询或重试",
+        });
+      this.liveFailure(generation, context, error, "决定保存失败");
+    } finally {
+      if (this.currentLive(generation, context, true))
+        this.setData({ busy: false });
+    }
+  },
+  participation() {
+    go(
+      "assisted",
+      `projectId=${this.projectId}&storyId=${this.data.story?.id || this.storyId}&interviewId=${this.interviewId}&purpose=story_confirmation`,
+    );
+  },
+  correctionInput(e: E) {
+    if (["careExpiry", "careEvidence"].includes(e.currentTarget.dataset.field))
+      this.setData({ [e.currentTarget.dataset.field]: e.detail.value });
+  },
+  async requestCorrection() {
+    const current = this.data.story,
+      revision = current?.revision;
+    if (this.data.busy || !current || !revision || !this.data.canDecide) return;
+    const expiry = this.data.careExpiry.trim(),
+      evidence = this.data.careEvidence.trim();
+    if (
+      !/^[^\r\n]{3,160}$/.test(evidence) ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(
+        expiry,
+      ) ||
+      !Number.isFinite(Date.parse(expiry)) ||
+      Date.parse(expiry) <= Date.now()
+    ) {
+      this.setData({
+        careStatus:
+          "请本人明确填写未来的 ISO 有效期和 3 至 160 字的单行独立说明；尚未申请",
+      });
+      return;
+    }
+    const input = {
+      revisionId: revision.id,
+      contentHash: revision.contentHash,
+      expectedVersion: current.version,
+      evidenceRef: `synthetic:${evidence}`,
+      expiresAt: expiry,
+      ...(this.confirmationSessionId
+        ? { assistedSessionId: this.confirmationSessionId }
+        : {}),
+    };
+    const serialized = JSON.stringify(input);
+    if (this.careCommand?.input !== serialized)
+      this.careCommand = { input: serialized, key: paymentKey() };
+    const generation = this.generation,
+      context = this.ownerContext;
+    this.setData({ busy: true, careStatus: "" });
+    try {
+      const result = await storyClient.requestCorrection(
+        this.projectId,
+        current.id,
+        input,
+        this.careCommand!.key,
+      );
+      if (!this.currentLive(generation, context)) return;
+      if (
+        result.storyId !== current.id ||
+        !/^[0-9a-f-]{36}$/.test(result.caseId) ||
+        Date.parse(result.expiresAt) !== Date.parse(expiry)
+      )
+        throw new Error("工单结果无效，请重新查询");
+      this.careCommand = null;
+      this.setData({
+        careEvidence: "",
+        careStatus: `校对申请已记录，工单 ${result.caseId}，有效期至 ${result.expiresAt}。等待运营处理；故事仍须本人确认。`,
+      });
+    } catch (error) {
+      if (this.currentLive(generation, context))
+        this.setData({ careStatus: "校对申请结果未确定，请重新查询或重试" });
+      this.liveFailure(generation, context, error, "申请未保存");
+    } finally {
+      if (this.currentLive(generation, context, true))
+        this.setData({ busy: false });
+    }
+  },
+  editLivePhotos() {
+    go("photos", `projectId=${this.projectId}&interviewId=${this.interviewId}`);
+  },
   async stopLiveAudio() {
     ++this.audioSequence;
     this.liveAudio?.stop();
@@ -456,6 +725,13 @@ Page({
     toast("已确认，允许这版故事入书");
   },
   edit() {
+    if (this.data.live && this.data.story?.revision) {
+      go(
+        "edit-story",
+        `projectId=${this.projectId}&storyId=${this.data.story.id}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+      );
+      return;
+    }
     go("edit-story", "id=" + this.data.id);
   },
   supplement() {

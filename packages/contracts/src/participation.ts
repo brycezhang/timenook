@@ -55,6 +55,7 @@ export interface BindingApplication {
   state: string;
 }
 export interface CareCase {
+  correctionGrant?: { storyId: string; expiresAt: string } | null;
   id: string;
   projectId: string;
   requesterId: string | null;
@@ -66,7 +67,7 @@ export interface CareCase {
   sourceAccessEpoch: number;
   state: "open" | "verified" | "completed";
   completedBy: string | null;
-  kind: "rebind" | "withdraw" | "export" | "delete";
+  kind: "rebind" | "withdraw" | "export" | "delete" | "correction";
   createdAt: string;
   supportCaseRef?: string;
   changes?: CareBindingChangeView[];
@@ -81,7 +82,7 @@ export interface CareCase {
 }
 export interface ProjectCareRequestView {
   id: string;
-  kind: "rebind" | "withdraw" | "export" | "delete";
+  kind: "rebind" | "withdraw" | "export" | "delete" | "correction";
   state: "open" | "verified" | "completed";
   createdAt: string;
 }

@@ -22,6 +22,20 @@ type E = {
   currentTarget: { dataset: Record<string, string> };
   detail: { value: string };
 };
+function recordingTime(clips: ProbeLocalClip[], currentSegmentMs = 0) {
+  const savedMs = clips.reduce(
+    (total, clip) =>
+      total +
+      (Number.isFinite(clip.durationMs) && clip.durationMs > 0
+        ? clip.durationMs
+        : 0),
+    0,
+  );
+  const seconds = Math.floor((savedMs + Math.max(0, currentSegmentMs)) / 1000);
+  return `${Math.floor(seconds / 60)
+    .toString()
+    .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
+}
 Page({
   data: {
     mode: dataMode(),
@@ -289,6 +303,7 @@ Page({
           state: snapshot.stage,
           status: snapshot.message,
           localClips: snapshot.clips,
+          timer: recordingTime(snapshot.clips),
         });
         if (snapshot.stage === "sealed") void this.refreshTasks();
       }
@@ -644,14 +659,13 @@ Page({
           device.start(actualQuestionId);
           const began = Date.now();
           this.timerHandle = setInterval(() => {
-            const seconds = Math.floor((Date.now() - began) / 1000);
+            if (
+              !this.current(generation, context) ||
+              this.data.state !== "recording"
+            )
+              return;
             this.setData({
-              timer: `${Math.floor(seconds / 60)
-                .toString()
-                .padStart(
-                  2,
-                  "0",
-                )}:${(seconds % 60).toString().padStart(2, "0")}`,
+              timer: recordingTime(this.data.localClips, Date.now() - began),
             });
           }, 1000);
         } catch (error) {

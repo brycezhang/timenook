@@ -1,3 +1,5 @@
+<block wx:if="{{live}}"><view class="page live-settings"><view class="title">修改书名</view><view class="section">修改项目展示书名，当前故事版本和本人决定可在项目页核对。</view><input class="live-title section" value="{{title}}" data-field="title" bindinput="input" maxlength="80" disabled="{{busy || !overview}}" /><view wx:if="{{error}}" class="error section">{{error}}</view><button wx:if="{{!overview}}" class="btn secondary section" bindtap="onShow" disabled="{{busy}}">重新查询</button><button class="btn section" bindtap="save" disabled="{{busy || !overview}}">{{busy?'正在保存…':'保存书名'}}</button></view></block>
+<block wx:else="">
 <view class="page with-dock"
   ><view class="title">给故事，一个名字</view
   ><view class="subtitle">现在不用想得很完整，之后还可以修改。</view
@@ -22,3 +24,4 @@
     >修改书名后，需要重新确认书稿。展示的成书图片为效果示意，实际书封以最终预览为准。</view
   ><view class="error">{{error}}</view></view
 ><view class="dock"><button class="btn" bindtap="save">保存资料</button></view>
+</block>

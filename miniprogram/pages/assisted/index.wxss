@@ -2,6 +2,16 @@
   font-size: 40rpx;
   overflow-wrap: anywhere;
 }
+.story-evidence {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 180rpx;
+  font-size: 40rpx;
+  line-height: 1.7;
+  border: 2rpx solid #c7bb9e;
+  border-radius: 12rpx;
+  padding: 22rpx;
+}
 .assisted-page .note,
 .assisted-page .soft,
 .assisted-page .section-title {

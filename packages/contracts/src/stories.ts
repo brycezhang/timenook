@@ -17,7 +17,41 @@ export interface StorySourceView {
     inputHash: string;
   } | null;
 }
+export interface StoryDecisionView {
+  id: string;
+  revisionId: string;
+  contentHash: string;
+  subjectId: string;
+  operatorUserId: string;
+  confirmed: boolean;
+  allowInBook: boolean;
+  method: string;
+  noticeVersion: string;
+  evidenceRef: string;
+  assistedEvidenceId: string | null;
+  createdAt: string;
+}
+export interface ProjectOverview {
+  projectId: string;
+  bookTitle: string;
+  metadataVersion: number;
+  subjectId: string;
+  role: "narrator" | "initiator";
+  canDecide: boolean;
+  stories: StoryView[];
+  tasks: import("./tasks").ProductionTaskView[];
+  interviews: import("./recording").RecordingContext["interviews"];
+  summary: { pending: number; confirmed: number; included: number };
+  nextStep: string;
+  accessExpiresAt: string | null;
+}
 export interface StoryRevisionView {
+  baseRevisionId?: string | null;
+  reviewResolutions?: { item: string; reason: string }[];
+  notes?: { id: string; text: string }[];
+  audioManifest?: StorySourceView[] | null;
+  photoSnapshot?: import("./photos").PhotoMaterials | null;
+
   id: string;
   version: number;
   title: string;
@@ -29,6 +63,8 @@ export interface StoryRevisionView {
   origin: "ai" | "participant";
 }
 export interface StoryView {
+  appliedRevision?: { id: string; version: number; contentHash: string };
+  decision?: StoryDecisionView | null;
   id: string;
   projectId: string;
   interviewId: string;

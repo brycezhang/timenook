@@ -208,7 +208,9 @@ export const participationClient = {
       !result.requests.every(
         (item) =>
           uuid(item.id) &&
-          ["rebind", "withdraw", "export", "delete"].includes(item.kind) &&
+          ["rebind", "withdraw", "export", "delete", "correction"].includes(
+            item.kind,
+          ) &&
           ["open", "verified", "completed"].includes(item.state) &&
           Number.isFinite(Date.parse(item.createdAt)),
       )

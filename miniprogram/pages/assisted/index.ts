@@ -27,6 +27,8 @@ Page({
     status: "",
     loggedIn: false,
     targetUserId: "",
+    storyPurpose: false,
+    storyEvidence: "",
     purposes: [
       { purpose: "collection", label: "采集并保存讲述和照片" },
       { purpose: "ai", label: "交由 AI 处理素材" },
@@ -34,19 +36,92 @@ Page({
     ],
   },
   projectId: "",
+  storyId: "",
+  interviewId: "",
   generation: 0,
+  ownerContext: "",
+  stopSessionWatch: undefined as (() => void) | undefined,
   intent: null as { input: string; key: string } | null,
   onLoad(q) {
     this.projectId = q.projectId ?? "";
+    this.storyId = q.storyId ?? "";
+    this.interviewId = q.interviewId ?? "";
+    this.setData({
+      storyPurpose: q.purpose === "story_confirmation" && !!this.storyId,
+    });
     setDataMode("live");
   },
   onHide() {
     ++this.generation;
+    this.ownerContext = "";
+    this.stopSessionWatch?.();
+    this.stopSessionWatch = undefined;
+    this.intent = null;
     this.setData({
       participation: null,
       sessions: [],
       careRequests: [],
       busy: false,
+      loggedIn: false,
+      targetUserId: "",
+      storyEvidence: "",
+    });
+  },
+  storyEvidence(e: { detail: { value: string } }) {
+    this.setData({ storyEvidence: e.detail.value });
+  },
+  async startStoryConfirmation(e: E) {
+    const current = this.data.participation,
+      granted = e.currentTarget.dataset.granted === "true",
+      evidence = this.data.storyEvidence.trim();
+    if (
+      !this.data.storyPurpose ||
+      !current ||
+      this.data.busy ||
+      current.policyStatus !== "synthetic-only"
+    )
+      return;
+    if (!/^[^\r\n]{3,160}$/.test(evidence)) {
+      this.setData({ status: "请记录 3 至 160 字的本人当次选择说明（单行）" });
+      return;
+    }
+    const expectedSessionId = this.data.sessions.find(
+      (s) => s.purpose === "story_confirmation",
+    )?.id;
+    const input = {
+      purpose: "story_confirmation",
+      granted,
+      noticeVersion: current.noticeVersion,
+      evidenceRef: `synthetic:${evidence}`,
+      expectedBindingVersion: current.bindingVersion,
+      expectedAccessEpoch: current.accessEpoch,
+      ...(expectedSessionId ? { expectedSessionId } : {}),
+    };
+    const key = this.key(JSON.stringify(input));
+    await this.perform(async (generation, context) => {
+      const session = await sessionClient.request<AssistedSessionView>(
+        `/projects/${this.projectId}/assisted-sessions`,
+        { key, data: input },
+      );
+      if (!this.current(generation, context)) return;
+      this.intent = null;
+      if (!granted) {
+        this.setData({
+          status: "本人拒绝已保存；不会进入故事确认",
+          storyEvidence: "",
+        });
+        return;
+      }
+      if (
+        session.purpose !== "story_confirmation" ||
+        session.state !== "active" ||
+        !/^[0-9a-f-]{36}$/.test(session.id)
+      )
+        throw new Error("当次故事确认协助尚未生效，请重新查询");
+      go(
+        "story",
+        `projectId=${this.projectId}&storyId=${this.storyId}${this.interviewId ? `&interviewId=${this.interviewId}` : ""}&assistedSessionId=${session.id}`,
+      );
     });
   },
   onUnload() {
@@ -84,6 +159,19 @@ Page({
     if (this.data.busy) return;
     const generation = ++this.generation;
     const context = sessionClient.context();
+    this.ownerContext = context;
+    this.stopSessionWatch?.();
+    this.stopSessionWatch = undefined;
+    if (context)
+      this.stopSessionWatch = sessionClient.onInvalidated((lost) => {
+        if (lost !== context || this.ownerContext !== context) return;
+        this.onHide();
+        this.setData({
+          status: sessionClient.sessionCleanupPending()
+            ? "登录已失效；设备会话缓存清理失败，请重试登录"
+            : "登录已失效，请重新登录",
+        });
+      });
     this.setData({ busy: true, status: "", loggedIn: !!context });
     try {
       await work(generation, context);

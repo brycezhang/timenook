@@ -126,3 +126,26 @@
   line-height: 1.7;
   margin: 20rpx 0;
 }
+.live-story .btn {
+  font-size: 40rpx;
+  min-height: 96rpx;
+  min-width: 96rpx;
+  line-height: 1.5;
+  white-space: normal;
+  padding: 22rpx;
+}
+.live-decision {
+  font-size: 40rpx;
+  line-height: 1.7;
+}
+.decision-evidence {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 160rpx;
+  border: 2rpx solid #c7bb9e;
+  border-radius: 12rpx;
+  padding: 22rpx;
+  font-size: 40rpx;
+  line-height: 1.7;
+  margin: 20rpx 0;
+}

@@ -21,7 +21,9 @@ const compiled = await build({
   platform: "neutral",
   define: { __TIMENOOK_API_BASE_URL__: JSON.stringify(base) },
 });
-function harness(options: { deferSaves?: boolean } = {}) {
+function harness(
+  options: { deferSaves?: boolean; clock?: { now: number } } = {},
+) {
   const storage = new Map<string, unknown>([
       ["timenook.mode.v1", "live"],
       [`timenook.session.v1:${base}`, login],
@@ -31,11 +33,13 @@ function harness(options: { deferSaves?: boolean } = {}) {
     files = new Set<string>(),
     handlers: Record<string, ((v?: any) => void)[]> = {},
     pendingSaves: any[] = [],
-    navigation: any[] = [];
-  let now = Date.now();
+    navigation: any[] = [],
+    intervals = new Map<number, () => void>();
+  let intervalId = 0;
+  const clock = options.clock ?? { now: Date.now() };
   class DeviceDate extends Date {
     static now() {
-      return now;
+      return clock.now;
     }
   }
   let page: any,
@@ -48,8 +52,15 @@ function harness(options: { deferSaves?: boolean } = {}) {
     Date: DeviceDate,
     setTimeout,
     clearTimeout,
-    setInterval,
-    clearInterval,
+    setInterval: options.clock
+      ? (callback: () => void) => {
+          intervals.set(++intervalId, callback);
+          return intervalId;
+        }
+      : setInterval,
+    clearInterval: options.clock
+      ? (id: number) => intervals.delete(id)
+      : clearInterval,
     Page: (value: any) => {
       page = value;
       page.setData = (patch: object) => Object.assign(page.data, patch);
@@ -118,7 +129,12 @@ function harness(options: { deferSaves?: boolean } = {}) {
     pendingSaves,
     navigation,
     expireSession() {
-      now = Date.parse(login.session.expiresAt);
+      clock.now = Date.parse(login.session.expiresAt);
+    },
+    advance(ms: number) {
+      assert.ok(options.clock, "controlled device clock required");
+      clock.now += ms;
+      for (const callback of intervals.values()) callback();
     },
     get saves() {
       return saves;
@@ -191,8 +207,17 @@ async function ready(h: ReturnType<typeof harness>) {
 }
 async function start(h: ReturnType<typeof harness>) {
   const starting = h.page.record();
+  const request = h.requests.shift(),
+    selectedQuestion =
+      h.page.data.interview.currentQuestion ??
+      h.page.data.interview.actualQuestion;
+  assert.equal(request.data.actualQuestionId, selectedQuestion.id);
+  assert.equal(
+    request.data.expectedQuestionVersion,
+    h.page.data.interview.questionVersion ?? 1,
+  );
   respond(
-    h.requests.shift(),
+    request,
     {
       allowed: true,
       actualQuestionId: (
@@ -205,6 +230,77 @@ async function start(h: ReturnType<typeof harness>) {
   );
   await starting;
 }
+test("restoring the same interview derives elapsed time from saved local clips and adds only the current recording segment", async (t) => {
+  const h = harness({ clock: { now: Date.parse("2026-10-24T01:00:00Z") } });
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  assert.equal(h.page.data.timer, "00:00");
+  await start(h);
+  await h.page.record();
+  await tick();
+  assert.equal(h.page.data.localClips[0].durationMs, 1080);
+  h.page.onHide();
+  h.advance(60000);
+  const nextQuestion = {
+    ...question,
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    source: {
+      kind: "follow-up",
+      generationTaskId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    },
+    snapshot: { text: "那条小路上还有谁陪着您？", intent: "补充人物" },
+  };
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        currentQuestion: nextQuestion,
+        questionVersion: 2,
+        usage: { reservedMs: 0, consumedMs: 600000 },
+      },
+    ],
+  });
+  await showing;
+  assert.equal(
+    h.page.data.timer,
+    "00:01",
+    "restored local duration, excluding server totals and time spent away",
+  );
+  assert.equal(
+    h.starts,
+    1,
+    "returning cannot automatically restart native recording",
+  );
+  assert.equal(h.page.data.question, "那条小路上还有谁陪着您？");
+  assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+  await start(h);
+  h.advance(3000);
+  assert.equal(
+    h.page.data.timer,
+    "00:04",
+    "saved local duration plus current segment elapsed time",
+  );
+  await h.page.record();
+  await tick();
+  assert.equal(
+    h.page.data.timer,
+    "00:02",
+    "stopped segments use actual native clip durations",
+  );
+  assert.deepEqual(
+    Array.from(h.page.data.localClips, (clip: any) => clip.actualQuestionId),
+    [question.id, nextQuestion.id],
+  );
+  h.page.onHide();
+  h.advance(360000);
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [interview] });
+  await returning;
+  assert.equal(h.page.data.timer, "00:02");
+  assert.equal(h.starts, 2);
+});
 test("live recording page saves file and manifest before success and restores the same account's pending file after re-login", async () => {
   const h = harness();
   await ready(h);
