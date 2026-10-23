@@ -128,6 +128,10 @@ test.beforeAll(async () => {
       payments: paymentConfig,
       participation: { mode: "synthetic-d08" },
       recording: { mode: "synthetic-local", storageRoot: root },
+      photos: {
+        mode: "synthetic-local",
+        placement: { widthMm: 100, heightMm: 150 },
+      },
     }),
     {
       paymentFetch,
@@ -959,6 +963,71 @@ test("a hidden interview current-session HTTP 401 clears the active story, playi
   } finally {
     releaseStatus();
     releaseContext();
+    await page.context().close();
+  }
+});
+
+test("cancelling PhotoPage selection leaves the waiting story intact while actual supplementary recording obsoletes it", async ({
+  browser,
+}) => {
+  const interview = await savedInterview(),
+    page = await openPage(browser, narrator);
+  try {
+    await page.goto(
+      `${base}/#/interview?projectId=${projectId}&interviewId=${interview.id}`,
+    );
+    await page
+      .getByRole("button", { name: "整理或查看故事", exact: true })
+      .click();
+    await page.getByRole("button", { name: "整理故事", exact: true }).click();
+    await expect(
+      page.getByText("正在等待全部录音转写，可离开", { exact: true }),
+    ).toBeVisible();
+    const current = () =>
+      request("POST", `/v1/projects/${projectId}/stories/context`, narrator, {
+        interviewId: interview.id,
+      }).then((r) => data(r));
+    const before = await current();
+    await page
+      .getByRole("button", { name: "回采访页继续讲", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "查看照片或事后补图", exact: true })
+      .click();
+    await page.evaluate(() => {
+      window.wx.chooseMedia = (o) =>
+        o.fail({ errMsg: "chooseMedia:fail cancel" });
+    });
+    await page.getByRole("button", { name: "选择原照片", exact: true }).click();
+    await expect(page.getByText(/未取得照片，请重试/)).toBeVisible();
+    const cancelled = await current();
+    expect(cancelled.story.task.id).toBe(before.story.task.id);
+    expect(cancelled.story.task.state).toBe("waiting_inputs");
+    expect(cancelled.story.task.queuedAt).toBe(before.story.task.queuedAt);
+    expect(cancelled.story.task.sources).toEqual(before.story.task.sources);
+    expect(cancelled.clipCount).toBe(2);
+    expect(cancelled.pendingCount).toBe(0);
+    await page
+      .getByRole("button", { name: "返回采访，开始说", exact: true })
+      .click();
+    await page.getByRole("button", { name: "开始说", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "说完了，停止录音", exact: true }),
+    ).toBeVisible();
+    const recording = await current();
+    expect(recording.story.task.id).toBe(before.story.task.id);
+    expect(recording.story.task.state).toBe("obsolete");
+    expect(recording.story.task.errorCode).toBe("INPUT_CHANGED");
+    expect(recording.clipCount).toBe(2);
+    expect(recording.pendingCount).toBe(0);
+    await page
+      .getByRole("button", { name: "说完了，停止录音", exact: true })
+      .click();
+    await expect(
+      page.getByText("本机文件已保存，尚待封存", { exact: true }),
+    ).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
     await page.context().close();
   }
 });

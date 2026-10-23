@@ -263,6 +263,36 @@ export class Interviews implements OnModuleDestroy {
       "existing",
     );
   }
+  private async assertCollectionInterviewIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    id: string,
+    actor: { subjectId: string; bindingVersion: number; accessEpoch: number },
+  ) {
+    const row = await tx.interview.findFirst({ where: { projectId, id } });
+    if (!row) throw new NotFoundException();
+    if (
+      row.subjectId !== actor.subjectId ||
+      row.bindingVersion !== actor.bindingVersion ||
+      row.accessEpoch !== actor.accessEpoch
+    ) throw new ForbiddenException();
+  }
+  collectionCheck(
+    projectId: string,
+    id: string,
+    body: { assistedSessionId?: string },
+    authorization?: string,
+  ) {
+    return this.participation.withCollectionAccess(
+      projectId,
+      authorization,
+      body.assistedSessionId,
+      async (tx, actor) => {
+        await this.assertCollectionInterviewIn(tx, projectId, id, actor);
+        return { allowed: true };
+      },
+    );
+  }
   recordingStart(
     projectId: string,
     id: string,
@@ -274,14 +304,7 @@ export class Interviews implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        const row = await tx.interview.findFirst({ where: { projectId, id } });
-        if (!row) throw new NotFoundException();
-        if (
-          row.subjectId !== actor.subjectId ||
-          row.bindingVersion !== actor.bindingVersion ||
-          row.accessEpoch !== actor.accessEpoch
-        )
-          throw new ForbiddenException();
+        await this.assertCollectionInterviewIn(tx, projectId, id, actor);
         await invalidateStoryRecordingIn(tx, projectId, id);
         return { allowed: true };
       },
@@ -372,6 +395,19 @@ export class InterviewsController {
   ) {
     return {
       data: await this.interviews.context(id, body, req.headers.authorization),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post(":interviewId/collection-check")
+  @Header("Cache-Control", "no-store")
+  async collectionCheck(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("interviewId", new ParseUUIDPipe()) interview: string,
+    @Body() body: InterviewCollectionDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.interviews.collectionCheck(id, interview, body, req.headers.authorization),
       meta: { requestId: req.id },
     };
   }

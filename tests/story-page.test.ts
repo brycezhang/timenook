@@ -110,12 +110,17 @@ function harness(
           src: "",
           plays: 0,
           destroyed: false,
+          stops: 0,
+          destroys: 0,
           play() {
             this.plays++;
           },
           pause() {},
-          stop() {},
+          stop() {
+            this.stops++;
+          },
           destroy() {
+            this.destroys++;
             this.destroyed = true;
           },
           onEnded() {},
@@ -403,13 +408,14 @@ async function showAudioStory(
   h: ReturnType<typeof harness>,
   start = 0,
   text = "原账号私人正文",
+  state = "succeeded",
 ) {
   h.page.onLoad({ projectId, interviewId });
   const showing = h.page.onShow();
   await turn();
   const current = {
-    ...story("succeeded", 1),
-    task: { ...story("succeeded", 1).task, sources: [source] },
+    ...story(state, 1),
+    task: { ...story(state, 1).task, sources: [source] },
     revision: {
       id: storyId,
       title: "真实故事",
@@ -429,6 +435,16 @@ async function showAudioStory(
   });
   await turn();
   h.respond(start + 1, current);
+  if (state === "failed") {
+    await turn();
+    h.respond(start + 2, {
+      id: taskId,
+      projectId,
+      kind: "compose_story",
+      state: "failed",
+      retryable: true,
+    });
+  }
   await showing;
 }
 const audioEvent = { currentTarget: { dataset: { id: source.clipId } } };
@@ -648,3 +664,157 @@ test("a fresh story runtime retains an audio cleanup reference on permission fai
   assert.ok(h.storage.has("synthetic-pending-original"));
   h.page.onUnload();
 });
+
+test("direct StoryPage unload releases played private audio, listener and private view and tolerates repeated lifecycle cleanup", async () => {
+  const h = harness();
+  await showAudioStory(h);
+  h.storage.set("synthetic-pending-original", [
+    { path: "only-original", sealed: false },
+  ]);
+  const playing = h.page.playLive(audioEvent);
+  await turn();
+  h.respond(2, recording);
+  await turn();
+  h.downloads[0].success({
+    statusCode: 200,
+    tempFilePath: "unload-playing-audio",
+  });
+  await playing;
+  h.page.onUnload();
+  await turn();
+  assert.equal(h.players[0].destroys, 1);
+  assert.equal(h.players[0].stops, 1);
+  assert.ok(h.removed.includes("unload-playing-audio"));
+  assert.equal(h.page.stopSessionWatch, undefined);
+  assert.equal(h.page.data.story, null);
+  assert.equal(h.page.data.liveParagraphs.length, 0);
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.data.audioBusy, false);
+  h.page.onHide();
+  h.page.onUnload();
+  await turn();
+  assert.equal(h.players[0].destroys, 1);
+  assert.ok(h.storage.has("synthetic-pending-original"));
+  assert.ok(!h.removed.includes("only-original"));
+});
+test("direct StoryPage unload fences an in-flight download and removes its late temporary bytes while retaining the pending original", async () => {
+  const h = harness();
+  await showAudioStory(h);
+  h.storage.set("synthetic-pending-original", [
+    { path: "only-original", sealed: false },
+  ]);
+  const playing = h.page.playLive(audioEvent);
+  await turn();
+  h.respond(2, recording);
+  await turn();
+  h.page.onUnload();
+  h.downloads[0].success({
+    statusCode: 200,
+    tempFilePath: "unload-late-audio",
+  });
+  await playing;
+  await turn();
+  assert.equal(h.players.length, 0);
+  assert.ok(h.removed.includes("unload-late-audio"));
+  assert.equal(h.page.stopSessionWatch, undefined);
+  assert.equal(h.page.data.story, null);
+  assert.equal(h.page.data.liveParagraphs.length, 0);
+  assert.equal(h.page.data.audioBusy, false);
+  h.page.onHide();
+  h.page.onUnload();
+  await turn();
+  assert.ok(h.storage.has("synthetic-pending-original"));
+  assert.ok(!h.removed.includes("only-original"));
+});
+
+for (const action of ["submitLive", "retryLive"]) {
+  test(`${action} response at exact local expiry clears private story, audio and busy`, async () => {
+    const h = harness();
+    await showAudioStory(
+      h,
+      0,
+      "当前私人正文",
+      action === "retryLive" ? "failed" : "succeeded",
+    );
+    h.storage.set("synthetic-pending-original", [
+      { path: "only-original", sealed: false },
+    ]);
+    const metadata = h.requests.length,
+      playing = h.page.playLive(audioEvent);
+    await turn();
+    h.respond(metadata, recording);
+    await turn();
+    h.downloads[0].success({
+      statusCode: 200,
+      tempFilePath: `${action}-private-audio`,
+    });
+    await playing;
+    const index = h.requests.length,
+      pending = h.page[action]();
+    await turn();
+    assert.ok(
+      h.requests[index].url.endsWith(
+        action === "submitLive" ? "/organize" : `/tasks/${taskId}/retry`,
+      ),
+    );
+    h.expireSession();
+    h.respond(
+      index,
+      action === "submitLive"
+        ? story("waiting_inputs", 1)
+        : { id: taskId, projectId, kind: "compose_story", state: "queued" },
+      202,
+    );
+    await pending;
+    await turn();
+    assert.equal(h.page.data.story, null);
+    assert.equal(h.page.data.context, null);
+    assert.equal(h.page.data.liveParagraphs.length, 0);
+    assert.equal(h.page.data.busy, false);
+    assert.equal(h.page.data.audioBusy, false);
+    assert.equal(h.page.data.canOrganize, false);
+    assert.equal(h.players[0].destroys, 1);
+    assert.ok(h.removed.includes(`${action}-private-audio`));
+    assert.equal(h.page.stopSessionWatch, undefined);
+    assert.ok(h.storage.has("synthetic-pending-original"));
+    assert.ok(!h.removed.includes("only-original"));
+    h.page.onUnload();
+  });
+}
+
+for (const action of ["submitLive", "retryLive"]) {
+  test(`${action} late response cannot clear a newer account or page instance`, async () => {
+    const h = harness();
+    await showAudioStory(
+      h,
+      0,
+      "旧页面私人正文",
+      action === "retryLive" ? "failed" : "succeeded",
+    );
+    const index = h.requests.length,
+      pending = h.page[action]();
+    await turn();
+    h.page.onHide();
+    const identity = structuredClone(login);
+    if (action === "submitLive") {
+      identity.user.id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+      identity.session.id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+      identity.session.token = "b".repeat(43);
+      h.storage.set(`timenook.session.v1:${base}`, identity);
+    }
+    await showAudioStory(h, h.requests.length, "后来页面私人正文");
+    h.respond(
+      index,
+      action === "submitLive"
+        ? story("waiting_inputs", 1)
+        : { id: taskId, projectId, kind: "compose_story", state: "queued" },
+      202,
+    );
+    await pending;
+    assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), identity);
+    assert.equal(h.page.data.liveParagraphs[0].text, "后来页面私人正文");
+    assert.equal(h.page.data.busy, false);
+    assert.equal(h.page.visible, true);
+    h.page.onUnload();
+  });
+}

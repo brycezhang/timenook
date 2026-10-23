@@ -1838,3 +1838,47 @@ test("each frozen story source locates its original sealed audio through the exi
     );
   }
 });
+
+test("the photo collection check returns only current authorization and leaves the frozen story untouched for narrator and assisted callers", async () => {
+  const p = await preparedStory(),
+    path = `/v1/projects/${p.projectId}/interviews/${p.interviewId}/collection-check`;
+  assert.deepEqual(data(await request("POST", path, p.narrator.token, {})), {
+    allowed: true,
+  });
+  assert.equal(
+    (await request("POST", path, p.buyer.token, {})).statusCode,
+    403,
+  );
+  const current = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/stories/context`,
+      p.narrator.token,
+      { interviewId: p.interviewId },
+    ),
+  );
+  assert.equal(current.story.task.id, p.story.task.id);
+  assert.equal(current.story.task.state, "waiting_inputs");
+  assert.equal(current.story.task.queuedAt, p.story.task.queuedAt);
+  assert.equal(current.clipCount, 2);
+  assert.equal(current.pendingCount, 0);
+  const a = await assistedStory(false),
+    assistedPath = `/v1/projects/${a.projectId}/interviews/${a.story.interviewId}/collection-check`;
+  assert.deepEqual(
+    data(
+      await request("POST", assistedPath, a.buyer.token, {
+        assistedSessionId: a.collection.id,
+      }),
+    ),
+    { allowed: true },
+  );
+  assert.equal(
+    (await request("POST", assistedPath, a.buyer.token, {})).statusCode,
+    403,
+  );
+  data((await choose(p, p.narrator.token, "collection", false)).response);
+  assert.equal(
+    (await request("POST", path, p.narrator.token, {})).statusCode,
+    403,
+  );
+});

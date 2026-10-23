@@ -43,6 +43,19 @@ export const interviewRecordingClient = {
       { key, data: assistedSessionId ? { assistedSessionId } : {} },
     );
   },
+  authorizeCollection(
+    projectId: string,
+    id: string,
+    assistedSessionId?: string,
+  ) {
+    return sessionClient.request<{ allowed: boolean }>(
+      `/projects/${projectId}/interviews/${id}/collection-check`,
+      {
+        key: paymentKey(),
+        data: assistedSessionId ? { assistedSessionId } : {},
+      },
+    );
+  },
   authorizeStart(projectId: string, id: string, assistedSessionId?: string) {
     return sessionClient.request<{ allowed: boolean }>(
       `/projects/${projectId}/interviews/${id}/recording-start`,

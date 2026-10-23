@@ -198,6 +198,10 @@ async function ready(h: ReturnType<typeof harness>, snapshot: unknown = null) {
 async function choose(h: ReturnType<typeof harness>) {
   const choosing = h.page.choose();
   await tick();
+  assert.equal(
+    h.requests[0].url,
+    `${base}/projects/${project}/interviews/${interview}/collection-check`,
+  );
   if (h.requests.length) respond(h.requests.shift(), { allowed: true }, 201);
   await choosing;
 }

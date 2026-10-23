@@ -161,9 +161,7 @@ Page({
     this.setData({ playing: false });
   },
   onUnload() {
-    this.visible = false;
-    ++this.generation;
-    if (this.poll) clearTimeout(this.poll);
+    this.onHide();
     audio?.destroy();
     audio = null;
   },
@@ -175,6 +173,22 @@ Page({
       dataMode() === "live" &&
       (current === context || (invalidated && !current))
     );
+  },
+  liveFailure(
+    generation: number,
+    context: string,
+    error: unknown,
+    fallback: string,
+  ) {
+    if (!this.currentLive(generation, context, true)) return;
+    const denied =
+      !sessionClient.context() ||
+      (error instanceof ApiFailure && [401, 403].includes(error.status));
+    if (denied) this.onHide();
+    this.setData({
+      stage: denied ? "当前访问已失效，请重新查询授权" : this.data.stage,
+      error: error instanceof Error ? error.message : fallback,
+    });
   },
   async refreshLive(generation?: number, context?: string) {
     generation ??= this.generation;
@@ -263,25 +277,7 @@ Page({
           2000,
         );
     } catch (error) {
-      if (this.currentLive(generation, context, true)) {
-        const denied =
-          !sessionClient.context() ||
-          (error instanceof ApiFailure &&
-            (error.status === 401 || error.status === 403));
-        if (denied) this.onHide();
-        this.setData({
-          ...(denied
-            ? {
-                story: null,
-                context: null,
-                liveParagraphs: [],
-                canOrganize: false,
-              }
-            : {}),
-          stage: denied ? "当前访问已失效，请重新查询授权" : this.data.stage,
-          error: error instanceof Error ? error.message : "查询失败，请重试",
-        });
-      }
+      this.liveFailure(generation, context, error, "查询失败，请重试");
     } finally {
       if (this.currentLive(generation, context, true))
         this.setData({ busy: false });
@@ -319,21 +315,12 @@ Page({
       this.setData({ story: result, stage: stage(result) });
       await this.refreshLive(generation, context);
     } catch (error) {
-      if (this.currentLive(generation, context, true))
-        this.setData({
-          ...(error instanceof ApiFailure && [401, 403].includes(error.status)
-            ? {
-                story: null,
-                context: null,
-                liveParagraphs: [],
-                canOrganize: false,
-              }
-            : {}),
-          error:
-            error instanceof Error
-              ? error.message
-              : "提交结果未确定，请重试查询",
-        });
+      this.liveFailure(
+        generation,
+        context,
+        error,
+        "提交结果未确定，请重试查询",
+      );
     } finally {
       if (this.currentLive(generation, context, true))
         this.setData({ busy: false });
@@ -360,21 +347,12 @@ Page({
       wx.removeStorageSync(keyName);
       await this.refreshLive(generation, context);
     } catch (error) {
-      if (this.currentLive(generation, context, true))
-        this.setData({
-          ...(error instanceof ApiFailure && [401, 403].includes(error.status)
-            ? {
-                story: null,
-                context: null,
-                liveParagraphs: [],
-                canOrganize: false,
-              }
-            : {}),
-          error:
-            error instanceof Error
-              ? error.message
-              : "重试结果未确定，请重新查询",
-        });
+      this.liveFailure(
+        generation,
+        context,
+        error,
+        "重试结果未确定，请重新查询",
+      );
     } finally {
       if (this.currentLive(generation, context, true))
         this.setData({ busy: false });
