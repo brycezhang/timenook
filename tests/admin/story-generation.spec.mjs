@@ -638,8 +638,43 @@ test("real story Page submits, leaves and restores the same task then renders ev
       path: "/tmp/timenook-t18-story-390.png",
       fullPage: true,
     });
-    await page.locator(".live-reviews").scrollIntoViewIfNeeded();
+    const reviews = page.locator(".live-story .live-reviews").filter({
+      has: page.locator(".section-title").filter({
+        hasText: /^请本人核对$/,
+      }),
+    });
+    await expect(reviews).toHaveCount(1);
+    await expect(reviews.locator(".live-review")).toHaveText([
+      "1. 出门的具体年份待本人核对",
+      "2. 家门口那棵树的品种尚不确定",
+    ]);
+    await reviews.scrollIntoViewIfNeeded();
     await page.screenshot({ path: "/tmp/timenook-t18-story-review-390.png" });
+    const currentStory = data(
+      await request(
+        "GET",
+        `/v1/projects/${projectId}/stories/${context.story.id}`,
+        narrator,
+      ),
+      200,
+    );
+    expect(currentStory.task.id).toBe(id);
+    expect(currentStory.revision.audioManifest).toHaveLength(2);
+    expect(
+      currentStory.revision.audioManifest.map((source) => source.clipId),
+    ).toEqual(context.story.task.sources.map((source) => source.clipId));
+    const audioOrder = page.locator(".live-story .live-reviews").filter({
+      has: page.getByText("本版关联的原声顺序", { exact: true }),
+    });
+    await expect(audioOrder).toHaveCount(1);
+    await expect(audioOrder.locator(".live-review")).toHaveText(
+      currentStory.revision.audioManifest.map(
+        (source, index) =>
+          `第 ${index + 1} 段：${source.question.snapshot.text}`,
+      ),
+    );
+    await audioOrder.scrollIntoViewIfNeeded();
+    await expect(audioOrder).toBeVisible();
     await page.setViewportSize({ width: 1280, height: 900 });
     expect(
       await page
