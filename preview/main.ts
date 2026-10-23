@@ -133,7 +133,15 @@ const wx: any = {
           /\/photos(?:\/(?:context|materials)|\/[a-f0-9-]{36}\/(?:upload|seal|status|release|crop))?$/.test(
             url.pathname,
           )));
+    const storyConfirmationSupported =
+      ((!options.method || options.method === "GET") &&
+        /\/v1\/projects\/[a-f0-9-]{36}\/overview$/.test(url.pathname)) ||
+      (options.method === "POST" &&
+        /\/v1\/projects\/[a-f0-9-]{36}\/(?:metadata|stories\/[a-f0-9-]{36}\/(?:revisions|decisions|care-access))$/.test(
+          url.pathname,
+        ));
     const supported =
+      storyConfirmationSupported ||
       photoSupported ||
       ((!options.method || options.method === "GET") &&
         /\/v1\/(recipient-types|packages\/current|orders(?:\/[a-f0-9-]{36})?|participations|invitations\/[A-Za-z0-9_-]{43}|projects\/[a-f0-9-]{36}\/(?:stories\/[a-f0-9-]{36}|participation|binding-requests|care-requests|assisted-sessions|tasks(?:\/[a-f0-9-]{36})?|plan|interviews(?:\/[a-f0-9-]{36}(?:\/clips\/[a-f0-9-]{36}(?:\/content)?)?)?))$/.test(

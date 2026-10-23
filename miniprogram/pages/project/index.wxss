@@ -77,5 +77,41 @@
   margin-bottom: 8rpx;
 }
 
-.live-project {font-size:40rpx;line-height:1.6;}
-.live-project .btn{font-size:40rpx;min-height:96rpx;line-height:1.5;white-space:normal;padding:24rpx;}
+.live-project {
+  font-size: 40rpx;
+  line-height: 1.6;
+}
+.live-project .btn {
+  font-size: 40rpx;
+  min-height: 96rpx;
+  line-height: 1.5;
+  white-space: normal;
+  padding: 24rpx;
+}
+.live-filters {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 24rpx;
+  flex-wrap: wrap;
+}
+.live-filters .btn {
+  flex: 1;
+  min-width: 200rpx;
+}
+.live-story-row {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.live-task {
+  padding: 24rpx;
+  border: 2rpx solid var(--line);
+  border-radius: 16rpx;
+  font-size: 40rpx;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.live-tabs .tab {
+  min-height: 96rpx;
+  min-width: 96rpx;
+  font-size: 32rpx;
+}

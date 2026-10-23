@@ -5,6 +5,17 @@ import type {
 } from "../../packages/contracts/src";
 import { sessionClient } from "./session";
 import { paymentKey } from "./payments";
+export interface StoryRevisionInput {
+  baseRevisionId: string;
+  expectedVersion: number;
+  title: string;
+  theme: string;
+  paragraphs: { text: string; sourceRefs: string[] }[];
+  reviewResolutions: { item: string; reason: string }[];
+  notes: { id: string; text: string }[];
+  photoSnapshotId?: string | null;
+  audioClipIds?: string[];
+}
 function story(value: StoryView, projectId: string) {
   if (
     !value ||
@@ -18,6 +29,67 @@ function story(value: StoryView, projectId: string) {
   return value;
 }
 export const storyClient = {
+  requestCorrection(
+    projectId: string,
+    id: string,
+    input: {
+      revisionId: string;
+      contentHash: string;
+      expectedVersion: number;
+      evidenceRef: string;
+      expiresAt: string;
+      assistedSessionId?: string;
+    },
+    key: string,
+  ) {
+    return sessionClient.request<{
+      caseId: string;
+      storyId: string;
+      expiresAt: string;
+    }>(`/projects/${projectId}/stories/${id}/care-access`, {
+      key,
+      data: { ...input, noticeVersion: "synthetic-d08-v1" },
+    });
+  },
+  async revise(
+    projectId: string,
+    id: string,
+    input: StoryRevisionInput,
+    key: string,
+  ) {
+    return story(
+      await sessionClient.request<StoryView>(
+        `/projects/${projectId}/stories/${id}/revisions`,
+        { key, data: { ...input } },
+      ),
+      projectId,
+    );
+  },
+  async decide(
+    projectId: string,
+    id: string,
+    input: {
+      revisionId: string;
+      contentHash: string;
+      expectedVersion: number;
+      confirmed: boolean;
+      allowInBook: boolean;
+      evidenceRef: string;
+      assistedSessionId?: string;
+    },
+    key: string,
+  ) {
+    return story(
+      await sessionClient.request<StoryView>(
+        `/projects/${projectId}/stories/${id}/decisions`,
+        {
+          key,
+          data: { ...input, noticeVersion: "synthetic-d08-v1" },
+        },
+      ),
+      projectId,
+    );
+  },
   async context(
     projectId: string,
     interviewId: string,

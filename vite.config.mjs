@@ -15,6 +15,11 @@ export default defineConfig({
     fs: { deny: privateArtifactsDeny },
     proxy: process.env.TIMENOOK_PREVIEW_API_TARGET
       ? {
+          "^/timenook/v1/projects/[a-f0-9-]{36}/(?:overview|metadata|stories/[a-f0-9-]{36}/(?:revisions|decisions|care-access))$":
+            {
+              target: process.env.TIMENOOK_PREVIEW_API_TARGET,
+              rewrite: (path) => path.replace(/^\/timenook/, ""),
+            },
           "^/timenook/v1/(recipient-types|packages/current|orders(?:/[a-f0-9-]{36}(?:/(?:payment|close))?)?|participations|invitations/[A-Za-z0-9_-]{43}(?:/requests)?|projects/[a-f0-9-]{36}/(?:stories(?:/(?:context|organize|[a-f0-9-]{36}))?|participation|binding-requests|care-requests|assisted-sessions|tasks(?:/status|/[a-f0-9-]{36}(?:/retry)?)?|plan(?:/preferences)?|interviews(?:/context|/[a-f0-9-]{36}(?:/(?:resume|recording-start|collection-check|actual-question|follow-up(?:/(?:status|finish))?)|/clips(?:/[a-f0-9-]{36}(?:/(?:upload|seal|status|release|content))?)?)?)?|invitations|consents(?:/revoke)?)|binding-requests/[a-f0-9-]{36}/approve|recordings/objects)$":
             {
               target: process.env.TIMENOOK_PREVIEW_API_TARGET,

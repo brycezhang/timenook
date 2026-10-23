@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Optional,
   Inject,
   Controller,
   Post,
@@ -22,7 +23,17 @@ import {
   ApiProperty,
   ApiHeader,
 } from "@nestjs/swagger";
-import { IsUUID, IsInt, Min, IsOptional } from "class-validator";
+import {
+  IsUUID,
+  IsInt,
+  Min,
+  IsOptional,
+  IsString,
+  IsArray,
+  IsBoolean,
+  Matches,
+  Equals,
+} from "class-validator";
 import { Prisma, ProductionTask } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyRequest } from "fastify";
@@ -30,6 +41,7 @@ import { API_CONFIG, ApiConfig } from "../config";
 import { isDeepStrictEqual } from "node:util";
 import { StoryComposerInput, validateStoryOutput } from "../probe/ai-providers";
 import { Participation } from "../identity/participation";
+import { Photos } from "../media/photos";
 const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 class StoryContextDto {
   @ApiProperty({ format: "uuid" }) @IsUUID() interviewId!: string;
@@ -40,6 +52,60 @@ class StoryContextDto {
 }
 class OrganizeDto extends StoryContextDto {
   @ApiProperty() @IsInt() @Min(0) baseVersion!: number;
+}
+class StoryParagraphDto {
+  @ApiProperty({ maxLength: 5000 }) text!: string;
+  @ApiProperty({ type: [String], minItems: 1 }) sourceRefs!: string[];
+}
+class StoryReviewResolutionDto {
+  @ApiProperty() item!: string;
+  @ApiProperty({ maxLength: 2000 }) reason!: string;
+}
+class StoryNoteDto {
+  @ApiProperty({ pattern: "^[-a-f0-9]{36}$" }) id!: string;
+  @ApiProperty({ maxLength: 5000 }) text!: string;
+}
+export class ReviseStoryDto {
+  @ApiProperty({ format: "uuid" }) @IsUUID() baseRevisionId!: string;
+  @ApiProperty() @IsInt() @Min(1) expectedVersion!: number;
+  @ApiProperty() @IsString() title!: string;
+  @ApiProperty() @IsString() theme!: string;
+  @ApiProperty({ type: [StoryParagraphDto] }) @IsArray() paragraphs!: {
+    text: string;
+    sourceRefs: string[];
+  }[];
+  @ApiProperty({ type: [StoryReviewResolutionDto] })
+  @IsArray()
+  reviewResolutions!: {
+    item: string;
+    reason: string;
+  }[];
+  @ApiProperty({ required: false, nullable: true, format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  photoSnapshotId?: string | null;
+  @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsUUID("4", { each: true })
+  audioClipIds?: string[];
+  @ApiProperty({ type: [StoryNoteDto] }) @IsArray() notes!: {
+    id: string;
+    text: string;
+  }[];
+}
+class StoryDecisionDto {
+  @ApiProperty({ format: "uuid" }) @IsUUID() revisionId!: string;
+  @ApiProperty() @Matches(/^[a-f0-9]{64}$/) contentHash!: string;
+  @ApiProperty() @IsInt() @Min(1) expectedVersion!: number;
+  @ApiProperty() @IsBoolean() confirmed!: boolean;
+  @ApiProperty() @IsBoolean() allowInBook!: boolean;
+  @ApiProperty() @Equals("synthetic-d08-v1") noticeVersion!: string;
+  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty({ required: false, format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  assistedSessionId?: string;
 }
 /** Existing recording-start caller holds the project/subject authorization lock. */
 export async function invalidateStoryRecordingIn(
@@ -84,6 +150,7 @@ export class Stories {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     private readonly participation: Participation,
+    @Optional() private readonly photos?: Photos,
   ) {}
   async organize(
     projectId: string,
@@ -312,6 +379,209 @@ export class Stories {
       "existing",
     );
   }
+  revise(
+    projectId: string,
+    id: string,
+    body: ReviseStoryDto,
+    authorization?: string,
+    key?: string,
+  ) {
+    if (!key || !/^[-A-Za-z0-9_:]{8,128}$/.test(key))
+      throw new BadRequestException();
+    return this.participation.withPlanAccess(
+      projectId,
+      authorization,
+      undefined,
+      async (tx, actor) => {
+        return this.reviseIn(
+          tx,
+          projectId,
+          id,
+          body,
+          { id: actor.userId, realm: "product" },
+          key,
+        );
+      },
+    );
+  }
+  // Both product and scoped Care callers hold their current authorization transaction.
+  async reviseIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    id: string,
+    body: ReviseStoryDto,
+    operator: { id: string; realm: "product" | "admin" },
+    key: string,
+  ) {
+    const requestHash = hash(JSON.stringify(body));
+    const prior = await tx.storyRevision.findFirst({
+      where: {
+        projectId,
+        storyId: id,
+        operatorRealm: operator.realm,
+        operatorId: operator.id,
+        commandKey: key,
+      },
+    });
+    if (prior) {
+      if (prior.requestHash !== requestHash) throw new ConflictException();
+      return {
+        ...(await this.view(tx, projectId, id)),
+        appliedRevision: {
+          id: prior.id,
+          version: prior.version,
+          contentHash: prior.contentHash,
+        },
+      };
+    }
+    const story = await tx.story.findFirst({ where: { id, projectId } });
+    if (
+      !story ||
+      story.version !== body.expectedVersion ||
+      story.currentRevisionId !== body.baseRevisionId
+    )
+      throw new ConflictException();
+    const base = await tx.storyRevision.findFirstOrThrow({
+      where: { id: body.baseRevisionId, storyId: id, projectId },
+    });
+    const applied = await this.appendIn(tx, {
+      projectId,
+      storyId: id,
+      expectedVersion: body.expectedVersion,
+      generationTaskId: base.generationTaskId,
+      origin: "participant",
+      command: {
+        operatorId: operator.id,
+        operatorRealm: operator.realm,
+        commandKey: key,
+        requestHash,
+      },
+      participant: {
+        reviewResolutions: body.reviewResolutions,
+        notes: body.notes,
+        audioClipIds: body.audioClipIds,
+        photoSnapshotId: body.photoSnapshotId,
+      },
+      content: {
+        title: body.title,
+        theme: body.theme,
+        paragraphs: body.paragraphs,
+        reviewItems: base.reviewItems as Prisma.InputJsonValue,
+      },
+    });
+    return {
+      ...(await this.view(tx, projectId, id)),
+      appliedRevision: {
+        id: applied.id,
+        version: applied.version,
+        contentHash: applied.contentHash,
+      },
+    };
+  }
+  decide(
+    projectId: string,
+    id: string,
+    body: StoryDecisionDto,
+    authorization?: string,
+    key?: string,
+  ) {
+    if (!key || !/^[-A-Za-z0-9_:]{8,128}$/.test(key))
+      throw new BadRequestException();
+    return this.participation.withPlanAccess(
+      projectId,
+      authorization,
+      undefined,
+      async (tx, actor) => {
+        const story = await tx.story.findFirst({ where: { id, projectId } });
+        if (
+          !story ||
+          story.version !== body.expectedVersion ||
+          story.currentRevisionId !== body.revisionId
+        )
+          throw new ConflictException();
+        const revision = await tx.storyRevision.findFirstOrThrow({
+          where: { id: body.revisionId, storyId: id, projectId },
+        });
+        if (revision.contentHash !== body.contentHash)
+          throw new ConflictException();
+        if (
+          body.confirmed &&
+          (revision.reviewItems as string[]).some(
+            (item) =>
+              !(
+                revision.reviewResolutions as { item: string; reason: string }[]
+              ).some((r) => r.item === item),
+          )
+        )
+          throw new ConflictException(
+            "Resolve review items before confirmation",
+          );
+        let assistedEvidenceId: string | undefined;
+        if (actor.subjectDecision !== "self") {
+          if (!body.assistedSessionId) throw new ForbiddenException();
+          const evidence =
+            await this.participation.recordAssistedVersionEvidence(tx, {
+              projectId,
+              sessionId: body.assistedSessionId,
+              operatorUserId: actor.userId,
+              content: {
+                kind: "story",
+                versionId: revision.id,
+                hash: revision.contentHash,
+              },
+              action: "story_decision",
+              noticeVersion: body.noticeVersion,
+              evidenceRef: body.evidenceRef,
+              idempotencyKey: key,
+            });
+          assistedEvidenceId = evidence.id;
+        }
+        if (!body.confirmed && body.allowInBook)
+          throw new BadRequestException();
+        const requestHash = hash(JSON.stringify(body));
+        const prior = await tx.storyDecision.findFirst({
+          where: {
+            projectId,
+            storyId: id,
+            operatorUserId: actor.userId,
+            idempotencyKey: key,
+          },
+        });
+        if (prior) {
+          if (prior.requestHash !== requestHash) throw new ConflictException();
+          return this.view(tx, projectId, id);
+        }
+        if (
+          await tx.storyDecision.findFirst({
+            where: { projectId, evidenceRef: body.evidenceRef },
+          })
+        )
+          throw new ConflictException("Fresh decision evidence required");
+        await tx.storyDecision.create({
+          data: {
+            id: randomUUID(),
+            projectId,
+            storyId: id,
+            revisionId: revision.id,
+            contentHash: revision.contentHash,
+            subjectId: actor.subjectId,
+            operatorUserId: actor.userId,
+            bindingVersion: actor.bindingVersion,
+            accessEpoch: actor.accessEpoch,
+            method: assistedEvidenceId ? "assisted" : "self_wechat",
+            assistedEvidenceId,
+            noticeVersion: body.noticeVersion,
+            evidenceRef: body.evidenceRef,
+            confirmed: body.confirmed,
+            allowInBook: body.allowInBook,
+            idempotencyKey: key,
+            requestHash: hash(JSON.stringify(body)),
+          },
+        });
+        return this.view(tx, projectId, id);
+      },
+    );
+  }
   configuration() {
     const g = this.config.generation;
     return g
@@ -480,6 +750,18 @@ export class Stories {
       expectedVersion: number;
       generationTaskId: string;
       origin: "ai" | "participant";
+      participant?: {
+        reviewResolutions: { item: string; reason: string }[];
+        notes?: { id: string; text: string }[];
+        audioClipIds?: string[];
+        photoSnapshotId?: string | null;
+      };
+      command?: {
+        operatorId: string;
+        operatorRealm: string;
+        commandKey: string;
+        requestHash: string;
+      };
       content: {
         title: string;
         theme: string;
@@ -509,19 +791,121 @@ export class Stories {
       generation.baseVersion !== command.expectedVersion
     )
       throw new ConflictException("Generation already superseded");
-    const task = await tx.productionTask.findUniqueOrThrow({
-        where: { id: generation.taskId },
-      }),
-      inputs = await this.inputsIn(tx, task);
-    if (!inputs.input) throw new ConflictException();
-    try {
-      validateStoryOutput(command.content, inputs.input);
-    } catch {
-      throw new ConflictException("Invalid story content or sources");
+    const base = story.currentRevisionId
+      ? await tx.storyRevision.findUniqueOrThrow({
+          where: { id: story.currentRevisionId },
+        })
+      : null;
+    const photoSnapshotId =
+      command.participant?.photoSnapshotId === undefined
+        ? base?.photoSnapshotId
+        : command.participant.photoSnapshotId;
+    if (photoSnapshotId && !this.photos)
+      throw new ServiceUnavailableException();
+    const photoSnapshot = photoSnapshotId
+      ? await this.photos!.readSnapshot(
+          tx,
+          story.projectId,
+          story.interviewId,
+          photoSnapshotId,
+        )
+      : null;
+    const sourceManifest = generation.resolvedManifest as unknown as {
+      clipId: string;
+      transcript: { sha256: string } | null;
+    }[];
+    const audioIds =
+      command.participant?.audioClipIds ??
+      (command.origin === "participant" && Array.isArray(base?.audioManifest)
+        ? (base.audioManifest as unknown as { clipId: string }[]).map(
+            (s) => s.clipId,
+          )
+        : sourceManifest.map((s) => s.clipId));
+    if (
+      new Set(audioIds).size !== audioIds.length ||
+      audioIds.some((id) => !sourceManifest.some((s) => s.clipId === id))
+    )
+      throw new ConflictException("Unknown original audio");
+    const audioManifest = audioIds.map((id) =>
+      sourceManifest.find((s) => s.clipId === id)!,
+    );
+    const notes = command.participant?.notes ?? [];
+    const reviewResolutions = command.participant?.reviewResolutions ?? [];
+    if (command.origin === "participant") {
+      const nonempty = (v: unknown, max: number) =>
+        typeof v === "string" && v.trim().length > 0 && v.length <= max;
+      if (
+        !nonempty(command.content.title, 200) ||
+        !nonempty(command.content.theme, 200) ||
+        !Array.isArray(command.content.paragraphs) ||
+        !command.content.paragraphs.length ||
+        command.content.paragraphs.length > 200
+      )
+        throw new BadRequestException();
+      if (
+        notes.some((n) => !n || typeof n !== "object") ||
+        reviewResolutions.some((r) => !r || typeof r !== "object")
+      )
+        throw new BadRequestException();
+      if (
+        notes.length > 200 ||
+        new Set(notes.map((n) => n.id)).size !== notes.length ||
+        notes.some(
+          (n) => !/^[-a-f0-9]{36}$/.test(n.id) || !nonempty(n.text, 5000),
+        )
+      )
+        throw new BadRequestException();
+      const allowed = new Set([
+        ...sourceManifest
+          .filter((s) => s.transcript)
+          .map((s) => `transcript:${s.clipId}:${s.transcript!.sha256}`),
+        ...notes.map((n) => `note:${n.id}`),
+      ]);
+      for (const p of command.content.paragraphs) {
+        if (
+          !p ||
+          typeof p !== "object" ||
+          Array.isArray(p) ||
+          !nonempty(p.text, 5000) ||
+          !Array.isArray(p.sourceRefs) ||
+          !p.sourceRefs.length ||
+          new Set(p.sourceRefs).size !== p.sourceRefs.length ||
+          p.sourceRefs.some(
+            (r: unknown) => typeof r !== "string" || !allowed.has(r),
+          )
+        )
+          throw new BadRequestException("Invalid participant sources");
+      }
+      if (
+        reviewResolutions.length > 200 ||
+        new Set(reviewResolutions.map((r) => r.item)).size !==
+          reviewResolutions.length ||
+        reviewResolutions.some(
+          (r) =>
+            !(command.content.reviewItems as string[]).includes(r.item) ||
+            !nonempty(r.reason, 2000),
+        )
+      )
+        throw new BadRequestException("Invalid review resolution");
+    } else {
+      const task = await tx.productionTask.findUniqueOrThrow({
+          where: { id: generation.taskId },
+        }),
+        inputs = await this.inputsIn(tx, task);
+      if (!inputs.input) throw new ConflictException();
+      try {
+        validateStoryOutput(command.content, inputs.input);
+      } catch {
+        throw new ConflictException("Invalid story content or sources");
+      }
     }
     const content = {
         ...command.content,
         sourceManifest: generation.resolvedManifest,
+        reviewResolutions,
+        notes,
+        audioManifest,
+        photoSnapshot,
       },
       revision = await tx.storyRevision.create({
         data: {
@@ -532,15 +916,33 @@ export class Stories {
           generationTaskId: generation.taskId,
           baseRevisionId: story.currentRevisionId,
           origin: command.origin,
+          ...command.command,
+          photoSnapshotId,
+          photoInterviewId: photoSnapshot ? story.interviewId : null,
           ...content,
           sourceManifest: generation.resolvedManifest as Prisma.InputJsonValue,
+          photoSnapshot: photoSnapshot
+            ? JSON.parse(JSON.stringify(photoSnapshot))
+            : Prisma.DbNull,
           contentHash: hash(JSON.stringify(content)),
         },
       });
-    await tx.story.update({
-      where: { id: story.id },
+    for (const [position, source] of audioManifest.entries())
+      await tx.storyRevisionAudio.create({
+        data: {
+          projectId: story.projectId,
+          storyId: story.id,
+          revisionId: revision.id,
+          generationTaskId: generation.taskId,
+          clipId: source.clipId,
+          position,
+        },
+      });
+    const updated = await tx.story.updateMany({
+      where: { id: story.id, version: command.expectedVersion },
       data: { version: revision.version, currentRevisionId: revision.id },
     });
+    if (updated.count !== 1) throw new ConflictException();
     return revision;
   }
   async applyIn(
@@ -607,6 +1009,12 @@ export class Stories {
   ) {
     const story = await tx.story.findFirst({ where: { id, projectId } });
     if (!story) throw new NotFoundException();
+    const project = await tx.project.findUniqueOrThrow({
+        where: { id: projectId },
+      }),
+      subject = await tx.projectSubject.findUniqueOrThrow({
+        where: { projectId },
+      });
     const generation = await tx.storyGeneration.findFirst({
       where: { storyId: id, ...(taskId ? { taskId } : {}) },
       orderBy: { userSubmittedAt: "desc" },
@@ -624,6 +1032,19 @@ export class Stories {
       : [];
     return {
       ...story,
+      decision:
+        privateContent && story.currentRevisionId
+          ? await tx.storyDecision.findFirst({
+              where: {
+                projectId,
+                storyId: id,
+                revisionId: story.currentRevisionId,
+                bindingVersion: subject.bindingVersion,
+                accessEpoch: project.accessEpoch,
+              },
+              orderBy: { sequence: "desc" },
+            })
+          : null,
       usage: {
         organizations: await tx.storyGeneration.count({
           where: { projectId, quotaKind: "organization" },
@@ -747,6 +1168,46 @@ export class StoriesController {
     return {
       data: await this.stories.organize(
         id,
+        body,
+        req.headers.authorization,
+        req.headers["idempotency-key"] as string | undefined,
+      ),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post(":storyId/revisions")
+  @Header("Cache-Control", "no-store")
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  async revise(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("storyId", new ParseUUIDPipe()) storyId: string,
+    @Body() body: ReviseStoryDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.stories.revise(
+        id,
+        storyId,
+        body,
+        req.headers.authorization,
+        req.headers["idempotency-key"] as string | undefined,
+      ),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post(":storyId/decisions")
+  @Header("Cache-Control", "no-store")
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  async decide(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("storyId", new ParseUUIDPipe()) storyId: string,
+    @Body() body: StoryDecisionDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.stories.decide(
+        id,
+        storyId,
         body,
         req.headers.authorization,
         req.headers["idempotency-key"] as string | undefined,

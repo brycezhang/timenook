@@ -135,9 +135,11 @@ class ConsentDto extends RevokeDto {
   @ApiProperty() @IsBoolean() granted!: boolean;
 }
 export class CareRequestDto {
-  @ApiProperty({ enum: ["rebind", "withdraw", "export", "delete"] })
-  @IsIn(["rebind", "withdraw", "export", "delete"])
-  kind!: "rebind" | "withdraw" | "export" | "delete";
+  @ApiProperty({
+    enum: ["rebind", "withdraw", "export", "delete", "correction"],
+  })
+  @IsIn(["rebind", "withdraw", "export", "delete", "correction"])
+  kind!: "rebind" | "withdraw" | "export" | "delete" | "correction";
   @ApiProperty({ format: "uuid", required: false })
   @ValidateIf((o) => o.kind === "rebind")
   @IsUUID()
@@ -710,6 +712,61 @@ export class Participation implements OnModuleDestroy {
       null,
     );
   }
+  // Content owners call this only while holding the real product session and subject locks.
+  async openCorrectionCaseIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    operatorUserId: string,
+    key: string,
+  ) {
+    this.policy();
+    const p = await this.project(tx, projectId, true),
+      subject = await this.subject(tx, projectId);
+    return this.createCare(
+      tx,
+      p,
+      subject,
+      { kind: "correction", expectedBindingVersion: subject.bindingVersion },
+      key,
+      operatorUserId,
+      "product",
+      subject.boundUserId === operatorUserId ? operatorUserId : null,
+    );
+  }
+  async authorizeCorrectionCareIn(
+    tx: Prisma.TransactionClient,
+    caseId: string,
+    operatorAdminId: string,
+  ) {
+    this.policy();
+    const found = await tx.careRequest.findUnique({ where: { id: caseId } });
+    if (!found) throw new NotFoundException();
+    const p = await this.project(tx, found.projectId, true),
+      subject = await this.subject(tx, p.id);
+    await tx.$queryRaw`SELECT id FROM care_requests WHERE id=${caseId}::uuid FOR UPDATE`;
+    const care = await tx.careRequest.findUniqueOrThrow({
+      where: { id: caseId },
+    });
+    if (
+      care.kind !== "correction" ||
+      care.state !== "verified" ||
+      care.verifiedBy !== operatorAdminId ||
+      care.sourceBindingVersion !== subject.bindingVersion ||
+      care.sourceAccessEpoch !== p.accessEpoch
+    )
+      throw new ForbiddenException();
+    if (
+      !(await this.status(tx, p, subject, care.requesterId ?? p.order.buyerId))
+        .canRead
+    )
+      throw new ForbiddenException();
+    return {
+      projectId: p.id,
+      subjectId: subject.id,
+      bindingVersion: subject.bindingVersion,
+      accessEpoch: p.accessEpoch,
+    };
+  }
   async verifyCare(
     tx: Prisma.TransactionClient,
     id: string,
@@ -836,6 +893,10 @@ export class Participation implements OnModuleDestroy {
     return {
       ...careView(row),
       supportCaseRef: `record:${id}`,
+      correctionGrant: await this.db.storyCareGrant.findUnique({
+        where: { caseId: id },
+        select: { storyId: true, expiresAt: true },
+      }),
       verification: row.verifiedBy
         ? {
             operatorAdminId: row.verifiedBy,
@@ -980,6 +1041,8 @@ export class Participation implements OnModuleDestroy {
       tx: Prisma.TransactionClient,
       actor: {
         userId: string;
+        bindingVersion: number;
+        accessEpoch: number;
         subjectId: string;
         method: "self_wechat" | "assisted" | "participant";
         assistedSessionId?: string;
@@ -1024,6 +1087,8 @@ export class Participation implements OnModuleDestroy {
       const collectionSession = sessions[0];
       return work(tx, {
         userId: user.id,
+        bindingVersion: subject.bindingVersion,
+        accessEpoch: p.accessEpoch,
         subjectId: subject.id,
         method,
         subjectDecision:
@@ -1248,6 +1313,9 @@ export class Participation implements OnModuleDestroy {
       sessionId: string;
       operatorUserId: string;
       content: { kind: "story" | "book"; versionId: string; hash: string };
+      // Content owners distinguish their actions even for the same version.
+      // Omitted only by the existing evidence-only caller contract.
+      action?: "story_decision" | "story_care_access";
       noticeVersion: string;
       evidenceRef: string;
       idempotencyKey: string;

@@ -56,3 +56,21 @@
 .project-option.selected {
   color: var(--olive);
 }
+.live-account {
+  font-size: 40rpx;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.live-account .btn {
+  font-size: 40rpx;
+  min-width: 96rpx;
+  min-height: 96rpx;
+  line-height: 1.5;
+  padding: 22rpx;
+  white-space: normal;
+}
+.live-tabs .tab {
+  min-height: 96rpx;
+  min-width: 96rpx;
+  font-size: 32rpx;
+}

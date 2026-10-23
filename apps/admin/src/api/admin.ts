@@ -1,5 +1,6 @@
 import { RequestClient } from "@vben/request";
 import type {
+  StoryView,
   AdminAuditEntry,
   AdminEnrollment,
   AdminLoginCommand,
@@ -166,6 +167,39 @@ export const serviceTermsApi = {
 
 import type { CareCase } from "@timenook/contracts";
 export const careApi = {
+  async story(caseId: string, csrf: string) {
+    return (
+      await client.get<ApiResponse<StoryView>>(
+        `/care-requests/${caseId}/story`,
+        { headers: { "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
+  async correct(
+    caseId: string,
+    story: StoryView,
+    title: string,
+    paragraphs: { text: string; sourceRefs: string[] }[],
+    reviewResolutions: { item: string; reason: string }[],
+    key: string,
+    csrf: string,
+  ) {
+    return (
+      await client.post<ApiResponse<StoryView>>(
+        `/care-requests/${caseId}/story/revisions`,
+        {
+          baseRevisionId: story.revision!.id,
+          expectedVersion: story.version,
+          title,
+          theme: story.revision!.theme,
+          paragraphs,
+          reviewResolutions,
+          notes: story.revision!.notes ?? [],
+        },
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
   async open(
     projectId: string,
     kind: "withdraw" | "export" | "delete",

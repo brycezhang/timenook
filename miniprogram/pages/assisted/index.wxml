@@ -7,6 +7,13 @@
   <button wx:if="{{!loggedIn}}" class="btn section" disabled="{{busy}}" bindtap="login">发起人微信登录</button>
   <button class="btn secondary section" disabled="{{busy}}" bindtap="refresh">重新查询协助与工单状态</button>
   <block wx:if="{{participation}}">
+    <view wx:if="{{storyPurpose}}" class="paper section">
+      <view class="section-title">仅本次故事确认协助</view>
+      <view class="note section">请本人选择是否由发起人操作设备核对这篇故事。返回故事后，仍须阅读全文，分别决定确认内容和允许入书，并记录当次独立说明。采集许可不能代替这一选择。</view>
+      <textarea class="story-evidence section" value="{{storyEvidence}}" bindinput="storyEvidence" auto-height="{{true}}" maxlength="160" placeholder="记录本人本次选择同机协助核对的说明" />
+      <button class="btn section" data-granted="true" bindtap="startStoryConfirmation" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">本人同意当次故事确认协助，返回故事</button>
+      <button class="btn secondary section" data-granted="false" bindtap="startStoryConfirmation" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">本人拒绝这次故事确认协助</button>
+    </view>
     <view class="note section">三项用途分别选择；可以拒绝或申请撤回。故事与书稿须在看过或听读实际版本后另行确认，每次重新留证。</view>
     <view wx:for="{{purposes}}" wx:key="purpose" class="paper section">
       <view class="section-title">{{item.label}}</view>
@@ -25,7 +32,7 @@
       <button class="btn secondary section" bindtap="requestRight" data-kind="withdraw" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">记录本人撤回申请</button>
       <button class="btn secondary section" bindtap="requestRight" data-kind="export" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">记录本人完整资料导出申请</button>
       <button class="btn secondary section" bindtap="requestRight" data-kind="delete" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">记录本人删除申请</button>
-      <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="note">工单 record:{{item.id}}</view><view>{{item.kind === 'withdraw' ? '撤回' : item.kind === 'export' ? '资料导出' : item.kind === 'delete' ? '删除' : '本人账号绑定'}}：{{item.state === 'open' ? '待客服核验' : item.kind === 'rebind' ? '账号绑定已完成' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : '已核验，后续交付或执行待完成'}}</view></view>
+      <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="note">工单 record:{{item.id}}</view><view>{{item.kind === 'withdraw' ? '撤回' : item.kind === 'export' ? '资料导出' : item.kind === 'delete' ? '删除' : item.kind === 'correction' ? '故事限时校对' : '本人账号绑定'}}：{{item.state === 'open' ? '待客服核验' : item.kind === 'rebind' ? '账号绑定已完成' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : '已核验，后续交付或执行待完成'}}</view></view>
     </view>
   </block>
   <button wx:if="{{participation}}" class="btn secondary section" bindtap="plan" disabled="{{busy}}">编辑个人大纲与问题</button>

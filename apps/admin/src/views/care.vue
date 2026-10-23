@@ -1,8 +1,22 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { Alert, Button, Form, FormItem, Input } from "antdv-next";
-import type { CareCase } from "@timenook/contracts";
+import type { CareCase, StoryView } from "@timenook/contracts";
 import { careApi } from "../api/admin";
+const correction = ref<StoryView | null>(null),
+  correctionTitle = ref(""),
+  correctionParagraphs = ref<{ text: string; sourceRefs: string[] }[]>([]),
+  reviewReasons = ref<{ item: string; reason: string }[]>([]);
+let correctionTimer: ReturnType<typeof setTimeout> | undefined;
+function clearCorrection() {
+  if (correctionTimer) clearTimeout(correctionTimer);
+  correctionTimer = undefined;
+  correction.value = null;
+  correctionTitle.value = "";
+  correctionParagraphs.value = [];
+  reviewReasons.value = [];
+}
+onUnmounted(clearCorrection);
 const props = defineProps<{ csrf: string }>();
 const emit = defineEmits<{ expired: [] }>();
 const cases = ref<CareCase[]>([]),
@@ -15,13 +29,15 @@ const intakeProject = ref(""),
   intakeVersion = ref(0),
   notice = ref("");
 const kindLabel = (kind: string) =>
-  kind === "rebind"
-    ? "账号换绑"
-    : kind === "withdraw"
-      ? "本人撤回申请"
-      : kind === "export"
-        ? "本人资料导出申请"
-        : "本人删除申请";
+  kind === "correction"
+    ? "故事限时校对"
+    : kind === "rebind"
+      ? "账号换绑"
+      : kind === "withdraw"
+        ? "本人撤回申请"
+        : kind === "export"
+          ? "本人资料导出申请"
+          : "本人删除申请";
 let intent: { input: string; key: string } | null = null;
 async function perform(work: () => Promise<void>) {
   if (busy.value) return;
@@ -32,16 +48,19 @@ async function perform(work: () => Promise<void>) {
   } catch (failure) {
     const code = (failure as { error?: { code?: string } }).error?.code;
     if (code === "UNAUTHENTICATED") {
+      clearCorrection();
       selected.value = null;
       cases.value = [];
       emit("expired");
-    } else
+    } else {
+      if (code === "FORBIDDEN") clearCorrection();
       error.value =
         code === "CONFLICT"
           ? "绑定或工单已变化，请重新查询后核验。"
           : code === "FORBIDDEN"
-            ? "当前账号没有换绑权限。"
+            ? "当前工单内容授权已失效或未授予，请重新核验。"
             : "操作未确认，请核对工单与证据后重试；相同意图保留原请求。";
+    }
   } finally {
     busy.value = false;
   }
@@ -52,11 +71,63 @@ const refresh = () =>
   });
 const open = (id: string) =>
   perform(async () => {
+    clearCorrection();
     selected.value = null;
     evidence.value = "";
     intent = null;
     selected.value = await careApi.read(id);
   });
+async function loadCorrection() {
+  const care = selected.value;
+  if (!care) return;
+  await perform(async () => {
+    clearCorrection();
+    const story = await careApi.story(care.id, props.csrf);
+    correction.value = story;
+    correctionTitle.value = story.revision!.title;
+    correctionParagraphs.value = story.revision!.paragraphs.map((p) => ({
+      ...p,
+      sourceRefs: [...p.sourceRefs],
+    }));
+    reviewReasons.value = story.revision!.reviewItems.map((item) => ({
+      item,
+      reason:
+        story.revision!.reviewResolutions?.find((r) => r.item === item)
+          ?.reason ?? "",
+    }));
+    const expires = Date.parse(care.correctionGrant?.expiresAt ?? "");
+    if (Number.isFinite(expires))
+      correctionTimer = setTimeout(
+        clearCorrection,
+        Math.min(2147483647, Math.max(0, expires - Date.now())),
+      );
+  });
+}
+async function saveCorrection() {
+  const care = selected.value,
+    story = correction.value;
+  if (!care || !story) return;
+  await perform(async () => {
+    const reasons = reviewReasons.value.filter((r) => r.reason.trim()),
+      input = JSON.stringify({
+        revision: story.revision!.id,
+        title: correctionTitle.value,
+        paragraphs: correctionParagraphs.value,
+        reasons,
+      });
+    if (intent?.input !== input) intent = { input, key: crypto.randomUUID() };
+    correction.value = await careApi.correct(
+      care.id,
+      story,
+      correctionTitle.value,
+      correctionParagraphs.value,
+      reasons,
+      intent.key,
+      props.csrf,
+    );
+    intent = null;
+  });
+}
 async function rebind() {
   const care = selected.value;
   if (!care || care.state !== "open" || !evidence.value) return;
@@ -205,7 +276,11 @@ onMounted(refresh);
       <Alert
         v-else-if="selected.state === 'verified'"
         type="info"
-        message="本人申请已核验，导出交付、删除执行与后续联动仍待对应流程处理。"
+        :message="
+          selected.kind === 'correction'
+            ? '本次限时故事校对已核验；新版本仍须本人重新确认。'
+            : '本人申请已核验，导出交付、删除执行与后续联动仍待对应流程处理。'
+        "
       />
       <Form v-else layout="vertical" class="section"
         ><FormItem label="D08 核验证据引用"
@@ -234,6 +309,61 @@ onMounted(refresh);
           }}</Button
         ></Form
       >
+      <section
+        v-if="selected.kind === 'correction' && selected.correctionGrant"
+        class="section"
+      >
+        <h3>本次受控故事校对</h3>
+        <p>
+          本人授权到期：{{
+            selected.correctionGrant.expiresAt
+          }}。仅核验本次工单的客服可读取和校对；新稿仍需本人重新确认。
+        </p>
+        <Button
+          :disabled="busy || selected.state !== 'verified'"
+          @click="loadCorrection"
+          >读取获授权故事</Button
+        >
+        <div v-if="correction && correction.revision">
+          <FormItem label="校对标题"
+            ><Input v-model:value="correctionTitle" :disabled="busy"
+          /></FormItem>
+          <div
+            v-for="(paragraph, index) in correctionParagraphs"
+            :key="index"
+            class="section"
+          >
+            <label
+              >第 {{ index + 1 }} 段<textarea
+                v-model="paragraph.text"
+                :disabled="busy"
+                rows="5"
+              />
+            </label>
+            <p>原有讲述来源保留。</p>
+          </div>
+          <div
+            v-for="(review, index) in reviewReasons"
+            :key="index"
+            class="section"
+          >
+            <p>核对项：{{ review.item }}</p>
+            <label
+              >处理依据<textarea
+                v-model="review.reason"
+                :disabled="busy"
+                rows="3"
+              />
+            </label>
+          </div>
+          <Button :disabled="busy" @click="saveCorrection"
+            >保存新版本，交本人确认</Button
+          >
+          <p>
+            第 {{ correction.version }} 版；运营校对不代表本人确认或入书许可。
+          </p>
+        </div>
+      </section>
       <div v-if="selected.verification" class="section">
         <p>核验证据：{{ selected.verification.evidenceRef }}</p>
         <p>核验客服：{{ selected.verification.operatorAdminId }}</p>
