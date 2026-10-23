@@ -43,16 +43,17 @@ export const personalPlanClient = {
       projectId,
     );
   },
-  async revise(plan: PersonalPlan, content: PlanContent) {
+  async revise(
+    projectId: string,
+    expectedVersion: number,
+    content: PlanContent,
+  ) {
     return validate(
-      await sessionClient.request<PersonalPlan>(
-        `/projects/${plan.projectId}/plan`,
-        {
-          key: paymentKey(),
-          data: { expectedVersion: plan.revision, content },
-        },
-      ),
-      plan.projectId,
+      await sessionClient.request<PersonalPlan>(`/projects/${projectId}/plan`, {
+        key: paymentKey(),
+        data: { expectedVersion, content },
+      }),
+      projectId,
     );
   },
   async decide(

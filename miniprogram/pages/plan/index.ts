@@ -17,6 +17,8 @@ Page({
   data: {
     plan: null as PersonalPlan | null,
     draft: null as PlanContent | null,
+    draftVersion: 0,
+    savedQuestionKeys: {} as Record<string, boolean>,
     busy: false,
     dirty: false,
     status: "",
@@ -40,6 +42,8 @@ Page({
     this.setData({
       plan: null,
       draft: null,
+      draftVersion: 0,
+      savedQuestionKeys: {},
       busy: false,
       dirty: false,
       topic: "",
@@ -78,9 +82,15 @@ Page({
       throw new Error("当次授权已到期，请重新取得本人许可");
     this.setData({
       plan,
+      savedQuestionKeys: Object.fromEntries(
+        plan.chapters.flatMap((chapter) =>
+          chapter.questions.map((question) => [question.key, true]),
+        ),
+      ),
       ...(resetDraft
         ? {
             draft: copy({ chapters: plan.chapters, starters: plan.starters }),
+            draftVersion: plan.revision,
             dirty: false,
           }
         : {}),
@@ -89,7 +99,7 @@ Page({
   },
   async perform(
     work: (generation: number, context: string) => Promise<void>,
-    keepConflictDraft = false,
+    preserveDraftOnError = false,
   ) {
     if (this.data.busy) return;
     const generation = ++this.generation,
@@ -99,18 +109,31 @@ Page({
       await work(generation, context);
     } catch (error) {
       if (generation !== this.generation || dataMode() !== "live") return;
-      if (context !== sessionClient.context()) {
+      if (
+        context !== sessionClient.context() ||
+        (error instanceof ApiFailure &&
+          (error.status === 401 || error.status === 403)) ||
+        (this.data.plan?.accessExpiresAt &&
+          Date.parse(this.data.plan.accessExpiresAt) <= Date.now())
+      ) {
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = 0;
         this.setData({
           plan: null,
           draft: null,
+          draftVersion: 0,
+          savedQuestionKeys: {},
           dirty: false,
           loggedIn: !!sessionClient.context(),
-          status: "登录已失效或账号已变化，请重新查询",
+          status:
+            context !== sessionClient.context()
+              ? "登录已失效或账号已变化，请重新查询"
+              : "授权已失效，请重新查询",
         });
       } else if (
         error instanceof ApiFailure &&
         error.status === 409 &&
-        keepConflictDraft
+        preserveDraftOnError
       ) {
         this.setData({
           status:
@@ -118,11 +141,18 @@ Page({
         });
       } else {
         this.setData({
-          plan: null,
-          draft: null,
-          dirty: false,
-          status:
-            error instanceof Error
+          ...(preserveDraftOnError
+            ? {}
+            : {
+                plan: null,
+                draft: null,
+                draftVersion: 0,
+                savedQuestionKeys: {},
+                dirty: false,
+              }),
+          status: preserveDraftOnError
+            ? `操作未确认，已保留未保存修改，请检查后重试。${error instanceof Error ? error.message : ""}`
+            : error instanceof Error
               ? `操作未确认，请重新查询。${error.message}`
               : "操作未确认，请重新查询",
         });
@@ -133,7 +163,13 @@ Page({
   },
   async refresh() {
     return this.perform(async (generation: number, context: string) => {
-      this.setData({ plan: null, draft: null, dirty: false });
+      this.setData({
+        plan: null,
+        draft: null,
+        draftVersion: 0,
+        savedQuestionKeys: {},
+        dirty: false,
+      });
       const plan = await personalPlanClient.read(this.projectId);
       if (this.current(generation, context)) this.accept(plan, context);
     });
@@ -222,10 +258,14 @@ Page({
     });
   },
   async save() {
-    const { plan, draft } = this.data;
-    if (!plan || !draft) return;
+    const { plan, draft, draftVersion } = this.data;
+    if (!plan || !draft || !draftVersion) return;
     return this.perform(async (generation: number, context: string) => {
-      const saved = await personalPlanClient.revise(plan, draft);
+      const saved = await personalPlanClient.revise(
+        plan.projectId,
+        draftVersion,
+        draft,
+      );
       if (this.current(generation, context)) {
         this.accept(saved, context);
         this.setData({
@@ -239,6 +279,10 @@ Page({
     if (!plan?.subjectDecision) return;
     const key = e.currentTarget.dataset.key,
       value = e.currentTarget.dataset.state;
+    if (!this.data.savedQuestionKeys[key]) {
+      this.setData({ status: "请先保存这个新问题，再设置本人的回答选择。" });
+      return;
+    }
     const states = plan.questionStates.filter((row) => row.questionKey !== key);
     if (["ready", "later", "skipped", "not-applicable"].includes(value))
       states.push({

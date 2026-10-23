@@ -10,6 +10,7 @@ const Redis = apiRequire("ioredis");
 const schema = `t13_browser_${randomUUID().replaceAll("-", "")}`;
 let api, preview, databaseUrl, projectId, buyer, narrator;
 const errors = [];
+const expectedPreferenceErrors = new Set();
 const base = "http://127.0.0.1:5174";
 const data = (r, status = 201) => {
   expect(r.statusCode, r.body).toBe(status);
@@ -220,6 +221,12 @@ async function pageFor(browser, session) {
   page.on("console", (message) => {
     if (
       message.type() === "error" &&
+      /\b400\b/.test(message.text()) &&
+      expectedPreferenceErrors.delete(message.location().url)
+    )
+      return;
+    if (
+      message.type() === "error" &&
       !/\b(?:40[139]|503)\b/.test(message.text())
     )
       errors.push(message.text());
@@ -286,6 +293,15 @@ test("both roles edit their actual personal plan, preserve subject choices, show
     }),
   ).toHaveCount(0);
   await subject.getByPlaceholder("章节标题").first().fill("另一方的修改草稿");
+  // A preference response includes the latest remote plan, but must not move
+  // the source version of this independently edited local draft.
+  await subject
+    .getByRole("button", { name: "稍后回答", exact: true })
+    .first()
+    .click();
+  await expect(
+    subject.getByText("本人选择：稍后回答", { exact: true }),
+  ).toBeVisible();
   const conflict = subject.waitForResponse(
     (r) =>
       r.url().endsWith(`/projects/${projectId}/plan`) &&
@@ -295,6 +311,10 @@ test("both roles edit their actual personal plan, preserve subject choices, show
     .getByRole("button", { name: "保存个人计划", exact: true })
     .click();
   expect((await conflict).status()).toBe(409);
+  expect(
+    data(await request("GET", `/v1/projects/${projectId}/plan`, buyer), 200)
+      .chapters[0].title,
+  ).toBe("我自己选的地方");
   await expect(subject.getByText(/编辑冲突：保留了你的修改/)).toBeVisible();
   await expect(subject.getByPlaceholder("章节标题").first()).toHaveValue(
     "另一方的修改草稿",
@@ -309,6 +329,55 @@ test("both roles edit their actual personal plan, preserve subject choices, show
   await expect(subject.getByPlaceholder("章节标题").first()).toHaveValue(
     "我自己选的地方",
   );
+  await subject
+    .getByRole("button", { name: "添加问题", exact: true })
+    .first()
+    .click();
+  const unsavedQuestion = subject
+    .locator(".chapter")
+    .first()
+    .locator(".question")
+    .last();
+  await unsavedQuestion.getByPlaceholder("自拟问题").fill("我尚未保存的新问题");
+  await expect(
+    unsavedQuestion.getByRole("button", { name: "不适用", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    unsavedQuestion.getByText("请先保存这个新问题，再设置本人的回答选择。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  // A recoverable protocol error on an already persisted question must keep
+  // the same account's unsaved new question and draft source version intact.
+  await subject.route(
+    "**/plan/preferences",
+    (route) => {
+      expectedPreferenceErrors.add(route.request().url());
+      return route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: {
+            code: "BAD_REQUEST",
+            message: "synthetic rejected preference",
+          },
+          meta: { requestId: "synthetic" },
+        }),
+      });
+    },
+    { times: 1 },
+  );
+  await subject
+    .getByRole("button", { name: "稍后回答", exact: true })
+    .first()
+    .click();
+  await expect(subject.getByText(/操作未确认，已保留未保存修改/)).toBeVisible();
+  await expect(unsavedQuestion.getByPlaceholder("自拟问题")).toHaveValue(
+    "我尚未保存的新问题",
+  );
+  await expect(
+    subject.getByRole("button", { name: "保存个人计划", exact: true }),
+  ).toBeEnabled();
   await subject
     .getByRole("button", { name: "本人明确重新启用此主题", exact: true })
     .click();

@@ -6,7 +6,7 @@
   <button wx:if="{{!loggedIn}}" class="btn section" bindtap="login" disabled="{{busy}}">微信登录</button>
   <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">{{dirty ? '重新查询并放弃未保存修改' : '重新查询个人计划'}}</button>
   <view wx:if="{{plan && draft}}">
-    <view class="note section">计划版本：{{plan.revision}} · 本人选择版本：{{plan.preferences.version}}</view>
+    <view class="note section">编辑基于版本：{{draftVersion}} · 本人选择版本：{{plan.preferences.version}}</view>
     <view wx:if="{{plan.subjectDecision === 'assisted'}}" class="soft section">本人在场的当次协助许可有效；以下回答选择由本人明确决定。</view>
     <view wx:if="{{!plan.subjectDecision}}" class="note section">你可以编辑计划。稍后、跳过、不适用和禁问由本人选择；同机协助须先取得有效的当次本人许可。</view>
     <view wx:for="{{draft.chapters}}" wx:for-item="chapter" wx:for-index="ci" wx:key="key" class="paper section chapter">
@@ -16,7 +16,8 @@
         <textarea class="input" auto-height="{{true}}" placeholder="自拟问题" value="{{question.text}}" data-chapter="{{ci}}" data-question="{{qi}}" bindinput="questionText" disabled="{{busy}}" />
         <view class="actions"><button class="btn secondary" data-chapter="{{ci}}" data-question="{{qi}}" data-direction="-1" bindtap="moveQuestion" disabled="{{busy || qi === 0}}">问题上移</button><button class="btn secondary" data-chapter="{{ci}}" data-question="{{qi}}" data-direction="1" bindtap="moveQuestion" disabled="{{busy || qi === chapter.questions.length - 1}}">问题下移</button><button class="btn secondary" data-chapter="{{ci}}" data-question="{{qi}}" bindtap="removeQuestion" disabled="{{busy}}">移出问题</button></view>
         <view wx:for="{{plan.questionStates}}" wx:for-item="choice" wx:key="questionKey" class="note"><text wx:if="{{choice.questionKey === question.key}}">本人选择：{{choice.state === 'later' ? '稍后回答' : choice.state === 'skipped' ? '已跳过' : choice.state === 'not-applicable' ? '不适用' : '可回答'}}</text></view>
-        <view wx:if="{{plan.subjectDecision}}" class="actions"><button class="btn secondary" data-key="{{question.key}}" data-state="later" bindtap="decision" disabled="{{busy}}">稍后回答</button><button class="btn secondary" data-key="{{question.key}}" data-state="skipped" bindtap="decision" disabled="{{busy}}">跳过</button><button class="btn secondary" data-key="{{question.key}}" data-state="not-applicable" bindtap="decision" disabled="{{busy}}">不适用</button><button class="btn secondary" data-key="{{question.key}}" data-state="ready" bindtap="decision" disabled="{{busy}}">恢复可回答</button></view>
+        <view wx:if="{{plan.subjectDecision && !savedQuestionKeys[question.key]}}" class="note section">请先保存这个新问题，再设置本人的回答选择。</view>
+        <view wx:if="{{plan.subjectDecision}}" class="actions"><button class="btn secondary" data-key="{{question.key}}" data-state="later" bindtap="decision" disabled="{{busy || !savedQuestionKeys[question.key]}}">稍后回答</button><button class="btn secondary" data-key="{{question.key}}" data-state="skipped" bindtap="decision" disabled="{{busy || !savedQuestionKeys[question.key]}}">跳过</button><button class="btn secondary" data-key="{{question.key}}" data-state="not-applicable" bindtap="decision" disabled="{{busy || !savedQuestionKeys[question.key]}}">不适用</button><button class="btn secondary" data-key="{{question.key}}" data-state="ready" bindtap="decision" disabled="{{busy || !savedQuestionKeys[question.key]}}">恢复可回答</button></view>
       </view>
       <button class="btn secondary section" data-chapter="{{ci}}" bindtap="addQuestion" disabled="{{busy}}">添加问题</button>
     </view>
