@@ -14,6 +14,7 @@
   <button class="link" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button>
   <button wx:for="{{memberships}}" wx:key="projectId" class="btn secondary section" data-id="{{item.projectId}}" bindtap="openParticipation">{{item.state === 'pending' ? '等待发起人核对' : '查看本人的用途选择'}} · {{item.projectId}}</button>
   <view wx:if="{{participation}}" class="section">
+    <button wx:if="{{participation.role === 'initiator'}}" class="btn section" bindtap="assisted">无个人微信？本人在场同机协助</button>
     <view class="small muted">项目：{{participation.projectId}}</view>
     <view class="note section">拒绝或撤回不取消已付款订单，仍可联系服务。已下载到设备的副本无法远程回收。本人入书确认是之后的独立决定。</view>
     <view wx:if="{{participation.role === 'narrator'}}">
@@ -25,11 +26,11 @@
       </view>
       <view class="soft section">{{participation.canCollect ? '已授权采集，录音功能待后续接入。' : '未获采集许可，不能开始录音。'}}{{participation.canProcessAi ? '已单独授权AI处理。' : 'AI处理未获许可。'}}</view>
     </view>
-    <view class="paper section"><view class="section-title">联系服务与账号换绑</view><view class="note section">目标账号先微信登录，再提供其账号编号。客服核验本人后换绑；新账号须重新选择资料用途。</view>
+    <view class="paper section"><view class="section-title">联系服务与本人账号绑定</view><view class="note section">目标账号先微信登录，再提供其账号编号。客服核验本人后换绑；新账号须重新选择资料用途。</view>
       <input class="input section" placeholder="目标账号编号" value="{{targetUserId}}" bindinput="targetInput" disabled="{{busy}}"/>
-      <button class="btn secondary section" bindtap="requestRebind" disabled="{{busy || !targetUserId || participation.bindingVersion === 0 || participation.policyStatus !== 'synthetic-only'}}">提交客服换绑申请</button>
+      <button class="btn secondary section" bindtap="requestRebind" disabled="{{busy || !targetUserId || participation.policyStatus !== 'synthetic-only'}}">{{participation.bindingVersion === 0 ? '提交客服本人账号绑定申请' : '提交客服换绑申请'}}</button>
       <view wx:if="{{supportCaseRef}}" class="note section">工单：{{supportCaseRef}}</view>
-      <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="small muted">换绑工单：record:{{item.id}}</view><view class="note">处理状态：{{item.state === 'open' ? '待客服核验' : '已完成'}}</view></view>
+      <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="small muted">{{item.kind === 'rebind' ? '换绑工单' : item.kind === 'withdraw' ? '撤回工单' : item.kind === 'export' ? '资料导出工单' : '删除工单'}}：record:{{item.id}}</view><view class="note">处理状态：{{item.state === 'open' ? '待客服核验' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : item.state === 'verified' ? '已核验，后续交付或执行待完成' : '已完成'}}</view></view>
     </view>
   </view>
   <button class="link" bindtap="back">返回首页</button>

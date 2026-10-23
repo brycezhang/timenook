@@ -154,6 +154,34 @@ export class ProjectServiceTerms {
     };
     return transaction ? write(transaction) : this.database.$transaction(write);
   }
+  // Trusted participation composition; caller keeps the project lock through its
+  // binding/session write. Existing facts preserve their original server time.
+  async ensureSubjectParticipation(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    subjectId: string,
+  ) {
+    await tx.$queryRaw`SELECT id FROM projects WHERE id=${projectId}::uuid FOR UPDATE`;
+    const subject = await tx.projectSubject.findUnique({
+      where: { projectId },
+    });
+    if (!subject || subject.id !== subjectId) throw new NotFoundException();
+    const prior = await tx.projectServiceEvent.findFirst({
+      where: { projectId, kind: "subject_participation" },
+    });
+    if (prior) return prior.occurredAt;
+    const occurredAt = this.now();
+    await this.recordFact(
+      {
+        projectId,
+        eventId: `subject-participation:${subjectId}`,
+        kind: "subject_participation",
+        occurredAt,
+      },
+      tx,
+    );
+    return occurredAt;
+  }
   // Caller must verify the operator, shared support case and CSRF (AdminAccess).
   async changePause(
     command: {

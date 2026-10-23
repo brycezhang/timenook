@@ -5,6 +5,8 @@ import {
   type ParticipationState,
   type BindingApplication,
   type ProjectCareRequestView,
+  type AssistedSessionView,
+  type AssistedPurpose,
 } from "../../packages/contracts/src";
 import { sessionClient } from "./session";
 import { paymentKey } from "./payments";
@@ -118,6 +120,69 @@ export const participationClient = {
       ),
     );
   },
+  async assisted(
+    current: ParticipationState,
+    purpose: AssistedPurpose,
+    granted: boolean,
+    key: string,
+  ) {
+    return sessionClient.request<AssistedSessionView>(
+      `/projects/${current.projectId}/assisted-sessions`,
+      {
+        key,
+        data: {
+          purpose,
+          granted,
+          noticeVersion: current.noticeVersion,
+          evidenceRef: `synthetic:当次同机本人选择:${key}`,
+          expectedBindingVersion: current.bindingVersion,
+          expectedAccessEpoch: current.accessEpoch,
+        },
+      },
+    );
+  },
+  async assistedSessions(id: string) {
+    const result = await sessionClient.request<{
+      sessions: AssistedSessionView[];
+    }>(`/projects/${id}/assisted-sessions`);
+    if (
+      !Array.isArray(result?.sessions) ||
+      !result.sessions.every(
+        (row) =>
+          uuid(row.id) &&
+          row.projectId === id &&
+          uuid(row.subjectId) &&
+          uuid(row.operatorUserId) &&
+          [
+            "collection",
+            "ai",
+            "sharing",
+            "story_confirmation",
+            "book_confirmation",
+          ].includes(row.purpose) &&
+          ["active", "expired", "revoked", "rejected"].includes(row.state) &&
+          Number.isFinite(Date.parse(row.expiresAt)),
+      )
+    )
+      throw new Error("协助状态无效，请重新查询");
+    return result.sessions.map((row) => ({
+      ...row,
+      state:
+        row.state === "active" && Date.parse(row.expiresAt) <= Date.now()
+          ? ("expired" as const)
+          : row.state,
+    }));
+  },
+  async subjectCare(
+    current: ParticipationState,
+    kind: "withdraw" | "export" | "delete",
+    key: string,
+  ) {
+    return sessionClient.request<{ supportCaseRef: string }>(
+      `/projects/${current.projectId}/care-requests`,
+      { key, data: { kind, expectedBindingVersion: current.bindingVersion } },
+    );
+  },
   async care(current: ParticipationState, targetUserId: string, key: string) {
     return sessionClient.request<{ supportCaseRef: string }>(
       `/projects/${current.projectId}/care-requests`,
@@ -141,8 +206,8 @@ export const participationClient = {
       !result.requests.every(
         (item) =>
           uuid(item.id) &&
-          item.kind === "rebind" &&
-          ["open", "completed"].includes(item.state) &&
+          ["rebind", "withdraw", "export", "delete"].includes(item.kind) &&
+          ["open", "verified", "completed"].includes(item.state) &&
           Number.isFinite(Date.parse(item.createdAt)),
       )
     )

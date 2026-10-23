@@ -166,6 +166,35 @@ export const serviceTermsApi = {
 
 import type { CareCase } from "@timenook/contracts";
 export const careApi = {
+  async open(
+    projectId: string,
+    kind: "withdraw" | "export" | "delete",
+    expectedBindingVersion: number,
+    key: string,
+    csrf: string,
+  ) {
+    return (
+      await client.post<ApiResponse<CareCase>>(
+        `/projects/${projectId}/care-requests`,
+        { kind, expectedBindingVersion },
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
+  async verify(care: CareCase, evidenceRef: string, key: string, csrf: string) {
+    return (
+      await client.post<ApiResponse<{ state: string }>>(
+        `/care-requests/${care.id}/verify`,
+        {
+          noticeVersion: "synthetic-d08-v1",
+          evidenceRef,
+          expectedBindingVersion: care.sourceBindingVersion,
+          expectedAccessEpoch: care.sourceAccessEpoch,
+        },
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
   async list() {
     return (
       await client.get<ApiResponse<{ requests: CareCase[] }>>("/care-requests")

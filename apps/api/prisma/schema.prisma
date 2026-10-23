@@ -398,7 +398,8 @@ model ConsentRecord {
   subjectId      String   @map("subject_id") @db.Uuid
   bindingVersion Int      @map("binding_version")
   accessEpoch    Int      @map("access_epoch")
-  operatorUserId String   @map("operator_user_id") @db.Uuid
+  operatorUserId String?   @map("operator_user_id") @db.Uuid
+  operatorAdminId String? @map("operator_admin_id") @db.Uuid
   granteeUserId  String?  @map("grantee_user_id") @db.Uuid
   purpose        String
   granted        Boolean
@@ -414,9 +415,20 @@ model ConsentRecord {
 model CareRequest {
   id                   String   @id @db.Uuid
   projectId            String   @map("project_id") @db.Uuid
-  requesterId          String   @map("requester_id") @db.Uuid
-  targetUserId         String   @map("target_user_id") @db.Uuid
+  requesterId          String?   @map("requester_id") @db.Uuid
+  requesterSubjectId String? @map("requester_subject_id") @db.Uuid
+  operatorId String @map("operator_id") @db.Uuid
+  operatorRealm String @map("operator_realm")
+  targetUserId         String?   @map("target_user_id") @db.Uuid
   sourceBindingVersion Int      @map("source_binding_version")
+  sourceAccessEpoch Int @map("source_access_epoch")
+  verificationKey String? @map("verification_key")
+  verificationHash String? @map("verification_hash") @db.Char(64)
+  verificationEvidence String? @map("verification_evidence")
+  verificationNotice String? @map("verification_notice")
+  verifiedBy String? @map("verified_by") @db.Uuid
+  verifiedAt DateTime? @map("verified_at") @db.Timestamptz(3)
+  revokedAccessEpoch Int? @map("revoked_access_epoch")
   idempotencyKey       String   @map("idempotency_key")
   requestHash          String   @map("request_hash") @db.Char(64)
   kind                 String
@@ -424,7 +436,7 @@ model CareRequest {
   completedBy          String?  @map("completed_by") @db.Uuid
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  @@unique([projectId, requesterId, idempotencyKey])
+  @@unique([projectId, operatorId, operatorRealm, idempotencyKey])
   @@index([projectId, createdAt])
   @@map("care_requests")
 }
@@ -449,4 +461,46 @@ model BindingChange {
 
   @@unique([projectId, bindingVersion])
   @@map("binding_changes")
+}
+
+model AssistedSession {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ operatorUserId String @map("operator_user_id") @db.Uuid
+ purpose String
+ granted Boolean
+ noticeVersion String @map("notice_version")
+ evidenceRef String @map("evidence_ref")
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ idempotencyKey String @map("idempotency_key")
+ requestHash String @map("request_hash") @db.Char(64)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+ @@unique([projectId,operatorUserId,idempotencyKey])
+ @@unique([projectId,evidenceRef])
+ @@index([projectId,createdAt])
+ @@map("assisted_sessions")
+}
+
+model AssistedVersionEvidence {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ operatorUserId String @map("operator_user_id") @db.Uuid
+ sessionId String @map("session_id") @db.Uuid
+ contentKind String @map("content_kind")
+ versionId String @map("version_id") @db.Uuid
+ contentHash String @map("content_hash") @db.Char(64)
+ noticeVersion String @map("notice_version")
+ evidenceRef String @map("evidence_ref")
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ idempotencyKey String @map("idempotency_key")
+ requestHash String @map("request_hash") @db.Char(64)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([projectId,idempotencyKey])
+ @@unique([projectId,evidenceRef])
+ @@map("assisted_version_evidence")
 }
