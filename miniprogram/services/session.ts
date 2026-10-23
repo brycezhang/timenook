@@ -146,6 +146,26 @@ export class SessionClient {
       )
     )
       throw new ApiFailure("INVALID_RESPONSE");
+    return this.downloadContent(
+      `/projects/${projectId}/interviews/${interviewId}/photos/${photoId}/assets/${assetId}/content`,
+    );
+  }
+  async downloadRecording(
+    projectId: string,
+    interviewId: string,
+    intentId: string,
+  ) {
+    if (
+      ![projectId, interviewId, intentId].every((id) =>
+        /^[a-f0-9-]{36}$/.test(id),
+      )
+    )
+      throw new ApiFailure("INVALID_RESPONSE");
+    return this.downloadContent(
+      `/projects/${projectId}/interviews/${interviewId}/clips/${intentId}/content`,
+    );
+  }
+  private async downloadContent(path: string) {
     const generation = this.generation,
       stored = this.stored();
     if (dataMode() !== "live" || !stored)
@@ -154,7 +174,7 @@ export class SessionClient {
     return new Promise<WechatMiniprogram.DownloadFileSuccessCallbackResult>(
       (resolve, reject) =>
         wx.downloadFile({
-          url: `${this.apiBaseUrl}/projects/${projectId}/interviews/${interviewId}/photos/${photoId}/assets/${assetId}/content`,
+          url: this.apiBaseUrl + path,
           header: { authorization: `Bearer ${stored.session.token}` },
           timeout: 15000,
           success: (result) => {

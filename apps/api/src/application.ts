@@ -1,3 +1,4 @@
+import { Stories, StoriesController } from "./stories/stories";
 import { AdminTasksController } from "./tasks/admin-tasks";
 import {
   ProductionTasks,
@@ -147,6 +148,32 @@ export async function createApplication(
     recordingObjects?: ProbeObjects;
   } = {},
 ): Promise<NestFastifyApplication> {
+  const generation = config.generation;
+  if (
+    generation &&
+    (config.environment !== "test" ||
+      !config.recording ||
+      !config.participation ||
+      generation.mode !== "synthetic-local" ||
+      !options.aiFetch ||
+      options.aiFetch === fetch ||
+      !/^synthetic-[a-z0-9-]+$/.test(generation.configVersion) ||
+      !/^synthetic-[a-z0-9-]+$/.test(generation.deepseek.model) ||
+      !generation.deepseek.apiKey.startsWith("synthetic-") ||
+      !Number.isSafeInteger(generation.deepseek.maxTokens) ||
+      generation.deepseek.maxTokens < 1 ||
+      generation.deepseek.maxTokens > 32768 ||
+      !Number.isSafeInteger(generation.submissionReservationFen) ||
+      generation.submissionReservationFen < 0 ||
+      !Number.isSafeInteger(generation.maxSubmissions) ||
+      generation.maxSubmissions < 1 ||
+      !Number.isSafeInteger(generation.deadlineMs) ||
+      generation.deadlineMs < 30000 ||
+      generation.deadlineMs > 86400000)
+  )
+    throw new ConfigurationError(
+      "Generation requires explicit isolated synthetic recording, configuration, budget and transport",
+    );
   if (
     config.photos &&
     (config.environment !== "test" ||
@@ -302,6 +329,7 @@ export async function createApplication(
       ...(config.recording
         ? [
             RecordingsController,
+            StoriesController,
             RecordingObjectsController,
             ProductionTasksController,
             AdminTasksController,
@@ -335,6 +363,7 @@ export async function createApplication(
       ...(config.recording
         ? [
             Recordings,
+            Stories,
             ProductionTasks,
             {
               provide: TASK_OBJECTS,

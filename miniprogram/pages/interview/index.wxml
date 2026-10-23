@@ -32,6 +32,7 @@
   </view>
   <button wx:for="{{pendingInterviews}}" wx:key="*this" class="btn secondary section" data-id="{{item}}" bindtap="resumeLocal" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">恢复本机采访 {{index + 1}}</button>
   <button class="btn secondary section" bindtap="refresh" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">重新查询与恢复</button>
+  <button wx:if="{{interview}}" class="btn section" bindtap="openStory" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving' || state === 'device-error'}}">整理或查看故事</button>
   <button class="link section" bindtap="finish">今天先到这里</button>
 </view>
 <block wx:else="">

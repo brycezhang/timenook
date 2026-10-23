@@ -1,3 +1,4 @@
+import { Stories } from "../stories/stories";
 import { probeStorageScope } from "../probe/storage-scope";
 import { ApiProperty } from "@nestjs/swagger";
 import { IsOptional, IsUUID } from "class-validator";
@@ -37,13 +38,15 @@ import {
   AI_FETCH,
   AsrSourcePreflightError,
   DoubaoFileAsr,
+  DeepSeekText,
+  StoryComposerInput,
 } from "../probe/ai-providers";
 import type { ProbeObjects } from "../probe/local-objects";
 class InvalidSealedInput extends AsrSourcePreflightError {}
 export const TASK_OBJECTS = Symbol("TASK_OBJECTS");
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
-const active = ["queued", "waiting_provider", "submitting"];
+const active = ["queued", "waiting_inputs", "waiting_provider", "submitting"];
 function configuration(config: ApiConfig) {
   return config.transcription
     ? {
@@ -115,13 +118,17 @@ class TaskRetryDto {
 export class ProductionTasks implements OnModuleDestroy {
   private readonly db: PrismaClient;
   private readonly asr?: DoubaoFileAsr;
+  private readonly text?: DeepSeekText;
   constructor(
     private readonly participation: Participation,
+    private readonly stories: Stories,
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(AI_FETCH) transport: typeof fetch,
     @Inject(TASK_OBJECTS) private readonly objects: ProbeObjects,
   ) {
     this.db = new PrismaClient({ datasourceUrl: config.databaseUrl });
+    if (config.generation)
+      this.text = new DeepSeekText(config.generation.deepseek, transport);
     if (config.transcription)
       this.asr = new DoubaoFileAsr(config.transcription.doubao, transport);
   }
@@ -159,10 +166,10 @@ export class ProductionTasks implements OnModuleDestroy {
       where: {
         id: task.id,
         fence: task.fence,
-        state: { notIn: ["succeeded", "no_speech", "invalidated"] },
+        state: { notIn: ["succeeded", "no_speech", "invalidated", "obsolete"] },
       },
       data: {
-        state: "invalidated",
+        state: task.kind === "compose_story" ? "obsolete" : "invalidated",
         errorCode,
         leaseUntil: null,
         fence: { increment: 1 },
@@ -228,27 +235,48 @@ export class ProductionTasks implements OnModuleDestroy {
       _sum: { polls: true, reservedCostFen: true },
       _count: true,
     });
-    if (action === "query") return (total._sum.polls ?? 0) < budget.polls;
+    const ids = (
+      await tx.productionTask.findMany({
+        where: { projectId, kind: "transcribe_audio" },
+        select: { id: true },
+      })
+    ).map((t) => t.id);
+    const audio = await tx.taskAttempt.aggregate({
+      where: { projectId, taskId: { in: ids } },
+      _sum: { polls: true },
+      _count: true,
+    });
+    if (action === "query") return (audio._sum.polls ?? 0) < budget.polls;
     // Preparing attempts already hold their one submission/cost reservation.
     const additional = action === "new_submission" ? 1 : 0;
     return (
-      total._count + additional <= budget.submissions &&
+      audio._count + additional <= budget.submissions &&
       (total._sum.reservedCostFen ?? 0) +
         additional * this.config.transcription!.submissionReservationFen <=
         budget.cost
     );
   }
-  private async claim(id: string) {
+  private async claim(id: string): Promise<{
+    task: ProductionTask;
+    submit: boolean;
+    input?: StoryComposerInput;
+  } | null> {
     const initial = await this.db.productionTask.findUnique({ where: { id } });
     if (!initial) return null;
     return this.db.$transaction(async (tx) => {
-      const sourceClip = await tx.recordingClip.findUniqueOrThrow({
-        where: { id: initial.clipId },
-      });
-      const grant = await this.participation.processingGrant(tx, {
-        ...initial,
-        sourceAssistedSessionId: sourceClip.assistedSessionId,
-      });
+      const sourceClip =
+        initial.kind === "transcribe_audio"
+          ? await tx.recordingClip.findUniqueOrThrow({
+              where: { id: initial.clipId! },
+            })
+          : null;
+      const grant =
+        initial.kind === "compose_story"
+          ? await this.stories.grantIn(tx, initial)
+          : await this.participation.processingGrant(tx, {
+              ...initial,
+              sourceAssistedSessionId: sourceClip!.assistedSessionId,
+            });
       const permitted = !!grant;
       const task = await this.locked(tx, id);
       if (
@@ -275,7 +303,11 @@ export class ProductionTasks implements OnModuleDestroy {
         const p = await tx.project.findUniqueOrThrow({
           where: { id: task.projectId },
         });
-        if (task.processingGrant || p.accessEpoch !== task.accessEpoch)
+        if (
+          task.kind === "compose_story" ||
+          task.processingGrant ||
+          p.accessEpoch !== task.accessEpoch
+        )
           await this.invalidate(tx, task);
         else
           await tx.productionTask.update({
@@ -288,6 +320,8 @@ export class ProductionTasks implements OnModuleDestroy {
           });
         return null;
       }
+      if (task.kind === "compose_story")
+        return this.claimStory(tx, task, grant!);
       if (
         !this.asr ||
         task.configurationHash !==
@@ -304,7 +338,7 @@ export class ProductionTasks implements OnModuleDestroy {
         return null;
       }
       const asset = await tx.recordingAsset.findUniqueOrThrow({
-        where: { id: task.assetId },
+        where: { id: task.assetId! },
       });
       if (!this.storageMatches(asset)) {
         await this.invalidate(tx, task, "INPUT_CHANGED");
@@ -373,17 +407,170 @@ export class ProductionTasks implements OnModuleDestroy {
       };
     });
   }
+  private async claimStory(
+    tx: Prisma.TransactionClient,
+    task: ProductionTask,
+    grant: Prisma.JsonObject,
+  ) {
+    const config = this.config.generation;
+    const stop = async (errorCode: string) => {
+      await tx.productionTask.update({
+        where: { id: task.id },
+        data: { state: "manual_review", errorCode, leaseUntil: null },
+      });
+      return null;
+    };
+    if (
+      !config ||
+      !this.text ||
+      task.configurationHash !==
+        hash(JSON.stringify(this.stories.configuration()))
+    )
+      return stop("CONFIGURATION_CHANGED");
+    const dependencies = await this.stories.inputsIn(tx, task);
+    if (dependencies.state !== "ready") {
+      await tx.productionTask.update({
+        where: { id: task.id },
+        data: {
+          state: dependencies.state,
+          errorCode: dependencies.errorCode,
+          nextRunAt: new Date(Date.now() + 1000),
+          ...(dependencies.state === "no_speech"
+            ? { completedAt: new Date() }
+            : {}),
+        },
+      });
+      return null;
+    }
+    const attempt = await tx.taskAttempt.findUnique({
+      where: { requestId: task.providerRequestId },
+    });
+    if (attempt && attempt.state !== "preparing")
+      return stop("PROVIDER_UNKNOWN");
+    if (!(await this.storyCapacity(tx, task, attempt ? 0 : 1)))
+      return stop("PROVIDER_BUDGET_EXHAUSTED");
+    if (!attempt)
+      await tx.taskAttempt.create({
+        data: {
+          requestId: task.providerRequestId,
+          taskId: task.id,
+          projectId: task.projectId,
+          number:
+            (await tx.taskAttempt.count({ where: { taskId: task.id } })) + 1,
+          configuration: task.configuration as Prisma.InputJsonValue,
+          configurationHash: task.configurationHash,
+          state: "preparing",
+          submittedAt: new Date(),
+          reservedCostFen: config.submissionReservationFen,
+        },
+      });
+    return {
+      submit: true,
+      input: dependencies.input!,
+      task: await tx.productionTask.update({
+        where: { id: task.id },
+        data: {
+          processingGrant: grant as Prisma.InputJsonObject,
+          state: "submitting",
+          errorCode: null,
+          fence: { increment: 1 },
+          leaseUntil: new Date(Date.now() + 30000),
+          submittedAt: task.submittedAt ?? new Date(),
+        },
+      }),
+    };
+  }
+  private async runStory(id: string) {
+    const claimed = await this.claim(id);
+    if (!claimed?.input) return;
+    const task = claimed.task;
+    const maySend = await this.db.$transaction(async (tx) => {
+      if (!(await this.currentClaim(tx, task))) return false;
+      return (
+        (
+          await tx.taskAttempt.updateMany({
+            where: { requestId: task.providerRequestId, state: "preparing" },
+            data: { state: "submitting" },
+          })
+        ).count === 1
+      );
+    });
+    if (!maySend) return;
+    const result = await this.text!.generate("story", claimed.input);
+    await this.db.$transaction(async (tx) => {
+      const current = await this.currentClaim(tx, task);
+      await tx.taskAttemptObservation.upsert({
+        where: {
+          requestId_fence: {
+            requestId: task.providerRequestId,
+            fence: task.fence,
+          },
+        },
+        create: {
+          requestId: task.providerRequestId,
+          fence: task.fence,
+          action: "submit",
+          state: result.state,
+          providerCode: result.failure,
+          superseded: !current,
+        },
+        update: {},
+      });
+      await tx.taskAttempt.update({
+        where: { requestId: task.providerRequestId },
+        data: {
+          state: result.state,
+          usage: result.usage,
+          model: result.model,
+          failure: result.failure,
+        },
+      });
+      if (!current) return;
+      if (result.state === "succeeded" && result.output)
+        await this.stories.applyIn(tx, task, result.output);
+      const noContent = ["declined", "not_applicable"].includes(result.state);
+      await tx.productionTask.update({
+        where: { id },
+        data: {
+          state:
+            result.state === "unknown"
+              ? "manual_review"
+              : noContent
+                ? "no_speech"
+                : result.state,
+          errorCode:
+            result.state === "unknown"
+              ? "PROVIDER_UNKNOWN"
+              : result.state === "failed"
+                ? "INVALID_OUTPUT"
+                : noContent
+                  ? "NO_CONTENT"
+                  : null,
+          completedAt:
+            result.state === "succeeded" || noContent ? new Date() : null,
+          failedAt: result.state === "failed" ? new Date() : null,
+          leaseUntil: null,
+        },
+      });
+    });
+  }
   private async currentClaim(
     tx: Prisma.TransactionClient,
     claim: ProductionTask,
   ) {
-    const sourceClip = await tx.recordingClip.findUniqueOrThrow({
-      where: { id: claim.clipId },
-    });
-    const allowed = await this.participation.processingAllowed(tx, {
-      ...claim,
-      sourceAssistedSessionId: sourceClip.assistedSessionId,
-    });
+    const sourceClip =
+      claim.kind === "transcribe_audio"
+        ? await tx.recordingClip.findUniqueOrThrow({
+            where: { id: claim.clipId! },
+          })
+        : null;
+    const allowed =
+      claim.kind === "compose_story"
+        ? !!(await this.stories.grantIn(tx, claim))
+        : await this.participation.processingAllowed(tx, {
+            ...claim,
+            sourceAssistedSessionId: sourceClip!.assistedSessionId,
+          });
     const row = await this.locked(tx, claim.id);
     if (
       row.fence !== claim.fence ||
@@ -410,14 +597,15 @@ export class ProductionTasks implements OnModuleDestroy {
       });
       return false;
     }
+    if (row.kind === "compose_story") return true;
     const asset = await tx.recordingAsset.findUnique({
-      where: { id: row.assetId },
+      where: { id: row.assetId! },
     });
     const clip = await tx.recordingClip.findFirst({
       where: {
-        id: row.clipId,
+        id: row.clipId!,
         projectId: row.projectId,
-        assetId: row.assetId,
+        assetId: row.assetId!,
         subjectId: row.subjectId,
       },
     });
@@ -433,6 +621,11 @@ export class ProductionTasks implements OnModuleDestroy {
     return true;
   }
   async run(id: string) {
+    const kind = await this.db.productionTask.findUnique({
+      where: { id },
+      select: { kind: true },
+    });
+    if (kind?.kind === "compose_story") return this.runStory(id);
     const claimed = await this.claim(id);
     if (!claimed) return;
     const { task, submit } = claimed;
@@ -442,7 +635,7 @@ export class ProductionTasks implements OnModuleDestroy {
       if (submit) {
         try {
           const asset = await this.db.recordingAsset.findUniqueOrThrow({
-            where: { id: task.assetId },
+            where: { id: task.assetId! },
           });
           const bytes = await this.objects.read(asset.objectKey);
           if (
@@ -532,7 +725,7 @@ export class ProductionTasks implements OnModuleDestroy {
           data: {
             taskId: id,
             projectId: task.projectId,
-            clipId: task.clipId,
+            clipId: task.clipId!,
             inputHash: task.inputHash,
             text: result.transcript,
             sha256: hash(result.transcript),
@@ -576,10 +769,58 @@ export class ProductionTasks implements OnModuleDestroy {
       });
     });
   }
+  private async storyCapacity(
+    tx: Prisma.TransactionClient,
+    task: ProductionTask,
+    additional: number,
+  ) {
+    const config = this.config.generation;
+    if (!config) return false;
+    const budget = await this.budget(tx, task.projectId),
+      total = await tx.taskAttempt.aggregate({
+        where: { projectId: task.projectId },
+        _sum: { reservedCostFen: true },
+      }),
+      ids = (
+        await tx.productionTask.findMany({
+          where: { projectId: task.projectId, kind: "compose_story" },
+          select: { id: true },
+        })
+      ).map((t) => t.id);
+    return (
+      (await tx.taskAttempt.count({ where: { taskId: { in: ids } } })) +
+        additional <=
+        config.maxSubmissions &&
+      (total._sum.reservedCostFen ?? 0) +
+        additional * config.submissionReservationFen <=
+        budget.cost
+    );
+  }
   private async retryAllowed(
     tx: Prisma.TransactionClient,
     task: ProductionTask,
   ) {
+    if (task.kind === "compose_story") {
+      if (
+        task.state !== "failed" ||
+        !this.config.generation ||
+        task.configurationHash !==
+          hash(JSON.stringify(this.stories.configuration())) ||
+        (task.deadline && task.deadline.getTime() <= Date.now())
+      )
+        return false;
+      const budget = await this.budget(tx, task.projectId),
+        attempt = await tx.taskAttempt.findUnique({
+          where: { requestId: task.providerRequestId },
+        });
+      return (
+        attempt?.state === "failed" &&
+        (await tx.taskRetryCommand.count({
+          where: { projectId: task.projectId },
+        })) < budget.retries &&
+        this.storyCapacity(tx, task, 1)
+      );
+    }
     if (
       !["failed", "manual_review"].includes(task.state) ||
       !this.config.transcription ||
@@ -623,7 +864,11 @@ export class ProductionTasks implements OnModuleDestroy {
       where: { id, projectId },
     });
     if (!initial) throw new NotFoundException();
-    if (!(await this.participation.processingAllowed(tx, initial)))
+    if (
+      !(initial.kind === "compose_story"
+        ? await this.stories.grantIn(tx, initial)
+        : await this.participation.processingAllowed(tx, initial))
+    )
       throw new ConflictException();
     const task = await this.locked(tx, id);
     const where = {
@@ -710,19 +955,26 @@ export class ProductionTasks implements OnModuleDestroy {
           const task = await tx.productionTask.findFirst({
             where: { id, projectId },
           });
-          const clip = task
-            ? await tx.recordingClip.findFirst({
-                where: {
-                  id: task.clipId,
-                  projectId,
-                  operatorUserId: actor.operatorUserId,
-                  subjectId: actor.subjectId,
-                  bindingVersion: actor.bindingVersion,
-                  accessEpoch: actor.accessEpoch,
-                },
-              })
-            : null;
-          if (!task || !clip) throw new ForbiddenException();
+          const clip =
+            task?.kind === "transcribe_audio"
+              ? await tx.recordingClip.findFirst({
+                  where: {
+                    id: task.clipId!,
+                    projectId,
+                    operatorUserId: actor.operatorUserId,
+                    subjectId: actor.subjectId,
+                    bindingVersion: actor.bindingVersion,
+                    accessEpoch: actor.accessEpoch,
+                  },
+                })
+              : null;
+          if (
+            !task ||
+            (task.kind === "transcribe_audio"
+              ? !clip
+              : !(await this.stories.grantIn(tx, task)))
+          )
+            throw new ForbiddenException();
           await this.retryIn(
             tx,
             projectId,
@@ -760,6 +1012,9 @@ export class ProductionTasks implements OnModuleDestroy {
         polls: true,
         reservedCostFen: true,
         actualCostFen: true,
+        usage: true,
+        model: true,
+        failure: true,
       },
     });
     return {
@@ -783,7 +1038,9 @@ export class ProductionTasks implements OnModuleDestroy {
             ? retryable
               ? "retry"
               : "contact_support"
-            : task.state === "manual_review" || task.state === "invalidated"
+            : task.state === "manual_review" ||
+                task.state === "invalidated" ||
+                task.state === "obsolete"
               ? "contact_support"
               : task.state === "succeeded"
                 ? "continue"
@@ -791,7 +1048,7 @@ export class ProductionTasks implements OnModuleDestroy {
       submittedAt: task.submittedAt?.toISOString() ?? null,
       completedAt: task.completedAt?.toISOString() ?? null,
       failedAt: task.failedAt?.toISOString() ?? null,
-      ...(privateContent
+      ...(privateContent && task.kind === "transcribe_audio"
         ? {
             originalTranscript: await tx.formalTranscript.findUnique({
               where: { taskId: task.id },
@@ -815,11 +1072,14 @@ export class ProductionTasks implements OnModuleDestroy {
           }),
         })),
       ),
-      recordingUsageMs: (
-        await tx.taskQuotaIntent.findUniqueOrThrow({
-          where: { taskId: task.id },
-        })
-      ).consumedMs,
+      recordingUsageMs:
+        task.kind === "transcribe_audio"
+          ? (
+              await tx.taskQuotaIntent.findUniqueOrThrow({
+                where: { taskId: task.id },
+              })
+            ).consumedMs
+          : 0,
     };
   }
   list(projectId: string, authorization?: string, id?: string) {

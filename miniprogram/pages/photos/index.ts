@@ -145,7 +145,7 @@ Page({
     if (!this.owner || this.data.busy) return;
     this.setData({ busy: true });
     try {
-      await interviewRecordingClient.authorizeStart(
+      await interviewRecordingClient.authorizeCollection(
         this.projectId,
         this.interviewId,
         this.assistedSessionId || undefined,

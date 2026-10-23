@@ -729,9 +729,9 @@ model PhotoReference {
 model ProductionTask {
  id String @id @db.Uuid
  projectId String @map("project_id") @db.Uuid
- clipId String @map("clip_id") @db.Uuid
- assetId String @map("asset_id") @db.Uuid
- sealedInputId String @unique @map("sealed_input_id") @db.Uuid
+ clipId String? @map("clip_id") @db.Uuid
+ assetId String? @map("asset_id") @db.Uuid
+ sealedInputId String? @unique @map("sealed_input_id") @db.Uuid
  subjectId String @map("subject_id") @db.Uuid
  bindingVersion Int @map("binding_version")
  accessEpoch Int @map("access_epoch")
@@ -785,6 +785,9 @@ model FormalTranscript {
 }
 
 model TaskAttempt {
+ usage Json?
+ model String?
+ failure String?
  requestId String @id @map("request_id") @db.Uuid
  taskId String @map("task_id") @db.Uuid
  projectId String @map("project_id") @db.Uuid
@@ -821,4 +824,76 @@ model TaskAttemptObservation {
  observedAt DateTime @default(now()) @map("observed_at") @db.Timestamptz(3)
  @@id([requestId,fence])
  @@map("task_attempt_observations")
+}
+
+model Story {
+ currentRevisionId String? @map("current_revision_id") @db.Uuid
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ interviewId String @unique @map("interview_id") @db.Uuid
+ version Int @default(0)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([projectId,id])
+ @@map("stories")
+}
+model StoryGeneration {
+ dependenciesReadyAt DateTime? @map("dependencies_ready_at") @db.Timestamptz(3)
+ resolvedManifest Json? @map("resolved_manifest")
+ taskId String @id @map("task_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ storyId String @map("story_id") @db.Uuid
+ baseVersion Int @map("base_version")
+ preferences Json
+ quotaKind String @map("quota_kind")
+ userSubmittedAt DateTime @map("user_submitted_at") @db.Timestamptz(3)
+ allSavedAt DateTime @map("all_saved_at") @db.Timestamptz(3)
+ @@unique([projectId,taskId])
+ @@map("story_generations")
+}
+model StorySource {
+ intentId String @map("intent_id") @db.Uuid
+ taskId String @map("task_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ clipId String @map("clip_id") @db.Uuid
+ interviewId String @map("interview_id") @db.Uuid
+ assetId String @map("asset_id") @db.Uuid
+ sealedInputId String @map("sealed_input_id") @db.Uuid
+ inputHash String @map("input_hash") @db.Char(64)
+ transcriptionTaskId String @map("transcription_task_id") @db.Uuid
+ actualQuestionId String @map("actual_question_id") @db.Uuid
+ question Json
+ sequence Int
+ @@id([taskId,clipId])
+ @@unique([taskId,sequence])
+ @@map("story_sources")
+}
+model StoryCommand {
+ projectId String @map("project_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ key String
+ requestHash String @map("request_hash") @db.Char(64)
+ taskId String @map("task_id") @db.Uuid
+ @@id([projectId,actorId,key])
+ @@map("story_commands")
+}
+
+model StoryRevision {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ storyId String @map("story_id") @db.Uuid
+ version Int
+ generationTaskId String @map("generation_task_id") @db.Uuid
+ baseRevisionId String? @map("base_revision_id") @db.Uuid
+ title String
+ theme String
+ paragraphs Json
+ reviewItems Json @map("review_items")
+ sourceManifest Json @map("source_manifest")
+ contentHash String @map("content_hash") @db.Char(64)
+ origin String
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([storyId,version])
+ @@unique([projectId,storyId,id,version])
+ @@unique([projectId,storyId,id])
+ @@map("story_revisions")
 }

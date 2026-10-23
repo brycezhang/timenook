@@ -29,6 +29,14 @@ export interface ApiConfig {
     submissionReservationFen: number;
     deadlineMs: number;
   };
+  generation?: {
+    mode: "synthetic-local";
+    configVersion: string;
+    deepseek: { apiKey: string; model: string; maxTokens: number };
+    submissionReservationFen: number;
+    maxSubmissions: number;
+    deadlineMs: number;
+  };
   sessionTtlSeconds?: number;
   redisKeyPrefix?: string;
   loginLimitPerMinute?: number;
