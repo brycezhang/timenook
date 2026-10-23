@@ -30,7 +30,8 @@ function harness(options: { deferSaves?: boolean } = {}) {
     uploads: any[] = [],
     files = new Set<string>(),
     handlers: Record<string, ((v?: any) => void)[]> = {},
-    pendingSaves: any[] = [];
+    pendingSaves: any[] = [],
+    navigation: any[] = [];
   let page: any,
     saves = 0,
     failManifest = false,
@@ -94,7 +95,7 @@ function harness(options: { deferSaves?: boolean } = {}) {
           o.success({ size: 6480, digest: "b".repeat(64) }),
         access: (o: any) => (files.has(o.path) ? o.success({}) : o.fail({})),
       }),
-      navigateTo: () => {},
+      navigateTo: (options: any) => navigation.push(options),
       reLaunch: () => {},
       showToast: () => {},
       openSetting: () => {},
@@ -108,6 +109,7 @@ function harness(options: { deferSaves?: boolean } = {}) {
     files,
     emit,
     pendingSaves,
+    navigation,
     get saves() {
       return saves;
     },
@@ -755,3 +757,49 @@ for (const action of ["status", "retry"]) {
     assert.equal(h.files.size, 1);
   });
 }
+
+test("the story entry preserves the selected assisted interview and blocks recording or another account without submitting generation", async () => {
+  const h = harness(),
+    assistedSessionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  h.page.onLoad({ projectId, interviewId, assistedSessionId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), context, 201);
+  await tick();
+  respond(h.requests.shift(), interview, 201);
+  await showing;
+  h.page.openStory();
+  assert.equal(
+    h.navigation[0].url,
+    `/pages/story/index?projectId=${projectId}&interviewId=${interviewId}&assistedSessionId=${assistedSessionId}`,
+  );
+  await start(h);
+  h.page.openStory();
+  assert.equal(
+    h.navigation.length,
+    1,
+    "active recording cannot navigate away through the story entry",
+  );
+  await h.page.record();
+  await tick();
+  assert.equal(h.page.data.localClips[0].sealed, undefined);
+  h.page.openStory();
+  assert.equal(
+    h.navigation.length,
+    2,
+    "a saved local file may enter the story save-recovery view",
+  );
+  const other = structuredClone(login);
+  other.user.id = "99999999-9999-4999-8999-999999999999";
+  other.session.id = "88888888-8888-4888-8888-888888888888";
+  other.session.token = "b".repeat(43);
+  h.storage.set(`timenook.session.v1:${base}`, other);
+  h.page.openStory();
+  assert.equal(
+    h.navigation.length,
+    2,
+    "old interview data cannot navigate for the new account",
+  );
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.uploads.length, 0);
+  h.page.onUnload();
+});

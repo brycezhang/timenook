@@ -48,6 +48,7 @@ Page({
   generation: 0,
   liveRecorder: null as InterviewRecorder | null,
   context: null as RecordingContext | null,
+  storyOwnerContext: "",
   selection: null as {
     input: string;
     key: string;
@@ -121,6 +122,7 @@ Page({
       this.liveRecorder?.unsubscribe();
       if (this.timerHandle) clearInterval(this.timerHandle);
       this.context = null;
+      this.storyOwnerContext = "";
       this.selection = null;
       this.setData({
         question: "",
@@ -153,6 +155,7 @@ Page({
     );
   },
   async refresh() {
+    this.storyOwnerContext = "";
     const generation = ++this.generation,
       context = sessionClient.context();
     if (this.taskPollHandle) clearTimeout(this.taskPollHandle);
@@ -227,6 +230,7 @@ Page({
         this.liveRecorder?.unsubscribe();
         this.liveRecorder = null;
         this.context = null;
+        this.storyOwnerContext = "";
         this.setData({
           question: "",
           interview: null,
@@ -257,6 +261,7 @@ Page({
       this.assistedSessionId || undefined,
     );
     this.liveRecorder = device;
+    this.storyOwnerContext = context;
     this.setData({
       interview: value,
       question: value.actualQuestion.snapshot.text,
@@ -485,6 +490,7 @@ Page({
           this.liveRecorder?.unsubscribe();
           this.liveRecorder = null;
           this.context = null;
+          this.storyOwnerContext = "";
           this.selection = null;
           this.setData({
             question: "",
@@ -564,6 +570,7 @@ Page({
         this.liveRecorder.unsubscribe();
         this.liveRecorder = null;
         this.context = null;
+        this.storyOwnerContext = "";
         this.setData({
           question: "",
           interview: null,
@@ -619,6 +626,7 @@ Page({
               this.liveRecorder?.unsubscribe();
               this.liveRecorder = null;
               this.context = null;
+              this.storyOwnerContext = "";
               this.selection = null;
               this.setData({
                 question: "",
@@ -666,6 +674,26 @@ Page({
   },
   settings() {
     wx.openSetting({});
+  },
+  openStory() {
+    const interview = this.data.interview,
+      context = sessionClient.context();
+    if (
+      dataMode() !== "live" ||
+      !context ||
+      context !== this.storyOwnerContext ||
+      !interview ||
+      interview.projectId !== this.projectId ||
+      this.data.busy ||
+      ["recording", "requesting", "saving", "device-error"].includes(
+        this.data.state,
+      )
+    )
+      return;
+    go(
+      "story",
+      `projectId=${this.projectId}&interviewId=${interview.id}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+    );
   },
   finish() {
     if (dataMode() === "live") {

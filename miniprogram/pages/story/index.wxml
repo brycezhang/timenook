@@ -1,3 +1,43 @@
+<block wx:if="{{live}}">
+  <view class="page live-story">
+    <view class="eyebrow">原声成稿</view>
+    <view class="title story-title">{{story && story.revision ? story.revision.title : '整理这段讲述'}}</view>
+    <view class="live-stage">{{stage}}</view>
+    <view wx:if="{{saveWarning}}" class="live-error">{{saveWarning}}</view>
+    <view wx:if="{{context}}" class="live-save">{{context.clipCount}} 段原声云端已保存</view>
+    <view wx:if="{{error}}" class="live-error">{{error}}</view>
+    <view wx:if="{{privateError}}" class="live-error">{{privateError}}</view>
+    <view class="live-controls">
+      <button class="btn secondary" bindtap="refresh" disabled="{{busy}}">{{busy?'正在查询…':'刷新状态'}}</button>
+      <button wx:if="{{canOrganize}}" class="btn" bindtap="submitLive" disabled="{{busy}}">{{story && story.version?'重新整理故事':'整理故事'}}</button>
+      <button wx:if="{{story && story.task && story.task.state==='failed' && retryable}}" class="btn" bindtap="retryLive" disabled="{{busy}}">从原素材重试</button>
+      <button class="btn secondary" bindtap="recoverInterview" disabled="{{busy}}">{{pendingLocal || !context || !context.cloudSaved?'回采访页恢复保存':'回采访页继续讲'}}</button>
+    </view>
+    <block wx:if="{{story && story.revision}}">
+      <view class="live-origin">{{story.revision.origin==='ai'?'AI 整理 · 待本人核对':'已保存的文字版本 · 待本人核对'}}</view>
+      <view class="live-version">第 {{story.version}} 版</view>
+      <view class="story-body">
+        <view wx:for="{{liveParagraphs}}" wx:key="index" class="live-paragraph">
+          <text class="paragraph">{{item.text}}</text>
+          <view class="live-source-label">来源：{{item.sourceLabel}}</view>
+        </view>
+      </view>
+      <view class="live-reviews">
+        <view class="title section-title">请本人核对</view>
+        <view wx:if="{{!story.revision.reviewItems.length}}">整理稿没有列出核对项，仍请阅读全文。</view>
+        <view wx:for="{{story.revision.reviewItems}}" wx:key="index" class="live-review">{{index+1}}. {{item}}</view>
+      </view>
+    </block>
+    <view wx:if="{{story && story.task}}" class="live-sources">
+      <view class="title section-title">已保存的原声</view>
+      <view wx:if="{{audioError}}" class="live-error">{{audioError}}</view>
+      <view wx:for="{{story.task.sources}}" wx:key="clipId" class="live-source-row">第 {{index+1}} 段 · 云端已保存
+        <button wx:if="{{!privateError}}" class="btn secondary section" bindtap="playLive" data-id="{{item.clipId}}" disabled="{{busy || audioBusy}}">{{playingClipId === item.clipId ? '停止回听' : '回听第 ' + (index+1) + ' 段原声'}}</button>
+      </view>
+    </view>
+  </view>
+</block>
+<block wx:else="">
 <view class="page story-page with-dock"
   ><view class="eyebrow">{{s.chapter}}</view
   ><view class="title story-title">{{s.title}}</view
@@ -50,3 +90,5 @@
     >{{s.confirmedVersion===s.version&&s.included?'已确认，允许入书':'没问题，同意入书'}}</button
   ><view class="dock-note">修改文字或照片后，需要重新确认</view></view
 >
+
+</block>

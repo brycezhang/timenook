@@ -1,3 +1,4 @@
+import { invalidateStoryRecordingIn } from "../stories/stories";
 import {
   Body,
   Controller,
@@ -281,6 +282,7 @@ export class Interviews implements OnModuleDestroy {
           row.accessEpoch !== actor.accessEpoch
         )
           throw new ForbiddenException();
+        await invalidateStoryRecordingIn(tx, projectId, id);
         return { allowed: true };
       },
     );
