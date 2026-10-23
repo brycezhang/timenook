@@ -100,6 +100,9 @@ function targetUrl(url: string) {
 }
 const recorder = createRecorder();
 const wx: any = {
+  getAccountInfoSync() {
+    return { miniProgram: { appId: "browser-preview" } };
+  },
   getStorageSync(key: string) {
     const v = localStorage.getItem(key);
     return v ? JSON.parse(v) : undefined;
@@ -120,11 +123,11 @@ const wx: any = {
     const url = new URL(options.url, location.origin);
     const supported =
       ((!options.method || options.method === "GET") &&
-        /\/v1\/(recipient-types|packages\/current|orders(?:\/[a-f0-9-]{36})?|participations|invitations\/[A-Za-z0-9_-]{43}|projects\/[a-f0-9-]{36}\/(?:participation|binding-requests|care-requests|assisted-sessions|plan))$/.test(
+        /\/v1\/(recipient-types|packages\/current|orders(?:\/[a-f0-9-]{36})?|participations|invitations\/[A-Za-z0-9_-]{43}|projects\/[a-f0-9-]{36}\/(?:participation|binding-requests|care-requests|assisted-sessions|plan|interviews(?:\/[a-f0-9-]{36}(?:\/clips\/[a-f0-9-]{36}(?:\/content)?)?)?))$/.test(
           url.pathname,
         )) ||
       (options.method === "POST" &&
-        /\/v1\/(?:orders(?:\/[a-f0-9-]{36}\/(?:payment|close))?|projects\/[a-f0-9-]{36}\/(?:invitations|consents(?:\/revoke)?|care-requests|assisted-sessions|plan(?:\/preferences)?)|invitations\/[A-Za-z0-9_-]{43}\/requests|binding-requests\/[a-f0-9-]{36}\/approve)$/.test(
+        /\/v1\/(?:orders(?:\/[a-f0-9-]{36}\/(?:payment|close))?|projects\/[a-f0-9-]{36}\/(?:invitations|consents(?:\/revoke)?|care-requests|assisted-sessions|plan(?:\/preferences)?|interviews(?:\/context|\/[a-f0-9-]{36}\/(?:resume|recording-start)|\/[a-f0-9-]{36}\/clips(?:\/[a-f0-9-]{36}\/(?:upload|seal|status|release))?)?)|invitations\/[A-Za-z0-9_-]{43}\/requests|binding-requests\/[a-f0-9-]{36}\/approve)$/.test(
           url.pathname,
         ));
     void (async () => {
@@ -163,6 +166,37 @@ const wx: any = {
       },
     };
   },
+  uploadFile(options: any) {
+    void (async () => {
+      try {
+        const url = new URL(options.url, location.origin);
+        if (
+          url.origin !== location.origin ||
+          !url.pathname.endsWith("/v1/recordings/objects")
+        )
+          throw Error("Unsupported preview upload");
+        const form = new FormData();
+        for (const [key, value] of Object.entries(options.formData ?? {}))
+          form.append(key, String(value));
+        const file = await fetch(await resolveBlob(options.filePath)).then(
+          (r) => r.blob(),
+        );
+        form.append(options.name, file, "recording.mp3");
+        const response = await fetch(url, {
+          method: "POST",
+          headers: options.header,
+          body: form,
+          credentials: "omit",
+        });
+        options.success?.({
+          statusCode: response.status,
+          data: await response.text(),
+        });
+      } catch {
+        options.fail?.({ errMsg: "uploadFile:fail" });
+      }
+    })();
+  },
   navigateTo({ url }: any) {
     location.hash = targetUrl(url);
   },
@@ -196,6 +230,33 @@ const wx: any = {
   },
   getFileSystemManager() {
     return {
+      access(o: any) {
+        void resolveBlob(o.path)
+          .then((url) => fetch(url))
+          .then((r) => {
+            if (!r.ok) throw Error();
+            o.success?.({});
+          })
+          .catch((e) => o.fail?.(e));
+      },
+      getFileInfo(o: any) {
+        void (async () => {
+          try {
+            const bytes = await fetch(await resolveBlob(o.filePath)).then((r) =>
+              r.arrayBuffer(),
+            );
+            const hash = await crypto.subtle.digest("SHA-256", bytes);
+            o.success?.({
+              size: bytes.byteLength,
+              digest: [...new Uint8Array(hash)]
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join(""),
+            });
+          } catch (e) {
+            o.fail?.(e);
+          }
+        })();
+      },
       saveFile(o: any) {
         saveBlob(o.tempFilePath)
           .then((savedFilePath) => o.success?.({ savedFilePath }))

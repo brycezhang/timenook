@@ -133,6 +133,16 @@ Page({
         });
     }
   },
+  record() {
+    const latest = this.data.sessions.find(
+      (row) => row.purpose === "collection" && row.state === "active",
+    );
+    if (latest)
+      go(
+        "interview",
+        `projectId=${this.projectId}&assistedSessionId=${latest.id}`,
+      );
+  },
   async refresh() {
     await this.perform(async (generation, context) => {
       this.setData({ participation: null, sessions: [], careRequests: [] });

@@ -108,7 +108,15 @@ export interface ActualPlanQuestion {
   capturedBy: string;
   questionKey: string | null;
   starterKind: "photo" | "free-narration" | null;
-  snapshot: PlanQuestion | PlanContent["starters"][number];
+  snapshot:
+    | PlanQuestion
+    | PlanContent["starters"][number]
+    | { text: string; intent: string };
+  source?: {
+    kind: "plan" | "photo" | "free-narration" | "self-written";
+    rewritesQuestionKey?: string;
+    original?: PlanQuestion;
+  };
   answerRef: string | null;
 }
 
@@ -118,3 +126,4 @@ export interface PlanDirectory {
   contentHash: string;
   chapters: { key: string; title: string; storyRefs: string[] }[];
 }
+export * from "./recording";

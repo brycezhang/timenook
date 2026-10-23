@@ -17,7 +17,7 @@ import type {
   ProbeClip,
   ProbeUploadForm,
 } from "@timenook/contracts";
-import { inspectAudio } from "./inspect-audio";
+import { sealAudio } from "../media/seal-audio";
 import { PROBE_OBJECTS, ProbeObjects } from "./local-objects";
 import { API_CONFIG, ApiConfig } from "../config";
 import { probeStorageScope } from "./storage-scope";
@@ -94,20 +94,12 @@ export class AudioProbe implements OnModuleDestroy {
         const target = `sealed/${id}.mp3`;
         let durationMs: number;
         try {
-          const bytes = await this.objects.read(source);
-          if (
-            bytes.length !== clip.bytes ||
-            createHash("sha256").update(bytes).digest("hex") !== clip.sha256
-          )
-            throw new Error();
-          durationMs = await inspectAudio(bytes);
-          await this.objects.copy(source, target);
-          const copied = await this.objects.read(target);
-          if (
-            copied.length !== bytes.length ||
-            createHash("sha256").update(copied).digest("hex") !== clip.sha256
-          )
-            throw new Error();
+          ({ durationMs } = await sealAudio(this.objects, {
+            source,
+            target,
+            bytes: clip.bytes,
+            sha256: clip.sha256,
+          }));
         } catch {
           await this.objects.remove(target).catch(() => {});
           throw new UnprocessableEntityException();

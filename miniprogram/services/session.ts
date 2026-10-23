@@ -120,6 +120,52 @@ export class SessionClient {
       throw error;
     }
   }
+  async uploadRecording(
+    form: import("../../packages/contracts/src/audio-probe").ProbeUploadForm,
+    filePath: string,
+  ): Promise<void> {
+    const generation = this.generation,
+      stored = this.stored();
+    if (dataMode() !== "live" || !stored)
+      throw new ApiFailure("UNAUTHENTICATED", 401);
+    this.checkBaseUrl();
+    const local =
+      form.storage === "local-simulator" &&
+      form.url === "/v1/recordings/objects";
+    const oss =
+      form.storage === "oss" &&
+      /^https:\/\/[a-z0-9-]+\.oss-[a-z0-9-]+\.aliyuncs\.com$/.test(form.url);
+    if (
+      (!local && !oss) ||
+      !Number.isFinite(Date.parse(form.expiresAt)) ||
+      Date.parse(form.expiresAt) <= Date.now()
+    )
+      throw new ApiFailure("INVALID_RESPONSE");
+    const result = await new Promise<number>((resolve, reject) =>
+      wx.uploadFile({
+        url: local ? this.apiBaseUrl + form.url.slice(3) : form.url,
+        name: "file",
+        filePath,
+        formData: form.fields,
+        timeout: 45000,
+        ...(local
+          ? { header: { authorization: `Bearer ${stored.session.token}` } }
+          : {}),
+        success: (r) => resolve(r.statusCode),
+        fail: () => reject(new ApiFailure("NETWORK_ERROR")),
+      }),
+    );
+    this.assertCurrent(generation);
+    if (this.stored()?.session.token !== stored.session.token)
+      throw new ApiFailure("STALE_RESPONSE");
+    if (result < 200 || result >= 300) {
+      if (result === 401) wx.removeStorageSync(this.storageKey);
+      throw new ApiFailure(
+        result === 401 ? "UNAUTHENTICATED" : "UPLOAD_FAILED",
+        result,
+      );
+    }
+  }
   async publicRequest<T>(path: string): Promise<T> {
     if (dataMode() !== "live") throw new ApiFailure("DEMO_MODE");
     const generation = this.generation;

@@ -128,3 +128,8 @@
     animation: none;
   }
 }
+
+.live-interview {padding: 32rpx 40rpx 80rpx; font-size: 40rpx;line-height:1.6;}
+.live-interview .btn,.live-interview .link {font-size:40rpx;min-height:96rpx;line-height:1.5;padding:24rpx;white-space:normal;}
+.live-interview .input {font-size:40rpx;min-height:96rpx;line-height:1.6;width:100%;box-sizing:border-box;}
+.live-interview textarea.input {min-height:200rpx;}

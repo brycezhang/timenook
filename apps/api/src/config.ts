@@ -12,6 +12,11 @@ export interface ApiConfig {
   payments?: WechatPayConfig;
   // No production D08 approval exists. This mode only exercises isolated tests.
   participation?: { mode: "synthetic-d08" };
+  recording?: {
+    mode: "synthetic-local";
+    storageRoot: string;
+    oss?: ProbeOssConfig;
+  };
   sessionTtlSeconds?: number;
   redisKeyPrefix?: string;
   loginLimitPerMinute?: number;

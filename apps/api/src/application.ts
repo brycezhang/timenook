@@ -1,4 +1,11 @@
 import {
+  Recordings,
+  RecordingsController,
+  RecordingObjectsController,
+  RECORDING_OBJECTS,
+} from "./media/recordings";
+import { Interviews, InterviewsController } from "./projects/interviews";
+import {
   PersonalPlans,
   PersonalPlanController,
 } from "./projects/personal-plan-controller";
@@ -27,6 +34,7 @@ import "reflect-metadata";
 import { AudioProbe } from "./probe/audio-probe";
 import { PrintProbeController } from "./probe/print-probe-controller";
 import { ProbeController } from "./probe/probe-controller";
+import { probeStorageScope } from "./probe/storage-scope";
 import { OssProbeObjects } from "./probe/oss-objects";
 import multipart from "@fastify/multipart";
 import {
@@ -124,8 +132,34 @@ export async function createApplication(
     probeObjects?: ProbeObjects;
     aiFetch?: typeof fetch;
     paymentFetch?: typeof fetch;
+    recordingObjects?: ProbeObjects;
   } = {},
 ): Promise<NestFastifyApplication> {
+  if (
+    config.recording &&
+    (config.environment !== "test" ||
+      config.recording.mode !== "synthetic-local" ||
+      !config.participation ||
+      !config.recording.storageRoot.startsWith("/"))
+  )
+    throw new ConfigurationError(
+      "Recording requires isolated synthetic participation and private local storage",
+    );
+  if (
+    options.recordingObjects &&
+    (!config.recording || config.environment !== "test")
+  )
+    throw new ConfigurationError(
+      "Custom recording storage requires isolated test recording",
+    );
+  if (
+    config.recording &&
+    config.audioProbe &&
+    probeStorageScope(config.recording) === probeStorageScope(config.audioProbe)
+  )
+    throw new ConfigurationError(
+      "Product recording and probe require separate object storage",
+    );
   if (
     config.participation &&
     (config.environment !== "test" ||
@@ -195,7 +229,7 @@ export async function createApplication(
     },
   });
   await adapter.getInstance().register(cookie);
-  if (config.audioProbe)
+  if (config.audioProbe || config.recording)
     await adapter.getInstance().register(multipart, {
       limits: {
         fileSize: 2097152,
@@ -211,7 +245,12 @@ export async function createApplication(
   const module = {
     module: AppModule,
     controllers: [
-      ...(config.participation ? [PersonalPlanController] : []),
+      ...(config.participation
+        ? [PersonalPlanController, InterviewsController]
+        : []),
+      ...(config.recording
+        ? [RecordingsController, RecordingObjectsController]
+        : []),
       ...(config.audioProbe
         ? [
             ProbeController,
@@ -223,6 +262,19 @@ export async function createApplication(
     providers: [
       { provide: API_CONFIG, useValue: config },
       Infrastructure,
+      ...(config.recording
+        ? [
+            Recordings,
+            {
+              provide: RECORDING_OBJECTS,
+              useValue:
+                options.recordingObjects ??
+                (config.recording.oss
+                  ? new OssProbeObjects(config.recording.oss)
+                  : new LocalProbeObjects(config.recording.storageRoot)),
+            },
+          ]
+        : []),
       ...(config.audioProbe
         ? [
             AudioProbe,
@@ -246,6 +298,7 @@ export async function createApplication(
       IdentityAccess,
       Participation,
       PersonalPlans,
+      Interviews,
       AdminAccess,
       Catalog,
       Orders,

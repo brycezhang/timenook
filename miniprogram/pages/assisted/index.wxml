@@ -13,7 +13,8 @@
       <button class="btn section" data-purpose="{{item.purpose}}" data-granted="true" bindtap="chooseAssisted" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">本人同意此用途，记录当次证据</button>
       <button class="btn secondary section" data-purpose="{{item.purpose}}" data-granted="false" bindtap="chooseAssisted" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">本人拒绝此用途</button>
     </view>
-    <view wx:for="{{sessions}}" wx:key="id" class="section paper">
+    <button wx:if="{{sessions.length}}" class="btn section" bindtap="record" disabled="{{busy}}">本人在场，开始本次讲述</button>
+  <view wx:for="{{sessions}}" wx:key="id" class="section paper">
       <view>{{item.purpose === 'collection' ? '采集保存' : item.purpose === 'ai' ? 'AI处理' : item.purpose === 'sharing' ? '向发起人共享' : '逐次内容确认'}}</view>
       <view class="note">{{item.state === 'active' ? '当次许可有效' : item.state === 'expired' ? '证据已过期，请取得新的当次证据' : item.state === 'rejected' ? '本人已拒绝' : '许可已撤销，请重新查询和取得证据'}}</view>
       <view class="note">当次有效期至：{{item.expiresAtLabel}}</view>
