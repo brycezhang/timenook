@@ -133,7 +133,8 @@ export class SessionClient {
       )
     )
       throw new ApiFailure("INVALID_RESPONSE");
-    const stored = this.stored();
+    const generation = this.generation,
+      stored = this.stored();
     if (dataMode() !== "live" || !stored)
       throw new ApiFailure("UNAUTHENTICATED", 401);
     this.checkBaseUrl();
@@ -143,7 +144,17 @@ export class SessionClient {
           url: `${this.apiBaseUrl}/projects/${projectId}/interviews/${interviewId}/photos/${photoId}/assets/${assetId}/content`,
           header: { authorization: `Bearer ${stored.session.token}` },
           timeout: 15000,
-          success: resolve,
+          success: (result) => {
+            if (
+              result.statusCode === 401 &&
+              generation === this.generation &&
+              dataMode() === "live" &&
+              this.stored()?.session.token === stored.session.token
+            )
+              wx.removeStorageSync(this.storageKey);
+            // The media owner still needs this path to remove denied or stale bytes.
+            resolve(result);
+          },
           fail: () => reject(new ApiFailure("NETWORK_ERROR")),
         }),
     );

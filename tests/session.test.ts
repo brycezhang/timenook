@@ -14,6 +14,7 @@ const identity = {
 };
 let storage: Map<string, unknown>;
 let requests: WechatMiniprogram.RequestOption[];
+let downloads: WechatMiniprogram.DownloadFileOption[];
 let reply: (request: WechatMiniprogram.RequestOption) => void;
 const envelope = (data: unknown) => ({
   data,
@@ -32,9 +33,22 @@ function success(
     errMsg: "request:ok",
   } as unknown as WechatMiniprogram.RequestSuccessCallbackResult);
 }
+function downloadSuccess(
+  options: WechatMiniprogram.DownloadFileOption,
+  result: Pick<
+    WechatMiniprogram.DownloadFileSuccessCallbackResult,
+    "statusCode" | "tempFilePath" | "errMsg"
+  >,
+) {
+  // Device network telemetry is outside this controlled transport fixture.
+  options.success?.(
+    result as WechatMiniprogram.DownloadFileSuccessCallbackResult,
+  );
+}
 beforeEach(() => {
   storage = new Map([["timenook.frontend.v1", { privateDemo: "unchanged" }]]);
   requests = [];
+  downloads = [];
   reply = (request) => success(request, 201, envelope(identity));
   (globalThis as { wx?: unknown }).wx = {
     getStorageSync: (key: string) => structuredClone(storage.get(key)),
@@ -46,6 +60,10 @@ beforeEach(() => {
     },
     login: (options: WechatMiniprogram.LoginOption) =>
       options.success?.({ code: "synthetic-device-code", errMsg: "login:ok" }),
+    downloadFile: (options: WechatMiniprogram.DownloadFileOption) => {
+      downloads.push(options);
+      return {};
+    },
     request: (options: WechatMiniprogram.RequestOption) => {
       requests.push(options);
       reply(options);
@@ -225,4 +243,56 @@ test("401 clears the current session while network errors preserve it and never 
     await new SessionClient("https://another.test/v1").restore(),
     null,
   );
+});
+
+test("an unauthorized private photo download clears the current login and preserves its temporary path for cleanup", async () => {
+  const client = new SessionClient(api);
+  await client.login();
+  const photoId = "55555555-5555-4555-8555-555555555555";
+  const pending = client.downloadPhoto(
+    identity.user.id,
+    identity.session.id,
+    photoId,
+    "66666666-6666-4666-8666-666666666666",
+  );
+  downloadSuccess(downloads[0], {
+    statusCode: 401,
+    tempFilePath: "denied-private-photo",
+    errMsg: "downloadFile:ok",
+  });
+  const result = await pending;
+  assert.equal(result.tempFilePath, "denied-private-photo");
+  assert.equal(client.context(), "");
+  assert.equal(storage.has(`timenook.session.v1:${api}`), false);
+  assert.equal(await client.restore(), null);
+});
+
+test("a previous account's delayed photo-download 401 cannot clear the newer login", async () => {
+  const client = new SessionClient(api);
+  await client.login();
+  const pending = client.downloadPhoto(
+    identity.user.id,
+    identity.session.id,
+    "55555555-5555-4555-8555-555555555555",
+    "66666666-6666-4666-8666-666666666666",
+  );
+  const other = {
+    user: { id: "77777777-7777-4777-8777-777777777777" },
+    session: {
+      ...identity.session,
+      id: "88888888-8888-4888-8888-888888888888",
+      token: "b".repeat(43),
+    },
+  };
+  reply = (request) => success(request, 201, envelope(other));
+  await client.login();
+  downloadSuccess(downloads[0], {
+    statusCode: 401,
+    tempFilePath: "previous-account-photo",
+    errMsg: "downloadFile:ok",
+  });
+  await pending;
+  reply = (request) => success(request, 200, envelope(other.user));
+  assert.deepEqual(await client.restore(), other.user);
+  assert.deepEqual(storage.get(`timenook.session.v1:${api}`), other);
 });

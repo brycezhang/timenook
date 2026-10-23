@@ -358,16 +358,19 @@ export async function privatePhotoPreview(
     asset.id,
   );
   if (result.tempFilePath) unregisteredPreviews.add(result.tempFilePath);
+  const denied = [401, 403].includes(result.statusCode)
+    ? new ApiFailure(
+        result.statusCode === 401 ? "UNAUTHENTICATED" : "FORBIDDEN",
+        result.statusCode,
+      )
+    : null;
   try {
+    // Revocation must reach the page even if device bookkeeping is unavailable.
+    if (denied) throw denied;
     if (result.tempFilePath) {
       wx.setStorageSync(previewCacheKey, previewPaths());
       unregisteredPreviews.delete(result.tempFilePath);
     }
-    if ([401, 403].includes(result.statusCode))
-      throw new ApiFailure(
-        result.statusCode === 401 ? "UNAUTHENTICATED" : "FORBIDDEN",
-        result.statusCode,
-      );
     if (
       result.statusCode !== 200 ||
       !result.tempFilePath ||
@@ -394,7 +397,11 @@ export async function privatePhotoPreview(
       throw Error("预览校验未通过");
     return result.tempFilePath;
   } catch (error) {
-    if (result.tempFilePath) await clearPhotoPreviews([result.tempFilePath]);
-    throw error;
+    try {
+      if (result.tempFilePath) await clearPhotoPreviews([result.tempFilePath]);
+    } catch (cleanupError) {
+      if (!denied) throw cleanupError;
+    }
+    throw denied ?? error;
   }
 }

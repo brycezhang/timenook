@@ -35,6 +35,7 @@ function harness() {
   let page: any,
     failManifest = false,
     failPreview = false,
+    failPreviewCleanup = false,
     chooseOptions: any;
   runInNewContext(compiled.outputFiles[0].text, {
     setTimeout,
@@ -46,6 +47,10 @@ function harness() {
     wx: {
       getStorageSync: (k: string) => structuredClone(storage.get(k)),
       setStorageSync: (k: string, v: unknown) => {
+        if (failPreviewCleanup && k.includes("photo-previews")) {
+          failPreviewCleanup = false;
+          throw Error("cleanup manifest storage full");
+        }
         if (
           failPreview &&
           k.includes("photo-previews") &&
@@ -111,6 +116,9 @@ function harness() {
     },
     failPreview() {
       failPreview = true;
+    },
+    failPreviewCleanup() {
+      failPreviewCleanup = true;
     },
     get chooseOptions() {
       return chooseOptions;
@@ -592,5 +600,144 @@ test("a delayed material-edit response cannot replace the newer snapshot returne
   );
   await edit;
   assert.equal(h.page.data.snapshot.revision, 4);
+  h.page.onHide();
+});
+
+function reviewMaterial() {
+  return {
+    id: "private-material",
+    revision: 1,
+    entries: [
+      {
+        photoId: "55555555-5555-4555-8555-555555555555",
+        caption: "私人照片说明",
+        assets: [
+          {
+            id: "66666666-6666-4666-8666-666666666666",
+            kind: "preview",
+            bytes: 123,
+            sha256: "b".repeat(64),
+          },
+        ],
+      },
+    ],
+  };
+}
+test("a current photo-download 401 signs out and clears the private page while retaining pending originals", async () => {
+  const h = harness(),
+    snapshot = reviewMaterial();
+  await ready(h, snapshot);
+  await choose(h);
+  const originals = h.page.data.photos.map((p: any) => p.path);
+  const opening = h.page.preview(event(snapshot.entries[0].photoId));
+  await tick();
+  h.downloads
+    .shift()
+    .success({ statusCode: 401, tempFilePath: "denied-current-preview" });
+  await opening;
+  await tick();
+  assert.equal(h.storage.has(`timenook.session.v1:${base}`), false);
+  assert.equal(h.page.data.snapshot, null);
+  assert.equal(h.page.data.photos.length, 0);
+  assert.equal(h.page.data.previewPath, "");
+  assert.ok(h.removed.includes("denied-current-preview"));
+  assert.ok(originals.every((path: string) => !h.removed.includes(path)));
+  h.page.onHide();
+});
+test("a previous account's delayed photo-download 401 preserves the new account and its current draft", async () => {
+  const h = harness(),
+    snapshot = reviewMaterial();
+  await ready(h, snapshot);
+  const opening = h.page.preview(event(snapshot.entries[0].photoId));
+  await tick();
+  const old = h.downloads.shift();
+  h.page.onHide();
+  const other = {
+    user: { id: "77777777-7777-4777-8777-777777777777" },
+    session: {
+      ...login.session,
+      id: "88888888-8888-4888-8888-888888888888",
+      token: "c".repeat(43),
+    },
+  };
+  h.storage.set(`timenook.session.v1:${base}`, other);
+  h.page.onLoad({
+    projectId: "99999999-9999-4999-8999-999999999999",
+    interviewId: interview,
+  });
+  const showing = h.page.onShow();
+  await tick();
+  respond(h.requests.shift(), {
+    photos: [],
+    snapshot: { ...snapshot, id: "new-account-material" },
+  });
+  await showing;
+  h.page.caption({
+    currentTarget: { dataset: { id: snapshot.entries[0].photoId } },
+    detail: { value: "新账号说明草稿" },
+  });
+  old.success({ statusCode: 401, tempFilePath: "previous-account-preview" });
+  await opening;
+  assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), other);
+  assert.equal(h.page.data.snapshot.id, "new-account-material");
+  assert.equal(
+    h.page.data.captions[snapshot.entries[0].photoId],
+    "新账号说明草稿",
+  );
+  assert.ok(h.removed.includes("previous-account-preview"));
+  h.page.onHide();
+});
+
+test("a forbidden photo response clears private material and its temporary image even when preview registration fails", async () => {
+  const h = harness(),
+    snapshot = reviewMaterial();
+  await ready(h, snapshot);
+  await choose(h);
+  const originals = h.page.data.photos.map((p: any) => p.path);
+  h.page.caption({
+    currentTarget: { dataset: { id: snapshot.entries[0].photoId } },
+    detail: { value: "未保存的私人说明" },
+  });
+  const opening = h.page.preview(event(snapshot.entries[0].photoId));
+  await tick();
+  h.failPreview();
+  h.downloads
+    .shift()
+    .success({
+      statusCode: 403,
+      tempFilePath: "forbidden-unregistered-preview",
+    });
+  await opening;
+  await tick();
+  assert.equal(h.page.data.snapshot, null);
+  assert.equal(h.page.data.photos.length, 0);
+  assert.equal(h.page.data.previewPath, "");
+  assert.equal(Object.keys(h.page.data.captions).length, 0);
+  assert.ok(h.removed.includes("forbidden-unregistered-preview"));
+  assert.ok(originals.every((path: string) => !h.removed.includes(path)));
+  assert.equal(h.storage.has(`timenook.session.v1:${base}`), true);
+  h.page.onHide();
+});
+
+test("a forbidden photo response remains authoritative when cleanup storage fails after deleting its temporary image", async () => {
+  const h = harness(),
+    snapshot = reviewMaterial();
+  await ready(h, snapshot);
+  const opening = h.page.preview(event(snapshot.entries[0].photoId));
+  await tick();
+  h.failPreviewCleanup();
+  h.downloads
+    .shift()
+    .success({
+      statusCode: 403,
+      tempFilePath: "forbidden-cleanup-storage-error",
+    });
+  await opening;
+  await tick();
+  assert.equal(h.page.data.snapshot, null);
+  assert.equal(h.page.data.photos.length, 0);
+  assert.equal(h.page.data.previewPath, "");
+  assert.ok(h.removed.includes("forbidden-cleanup-storage-error"));
+  assert.equal(h.page.data.status, "照片权限已变化，请重新查询");
   h.page.onHide();
 });
