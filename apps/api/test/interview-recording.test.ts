@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { before, after, test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
+import nock from "nock";
 import { LocalProbeObjects } from "../src/probe/local-objects";
 import { createApplication, createOpenApiDocument } from "../src/application";
 import type { ApiConfig } from "../src/config";
@@ -1184,24 +1185,6 @@ test("product recording consumes the existing OSS form adapter and preserves its
     securityToken: "synthetic",
     expiresAt: new Date(Date.now() + 3600000).toISOString(),
   };
-  class SyntheticOss extends LocalProbeObjects {
-    async uploadForm(key: string, bytes: number, expiresAt: Date) {
-      return {
-        url: "https://synthetic-t14.oss-cn-hangzhou.aliyuncs.com",
-        storage: "oss" as const,
-        expiresAt: expiresAt.toISOString(),
-        fields: {
-          key,
-          policy: Buffer.from(
-            JSON.stringify({
-              conditions: [["content-length-range", bytes, bytes]],
-            }),
-          ).toString("base64"),
-        },
-      };
-    }
-  }
-  const objects = new SyntheticOss(join(root, "synthetic-oss"));
   const assembly = {
     ...config,
     recording: { ...config.recording!, oss: fakeOss },
@@ -1209,7 +1192,6 @@ test("product recording consumes the existing OSS form adapter and preserves its
   const isolated = await createApplication(assembly, {
     wechatFetch,
     paymentFetch,
-    recordingObjects: objects,
   });
   try {
     const intent = data(
@@ -1242,7 +1224,86 @@ test("product recording consumes the existing OSS form adapter and preserves its
       "https://synthetic-t14.oss-cn-hangzhou.aliyuncs.com",
     );
     assert.equal(form.fields.key, `staging/${intent.id}.mp3`);
-    await objects.put(form.fields.key, audio);
+    nock.disableNetConnect();
+    let snapshotKey = "";
+    const provider = nock(
+      "https://synthetic-t14.oss-cn-hangzhou.aliyuncs.com",
+      {
+        reqheaders: {
+          authorization: (value: string) =>
+            value.startsWith("OSS4-HMAC-SHA256 "),
+          "x-oss-security-token": "synthetic",
+        },
+      },
+    );
+    provider
+      .get(`/${form.fields.key}`)
+      .reply(200, audio, { "content-length": String(audio.length) });
+    provider
+      .put(/^\/staging\/[0-9a-f-]{36}\.mp3$/, audio)
+      .reply(
+        403,
+        "<Error><Code>AccessDenied</Code><Message>denied</Message></Error>",
+        { "content-type": "application/xml" },
+      );
+    provider.delete(/^\/staging\/[0-9a-f-]{36}\.mp3$/).reply(204);
+    assert.equal(
+      (
+        await request(
+          "POST",
+          `${base}/${intent.id}/seal`,
+          p.narrator.token,
+          {},
+          randomUUID(),
+          isolated,
+        )
+      ).statusCode,
+      422,
+    );
+    const pending = data(
+      await request(
+        "GET",
+        `${base}/${intent.id}`,
+        p.narrator.token,
+        undefined,
+        randomUUID(),
+        isolated,
+      ),
+      200,
+    );
+    assert.equal(pending.state, "pending");
+    assert.equal(pending.asset, null);
+    assert.equal(pending.sealedInput, null);
+    assert.ok(nock.isDone());
+    provider
+      .get(`/${form.fields.key}`)
+      .reply(200, audio, { "content-length": String(audio.length) });
+    provider
+      .put(/^\/staging\/[0-9a-f-]{36}\.mp3$/, audio)
+      .matchHeader("x-oss-object-acl", "private")
+      .matchHeader("cache-control", "private, no-store")
+      .matchHeader("content-type", "audio/mpeg")
+      .reply(function (uri) {
+        snapshotKey = uri.slice(1);
+        return [200, "", { etag: '"synthetic"' }];
+      });
+    provider
+      .put(`/sealed/${intent.id}.mp3`)
+      .matchHeader(
+        "x-oss-copy-source",
+        (value: string) =>
+          snapshotKey !== "" &&
+          value === `/synthetic-t14/${encodeURIComponent(snapshotKey)}`,
+      )
+      .reply(
+        200,
+        "<CopyObjectResult><LastModified>2026-10-23T00:00:00Z</LastModified><ETag>synthetic</ETag></CopyObjectResult>",
+        { "content-type": "application/xml" },
+      );
+    provider
+      .get(`/sealed/${intent.id}.mp3`)
+      .reply(200, audio, { "content-length": String(audio.length) });
+    provider.delete(/^\/staging\/[0-9a-f-]{36}\.mp3$/).reply(204);
     const sealed = data(
       await request(
         "POST",
@@ -1255,6 +1316,8 @@ test("product recording consumes the existing OSS form adapter and preserves its
     );
     assert.equal(sealed.storage, "oss");
     assert.equal(sealed.asset.storage, "oss");
+    assert.notEqual(snapshotKey, form.fields.key);
+    assert.ok(nock.isDone());
     assert.equal(
       (
         await request(
@@ -1270,6 +1333,8 @@ test("product recording consumes the existing OSS form adapter and preserves its
     );
   } finally {
     await isolated.close();
+    nock.cleanAll();
+    nock.enableNetConnect();
   }
 });
 

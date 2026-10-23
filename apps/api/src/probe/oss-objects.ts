@@ -141,6 +141,26 @@ export class OssProbeObjects {
   async put(_key: string, _bytes: Buffer): Promise<void> {
     throw new Error("OSS upload requires the signed PostObject form");
   }
+  // The server snapshots verified bytes before copy. Client uploads still use
+  // the exact-key signed PostObject form and cannot call this operation.
+  async putSnapshot(key: string, bytes: Buffer): Promise<void> {
+    this.checkKey(key);
+    if (
+      !key.startsWith("staging/") ||
+      !Buffer.isBuffer(bytes) ||
+      bytes.length < 1 ||
+      bytes.length > 2097152
+    )
+      throw new Error("Invalid server audio snapshot");
+    await this.client.put(key, bytes, {
+      timeout: 10000,
+      mime: "audio/mpeg",
+      headers: {
+        "x-oss-object-acl": "private",
+        "Cache-Control": "private, no-store",
+      },
+    });
+  }
   async read(key: string): Promise<Buffer> {
     this.checkKey(key);
     const result = await this.client.getStream(key, { timeout: 10000 });

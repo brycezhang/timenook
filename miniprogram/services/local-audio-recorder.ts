@@ -107,6 +107,47 @@ export class LocalAudioRecorder {
       if (this.current.stage === "recording") this.manager.stop();
     }
   }
+  // Each callback commits only its clip against the latest durable manifest.
+  // The synchronous read/merge/write cannot interleave with another callback
+  // in the app-service runtime; a stale owner never writes its whole array.
+  protected commitClip(clip: ProbeLocalClip) {
+    const stored: unknown = wx.getStorageSync(this.key);
+    const clips: ProbeLocalClip[] = Array.isArray(stored)
+      ? stored.filter(
+          (value): value is ProbeLocalClip =>
+            !!value &&
+            typeof value.path === "string" &&
+            /^[0-9a-f-]{36}$/.test(value.clientClipId) &&
+            /^[0-9a-f]{64}$/.test(value.sha256),
+        )
+      : [];
+    const existing = clips.find(
+      (value) => value.clientClipId === clip.clientClipId,
+    );
+    if (
+      existing &&
+      (existing.path !== clip.path ||
+        existing.sha256 !== clip.sha256 ||
+        existing.bytes !== clip.bytes ||
+        existing.durationMs !== clip.durationMs ||
+        (existing.serverId &&
+          clip.serverId &&
+          existing.serverId !== clip.serverId))
+    )
+      throw new Error("Saved clip identity changed");
+    const merged = {
+      ...existing,
+      ...clip,
+      ...(existing?.serverId ? { serverId: existing.serverId } : {}),
+      ...(existing?.sealed ? { sealed: true } : {}),
+    };
+    const next = [
+      ...clips.filter((value) => value.clientClipId !== clip.clientClipId),
+      merged,
+    ];
+    wx.setStorageSync(this.key, next);
+    this.current.clips = next;
+  }
   async retrySave() {
     if (!this.pending || this.saving) return;
     this.saving = true;
@@ -143,14 +184,7 @@ export class LocalAudioRecorder {
         bytes: info.size,
         sha256: info.digest,
       };
-      const clips = [
-        ...this.current.clips.filter(
-          (c) => c.clientClipId !== clip.clientClipId,
-        ),
-        clip,
-      ];
-      wx.setStorageSync(this.key, clips);
-      this.current.clips = clips;
+      this.commitClip(clip);
       this.pending = undefined;
       this.update("local", "已保存在本机；尚未上传封存");
     } catch {
@@ -160,6 +194,7 @@ export class LocalAudioRecorder {
     }
   }
   async restore() {
+    if (this.pending || this.saving || this.active) return;
     const stored: unknown = wx.getStorageSync(this.key);
     const clips: ProbeLocalClip[] = [];
     if (Array.isArray(stored))

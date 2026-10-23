@@ -21,7 +21,7 @@ const compiled = await build({
   platform: "neutral",
   define: { __TIMENOOK_API_BASE_URL__: JSON.stringify(base) },
 });
-function harness() {
+function harness(options: { deferSaves?: boolean } = {}) {
   const storage = new Map<string, unknown>([
       ["timenook.mode.v1", "live"],
       [`timenook.session.v1:${base}`, login],
@@ -29,7 +29,8 @@ function harness() {
     requests: any[] = [],
     uploads: any[] = [],
     files = new Set<string>(),
-    handlers: Record<string, ((v?: any) => void)[]> = {};
+    handlers: Record<string, ((v?: any) => void)[]> = {},
+    pendingSaves: any[] = [];
   let page: any,
     saves = 0,
     failManifest = false,
@@ -81,8 +82,13 @@ function harness() {
       getFileSystemManager: () => ({
         saveFile: (o: any) => {
           saves++;
-          files.add("saved-audio");
-          o.success({ savedFilePath: "saved-audio" });
+          const savedFilePath = `saved-audio-${saves}`;
+          const finish = () => {
+            files.add(savedFilePath);
+            o.success({ savedFilePath });
+          };
+          if (options.deferSaves) pendingSaves.push({ finish, fail: o.fail });
+          else finish();
         },
         getFileInfo: (o: any) =>
           o.success({ size: 6480, digest: "b".repeat(64) }),
@@ -101,6 +107,7 @@ function harness() {
     uploads,
     files,
     emit,
+    pendingSaves,
     get saves() {
       return saves;
     },
@@ -376,4 +383,127 @@ test("session expiry during recording authorization clears private content even 
   assert.equal(h.page.data.question, "");
   assert.equal(h.page.data.customText, "");
   assert.equal(h.storage.has(`timenook.session.v1:${base}`), false);
+});
+
+test("returning during a native save retains its pending owner and retries the same saved file before another clip", async (t) => {
+  const h = harness({ deferSaves: true });
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  h.page.onHide();
+  assert.equal(h.pendingSaves.length, 1);
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [interview] });
+  await showing;
+  assert.equal(h.page.data.state, "saving");
+  assert.equal(h.starts, 1);
+  h.fail(true);
+  h.pendingSaves[0].finish();
+  await tick();
+  assert.equal(h.page.data.state, "device-error");
+  assert.equal(h.files.size, 1);
+  h.page.onHide();
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [interview] });
+  await returning;
+  assert.equal(h.page.data.state, "device-error");
+  h.fail(false);
+  await h.page.retry();
+  assert.equal(h.saves, 1);
+  assert.equal(h.page.data.localClips.length, 1);
+  await start(h);
+  await h.page.record();
+  h.pendingSaves[1].finish();
+  await tick();
+  assert.equal(h.files.size, 2);
+  assert.equal(h.page.data.localClips.length, 2);
+  h.page.onHide();
+  const restored = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [interview] });
+  await restored;
+  assert.equal(h.page.data.localClips.length, 2);
+  assert.equal(h.starts, 2);
+});
+
+test("a delayed seal completion merges its clip state without removing a later saved recording after re-entry", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const first = h.page.data.localClips[0],
+    remote = {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      projectId,
+      interviewId,
+      actualQuestionId: question.id,
+      clientClipId: first.clientClipId,
+      bytes: first.bytes,
+      sha256: first.sha256,
+      state: "pending",
+      storage: "local-simulator",
+      asset: null,
+    };
+  const uploading = h.page.upload({
+    currentTarget: { dataset: { id: first.clientClipId } },
+  });
+  respond(h.requests.shift(), remote, 201);
+  await tick();
+  respond(
+    h.requests.shift(),
+    {
+      url: "/v1/recordings/objects",
+      storage: "local-simulator",
+      expiresAt: "2099-01-01T00:00:00Z",
+      fields: {},
+    },
+    201,
+  );
+  await tick();
+  const delayed = h.requests.shift();
+  assert.match(delayed.url, /seal$/);
+  h.page.onHide();
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [interview] });
+  await returning;
+  await start(h);
+  await h.page.record();
+  await tick();
+  assert.equal(h.page.data.localClips.length, 2);
+  assert.equal(h.files.size, 2);
+  const second = h.page.data.localClips.find(
+    (c: any) => c.clientClipId !== first.clientClipId,
+  );
+  respond(
+    delayed,
+    {
+      ...remote,
+      state: "sealed",
+      asset: {
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        sha256: first.sha256,
+      },
+    },
+    201,
+  );
+  await uploading;
+  const manifest = [...h.storage.entries()].find(
+    ([key, value]) => key.endsWith(interviewId) && Array.isArray(value),
+  )![1] as any[];
+  assert.equal(manifest.length, 2);
+  assert.equal(
+    manifest.find((c) => c.clientClipId === first.clientClipId).sealed,
+    true,
+  );
+  assert.equal(
+    manifest.find((c) => c.clientClipId === second.clientClipId).sealed,
+    undefined,
+  );
+  h.page.onHide();
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [interview] });
+  await showing;
+  assert.equal(h.page.data.localClips.length, 2);
+  assert.equal(h.files.size, 2);
 });

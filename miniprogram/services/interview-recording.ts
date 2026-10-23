@@ -48,13 +48,39 @@ export const interviewRecordingClient = {
   },
 };
 export class InterviewRecorder extends LocalAudioRecorder {
-  private readonly sessionContext = sessionClient.context();
+  private static readonly owners = new Map<string, InterviewRecorder>();
+  // Preserve native pending-save/retry state across page instances. Uploads
+  // remain independently fenced and persist only their own clip changes.
+  static open(
+    projectId: string,
+    interview: RecordingInterview,
+    canRecord: () => boolean,
+    assistedSessionId?: string,
+  ) {
+    const key = `${recordingPartition(projectId)}:${interview.id}`;
+    const prior = this.owners.get(key);
+    if (prior && (prior.pending || prior.saving || prior.active)) {
+      prior.sessionContext = sessionClient.context();
+      prior.canRecord = canRecord;
+      prior.assistedSessionId = assistedSessionId;
+      return prior;
+    }
+    const owner = new InterviewRecorder(
+      projectId,
+      interview,
+      canRecord,
+      assistedSessionId,
+    );
+    this.owners.set(key, owner);
+    return owner;
+  }
+  private sessionContext = sessionClient.context();
   private uploading = false;
   constructor(
     readonly projectId: string,
     readonly interview: RecordingInterview,
-    private readonly canRecord: () => boolean,
-    private readonly assistedSessionId?: string,
+    private canRecord: () => boolean,
+    private assistedSessionId?: string,
   ) {
     super(`${recordingPartition(projectId)}:${interview.id}`);
   }
@@ -111,7 +137,7 @@ export class InterviewRecorder extends LocalAudioRecorder {
       )
         throw new Error("上传结果不匹配");
       local.serverId = remote.id;
-      wx.setStorageSync(this.key, this.current.clips);
+      this.commitClip(local);
       let result = remote;
       if (remote.state === "released")
         throw new Error("上传预留已释放，本机文件仍保留，请联系服务");
@@ -138,7 +164,7 @@ export class InterviewRecorder extends LocalAudioRecorder {
       )
         throw new Error("封存未确认");
       local.sealed = true;
-      wx.setStorageSync(this.key, this.current.clips);
+      this.commitClip(local);
       this.update(
         "sealed",
         result.storage === "oss"

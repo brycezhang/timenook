@@ -90,7 +90,7 @@ export class AudioProbeClient extends LocalAudioRecorder {
       )
         throw new Error("封存响应不匹配");
       clip.serverId = remote.id;
-      wx.setStorageSync(this.key, this.current.clips);
+      this.commitClip(clip);
       if (remote.state !== "sealed") {
         const form = await this.send<ProbeUploadForm>(
           `/clips/${remote.id}/upload`,
@@ -135,7 +135,7 @@ export class AudioProbeClient extends LocalAudioRecorder {
           throw new Error("尚未封存");
       }
       clip.sealed = true;
-      wx.setStorageSync(this.key, this.current.clips);
+      this.commitClip(clip);
       this.update(
         "sealed",
         remote.storage === "oss"

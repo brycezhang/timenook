@@ -16,7 +16,7 @@ export async function sealAudio(
   // bytes we inspected; every concurrent completion of this intent has this hash.
   const snapshot = `staging/${randomUUID()}.mp3`;
   try {
-    await objects.put(snapshot, bytes);
+    await objects.putSnapshot(snapshot, bytes);
     await objects.copy(snapshot, input.target);
     if (!expected(await objects.read(input.target)))
       throw new Error("Final object mismatch");

@@ -461,6 +461,7 @@ test("copy corruption never becomes sealed and a retry reuses the saved input", 
   let corrupt = true;
   const storage = {
     put: objects.put.bind(objects),
+    putSnapshot: objects.putSnapshot.bind(objects),
     read: objects.read.bind(objects),
     remove: objects.remove.bind(objects),
     async copy(source: string, target: string) {

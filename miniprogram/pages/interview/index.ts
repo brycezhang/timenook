@@ -208,7 +208,7 @@ Page({
     )
       throw new Error("采访数据无效");
     this.liveRecorder?.unsubscribe();
-    const device = new InterviewRecorder(
+    const device = InterviewRecorder.open(
       this.projectId,
       value,
       () => this.data.canRecord,
