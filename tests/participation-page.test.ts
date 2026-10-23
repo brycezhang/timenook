@@ -30,7 +30,7 @@ const bundles = await Promise.all(
       ] as const,
   ),
 );
-function harness(name: string) {
+function harness(name: string, clock?: { now: number }) {
   const storage = new Map<string, unknown>([
     ["timenook.mode.v1", "live"],
     [`timenook.session.v1:${base}`, login],
@@ -39,6 +39,18 @@ function harness(name: string) {
   const routes: string[] = [];
   let page: any;
   runInNewContext(bundles.find(([n]) => n === name)![1], {
+    ...(clock
+      ? {
+          Date: class extends Date {
+            static now() {
+              return clock?.now ?? Date.now();
+            }
+            constructor(value?: string | number) {
+              super(value === undefined ? (clock?.now ?? Date.now()) : value);
+            }
+          },
+        }
+      : {}),
     Page(value: any) {
       page = value;
       page.setData = (patch: object) => Object.assign(page.data, patch);
@@ -399,4 +411,155 @@ for (const action of ["refreshLive", "share", "approve"])
       assert.equal(page.data.status, "页面已离开");
       assert.equal(page.data.busy, false);
     }
+  });
+
+for (const [name, actions] of [
+  ["welcome", ["refreshLive", "accept", "chooseConsent", "requestRebind"]],
+  ["invite", ["refreshLive", "share", "approve"]],
+] as const)
+  for (const action of actions)
+    test(`${name} ${action} recovers when a successful response crosses the local session TTL`, async () => {
+      const clock = { now: Date.parse("2026-10-23T01:00:00.000Z") };
+      const { page, requests, storage } = harness(name, clock);
+      storage.set(`timenook.session.v1:${base}`, {
+        ...login,
+        session: {
+          ...login.session,
+          expiresAt: new Date(clock.now + 1000).toISOString(),
+        },
+      });
+      page.onLoad(
+        action === "accept" ? { token: "b".repeat(43) } : { projectId },
+      );
+      if (action !== "refreshLive") {
+        const showing = page.onShow();
+        if (name === "invite") {
+          respond(requests.shift()!, {
+            ...current,
+            role: "initiator",
+            bindingVersion: 0,
+          });
+          await tick();
+          respond(requests.shift()!, { requests: [] });
+        } else if (action === "accept")
+          respond(requests.shift()!, {
+            inviter: "发起人",
+            process: ["说一段"],
+            purposes: ["collection", "ai", "sharing"],
+            noticeVersion: "synthetic-d08-v1",
+            policyStatus: "synthetic-only",
+            choice: "可撤回",
+          });
+        else await completeProjectState(requests, current);
+        await showing;
+      }
+      if (action === "requestRebind")
+        page.targetInput({
+          detail: { value: "77777777-7777-4777-8777-777777777777" },
+        });
+      const acting =
+        action === "chooseConsent"
+          ? page.chooseConsent({
+              currentTarget: {
+                dataset: { purpose: "collection", granted: "true" },
+              },
+            })
+          : action === "approve"
+            ? page.approve({
+                currentTarget: {
+                  dataset: { id: "55555555-5555-4555-8555-555555555555" },
+                },
+              })
+            : page[action]();
+      const pending = requests.shift()!;
+      assert.ok(pending);
+      assert.equal(page.data.busy, true);
+      clock.now += 2000;
+      respond(pending, current, 200);
+      await acting;
+      assert.equal(page.data.busy, false);
+      assert.equal(page.data.loggedIn, false);
+      assert.equal(page.data.participation, null);
+      assert.match(page.data.status, /登录已失效/);
+      const relogin = page.loginLive();
+      await tick();
+      assert.equal(requests[0].url, `${base}/sessions/wechat`);
+      respond(requests.shift()!, login, 201);
+      await tick();
+      if (name === "invite") {
+        respond(requests.shift()!, {
+          ...current,
+          role: "initiator",
+          bindingVersion: 0,
+        });
+        await tick();
+        respond(requests.shift()!, { requests: [] });
+      } else if (action === "accept")
+        respond(requests.shift()!, {
+          inviter: "发起人",
+          process: ["说一段"],
+          purposes: ["collection", "ai", "sharing"],
+          noticeVersion: "synthetic-d08-v1",
+          policyStatus: "synthetic-only",
+          choice: "可撤回",
+        });
+      else await completeProjectState(requests, current);
+      await relogin;
+      assert.equal(page.data.busy, false);
+      assert.equal(page.data.loggedIn, true);
+    });
+for (const name of ["welcome", "invite"])
+  test(`${name} drops a cross-TTL success after an account or page change`, async () => {
+    const clock = { now: Date.parse("2026-10-23T01:00:00.000Z") };
+    const { page, requests, storage } = harness(name, clock);
+    storage.set(`timenook.session.v1:${base}`, {
+      ...login,
+      session: {
+        ...login.session,
+        expiresAt: new Date(clock.now + 1000).toISOString(),
+      },
+    });
+    page.onLoad({ projectId });
+    const old = page.refreshLive();
+    const oldRequest = requests.shift()!;
+    clock.now += 2000;
+    const nextLogin = {
+      user: { id: "77777777-7777-4777-8777-777777777777" },
+      session: {
+        ...login.session,
+        id: "88888888-8888-4888-8888-888888888888",
+        token: "z".repeat(43),
+      },
+    };
+    storage.set(`timenook.session.v1:${base}`, nextLogin);
+    const next = page.refreshLive();
+    const nextRequest = requests.shift()!;
+    respond(oldRequest, current, 200);
+    await old;
+    assert.equal(page.data.busy, true);
+    assert.equal(page.data.loggedIn, true);
+    assert.equal(page.data.status, "");
+    assert.deepEqual(storage.get(`timenook.session.v1:${base}`), nextLogin);
+    respond(nextRequest, current);
+    await tick();
+    respond(requests.shift()!, { requests: [] });
+    await next;
+    assert.equal(page.data.busy, false);
+    storage.set(`timenook.session.v1:${base}`, {
+      ...nextLogin,
+      session: {
+        ...nextLogin.session,
+        expiresAt: new Date(clock.now + 1000).toISOString(),
+      },
+    });
+    const leaving = page.refreshLive();
+    const leavingRequest = requests.shift()!;
+    clock.now += 2000;
+    page.onHide();
+    page.setData({ status: "页面已离开" });
+    respond(leavingRequest, current, 200);
+    await leaving;
+    assert.equal(page.data.status, "页面已离开");
+    assert.equal(page.data.busy, false);
+    assert.equal(page.data.participation, null);
   });

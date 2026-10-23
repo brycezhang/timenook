@@ -84,7 +84,8 @@ Page({
       !context ||
       sessionClient.context() ||
       !(error instanceof ApiFailure) ||
-      error.status !== 401
+      (error.status !== 401 &&
+        !(error.code === "STALE_RESPONSE" && error.status === 0))
     )
       return false;
     this.setData({
@@ -96,7 +97,7 @@ Page({
       memberships: [],
       careRequests: [],
       supportCaseRef: "",
-      status: error.message,
+      status: "登录已失效，请重新登录",
     });
     return true;
   },
