@@ -2,6 +2,8 @@
 
 本探针只接收合成样本，用于 S0 技术验证。它不创建产品相册、书稿版本、授权或生产单。票据 [#5](https://github.com/brycezhang/timenook/issues/5) 的真实印厂、实物和双端验收仍须另行完成；运行结果见 [T04 证据](delivery/2026-10-22/evidence/T04.md)。
 
+T16 将同一像素内核与受限子进程执行器移到 `apps/api/runtime/`，探针 wrapper 仍保留原开关、样本范围和 manifest scope；产品照片入口另行执行真实 Participation/采访/上传封存，并且当前仍只允许隔离 test 配置。图片运行依赖固定于 API package，不能把探针身份或 CLI 开关当产品权限。新增集成证据见 [T16](delivery/2026-10-22/evidence/T16.md)。
+
 ## 准备与复现
 
 在仓库根目录使用 `.node-version` 与 `packageManager` 指定的工具链。已有 PostgreSQL/Redis 和 FFmpeg 准备方法沿用 [本地开发](development.md) 与 [原声探针](development-audio-probe.md)。
@@ -88,7 +90,7 @@ T04_ARTIFACT_DIR="$PWD/../../output/pdf/new-synthetic-proof" \
 | --- | --- | --- |
 | 渲染 | Playwright 1.58.2 / Apache-2.0；对应 Chromium 145.0.7632.6 | [page.pdf](https://playwright.dev/docs/api/class-page#page-pdf) |
 | 图像 | Sharp 0.34.5 / Apache-2.0 | [资源与安全](https://sharp.pixelplumbing.com/security/)、[HEIC 限制](https://sharp.pixelplumbing.com/install/) |
-| HEVC 候选 | libheif-js 1.23.5 / LGPL-3.0 | [官方包与用法](https://github.com/catdad-experiments/libheif-js)；只在本地探针进程使用 |
+| HEVC 候选 | libheif-js 1.23.5 / LGPL-3.0 | [官方包与用法](https://github.com/catdad-experiments/libheif-js)；由探针与隔离产品照片子进程共用，正式环境仍待准入 |
 | QR 生成 / 解码 | qrcode 1.5.4 / MIT；jsQR 1.4.0 / Apache-2.0 | [qrcode](https://github.com/soldair/node-qrcode)、[jsQR](https://github.com/cozmo/jsQR) |
 | PDF 独立解析/逐页渲染 | pdfjs-dist 5.4.624 / Apache-2.0；@napi-rs/canvas 0.1.100 / MIT | [PDF.js 示例](https://mozilla.github.io/pdf.js/examples/)、[canvas](https://github.com/Brooooooklyn/canvas) |
 | 字体 cmap 检查 | fontkit 2.0.4 / MIT | [fontkit](https://github.com/foliojs/fontkit) |

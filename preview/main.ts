@@ -8,6 +8,7 @@ import {
   saveBlob,
   writeBlob,
   resolveBlob,
+  removeBlob,
 } from "./media";
 const root = document.querySelector<HTMLElement>("#page")!,
   phone = document.querySelector<HTMLElement>("#phone")!,
@@ -35,6 +36,7 @@ let current: any = null,
   scheduled = false;
 const definitions: Record<string, any> = {};
 let registering = "";
+let pageLoad = Promise.resolve();
 let cssTag = document.createElement("style");
 document.head.append(cssTag);
 function css(source: string) {
@@ -121,7 +123,18 @@ const wx: any = {
       options.timeout ?? 10000,
     );
     const url = new URL(options.url, location.origin);
+    const photoPath =
+      /\/v1\/projects\/[a-f0-9-]{36}\/interviews\/[a-f0-9-]{36}\/photos/;
+    const photoSupported =
+      photoPath.test(url.pathname) &&
+      (((!options.method || options.method === "GET") &&
+        /\/photos(?:\/materials\/[a-f0-9-]{36})?$/.test(url.pathname)) ||
+        (options.method === "POST" &&
+          /\/photos(?:\/(?:context|materials)|\/[a-f0-9-]{36}\/(?:upload|seal|status|release|crop))?$/.test(
+            url.pathname,
+          )));
     const supported =
+      photoSupported ||
       ((!options.method || options.method === "GET") &&
         /\/v1\/(recipient-types|packages\/current|orders(?:\/[a-f0-9-]{36})?|participations|invitations\/[A-Za-z0-9_-]{43}|projects\/[a-f0-9-]{36}\/(?:participation|binding-requests|care-requests|assisted-sessions|tasks(?:\/[a-f0-9-]{36})?|plan|interviews(?:\/[a-f0-9-]{36}(?:\/clips\/[a-f0-9-]{36}(?:\/content)?)?)?))$/.test(
           url.pathname,
@@ -172,7 +185,7 @@ const wx: any = {
         const url = new URL(options.url, location.origin);
         if (
           url.origin !== location.origin ||
-          !url.pathname.endsWith("/v1/recordings/objects")
+          !/\/v1\/(recordings|photos)\/objects$/.test(url.pathname)
         )
           throw Error("Unsupported preview upload");
         const form = new FormData();
@@ -181,7 +194,13 @@ const wx: any = {
         const file = await fetch(await resolveBlob(options.filePath)).then(
           (r) => r.blob(),
         );
-        form.append(options.name, file, "recording.mp3");
+        form.append(
+          options.name,
+          file,
+          url.pathname.endsWith("/photos/objects")
+            ? "photo.bin"
+            : "recording.mp3",
+        );
         const response = await fetch(url, {
           method: "POST",
           headers: options.header,
@@ -230,6 +249,11 @@ const wx: any = {
   },
   getFileSystemManager() {
     return {
+      unlink(o: any) {
+        void removeBlob(o.filePath)
+          .then(() => o.success?.({}))
+          .catch(() => o.fail?.({}));
+      },
       access(o: any) {
         void resolveBlob(o.path)
           .then((url) => fetch(url))
@@ -268,6 +292,30 @@ const wx: any = {
           .catch((e) => o.fail?.(e));
       },
     };
+  },
+  downloadFile(o: any) {
+    const url = new URL(o.url, location.origin);
+    if (
+      url.origin !== location.origin ||
+      !/\/v1\/projects\/[a-f0-9-]{36}\/interviews\/[a-f0-9-]{36}\/photos\/[a-f0-9-]{36}\/assets\/[a-f0-9-]{36}\/content$/.test(
+        url.pathname,
+      )
+    ) {
+      o.fail?.({ errMsg: "downloadFile:fail" });
+      return;
+    }
+    void fetch(url, {
+      headers: o.header,
+      credentials: "omit",
+      signal: AbortSignal.timeout(o.timeout ?? 15000),
+    })
+      .then(async (response) =>
+        o.success?.({
+          statusCode: response.status,
+          tempFilePath: temporaryFile(await response.blob()),
+        }),
+      )
+      .catch(() => o.fail?.({ errMsg: "downloadFile:fail" }));
   },
   chooseMedia(o: any) {
     const input = document.createElement("input");
@@ -460,8 +508,13 @@ async function mount() {
   current?.onHide?.();
   current?.onUnload?.();
   route = name;
-  registering = name;
-  await imports[`../miniprogram/pages/${name}/index.ts`]();
+  // Page() has no route argument; keep its owner stable until the module loads.
+  const loaded = pageLoad.then(async () => {
+    registering = name;
+    await imports[`../miniprogram/pages/${name}/index.ts`]();
+  });
+  pageLoad = loaded.catch(() => {});
+  await loaded;
   if (ticket !== serial) return;
   const def = definitions[name];
   current = { ...def, data: structuredClone(def.data || {}) };

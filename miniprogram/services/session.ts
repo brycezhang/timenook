@@ -49,7 +49,19 @@ function loginResult(value: unknown): value is LoginResult {
 
 export class SessionClient {
   private generation = 0;
+  private invalidatedToken: string | null = null;
+  private cleanupPending = false;
+  private readonly invalidationListeners = new Set<(context: string) => void>();
   constructor(private readonly apiBaseUrl: string) {}
+  onInvalidated(listener: (context: string) => void): () => void {
+    this.invalidationListeners.add(listener);
+    return () => {
+      this.invalidationListeners.delete(listener);
+    };
+  }
+  sessionCleanupPending(): boolean {
+    return this.cleanupPending;
+  }
   context(): string {
     const stored = this.stored();
     return dataMode() === "live" && stored
@@ -69,6 +81,7 @@ export class SessionClient {
     this.generation++;
     const stored = this.stored();
     wx.removeStorageSync(this.storageKey);
+    this.cleanupPending = false;
     if (stored) {
       try {
         await this.send<void>(
@@ -114,15 +127,61 @@ export class SessionClient {
         error instanceof ApiFailure &&
         error.status === 401 &&
         generation === this.generation &&
-        this.stored()?.session.token === stored.session.token
+        this.persisted()?.session.token === stored.session.token
       )
-        wx.removeStorageSync(this.storageKey);
+        this.invalidate(stored);
       throw error;
     }
+  }
+
+  async downloadPhoto(
+    projectId: string,
+    interviewId: string,
+    photoId: string,
+    assetId: string,
+  ) {
+    if (
+      ![projectId, interviewId, photoId, assetId].every((id) =>
+        /^[a-f0-9-]{36}$/.test(id),
+      )
+    )
+      throw new ApiFailure("INVALID_RESPONSE");
+    const generation = this.generation,
+      stored = this.stored();
+    if (dataMode() !== "live" || !stored)
+      throw new ApiFailure("UNAUTHENTICATED", 401);
+    this.checkBaseUrl();
+    return new Promise<WechatMiniprogram.DownloadFileSuccessCallbackResult>(
+      (resolve, reject) =>
+        wx.downloadFile({
+          url: `${this.apiBaseUrl}/projects/${projectId}/interviews/${interviewId}/photos/${photoId}/assets/${assetId}/content`,
+          header: { authorization: `Bearer ${stored.session.token}` },
+          timeout: 15000,
+          success: (result) => {
+            if (
+              result.statusCode === 401 &&
+              generation === this.generation &&
+              dataMode() === "live" &&
+              this.persisted()?.session.token === stored.session.token
+            )
+              this.invalidate(stored);
+            // The media owner still needs this path to remove denied or stale bytes.
+            resolve(result);
+          },
+          fail: () => reject(new ApiFailure("NETWORK_ERROR")),
+        }),
+    );
+  }
+  async uploadPhoto(
+    form: import("../../packages/contracts/src/audio-probe").ProbeUploadForm,
+    filePath: string,
+  ) {
+    return this.uploadRecording(form, filePath, "photos");
   }
   async uploadRecording(
     form: import("../../packages/contracts/src/audio-probe").ProbeUploadForm,
     filePath: string,
+    kind: "recordings" | "photos" = "recordings",
   ): Promise<void> {
     const generation = this.generation,
       stored = this.stored();
@@ -130,8 +189,7 @@ export class SessionClient {
       throw new ApiFailure("UNAUTHENTICATED", 401);
     this.checkBaseUrl();
     const local =
-      form.storage === "local-simulator" &&
-      form.url === "/v1/recordings/objects";
+      form.storage === "local-simulator" && form.url === `/v1/${kind}/objects`;
     const oss =
       form.storage === "oss" &&
       /^https:\/\/[a-z0-9-]+\.oss-[a-z0-9-]+\.aliyuncs\.com$/.test(form.url);
@@ -156,10 +214,16 @@ export class SessionClient {
       }),
     );
     this.assertCurrent(generation);
+    if (
+      result === 401 &&
+      this.persisted()?.session.token === stored.session.token
+    ) {
+      this.invalidate(stored);
+      throw new ApiFailure("UNAUTHENTICATED", 401);
+    }
     if (this.stored()?.session.token !== stored.session.token)
       throw new ApiFailure("STALE_RESPONSE");
     if (result < 200 || result >= 300) {
-      if (result === 401) wx.removeStorageSync(this.storageKey);
       throw new ApiFailure(
         result === 401 ? "UNAUTHENTICATED" : "UPLOAD_FAILED",
         result,
@@ -177,11 +241,34 @@ export class SessionClient {
     return `timenook.session.v1:${this.apiBaseUrl}`;
   }
   private stored(): LoginResult | null {
-    const value: unknown = wx.getStorageSync(this.storageKey);
-    return loginResult(value) &&
+    const value = this.persisted();
+    return value &&
+      value.session.token !== this.invalidatedToken &&
       Date.parse(value.session.expiresAt) > Date.now()
       ? value
       : null;
+  }
+  private persisted(): LoginResult | null {
+    // Expiry blocks new credentials, but does not change an in-flight request's owner.
+    const value: unknown = wx.getStorageSync(this.storageKey);
+    return loginResult(value) ? value : null;
+  }
+  private invalidate(stored: LoginResult) {
+    // Fail closed even if the device cannot remove its persisted session.
+    this.invalidatedToken = stored.session.token;
+    try {
+      wx.removeStorageSync(this.storageKey);
+      this.cleanupPending = false;
+    } catch {
+      this.cleanupPending = true;
+    }
+    for (const listener of [...this.invalidationListeners]) {
+      try {
+        listener(`${stored.user.id}:${stored.session.id}`);
+      } catch {
+        /* One device view must not block invalidation or media cleanup. */
+      }
+    }
   }
   private assertCurrent(generation: number) {
     if (generation !== this.generation || dataMode() !== "live")
@@ -192,6 +279,7 @@ export class SessionClient {
     const generation = ++this.generation;
     setDataMode("live");
     wx.removeStorageSync(this.storageKey);
+    this.cleanupPending = false;
     this.checkBaseUrl();
     const code = await new Promise<string>((resolve, reject) =>
       wx.login({
@@ -225,6 +313,7 @@ export class SessionClient {
       throw error;
     }
     wx.setStorageSync(this.storageKey, result);
+    this.invalidatedToken = null;
     return result;
   }
 

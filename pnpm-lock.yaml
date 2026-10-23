@@ -169,6 +169,9 @@ importers:
       ioredis:
         specifier: 5.11.1
         version: 5.11.1
+      libheif-js:
+        specifier: 1.23.5
+        version: 1.23.5
       otplib:
         specifier: 13.5.0
         version: 13.5.0
@@ -178,6 +181,9 @@ importers:
       rxjs:
         specifier: 7.8.2
         version: 7.8.2
+      sharp:
+        specifier: 0.34.5
+        version: 0.34.5
     devDependencies:
       '@types/ali-oss':
         specifier: 6.23.3

@@ -59,6 +59,7 @@ Page({
   taskDelay: 2000,
   taskRetries: {} as Record<string, string>,
   timerHandle: undefined as ReturnType<typeof setInterval> | undefined,
+  stopSessionWatch: undefined as (() => void) | undefined,
   onLoad(q) {
     if (dataMode() === "live") {
       this.projectId = q.projectId ?? "";
@@ -89,10 +90,25 @@ Page({
     if (q.photo === "1") this.pickPhoto();
   },
   async onShow() {
+    this.stopSessionWatch?.();
+    this.stopSessionWatch = undefined;
+    const ownerContext = sessionClient.context();
+    if (dataMode() === "live" && ownerContext)
+      this.stopSessionWatch = sessionClient.onInvalidated((context) => {
+        if (context !== ownerContext) return;
+        this.onHide();
+        this.setData({
+          status: sessionClient.sessionCleanupPending()
+            ? "登录已失效；设备会话缓存清理失败，请重试登录"
+            : "当前权限已失效，请重新查询或登录；本机原文件仍保留",
+        });
+      });
     this.taskVisible = true;
     if (dataMode() === "live") await this.refresh();
   },
   onHide() {
+    this.stopSessionWatch?.();
+    this.stopSessionWatch = undefined;
     this.taskVisible = false;
     if (this.taskPollHandle) clearTimeout(this.taskPollHandle);
     this.taskPollHandle = undefined;
@@ -262,6 +278,36 @@ Page({
     });
     await device.restore();
   },
+  photos() {
+    const interview = this.data.interview;
+    if (
+      !interview ||
+      ["recording", "requesting", "saving"].includes(this.data.state)
+    )
+      return;
+    wx.navigateTo({
+      url: `/pages/photos/index?projectId=${encodeURIComponent(this.projectId)}&interviewId=${encodeURIComponent(interview.id)}${this.assistedSessionId ? `&assistedSessionId=${encodeURIComponent(this.assistedSessionId)}` : ""}`,
+    });
+  },
+  taskAuthorizationLost(error: unknown, generation: number, context: string) {
+    const current = sessionClient.context();
+    if (
+      error instanceof ApiFailure &&
+      [401, 403].includes(error.status) &&
+      generation === this.generation &&
+      dataMode() === "live" &&
+      (!current || current === context)
+    ) {
+      this.onHide();
+      this.setData({
+        status: sessionClient.sessionCleanupPending()
+          ? "登录已失效；设备会话缓存清理失败，请重试登录"
+          : "当前权限已失效，请重新查询或登录；本机原文件仍保留",
+      });
+      return true;
+    }
+    return false;
+  },
   async refreshTasks() {
     if (!this.taskVisible || dataMode() !== "live" || !this.data.interview)
       return;
@@ -317,12 +363,17 @@ Page({
         this.taskDelay = Math.min(10000, this.taskDelay * 2);
       }
     } catch (error) {
+      if (!this.taskVisible || generation !== this.generation) return;
+      // Current-session invalidation also applies to an older overlapping query.
       if (
-        !this.taskVisible ||
-        !this.current(generation, context) ||
-        sequence !== this.taskSequence
+        error instanceof ApiFailure &&
+        error.status === 401 &&
+        this.taskAuthorizationLost(error, generation, context)
       )
         return;
+      if (sequence !== this.taskSequence) return;
+      if (this.taskAuthorizationLost(error, generation, context)) return;
+      if (!this.current(generation, context)) return;
       this.setData({
         taskRows:
           error instanceof ApiFailure &&
@@ -355,7 +406,8 @@ Page({
       delete this.taskRetries[id];
       this.taskDelay = 2000;
       await this.refreshTasks();
-    } catch {
+    } catch (error) {
+      if (this.taskAuthorizationLost(error, generation, context)) return;
       if (this.current(generation, context))
         this.setData({
           taskError: "重试结果未确认，请重新查询；相同任务保留原请求。",
@@ -423,6 +475,7 @@ Page({
       this.selection = null;
       this.setData({ pendingInterviews: ids });
       await this.attach(selected, generation, context);
+      if (kind === "photo") this.photos();
     } catch (error) {
       if (generation === this.generation && dataMode() === "live") {
         if (

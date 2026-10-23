@@ -1,3 +1,4 @@
+import { objectFormat } from "../media/object-format";
 import type { ProbeUploadForm } from "@timenook/contracts";
 import {
   mkdir,
@@ -30,8 +31,7 @@ export interface ProbeObjects {
 export class LocalProbeObjects implements ProbeObjects {
   constructor(private readonly root: string) {}
   private path(key: string) {
-    if (!/^(staging|sealed)\/[0-9a-f-]{36}\.mp3$/.test(key))
-      throw new Error("Invalid object key");
+    objectFormat(key);
     return join(this.root, "objects", key);
   }
   async put(key: string, bytes: Buffer) {
@@ -41,10 +41,10 @@ export class LocalProbeObjects implements ProbeObjects {
   }
   async putSnapshot(key: string, bytes: Buffer) {
     if (
-      !/^staging\/[0-9a-f-]{36}\.mp3$/.test(key) ||
+      !objectFormat(key).staging ||
       !Buffer.isBuffer(bytes) ||
       bytes.length < 1 ||
-      bytes.length > 2097152
+      bytes.length > objectFormat(key).limit
     )
       throw new Error("Invalid server audio snapshot");
     const path = this.path(key);
@@ -53,7 +53,8 @@ export class LocalProbeObjects implements ProbeObjects {
   }
   async read(key: string) {
     const path = this.path(key);
-    if ((await stat(path)).size > 2097152) throw new Error("Object too large");
+    if ((await stat(path)).size > objectFormat(key).limit)
+      throw new Error("Object too large");
     return readFile(path);
   }
   async copy(source: string, target: string) {

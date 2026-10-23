@@ -1,3 +1,4 @@
+import { objectFormat } from "../media/object-format";
 import OSS from "ali-oss";
 import type { ProbeUploadForm } from "@timenook/contracts";
 
@@ -33,10 +34,12 @@ export class OssProbeObjects {
     now = new Date(),
   ): Promise<ProbeUploadForm> {
     if (
-      !/^staging\/[0-9a-f-]{36}\.mp3$/.test(key) ||
+      !objectFormat(key).staging ||
+      key.endsWith(".jpg") ||
+      key.endsWith(".png") ||
       !Number.isInteger(bytes) ||
       bytes < 1 ||
-      bytes > 2097152
+      bytes > objectFormat(key).limit
     )
       throw new Error("Invalid staging grant");
     const expiresAt = new Date(
@@ -133,8 +136,7 @@ export class OssProbeObjects {
     return { url, expiresAt, credentialsExpireAt: this.config.expiresAt };
   }
   private checkKey(key: string) {
-    if (!/^(staging|sealed)\/[0-9a-f-]{36}\.mp3$/.test(key))
-      throw new Error("Invalid object key");
+    objectFormat(key);
     if (Date.parse(this.config.expiresAt) <= Date.now() + 5000)
       throw new Error("STS credentials expired");
   }
@@ -146,15 +148,15 @@ export class OssProbeObjects {
   async putSnapshot(key: string, bytes: Buffer): Promise<void> {
     this.checkKey(key);
     if (
-      !key.startsWith("staging/") ||
+      !objectFormat(key).staging ||
       !Buffer.isBuffer(bytes) ||
       bytes.length < 1 ||
-      bytes.length > 2097152
+      bytes.length > objectFormat(key).limit
     )
       throw new Error("Invalid server audio snapshot");
     await this.client.put(key, bytes, {
       timeout: 10000,
-      mime: "audio/mpeg",
+      mime: objectFormat(key).mime,
       headers: {
         "x-oss-object-acl": "private",
         "Cache-Control": "private, no-store",
@@ -173,7 +175,7 @@ export class OssProbeObjects {
       if (
         Number(
           (result.res.headers as Record<string, string>)["content-length"],
-        ) > 2097152
+        ) > objectFormat(key).limit
       )
         throw new Error("OSS object exceeds limit");
       const chunks: Buffer[] = [];
@@ -181,7 +183,8 @@ export class OssProbeObjects {
       for await (const value of stream) {
         const chunk = Buffer.from(value);
         size += chunk.length;
-        if (size > 2097152) throw new Error("OSS object exceeds limit");
+        if (size > objectFormat(key).limit)
+          throw new Error("OSS object exceeds limit");
         chunks.push(chunk);
       }
       return Buffer.concat(chunks);
@@ -193,13 +196,13 @@ export class OssProbeObjects {
   async copy(source: string, target: string) {
     this.checkKey(source);
     this.checkKey(target);
-    if (!source.startsWith("staging/") || !target.startsWith("sealed/"))
+    if (!objectFormat(source).staging || objectFormat(target).staging)
       throw new Error("Invalid copy direction");
     await this.client.copy(target, source, {
       headers: {
         "x-oss-object-acl": "private",
         "x-oss-metadata-directive": "REPLACE",
-        "Content-Type": "audio/mpeg",
+        "Content-Type": objectFormat(target).mime,
         "Cache-Control": "private, no-store",
       },
     });
