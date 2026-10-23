@@ -857,6 +857,179 @@ test("an actual download 401 clears private material despite device session-cach
   await page.context().close();
 });
 
+for (const direction of ["interview-to-photo", "photo-to-interview"]) {
+  test(`shared-session invalidation clears the active page across ${direction} navigation`, async ({
+    browser,
+  }) => {
+    const current = await login("synthetic-plan-narrator"),
+      i = data(
+        await request("GET", `/v1/projects/${projectId}/interviews`, current),
+        200,
+      ).interviews[0],
+      page = await openPage(browser, current),
+      fromInterview = direction === "interview-to-photo";
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const pattern = fromInterview ? "**/tasks/status" : "**/assets/*/content";
+    await page.route(pattern, async (route) => {
+      await gate;
+      await route.continue();
+    });
+    try {
+      if (fromInterview) {
+        const pending = page.waitForRequest((r) =>
+          r.url().endsWith("/tasks/status"),
+        );
+        await page.goto(`${base}/#/interview?projectId=${projectId}`);
+        await pending;
+        await page
+          .getByRole("button", { name: "查看照片或事后补图", exact: true })
+          .click();
+      } else {
+        await page.goto(`${base}/#/interview?projectId=${projectId}`);
+        await expect(
+          page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
+        ).toBeVisible();
+        await page
+          .getByRole("button", { name: "查看照片或事后补图", exact: true })
+          .click();
+      }
+      await expect(page.getByText(/已保存的照片引用 · 版本 4/)).toBeVisible();
+      const chooser = page.waitForEvent("filechooser");
+      await page
+        .getByRole("button", { name: "选择原照片", exact: true })
+        .click();
+      await (await chooser).setFiles(photoPaths[0]);
+      await expect(
+        page.getByText("本机原文件和清单已保存，尚未封存", { exact: true }),
+      ).toHaveCount(1);
+      await page
+        .getByPlaceholder("这张照片想说明什么？")
+        .first()
+        .fill("跨页私人照片草稿");
+      await page.evaluate(() => {
+        window.crossPageRemoved = [];
+        const fileSystem = window.wx.getFileSystemManager.bind(window.wx);
+        window.wx.getFileSystemManager = () => {
+          const fs = fileSystem();
+          return {
+            ...fs,
+            unlink(options) {
+              fs.unlink({
+                ...options,
+                success(result) {
+                  window.crossPageRemoved.push(options.filePath);
+                  options.success?.(result);
+                },
+              });
+            },
+          };
+        };
+      });
+      const pendingImage = fromInterview
+        ? null
+        : page.waitForRequest((r) => /\/assets\/[^/]+\/content$/.test(r.url()));
+      await page
+        .getByRole("button", { name: "安全查看这张照片", exact: true })
+        .first()
+        .click();
+      if (pendingImage) {
+        await pendingImage;
+        await page
+          .getByRole("button", { name: "返回采访，开始说", exact: true })
+          .click();
+        await expect(
+          page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
+        ).toBeVisible();
+        await page.getByRole("button", { name: "开始说", exact: true }).click();
+        await page
+          .getByRole("button", { name: "说完了，停止录音", exact: true })
+          .click();
+        await expect(
+          page.getByText("本机文件已保存，尚待封存", { exact: true }),
+        ).toBeVisible();
+        await page
+          .getByPlaceholder("想讲的问题", { exact: true })
+          .fill("跨页私人采访草稿");
+      } else {
+        await expect(page.locator(".photos-page > img")).toBeVisible();
+      }
+      expect(
+        (await request("DELETE", `/v1/sessions/${current.session.id}`, current))
+          .statusCode,
+      ).toBe(204);
+      const denied = page.waitForResponse(
+        (r) =>
+          (fromInterview
+            ? r.url().endsWith("/tasks/status")
+            : /\/assets\/[^/]+\/content$/.test(r.url())) && r.status() === 401,
+      );
+      release();
+      await denied;
+      await expect(
+        page.getByText(
+          fromInterview
+            ? "照片权限已变化，请重新查询"
+            : "当前权限已失效，请重新查询或登录；本机原文件仍保留",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(page.locator(".photos-page > img")).toHaveCount(0);
+      await expect(page.getByPlaceholder("这张照片想说明什么？")).toHaveCount(
+        0,
+      );
+      await expect(
+        page.getByPlaceholder("想讲的问题", { exact: true }),
+      ).toHaveCount(0);
+      await expect
+        .poll(() => page.evaluate(() => window.crossPageRemoved.length))
+        .toBeGreaterThan(0);
+      const retained = await page.evaluate(
+        ({ base }) => {
+          const pending = (prefix) =>
+            Object.entries(localStorage)
+              .filter(
+                ([key, value]) =>
+                  key.startsWith(prefix) && Array.isArray(JSON.parse(value)),
+              )
+              .flatMap(([, value]) => JSON.parse(value))
+              .filter((file) => !file.sealed && file.path);
+          const photos = pending("timenook.photos.v1:");
+          return {
+            session: !!localStorage.getItem(
+              `timenook.session.v1:${base}/timenook/v1`,
+            ),
+            pendingPhotos: photos.length,
+            pendingRecordings: pending("timenook.recording.v1:").length,
+            originalRemoved: photos.some((photo) =>
+              window.crossPageRemoved.includes(photo.path),
+            ),
+            previews: JSON.parse(
+              localStorage.getItem(
+                `timenook.photo-previews.v1:${base}/timenook/v1`,
+              ) || "[]",
+            ).length,
+          };
+        },
+        { base },
+      );
+      expect(retained).toEqual({
+        session: false,
+        pendingPhotos: 1,
+        pendingRecordings: fromInterview ? 0 : 1,
+        originalRemoved: false,
+        previews: 0,
+      });
+      expect(errors).toEqual([]);
+    } finally {
+      release();
+      await page.context().close();
+    }
+  });
+}
+
 test("unsupported photo recovery retains the local original and permission changes clear private previews", async ({
   browser,
 }) => {

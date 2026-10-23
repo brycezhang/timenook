@@ -51,7 +51,14 @@ export class SessionClient {
   private generation = 0;
   private invalidatedToken: string | null = null;
   private cleanupPending = false;
+  private readonly invalidationListeners = new Set<(context: string) => void>();
   constructor(private readonly apiBaseUrl: string) {}
+  onInvalidated(listener: (context: string) => void): () => void {
+    this.invalidationListeners.add(listener);
+    return () => {
+      this.invalidationListeners.delete(listener);
+    };
+  }
   sessionCleanupPending(): boolean {
     return this.cleanupPending;
   }
@@ -122,7 +129,7 @@ export class SessionClient {
         generation === this.generation &&
         this.stored()?.session.token === stored.session.token
       )
-        this.invalidate(stored.session.token);
+        this.invalidate(stored);
       throw error;
     }
   }
@@ -157,7 +164,7 @@ export class SessionClient {
               dataMode() === "live" &&
               this.stored()?.session.token === stored.session.token
             )
-              this.invalidate(stored.session.token);
+              this.invalidate(stored);
             // The media owner still needs this path to remove denied or stale bytes.
             resolve(result);
           },
@@ -210,7 +217,7 @@ export class SessionClient {
     if (this.stored()?.session.token !== stored.session.token)
       throw new ApiFailure("STALE_RESPONSE");
     if (result < 200 || result >= 300) {
-      if (result === 401) this.invalidate(stored.session.token);
+      if (result === 401) this.invalidate(stored);
       throw new ApiFailure(
         result === 401 ? "UNAUTHENTICATED" : "UPLOAD_FAILED",
         result,
@@ -235,14 +242,21 @@ export class SessionClient {
       ? value
       : null;
   }
-  private invalidate(token: string) {
+  private invalidate(stored: LoginResult) {
     // Fail closed even if the device cannot remove its persisted session.
-    this.invalidatedToken = token;
+    this.invalidatedToken = stored.session.token;
     try {
       wx.removeStorageSync(this.storageKey);
       this.cleanupPending = false;
     } catch {
       this.cleanupPending = true;
+    }
+    for (const listener of [...this.invalidationListeners]) {
+      try {
+        listener(`${stored.user.id}:${stored.session.id}`);
+      } catch {
+        /* One device view must not block invalidation or media cleanup. */
+      }
     }
   }
   private assertCurrent(generation: number) {

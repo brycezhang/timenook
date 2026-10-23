@@ -273,6 +273,8 @@ test("an unauthorized private photo download clears the current login and preser
 
 test("a previous account's delayed photo-download 401 cannot clear the newer login", async () => {
   const client = new SessionClient(api);
+  const invalidations: string[] = [];
+  client.onInvalidated((context) => invalidations.push(context));
   await client.login();
   const pending = client.downloadPhoto(
     identity.user.id,
@@ -300,6 +302,34 @@ test("a previous account's delayed photo-download 401 cannot clear the newer log
   reply = (request) => success(request, 200, envelope(other.user));
   assert.deepEqual(await client.restore(), other.user);
   assert.deepEqual(storage.get(`timenook.session.v1:${api}`), other);
+  assert.deepEqual(invalidations, []);
+});
+
+test("session invalidation delivers the download result despite a failed view listener and unsubscribe is idempotent", async () => {
+  const client = new SessionClient(api),
+    events: string[] = [];
+  await client.login();
+  const stop = client.onInvalidated(() => events.push("detached"));
+  stop();
+  stop();
+  client.onInvalidated(() => {
+    throw Error("device view unavailable");
+  });
+  client.onInvalidated((context) => events.push(context));
+  const pending = client.downloadPhoto(
+    identity.user.id,
+    identity.session.id,
+    "55555555-5555-4555-8555-555555555555",
+    "66666666-6666-4666-8666-666666666666",
+  );
+  downloadSuccess(downloads[0], {
+    statusCode: 401,
+    tempFilePath: "denied-with-listener-error",
+    errMsg: "downloadFile:ok",
+  });
+  assert.equal((await pending).tempFilePath, "denied-with-listener-error");
+  assert.equal(client.context(), "");
+  assert.deepEqual(events, [`${identity.user.id}:${identity.session.id}`]);
 });
 
 test("a failed device session removal cannot reuse the rejected token and a successful login recovers cleanup", async () => {

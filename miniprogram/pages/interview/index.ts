@@ -59,6 +59,7 @@ Page({
   taskDelay: 2000,
   taskRetries: {} as Record<string, string>,
   timerHandle: undefined as ReturnType<typeof setInterval> | undefined,
+  stopSessionWatch: undefined as (() => void) | undefined,
   onLoad(q) {
     if (dataMode() === "live") {
       this.projectId = q.projectId ?? "";
@@ -89,10 +90,25 @@ Page({
     if (q.photo === "1") this.pickPhoto();
   },
   async onShow() {
+    this.stopSessionWatch?.();
+    this.stopSessionWatch = undefined;
+    const ownerContext = sessionClient.context();
+    if (dataMode() === "live" && ownerContext)
+      this.stopSessionWatch = sessionClient.onInvalidated((context) => {
+        if (context !== ownerContext) return;
+        this.onHide();
+        this.setData({
+          status: sessionClient.sessionCleanupPending()
+            ? "登录已失效；设备会话缓存清理失败，请重试登录"
+            : "当前权限已失效，请重新查询或登录；本机原文件仍保留",
+        });
+      });
     this.taskVisible = true;
     if (dataMode() === "live") await this.refresh();
   },
   onHide() {
+    this.stopSessionWatch?.();
+    this.stopSessionWatch = undefined;
     this.taskVisible = false;
     if (this.taskPollHandle) clearTimeout(this.taskPollHandle);
     this.taskPollHandle = undefined;

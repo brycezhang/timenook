@@ -14,7 +14,12 @@ const login = {
   },
 };
 const compiled = await build({
-  entryPoints: ["miniprogram/pages/photos/index.ts"],
+  stdin: {
+    contents:
+      'import "./miniprogram/pages/interview/index"; import "./miniprogram/pages/photos/index";',
+    resolveDir: process.cwd(),
+    loader: "ts",
+  },
   bundle: true,
   write: false,
   format: "cjs",
@@ -31,7 +36,9 @@ function harness() {
     downloads: any[] = [],
     navigations: string[] = [],
     saved: string[] = [],
-    removed: string[] = [];
+    removed: string[] = [],
+    pages: any[] = [],
+    recorderHandlers: Record<string, ((value?: any) => void)[]> = {};
   let page: any,
     failManifest = false,
     failPreview = false,
@@ -41,9 +48,12 @@ function harness() {
   runInNewContext(compiled.outputFiles[0].text, {
     setTimeout,
     clearTimeout,
+    setInterval,
+    clearInterval,
     Page: (v: any) => {
       page = v;
-      page.setData = (patch: object) => Object.assign(page.data, patch);
+      v.setData = (patch: object) => Object.assign(v.data, patch);
+      pages.push(page);
     },
     wx: {
       getStorageSync: (k: string) => structuredClone(storage.get(k)),
@@ -73,6 +83,18 @@ function harness() {
         storage.delete(k);
       },
       getAccountInfoSync: () => ({ miniProgram: { appId: "synthetic" } }),
+      getRecorderManager: () => ({
+        onStart: (f: any) => (recorderHandlers.start ??= []).push(f),
+        onStop: (f: any) => (recorderHandlers.stop ??= []).push(f),
+        onError: (f: any) => (recorderHandlers.error ??= []).push(f),
+        onInterruptionBegin: (f: any) =>
+          (recorderHandlers.interrupt ??= []).push(f),
+        start: () => recorderHandlers.start?.forEach((f) => f()),
+        stop: () =>
+          recorderHandlers.stop?.forEach((f) =>
+            f({ tempFilePath: "native-audio-temp", duration: 1080 }),
+          ),
+      }),
       request: (o: any) => requests.push(o),
       uploadFile: (o: any) => {
         uploads.push(o);
@@ -109,6 +131,7 @@ function harness() {
   });
   return {
     page,
+    interviewPage: pages[0],
     storage,
     requests,
     uploads,
@@ -631,6 +654,238 @@ function reviewMaterial() {
     ],
   };
 }
+async function showInterview(h: ReturnType<typeof harness>) {
+  const p = h.interviewPage;
+  p.onLoad({ projectId: project });
+  const showing = p.onShow();
+  respond(h.requests.shift(), {
+    canRecord: true,
+    interviews: [
+      {
+        id: interview,
+        projectId: project,
+        actualQuestion: {
+          snapshot: { text: "私人采访问题", intent: "具体场景" },
+        },
+        clips: [
+          { id: "77777777-7777-4777-8777-777777777777", state: "sealed" },
+        ],
+      },
+    ],
+    plan: {
+      revision: 1,
+      defaultQuestion: { text: "私人采访问题" },
+      starters: [],
+    },
+  });
+  await showing;
+  await tick();
+  const status = h.requests.shift();
+  assert.match(status.url, /\/tasks\/status$/);
+  return status;
+}
+async function leaveInterviewWithStatusPending(h: ReturnType<typeof harness>) {
+  const status = await showInterview(h),
+    p = h.interviewPage;
+  p.photos();
+  p.onHide();
+  return status;
+}
+test("the active photo page clears private material and controlled previews when the hidden interview's current session expires", async (t) => {
+  const h = harness(),
+    snapshot = reviewMaterial(),
+    status = await leaveInterviewWithStatusPending(h);
+  t.after(() => {
+    h.page.onUnload();
+    h.interviewPage.onUnload();
+  });
+  await ready(h, snapshot);
+  await choose(h);
+  const originals = [...h.saved];
+  h.page.caption({
+    currentTarget: { dataset: { id: snapshot.entries[0].photoId } },
+    detail: { value: "跨页私人草稿" },
+  });
+  const previewing = h.page.preview(event(snapshot.entries[0].photoId));
+  await tick();
+  h.downloads
+    .shift()
+    .success({ statusCode: 200, tempFilePath: "cross-page-private-preview" });
+  await previewing;
+  respond(status, undefined, 401);
+  await tick();
+  assert.equal(h.storage.has(`timenook.session.v1:${base}`), false);
+  assert.equal(h.page.data.snapshot, null);
+  assert.equal(Object.keys(h.page.data.captions).length, 0);
+  assert.equal(h.page.data.previewPath, "");
+  assert.equal(h.page.data.photos.length, 0);
+  assert.ok(h.removed.includes("cross-page-private-preview"));
+  assert.ok(originals.every((path) => !h.removed.includes(path)));
+  assert.ok(
+    [...h.storage.values()].some(
+      (value) =>
+        Array.isArray(value) &&
+        value.some((photo) => originals.includes(photo.path)),
+    ),
+  );
+});
+test("the active interview clears private task and draft state when a hidden photo download expires its session", async (t) => {
+  const h = harness(),
+    snapshot = reviewMaterial(),
+    status = await leaveInterviewWithStatusPending(h);
+  t.after(() => {
+    h.page.onUnload();
+    h.interviewPage.onUnload();
+  });
+  respond(status, [], 201);
+  await ready(h, snapshot);
+  await choose(h);
+  const previewing = h.page.preview(event(snapshot.entries[0].photoId));
+  await tick();
+  const held = h.downloads.shift();
+  h.page.onHide();
+  const currentStatus = await showInterview(h);
+  respond(
+    currentStatus,
+    [
+      {
+        id: "88888888-8888-4888-8888-888888888888",
+        projectId: project,
+        state: "failed",
+        retryable: true,
+      },
+    ],
+    201,
+  );
+  await tick();
+  const starting = h.interviewPage.record();
+  respond(h.requests.shift(), { allowed: true }, 201);
+  await starting;
+  await h.interviewPage.record();
+  await tick();
+  h.interviewPage.customText({ detail: { value: "采访私人草稿" } });
+  const originals = [...h.saved];
+  assert.equal(originals.length, 3, "two photos and one pending audio file");
+  held.success({ statusCode: 401, tempFilePath: "hidden-photo-denied" });
+  await previewing;
+  await tick();
+  assert.equal(h.interviewPage.data.interview, null);
+  assert.equal(h.interviewPage.data.question, "");
+  assert.equal(h.interviewPage.data.customText, "");
+  assert.equal(h.interviewPage.data.taskRows.length, 0);
+  assert.equal(h.interviewPage.data.canRecord, false);
+  assert.equal(h.interviewPage.data.busy, false);
+  assert.ok(h.removed.includes("hidden-photo-denied"));
+  assert.ok(originals.every((path) => !h.removed.includes(path)));
+});
+test("an old interview's late 401 preserves the new account's active photo draft and private preview", async (t) => {
+  const h = harness(),
+    snapshot = reviewMaterial(),
+    status = await leaveInterviewWithStatusPending(h);
+  t.after(() => {
+    h.page.onUnload();
+    h.interviewPage.onUnload();
+  });
+  const other = {
+    ...login,
+    user: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+    session: {
+      ...login.session,
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      token: "b".repeat(43),
+    },
+  };
+  h.storage.set(`timenook.session.v1:${base}`, other);
+  const nextProject = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  h.page.onLoad({ projectId: nextProject, interviewId: interview });
+  const showing = h.page.onShow();
+  await tick();
+  respond(h.requests.shift(), {
+    photos: [],
+    snapshot: { ...snapshot, id: "new-account-material" },
+  });
+  await showing;
+  h.page.caption({
+    currentTarget: { dataset: { id: snapshot.entries[0].photoId } },
+    detail: { value: "新账号私人草稿" },
+  });
+  const previewing = h.page.preview(event(snapshot.entries[0].photoId));
+  await tick();
+  h.downloads
+    .shift()
+    .success({ statusCode: 200, tempFilePath: "new-account-private-preview" });
+  await previewing;
+  respond(status, undefined, 401);
+  await tick();
+  assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), other);
+  assert.equal(h.page.data.snapshot.id, "new-account-material");
+  assert.equal(
+    h.page.data.captions[snapshot.entries[0].photoId],
+    "新账号私人草稿",
+  );
+  assert.equal(h.page.data.previewPath, "new-account-private-preview");
+  assert.equal(h.removed.includes("new-account-private-preview"), false);
+});
+test("repeated photo show-hide detaches hidden views and cleans their late download after cross-page invalidation", async (t) => {
+  const h = harness(),
+    snapshot = reviewMaterial(),
+    status = await leaveInterviewWithStatusPending(h);
+  t.after(() => {
+    h.page.onUnload();
+    h.interviewPage.onUnload();
+  });
+  for (let i = 0; i < 3; i++) {
+    await ready(h, snapshot);
+    h.page.caption({
+      currentTarget: { dataset: { id: snapshot.entries[0].photoId } },
+      detail: { value: "保留草稿" },
+    });
+    await h.page.onShow();
+    h.page.onHide();
+  }
+  await ready(h, snapshot);
+  const previewing = h.page.preview(event(snapshot.entries[0].photoId));
+  await tick();
+  const download = h.downloads.shift();
+  h.page.onHide();
+  const currentStatus = await showInterview(h);
+  respond(currentStatus, [], 201);
+  await tick();
+  respond(status, undefined, 401);
+  await tick();
+  assert.equal(h.page.data.status, "", "the hidden photo view is unsubscribed");
+  assert.equal(h.interviewPage.data.interview, null);
+  download.success({ statusCode: 200, tempFilePath: "late-hidden-preview" });
+  await previewing;
+  await tick();
+  assert.ok(h.removed.includes("late-hidden-preview"));
+  assert.equal(h.page.data.previewPath, "");
+  assert.equal(h.page.data.status, "");
+});
+test("an active photo's in-flight download is discarded and cleaned after another page invalidates the shared session", async (t) => {
+  const h = harness(),
+    snapshot = reviewMaterial(),
+    status = await leaveInterviewWithStatusPending(h);
+  t.after(() => {
+    h.page.onUnload();
+    h.interviewPage.onUnload();
+  });
+  await ready(h, snapshot);
+  await choose(h);
+  const originals = [...h.saved],
+    previewing = h.page.preview(event(snapshot.entries[0].photoId));
+  await tick();
+  const download = h.downloads.shift();
+  respond(status, undefined, 401);
+  await tick();
+  assert.equal(h.page.data.snapshot, null);
+  download.success({ statusCode: 200, tempFilePath: "late-active-preview" });
+  await previewing;
+  await tick();
+  assert.ok(h.removed.includes("late-active-preview"));
+  assert.equal(h.page.data.previewPath, "");
+  assert.ok(originals.every((path) => !h.removed.includes(path)));
+});
 test("a current photo-download 401 signs out and clears the private page while retaining pending originals", async () => {
   const h = harness(),
     snapshot = reviewMaterial();

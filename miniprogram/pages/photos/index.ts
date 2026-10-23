@@ -33,6 +33,7 @@ Page({
   ownerContext: "",
   editingRevision: null as number | null,
   owner: null as PhotoFiles | null,
+  stopSessionWatch: undefined as (() => void) | undefined,
   onLoad(q: Record<string, string>) {
     this.projectId = q.projectId ?? "";
     this.interviewId = q.interviewId ?? "";
@@ -48,6 +49,19 @@ Page({
     );
   },
   async onShow() {
+    this.stopSessionWatch?.();
+    this.stopSessionWatch = undefined;
+    const ownerContext = sessionClient.context();
+    if (ownerContext)
+      this.stopSessionWatch = sessionClient.onInvalidated((context) => {
+        if (!ownerContext || context !== ownerContext) return;
+        this.onHide();
+        this.setData({
+          status: sessionClient.sessionCleanupPending()
+            ? "登录已失效；设备会话缓存清理失败，请重试登录"
+            : "照片权限已变化，请重新查询",
+        });
+      });
     if (this.data.hasDraft && this.ownerContext === sessionClient.context()) {
       this.setData({
         status: "仍有未保存的照片说明；请先保存，或明确放弃草稿再重新查询",
@@ -104,6 +118,8 @@ Page({
     }
   },
   onHide() {
+    this.stopSessionWatch?.();
+    this.stopSessionWatch = undefined;
     this.editingRevision = null;
     ++this.previewGeneration;
     void clearPhotoPreviews().catch(() => {});
