@@ -495,14 +495,17 @@ test("submitting a story freezes every sealed clip including the unfinished fina
 async function wakeStory(
   runtime: Awaited<ReturnType<typeof startProductionWorker>>,
   id: string,
+  otherId?: string,
 ) {
+  const pending = new Set([id, ...(otherId ? [otherId] : [])]);
   const done = new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
       runtime.worker.off("completed", onDone);
       reject(new Error("story worker timeout"));
     }, 5000);
     function onDone(job: { id?: string }) {
-      if (job.id === id) {
+      if (job.id) pending.delete(job.id);
+      if (!pending.size) {
         clearTimeout(timer);
         runtime.worker.off("completed", onDone);
         resolve();
@@ -938,7 +941,8 @@ test("an unknown DeepSeek result becomes manual takeover without query or automa
   }
 });
 test("a response lost at PostgreSQL commit recovers to manual takeover with its original attempt rather than reissuing DeepSeek", async () => {
-  const p = await preparedStory(),
+  const other = await preparedStory(),
+    p = await preparedStory(),
     before = textRequests.length;
   await db.$executeRawUnsafe(
     `CREATE FUNCTION reject_story_commit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.generation_task_id='${p.story.task.id}'::uuid THEN RAISE EXCEPTION 'synthetic commit fault'; END IF; RETURN NEW; END $$`,
@@ -965,13 +969,21 @@ test("a response lost at PostgreSQL commit recovers to manual takeover with its 
     ),
     200,
   );
+  const otherFrozen = data(
+    await request(
+      "GET",
+      `/v1/projects/${other.projectId}/stories/${other.story.id}`,
+      other.narrator.token,
+    ),
+    200,
+  );
   await db.productionTask.update({
     where: { id: p.story.task.id },
     data: { leaseUntil: new Date(0), nextRunAt: new Date(0) },
   }); // Expire the exact crashed owner lease.
   const runtime = await startProductionWorker(app);
   try {
-    await wakeStory(runtime, p.story.task.id);
+    await wakeStory(runtime, p.story.task.id, other.story.task.id);
   } finally {
     await runtime.close();
   }
@@ -991,7 +1003,37 @@ test("a response lost at PostgreSQL commit recovers to manual takeover with its 
     current.task.attempts[0].requestId,
     lost.task.attempts[0].requestId,
   );
-  assert.equal(textRequests.length, before + 1);
+  const otherCurrent = data(
+    await request(
+      "GET",
+      `/v1/projects/${other.projectId}/stories/${other.story.id}`,
+      other.narrator.token,
+    ),
+    200,
+  );
+  assert.equal(otherCurrent.task.state, "succeeded");
+  const targetRefs = lost.task.sources.map(
+      (source: any) =>
+        `transcript:${source.clipId}:${source.transcript.sha256}`,
+    ),
+    otherRefs = otherFrozen.task.sources.map(
+      (source: any) =>
+        `transcript:${source.clipId}:${source.transcript.sha256}`,
+    );
+  assert.equal(targetRefs.length, 2);
+  assert.equal(otherRefs.length, 2);
+  assert.equal(new Set([...targetRefs, ...otherRefs]).size, 4);
+  // recoverDue also runs other projects; each frozen source set must be submitted exactly once.
+  const calls = textRequests.slice(before),
+    callsFor = (refs: string[]) =>
+      calls.filter(
+        (payload) =>
+          Array.isArray(payload.sourceRefs) &&
+          payload.sourceRefs.length === refs.length &&
+          refs.every((ref) => payload.sourceRefs.includes(ref)),
+      ).length;
+  assert.equal(callsFor(targetRefs), 1);
+  assert.equal(callsFor(otherRefs), 1);
   assert.equal(current.usage.organizations, 1);
   assert.equal(current.task.queuedAt, p.story.task.queuedAt);
 });
