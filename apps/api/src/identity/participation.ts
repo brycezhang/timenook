@@ -33,9 +33,10 @@ import {
   IsIn,
   IsBoolean,
   IsUUID,
+  IsOptional,
   ValidateIf,
 } from "class-validator";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient, type AssistedSession } from "@prisma/client";
 import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
 import { IdentityAccess } from "./identity-access";
@@ -99,6 +100,15 @@ class ParticipationNoticeDto {
   evidenceRef!: string;
 }
 class AssistedSessionDto extends ParticipationNoticeDto {
+  @ApiProperty({
+    format: "uuid",
+    required: false,
+    description:
+      "Latest observed session for this purpose; omit only when none exists",
+  })
+  @IsOptional()
+  @IsUUID()
+  expectedSessionId?: string;
   @ApiProperty({ enum: ASSISTED_PURPOSES })
   @IsIn(ASSISTED_PURPOSES)
   purpose!: (typeof ASSISTED_PURPOSES)[number];
@@ -455,13 +465,31 @@ export class Participation implements OnModuleDestroy {
         createdAt: true,
       },
     });
+    const decisions = new Map(
+      records.map((record) => [record.purpose, record]),
+    );
     const granted = Object.fromEntries(
-      records.map((record) => [record.purpose, record.granted]),
+      [...decisions].map(([purpose, record]) => [purpose, record.granted]),
     );
     const enabled =
       this.config.environment === "test" &&
       this.config.participation?.mode === "synthetic-d08";
-    const collection = enabled && granted.collection === true;
+    const effective: Partial<Record<ConsentPurpose, boolean>> = {};
+    // Sequence orders the actual purpose decisions. Assisted choices produce
+    // permission only while their latest matching session remains valid.
+    for (const [key, record] of decisions) {
+      const purpose = key as ConsentPurpose;
+      if (record.method === "assisted") {
+        const session = await this.latestAssisted(tx, p.id, purpose);
+        effective[purpose] =
+          record.granted &&
+          this.activeAssisted(session, p, subject) &&
+          session.evidenceRef === record.evidenceRef &&
+          session.operatorUserId === record.operatorUserId;
+      } else
+        effective[purpose] = record.granted && record.method === "self_wechat";
+    }
+    const collection = enabled && effective.collection === true;
     const terms = await this.terms.read(p.id, undefined, tx);
     return {
       projectId: p.id,
@@ -485,10 +513,11 @@ export class Participation implements OnModuleDestroy {
         : [],
       careAvailable: true,
       canCollect: narrator && collection && terms.canRecord,
-      canProcessAi: narrator && collection && granted.ai === true,
+      canProcessAi: narrator && collection && effective.ai === true,
       canRead:
         collection &&
-        (narrator || (p.order.buyerId === userId && granted.sharing === true)),
+        (narrator ||
+          (p.order.buyerId === userId && effective.sharing === true)),
     };
   }
   async consent(
@@ -938,6 +967,33 @@ export class Participation implements OnModuleDestroy {
       };
     });
   }
+  private latestAssisted(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    purpose: AssistedPurpose,
+  ) {
+    return tx.assistedSession.findFirst({
+      where: { projectId, purpose },
+      orderBy: { sequence: "desc" },
+    });
+  }
+  private activeAssisted(
+    row: AssistedSession | null,
+    p: Awaited<ReturnType<Participation["project"]>>,
+    subject: Awaited<ReturnType<Participation["subject"]>>,
+  ): row is AssistedSession {
+    return (
+      !!row &&
+      row.projectId === p.id &&
+      row.subjectId === subject.id &&
+      row.operatorUserId === p.order.buyerId &&
+      row.granted &&
+      !!row.evidenceRef &&
+      row.bindingVersion === subject.bindingVersion &&
+      row.accessEpoch === p.accessEpoch &&
+      row.expiresAt.getTime() > Date.now()
+    );
+  }
   // Public transactional boundary for authenticated content owners. They must
   // pass their real logged-in operator and keep this transaction through the
   // protected write. There is no preflight HTTP grant for content operations.
@@ -953,21 +1009,11 @@ export class Participation implements OnModuleDestroy {
     this.policy();
     const p = await this.project(tx, command.projectId, true);
     const subject = await this.subject(tx, p.id);
-    const row = await tx.assistedSession.findUnique({
-      where: { id: command.sessionId },
-    });
+    const row = await this.latestAssisted(tx, p.id, command.purpose);
     if (
-      !row ||
-      p.order.buyerId !== command.operatorUserId ||
-      row.operatorUserId !== command.operatorUserId ||
-      row.projectId !== p.id ||
-      row.subjectId !== subject.id ||
-      !row.granted ||
-      !row.evidenceRef ||
-      row.purpose !== command.purpose ||
-      row.bindingVersion !== subject.bindingVersion ||
-      row.accessEpoch !== p.accessEpoch ||
-      row.expiresAt.getTime() <= Date.now()
+      !this.activeAssisted(row, p, subject) ||
+      row.id !== command.sessionId ||
+      row.operatorUserId !== command.operatorUserId
     )
       throw new ForbiddenException();
     if (
@@ -1093,6 +1139,7 @@ export class Participation implements OnModuleDestroy {
     },
     bindingVersion: number,
     accessEpoch: number,
+    latestSessionId: string,
   ): AssistedSessionView {
     return {
       id: row.id,
@@ -1109,7 +1156,8 @@ export class Participation implements OnModuleDestroy {
       expiresAt: row.expiresAt.toISOString(),
       state: !row.granted
         ? "rejected"
-        : row.bindingVersion !== bindingVersion ||
+        : row.id !== latestSessionId ||
+            row.bindingVersion !== bindingVersion ||
             row.accessEpoch !== accessEpoch
           ? "revoked"
           : row.expiresAt.getTime() <= Date.now()
@@ -1129,17 +1177,26 @@ export class Participation implements OnModuleDestroy {
       const p = await this.project(tx, id, true);
       if (p.order.buyerId !== user.id) throw new ForbiddenException();
       const subject = await this.subject(tx, id);
-      if (!body)
+      if (!body) {
+        const sessions = await tx.assistedSession.findMany({
+          where: { projectId: id, operatorUserId: user.id },
+          orderBy: { sequence: "desc" },
+        });
+        const latest = new Map<string, string>();
+        for (const row of sessions)
+          if (!latest.has(row.purpose)) latest.set(row.purpose, row.id);
         return {
-          sessions: (
-            await tx.assistedSession.findMany({
-              where: { projectId: id, operatorUserId: user.id },
-              orderBy: { createdAt: "desc" },
-            })
-          ).map((row) =>
-            this.assistedView(row, subject.bindingVersion, p.accessEpoch),
+          sessions: sessions.map((row) =>
+            this.assistedView(
+              row,
+              subject.bindingVersion,
+              p.accessEpoch,
+              latest.get(row.purpose)!,
+            ),
           ),
         };
+      }
+      const latest = await this.latestAssisted(tx, id, body.purpose);
       const hash = digest(JSON.stringify(body));
       const prior = await tx.assistedSession.findUnique({
         where: {
@@ -1152,7 +1209,12 @@ export class Participation implements OnModuleDestroy {
       });
       if (prior) {
         if (prior.requestHash !== hash) throw new ConflictException();
-        return this.assistedView(prior, subject.bindingVersion, p.accessEpoch);
+        return this.assistedView(
+          prior,
+          subject.bindingVersion,
+          p.accessEpoch,
+          latest!.id,
+        );
       }
       if (
         (await tx.assistedSession.findFirst({
@@ -1165,13 +1227,10 @@ export class Participation implements OnModuleDestroy {
         throw new ConflictException();
       if (
         subject.bindingVersion !== body.expectedBindingVersion ||
-        p.accessEpoch !== body.expectedAccessEpoch
+        p.accessEpoch !== body.expectedAccessEpoch ||
+        (latest?.id ?? null) !== (body.expectedSessionId ?? null)
       )
         throw new ConflictException();
-      const updated = await tx.project.update({
-        where: { id },
-        data: { accessEpoch: { increment: 1 } },
-      });
       const row = await tx.assistedSession.create({
         data: {
           id: randomUUID(),
@@ -1183,7 +1242,7 @@ export class Participation implements OnModuleDestroy {
           noticeVersion: body.noticeVersion,
           evidenceRef: body.evidenceRef,
           bindingVersion: subject.bindingVersion,
-          accessEpoch: updated.accessEpoch,
+          accessEpoch: p.accessEpoch,
           idempotencyKey: key!,
           requestHash: hash,
           expiresAt: new Date(Date.now() + 15 * 60000),
@@ -1196,7 +1255,7 @@ export class Participation implements OnModuleDestroy {
             projectId: id,
             subjectId: subject.id,
             bindingVersion: subject.bindingVersion,
-            accessEpoch: updated.accessEpoch,
+            accessEpoch: p.accessEpoch,
             operatorUserId: user.id,
             granteeUserId: body.purpose === "sharing" ? user.id : null,
             purpose: body.purpose,
@@ -1211,7 +1270,8 @@ export class Participation implements OnModuleDestroy {
       return this.assistedView(
         row,
         subject.bindingVersion,
-        updated.accessEpoch,
+        p.accessEpoch,
+        row.id,
       );
     });
   }

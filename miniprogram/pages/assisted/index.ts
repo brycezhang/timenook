@@ -173,8 +173,12 @@ Page({
       !CONSENT_PURPOSES.includes(purpose)
     )
       return;
+    const expectedSessionId = this.data.sessions.find(
+      (row) => row.purpose === purpose,
+    )?.id;
     const key = this.key(
       JSON.stringify({
+        expectedSessionId,
         purpose,
         granted,
         epoch: current.accessEpoch,
@@ -182,7 +186,13 @@ Page({
       }),
     );
     await this.perform(async (generation, context) => {
-      await participationClient.assisted(current, purpose, granted, key);
+      await participationClient.assisted(
+        current,
+        purpose,
+        granted,
+        key,
+        expectedSessionId,
+      );
       if (!this.current(generation, context)) return;
       this.intent = null;
       await this.load(generation, context);

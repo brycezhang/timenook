@@ -125,6 +125,7 @@ export const participationClient = {
     purpose: AssistedPurpose,
     granted: boolean,
     key: string,
+    expectedSessionId?: string,
   ) {
     return sessionClient.request<AssistedSessionView>(
       `/projects/${current.projectId}/assisted-sessions`,
@@ -135,6 +136,7 @@ export const participationClient = {
           granted,
           noticeVersion: current.noticeVersion,
           evidenceRef: `synthetic:当次同机本人选择:${key}`,
+          ...(expectedSessionId ? { expectedSessionId } : {}),
           expectedBindingVersion: current.bindingVersion,
           expectedAccessEpoch: current.accessEpoch,
         },

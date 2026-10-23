@@ -676,6 +676,18 @@ test("assisted subject choices and Care manual intake preserve real actors and p
   await expect(
     buyer.getByText(/当次有效期至：.*设备时间 UTC\+08:00/).first(),
   ).toBeVisible();
+  const renewalResponse = buyer.waitForResponse(
+    (r) =>
+      r.url().endsWith("/assisted-sessions") && r.request().method() === "POST",
+  );
+  await collection
+    .getByRole("button", { name: "本人同意此用途，记录当次证据", exact: true })
+    .click();
+  const renewalHttp = await renewalResponse;
+  expect(renewalHttp.status(), await renewalHttp.text()).toBe(201);
+  const renewalBody = renewalHttp.request().postDataJSON();
+  expect(renewalBody.expectedSessionId).toBeTruthy();
+  await expect(buyer.getByText("当次许可有效", { exact: true })).toBeVisible();
   await buyer
     .getByRole("button", { name: "记录本人完整资料导出申请", exact: true })
     .click();

@@ -465,6 +465,7 @@ model BindingChange {
 
 model AssistedSession {
  id String @id @db.Uuid
+ sequence Int @unique @default(autoincrement())
  projectId String @map("project_id") @db.Uuid
  subjectId String @map("subject_id") @db.Uuid
  operatorUserId String @map("operator_user_id") @db.Uuid

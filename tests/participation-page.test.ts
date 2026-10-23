@@ -727,3 +727,43 @@ test("assisted rights submission reads the tracked case again and page departure
   assert.equal(page.data.busy, false);
   assert.equal(requests.length, 0);
 });
+
+test("assisted renewal sends the latest observed purpose session as its compare-and-swap precondition", async () => {
+  const { page, requests } = harness("assisted");
+  page.onLoad({ projectId });
+  const showing = page.onShow();
+  const prior = {
+    id: "55555555-5555-4555-8555-555555555555",
+    projectId,
+    subjectId: current.subjectId,
+    operatorUserId: login.user.id,
+    purpose: "collection",
+    granted: true,
+    noticeVersion: "synthetic-d08-v1",
+    evidenceRef: "synthetic:previous",
+    bindingVersion: 0,
+    accessEpoch: 0,
+    createdAt: "2026-01-01T00:00:00Z",
+    expiresAt: "2099-01-01T00:00:00Z",
+    state: "active",
+  };
+  respond(requests.shift()!, {
+    ...current,
+    role: "initiator",
+    bindingVersion: 0,
+    accessEpoch: 0,
+  });
+  await tick();
+  respond(requests.shift()!, { sessions: [prior] });
+  await tick();
+  respond(requests.shift()!, { requests: [] });
+  await showing;
+  const choosing = page.chooseAssisted({
+    currentTarget: { dataset: { purpose: "collection", granted: "true" } },
+  });
+  const command = requests.shift()!;
+  assert.equal((command.data as any).expectedSessionId, prior.id);
+  respond(command, {}, 403);
+  await choosing;
+  assert.equal(page.data.busy, false);
+});
