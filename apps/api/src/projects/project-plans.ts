@@ -267,6 +267,11 @@ export class ProjectPlans {
       capturedBy: string;
       questionKey?: string;
       starterKind?: "photo" | "free-narration";
+      followupSource?: {
+        generationTaskId: string;
+        sourceActualQuestionId: string;
+        original: Record<string, unknown>;
+      };
       selfWritten?: {
         text: string;
         intent: string;
@@ -289,6 +294,8 @@ export class ProjectPlans {
         prior.capturedBy !== command.capturedBy ||
         prior.questionKey !== (command.questionKey ?? null) ||
         prior.starterKind !== (command.starterKind ?? null) ||
+        (prior.source as Prisma.JsonObject | null)?.generationTaskId !==
+          command.followupSource?.generationTaskId ||
         JSON.stringify(
           normalizeWritten(
             prior.source
@@ -365,7 +372,8 @@ export class ProjectPlans {
             ? {
                 source: JSON.parse(
                   JSON.stringify({
-                    kind: "self-written",
+                    kind: command.followupSource ? "follow-up" : "self-written",
+                    ...command.followupSource,
                     input: custom,
                     ...(original
                       ? {

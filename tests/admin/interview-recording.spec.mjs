@@ -21,7 +21,9 @@ let api,
   versionId,
   latestPage;
 const errors = [];
-const base = "http://127.0.0.1:5176";
+const apiPort = Number(process.env.TIMENOOK_RECORDING_API_PORT ?? 3424);
+const previewPort = Number(process.env.TIMENOOK_RECORDING_PREVIEW_PORT ?? 5176);
+const base = `http://127.0.0.1:${previewPort}`;
 const data = (r, status = 201) => {
   expect(r.statusCode, r.body).toBe(status);
   expect(r.json().error).toBeUndefined();
@@ -74,7 +76,7 @@ test.beforeAll(async () => {
     {
       environment: "test",
       host: "127.0.0.1",
-      port: 3424,
+      port: apiPort,
       databaseUrl,
       redisUrl: process.env.REDIS_URL,
       redisKeyPrefix: schema,
@@ -174,7 +176,7 @@ test.beforeAll(async () => {
       }),
     );
   }
-  await api.listen(3424, "127.0.0.1");
+  await api.listen(apiPort, "127.0.0.1");
   preview = spawn(
     process.execPath,
     [
@@ -182,7 +184,7 @@ test.beforeAll(async () => {
       "--host",
       "127.0.0.1",
       "--port",
-      "5176",
+      String(previewPort),
       "--strictPort",
     ],
     {
@@ -190,7 +192,7 @@ test.beforeAll(async () => {
       env: {
         ...process.env,
         TIMENOOK_API_BASE_URL: `${base}/timenook/v1`,
-        TIMENOOK_PREVIEW_API_TARGET: "http://127.0.0.1:3424",
+        TIMENOOK_PREVIEW_API_TARGET: `http://127.0.0.1:${apiPort}`,
       },
       stdio: "ignore",
     },
@@ -366,6 +368,86 @@ test("bound project home reaches the actual recording page, seals a file and ret
   test.info().annotations.push({
     type: "engineering-path-ms",
     description: String(Math.round(elapsed)),
+  });
+  expect(errors).toEqual([]);
+  await page.context().close();
+});
+
+test("actual Page and HTTP retain an older answer source after another question is displayed in the same interview", async ({
+  browser,
+}) => {
+  const started = data(
+    await request("POST", `/v1/projects/${projectId}/interviews`, narrator, {
+      clientInterviewId: randomUUID(),
+      expectedPlanRevision: 1,
+      selfWritten: {
+        text: "您想说说家门前的小路吗？",
+        intent: "本人选择的起点",
+      },
+    }),
+  );
+  const page = await openPage(browser, narrator);
+  await page.goto(
+    `${base}/#/interview?projectId=${projectId}&interviewId=${started.id}`,
+  );
+  await page.getByRole("button", { name: "开始说", exact: true }).click();
+  await page
+    .getByRole("button", { name: "说完了，停止录音", exact: true })
+    .click();
+  await expect(
+    page.getByText("本机文件已保存，尚待封存", { exact: true }),
+  ).toBeVisible();
+  const laterText = "那条路上还有什么让您记得清楚？";
+  const displayed = data(
+    await request(
+      "POST",
+      `/v1/projects/${projectId}/interviews/${started.id}/actual-question`,
+      narrator,
+      {
+        clientQuestionId: randomUUID(),
+        expectedVersion: 1,
+        expectedActualQuestionId: started.actualQuestion.id,
+        expectedPlanRevision: 1,
+        selfWritten: { text: laterText, intent: "本人改写的补充问题" },
+      },
+    ),
+  );
+  await page
+    .getByRole("button", { name: "重新查询与恢复", exact: true })
+    .click();
+  await expect(page.getByText(laterText, { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "查询并上传原文件", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "查询封存结果", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "开始说", exact: true }).click();
+  await page
+    .getByRole("button", { name: "说完了，停止录音", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "查询并上传原文件", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "查询封存结果", exact: true }),
+  ).toHaveCount(2);
+  const restored = data(
+    await request(
+      "GET",
+      `/v1/projects/${projectId}/interviews/${started.id}`,
+      narrator,
+    ),
+    200,
+  );
+  expect(restored.actualQuestion.id).toBe(started.actualQuestion.id);
+  expect(restored.currentQuestion.id).toBe(displayed.currentQuestion.id);
+  expect(restored.clips.map((clip) => clip.actualQuestionId).sort()).toEqual(
+    [started.actualQuestion.id, displayed.currentQuestion.id].sort(),
+  );
+  expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(2);
+  await page.screenshot({
+    path: test.info().outputPath("actual-questions-390.png"),
   });
   expect(errors).toEqual([]);
   await page.context().close();

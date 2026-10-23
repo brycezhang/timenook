@@ -56,14 +56,25 @@ export const interviewRecordingClient = {
       },
     );
   },
-  authorizeStart(projectId: string, id: string, assistedSessionId?: string) {
-    return sessionClient.request<{ allowed: boolean }>(
-      `/projects/${projectId}/interviews/${id}/recording-start`,
-      {
-        key: paymentKey(),
-        data: assistedSessionId ? { assistedSessionId } : {},
+  authorizeStart(
+    projectId: string,
+    id: string,
+    actualQuestionId: string,
+    expectedQuestionVersion: number,
+    assistedSessionId?: string,
+  ) {
+    return sessionClient.request<{
+      allowed: boolean;
+      actualQuestionId: string;
+      questionVersion: number;
+    }>(`/projects/${projectId}/interviews/${id}/recording-start`, {
+      key: paymentKey(),
+      data: {
+        actualQuestionId,
+        expectedQuestionVersion,
+        ...(assistedSessionId ? { assistedSessionId } : {}),
       },
-    );
+    });
   },
   context(projectId: string, assistedSessionId?: string) {
     return sessionClient.request<RecordingContext>(
@@ -131,9 +142,36 @@ export class InterviewRecorder extends LocalAudioRecorder {
     if (!this.canRecord())
       throw new Error("当前不能新录音，请保留本机文件并联系服务");
   }
-  start() {
+  start(actualQuestionId?: string) {
     if (this.uploading) return;
-    super.start();
+    if (!actualQuestionId || !/^[a-f0-9-]{36}$/.test(actualQuestionId))
+      throw new Error("实际问题未确认，请重新查询");
+    super.start(actualQuestionId);
+  }
+  async restore() {
+    await super.restore();
+    // T14 manifests had one question per interview. Never use its later current question.
+    const original = this.interview.actualQuestion;
+    const knownOrigin =
+      original?.projectId === this.projectId &&
+      original.answerRef === this.interview.id &&
+      /^[a-f0-9-]{36}$/.test(original.id)
+        ? original.id
+        : undefined;
+    for (const clip of [...this.current.clips]) {
+      if (clip.actualQuestionId) continue;
+      const saved = clip.serverId
+        ? this.interview.clips.find(
+            (row) =>
+              row.id === clip.serverId &&
+              row.clientClipId === clip.clientClipId,
+          )
+        : undefined;
+      const actualQuestionId =
+        saved?.actualQuestionId ?? (!clip.serverId ? knownOrigin : undefined);
+      if (actualQuestionId) this.commitClip({ ...clip, actualQuestionId });
+    }
+    this.update(this.current.stage, this.current.message);
   }
   private currentContext() {
     if (this.sessionContext !== sessionClient.context())
@@ -146,6 +184,15 @@ export class InterviewRecorder extends LocalAudioRecorder {
       (c) => c.clientClipId === clientClipId,
     );
     if (!local) throw new Error("没有已保存的片段");
+    if (
+      !local.serverId &&
+      (!local.actualQuestionId ||
+        !/^[a-f0-9-]{36}$/.test(local.actualQuestionId))
+    ) {
+      const message = "原录音的问题归属未确认；本机文件仍保留，请重新查询";
+      this.update("upload-error", message);
+      throw new Error(message);
+    }
     this.uploading = true;
     let sealing = false;
     const base = `/projects/${this.projectId}/interviews/${this.interview.id}/clips`,
@@ -164,6 +211,7 @@ export class InterviewRecorder extends LocalAudioRecorder {
             data: {
               ...body,
               clientClipId: local.clientClipId,
+              actualQuestionId: local.actualQuestionId,
               bytes: local.bytes,
               sha256: local.sha256,
             },
@@ -173,10 +221,15 @@ export class InterviewRecorder extends LocalAudioRecorder {
         remote.clientClipId !== local.clientClipId ||
         remote.projectId !== this.projectId ||
         remote.interviewId !== this.interview.id ||
+        (local.serverId && remote.id !== local.serverId) ||
+        !/^[a-f0-9-]{36}$/.test(remote.actualQuestionId) ||
+        (local.actualQuestionId &&
+          remote.actualQuestionId !== local.actualQuestionId) ||
         remote.sha256 !== local.sha256 ||
         remote.bytes !== local.bytes
       )
         throw new Error("上传结果不匹配");
+      local.actualQuestionId ??= remote.actualQuestionId;
       local.serverId = remote.id;
       this.commitClip(local);
       let result = remote;
@@ -200,6 +253,7 @@ export class InterviewRecorder extends LocalAudioRecorder {
       }
       if (
         result.state !== "sealed" ||
+        result.actualQuestionId !== local.actualQuestionId ||
         result.sha256 !== local.sha256 ||
         !result.asset
       )

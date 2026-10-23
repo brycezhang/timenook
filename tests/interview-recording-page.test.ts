@@ -181,7 +181,18 @@ async function ready(h: ReturnType<typeof harness>) {
 }
 async function start(h: ReturnType<typeof harness>) {
   const starting = h.page.record();
-  respond(h.requests.shift(), { allowed: true }, 201);
+  respond(
+    h.requests.shift(),
+    {
+      allowed: true,
+      actualQuestionId: (
+        h.page.data.interview.currentQuestion ??
+        h.page.data.interview.actualQuestion
+      ).id,
+      questionVersion: h.page.data.interview.questionVersion ?? 1,
+    },
+    201,
+  );
   await starting;
 }
 test("live recording page saves file and manifest before success and restores the same account's pending file after re-login", async () => {
@@ -385,6 +396,293 @@ test("session expiry during recording authorization clears private content even 
   assert.equal(h.page.data.question, "");
   assert.equal(h.page.data.customText, "");
   assert.equal(h.storage.has(`timenook.session.v1:${base}`), false);
+});
+
+test("a pending recording keeps its opening question when the same interview displays a later question", async (t) => {
+  const h = harness({ deferSaves: true });
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  const starting = h.page.record();
+  const permission = h.requests.shift();
+  assert.equal(permission.data.actualQuestionId, question.id);
+  assert.equal(permission.data.expectedQuestionVersion, 1);
+  respond(
+    permission,
+    { allowed: true, actualQuestionId: question.id, questionVersion: 1 },
+    201,
+  );
+  await starting;
+  h.page.onHide();
+  const laterQuestion = {
+    ...question,
+    id: "88888888-8888-4888-8888-888888888888",
+    snapshot: { text: "那时还有什么想留下？", intent: "本人补充" },
+  };
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      { ...interview, currentQuestion: laterQuestion, questionVersion: 2 },
+    ],
+  });
+  await returning;
+  assert.equal(h.page.data.question, laterQuestion.snapshot.text);
+  h.pendingSaves[0].finish();
+  await tick();
+  assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+  const next = h.page.record();
+  const nextPermission = h.requests.shift();
+  assert.equal(nextPermission.data.actualQuestionId, laterQuestion.id);
+  respond(
+    nextPermission,
+    { allowed: true, actualQuestionId: laterQuestion.id, questionVersion: 2 },
+    201,
+  );
+  await next;
+  await h.page.record();
+  h.pendingSaves[1].finish();
+  await tick();
+  assert.deepEqual(
+    Array.from(h.page.data.localClips, (clip: any) => clip.actualQuestionId),
+    [question.id, laterQuestion.id],
+  );
+  assert.equal(h.saves, 2);
+});
+
+test("uploading an older saved answer sends its original question and refuses a response for the current question", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const saved = h.page.data.localClips[0];
+  const laterQuestion = {
+    ...question,
+    id: "88888888-8888-4888-8888-888888888888",
+    snapshot: { text: "后来您还做了什么？", intent: "本人补充" },
+  };
+  h.page.onHide();
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      { ...interview, currentQuestion: laterQuestion, questionVersion: 2 },
+    ],
+  });
+  await returning;
+  const uploading = h.page.upload({
+    currentTarget: { dataset: { id: saved.clientClipId } },
+  });
+  const intent = h.requests.shift();
+  assert.equal(intent.data.actualQuestionId, question.id);
+  respond(
+    intent,
+    {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      projectId,
+      interviewId,
+      actualQuestionId: laterQuestion.id,
+      clientClipId: saved.clientClipId,
+      bytes: saved.bytes,
+      sha256: saved.sha256,
+      state: "pending",
+      storage: "local-simulator",
+      asset: null,
+    },
+    201,
+  );
+  await uploading;
+  assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+  assert.equal(h.page.data.localClips[0].serverId, undefined);
+  assert.equal(h.page.data.localClips[0].sealed, undefined);
+  assert.equal(h.uploads.length, 0);
+  assert.equal(h.files.size, 1);
+});
+
+test("an old local manifest without a question restores only the immutable interview starting question", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const saved = h.page.data.localClips[0];
+  const manifestKey = [...h.storage.keys()].find((key) =>
+    key.endsWith(interviewId),
+  )!;
+  h.storage.set(manifestKey, [{ ...saved, actualQuestionId: undefined }]);
+  h.page.onHide();
+  const laterQuestion = {
+    ...question,
+    id: "88888888-8888-4888-8888-888888888888",
+    snapshot: { text: "后来您还做了什么？", intent: "本人补充" },
+  };
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      { ...interview, currentQuestion: laterQuestion, questionVersion: 2 },
+    ],
+  });
+  await returning;
+  assert.equal(h.page.data.question, laterQuestion.snapshot.text);
+  assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+  const uploading = h.page.upload({
+    currentTarget: { dataset: { id: saved.clientClipId } },
+  });
+  const intent = h.requests.shift();
+  assert.equal(intent.data.actualQuestionId, question.id);
+  respond(intent, {}, 403);
+  await uploading;
+  assert.equal(h.files.size, 1);
+  assert.equal(h.saves, 1);
+});
+
+test("an old pending upload recovers its question from its verified server intent before sealing", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const saved = h.page.data.localClips[0],
+    serverId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const manifestKey = [...h.storage.keys()].find((key) =>
+    key.endsWith(interviewId),
+  )!;
+  h.storage.set(manifestKey, [
+    { ...saved, actualQuestionId: undefined, serverId },
+  ]);
+  h.page.onHide();
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        currentQuestion: {
+          ...question,
+          id: "88888888-8888-4888-8888-888888888888",
+        },
+        questionVersion: 2,
+      },
+    ],
+  });
+  await returning;
+  const uploading = h.page.upload({
+    currentTarget: { dataset: { id: saved.clientClipId } },
+  });
+  const status = h.requests.shift();
+  assert.equal(
+    status?.url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/clips/${serverId}/status`,
+  );
+  const remote = {
+    id: serverId,
+    projectId,
+    interviewId,
+    actualQuestionId: question.id,
+    clientClipId: saved.clientClipId,
+    bytes: saved.bytes,
+    sha256: saved.sha256,
+    state: "pending",
+    storage: "local-simulator",
+    asset: null,
+  };
+  respond(status, remote, 201);
+  await tick();
+  respond(
+    h.requests.shift(),
+    {
+      url: "/v1/recordings/objects",
+      storage: "local-simulator",
+      fields: {},
+      expiresAt: "2099-01-01T00:00:00Z",
+    },
+    201,
+  );
+  await tick();
+  respond(
+    h.requests.shift(),
+    {
+      ...remote,
+      state: "sealed",
+      asset: {
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        sha256: saved.sha256,
+      },
+    },
+    201,
+  );
+  await uploading;
+  assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+  assert.equal(h.page.data.localClips[0].sealed, true);
+  assert.equal(h.saves, 1);
+  assert.equal(h.files.size, 1);
+});
+
+test("an ambiguous old local answer remains on the device without being assigned to the current question", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const saved = h.page.data.localClips[0];
+  const manifestKey = [...h.storage.keys()].find((key) =>
+    key.endsWith(interviewId),
+  )!;
+  h.storage.set(manifestKey, [
+    {
+      ...saved,
+      actualQuestionId: undefined,
+      serverId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    },
+  ]);
+  h.page.onHide();
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        currentQuestion: {
+          ...question,
+          id: "88888888-8888-4888-8888-888888888888",
+        },
+        questionVersion: 2,
+      },
+    ],
+  });
+  await returning;
+  const uploading = h.page.upload({
+    currentTarget: { dataset: { id: saved.clientClipId } },
+  });
+  const status = h.requests.shift();
+  assert.match(status?.url, /\/status$/);
+  respond(
+    status,
+    {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      projectId,
+      interviewId,
+      actualQuestionId: "88888888-8888-4888-8888-888888888888",
+      clientClipId: "different-file",
+      bytes: saved.bytes,
+      sha256: saved.sha256,
+      state: "pending",
+      storage: "local-simulator",
+      asset: null,
+    },
+    201,
+  );
+  await uploading;
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.page.data.localClips[0].actualQuestionId, undefined);
+  assert.equal(h.page.data.localClips[0].sealed, undefined);
+  assert.equal(h.files.size, 1);
+  assert.match(h.page.data.status, /未确认/);
 });
 
 test("returning during a native save retains its pending owner and retries the same saved file before another clip", async (t) => {
@@ -801,5 +1099,168 @@ test("the story entry preserves the selected assisted interview and blocks recor
   );
   assert.equal(h.requests.length, 0);
   assert.equal(h.uploads.length, 0);
+  h.page.onUnload();
+});
+
+test("optional follow-up waits without blocking recording and saves the actual snapshot before displaying a model question", async () => {
+  const h = harness();
+  await ready(h);
+  const taskId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const requesting = h.page.requestFollowup();
+  assert.equal(
+    h.requests[0].url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/follow-up`,
+  );
+  assert.equal(h.requests[0].data.actualQuestionId, question.id);
+  assert.equal(h.requests[0].data.expectedQuestionVersion, 1);
+  respond(
+    h.requests.shift(),
+    {
+      interviewId,
+      actualQuestionId: question.id,
+      questionVersion: 1,
+      planRevision: 1,
+      task: { id: taskId, state: "queued", errorCode: null },
+      result: null,
+      canFinish: true,
+      usage: 1,
+    },
+    202,
+  );
+  await requesting;
+  assert.equal(h.page.data.busy, false);
+  assert.match(h.page.data.followupStatus, /等待|正在/);
+  assert.equal(h.page.data.question, question.snapshot.text);
+  const refreshing = h.page.refreshFollowup();
+  respond(
+    h.requests.shift(),
+    {
+      interviewId,
+      actualQuestionId: question.id,
+      questionVersion: 1,
+      planRevision: 1,
+      task: { id: taskId, state: "succeeded", errorCode: null },
+      result: {
+        action: "ask",
+        question: "那一年您最记得哪个场景？",
+        intent: "scene",
+        sourceRefs: [],
+        reasonCode: "SCENE_AVAILABLE",
+      },
+      canFinish: true,
+      usage: 1,
+    },
+    201,
+  );
+  await tick();
+  assert.equal(
+    h.requests[0].url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/actual-question`,
+  );
+  assert.equal(h.requests[0].data.followupTaskId, taskId);
+  assert.equal(
+    h.page.data.question,
+    question.snapshot.text,
+    "an uncommitted suggestion must never become the recording question",
+  );
+  const currentQuestion = {
+    ...question,
+    id: taskId,
+    source: { kind: "follow-up", generationTaskId: taskId },
+    snapshot: { text: "那一年您最记得哪个场景？", intent: "scene" },
+  };
+  respond(
+    h.requests.shift(),
+    { ...interview, currentQuestion, questionVersion: 2 },
+    201,
+  );
+  await refreshing;
+  assert.equal(h.page.data.question, currentQuestion.snapshot.text);
+  await start(h);
+  await h.page.record();
+  await tick();
+  assert.equal(h.page.data.localClips[0].actualQuestionId, taskId);
+  h.page.onUnload();
+});
+
+test("a displayed follow-up can be rewritten and skipped while pending audio keeps its original question and a hidden page ignores late status", async () => {
+  const h = harness(),
+    taskId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const displayed = {
+    ...question,
+    id: taskId,
+    source: { kind: "follow-up", generationTaskId: taskId },
+    snapshot: { text: "那一年您最记得哪个场景？", intent: "scene" },
+  };
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      { ...interview, currentQuestion: displayed, questionVersion: 2 },
+    ],
+  });
+  await showing;
+  await start(h);
+  await h.page.record();
+  await tick();
+  assert.equal(h.page.data.localClips[0].actualQuestionId, taskId);
+  h.page.followupText({ detail: { value: "那一年您最记得哪件事？" } });
+  const rewrite = h.page.rewriteFollowup();
+  assert.equal(h.requests[0].data.followupTaskId, taskId);
+  assert.equal(h.requests[0].data.expectedActualQuestionId, taskId);
+  const edited = {
+    ...displayed,
+    id: h.requests[0].data.clientQuestionId,
+    snapshot: { text: "那一年您最记得哪件事？", intent: "scene" },
+  };
+  respond(
+    h.requests.shift(),
+    { ...interview, currentQuestion: edited, questionVersion: 3 },
+    201,
+  );
+  await rewrite;
+  assert.equal(h.page.data.question, edited.snapshot.text);
+  assert.equal(
+    h.page.data.localClips[0].actualQuestionId,
+    taskId,
+    "pending audio cannot be relabelled after rewriting",
+  );
+  const skip = h.page.skipFollowup();
+  assert.equal(
+    h.requests[0].url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/follow-up/finish`,
+  );
+  respond(
+    h.requests.shift(),
+    {
+      interviewId,
+      task: null,
+      result: null,
+      canFinish: true,
+      finishReason: "USER_FINISHED",
+      usage: 1,
+    },
+    201,
+  );
+  await skip;
+  assert.match(h.page.data.followupStatus, /跳过/);
+  const query = h.page.refreshFollowup(),
+    request = h.requests.shift();
+  h.page.onHide();
+  respond(
+    request,
+    {
+      interviewId,
+      task: { id: taskId, state: "succeeded" },
+      result: { action: "ask", question: "迟到的问题？" },
+    },
+    201,
+  );
+  await query;
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.followup, null);
+  assert.equal(h.files.size, 1);
   h.page.onUnload();
 });

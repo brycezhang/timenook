@@ -41,6 +41,7 @@ export type ProbeDeviceStage =
   | "sealed";
 export interface ProbeLocalClip {
   clientClipId: string;
+  actualQuestionId?: string;
   path: string;
   durationMs: number;
   bytes: number;

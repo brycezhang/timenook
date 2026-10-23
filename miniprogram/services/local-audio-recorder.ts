@@ -27,8 +27,10 @@ export class LocalAudioRecorder {
     tempFilePath: string;
     duration: number;
     savedPath?: string;
+    actualQuestionId?: string;
   };
   protected clipId = "";
+  private openingQuestionId?: string;
   constructor(
     protected readonly key: string,
     private readonly allowed: () => void = () => {},
@@ -45,7 +47,13 @@ export class LocalAudioRecorder {
       if (!this.active || !recordingLease.owns(this)) return;
       recordingLease.release(this);
       this.active = false;
-      this.pending = { ...value, clientClipId: this.clipId };
+      this.pending = {
+        ...value,
+        clientClipId: this.clipId,
+        ...(this.openingQuestionId
+          ? { actualQuestionId: this.openingQuestionId }
+          : {}),
+      };
       void this.retrySave();
     });
     this.manager.onError(() => {
@@ -80,7 +88,7 @@ export class LocalAudioRecorder {
     this.current = { ...this.current, stage, message };
     this.listener?.(this.snapshot());
   }
-  start() {
+  start(actualQuestionId?: string) {
     this.check();
     if (
       this.active ||
@@ -90,6 +98,7 @@ export class LocalAudioRecorder {
     )
       return;
     this.clipId = recordingId();
+    this.openingQuestionId = actualQuestionId;
     this.active = true;
     this.stopRequested = false;
     this.update("requesting", "正在请求麦克风权限");
@@ -130,6 +139,9 @@ export class LocalAudioRecorder {
         existing.sha256 !== clip.sha256 ||
         existing.bytes !== clip.bytes ||
         existing.durationMs !== clip.durationMs ||
+        (existing.actualQuestionId &&
+          clip.actualQuestionId &&
+          existing.actualQuestionId !== clip.actualQuestionId) ||
         (existing.serverId &&
           clip.serverId &&
           existing.serverId !== clip.serverId))
@@ -183,6 +195,9 @@ export class LocalAudioRecorder {
         durationMs: pending.duration,
         bytes: info.size,
         sha256: info.digest,
+        ...(pending.actualQuestionId
+          ? { actualQuestionId: pending.actualQuestionId }
+          : {}),
       };
       this.commitClip(clip);
       this.pending = undefined;

@@ -1,3 +1,4 @@
+import { Followups } from "../followups/followups";
 import { Stories } from "../stories/stories";
 import { probeStorageScope } from "../probe/storage-scope";
 import { ApiProperty } from "@nestjs/swagger";
@@ -122,6 +123,7 @@ export class ProductionTasks implements OnModuleDestroy {
   constructor(
     private readonly participation: Participation,
     private readonly stories: Stories,
+    private readonly followups: Followups,
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(AI_FETCH) transport: typeof fetch,
     @Inject(TASK_OBJECTS) private readonly objects: ProbeObjects,
@@ -131,6 +133,9 @@ export class ProductionTasks implements OnModuleDestroy {
       this.text = new DeepSeekText(config.generation.deepseek, transport);
     if (config.transcription)
       this.asr = new DoubaoFileAsr(config.transcription.doubao, transport);
+  }
+  private textOwner(task: ProductionTask) {
+    return task.kind === "ask_followup" ? this.followups : this.stories;
   }
   async due() {
     return (
@@ -169,7 +174,7 @@ export class ProductionTasks implements OnModuleDestroy {
         state: { notIn: ["succeeded", "no_speech", "invalidated", "obsolete"] },
       },
       data: {
-        state: task.kind === "compose_story" ? "obsolete" : "invalidated",
+        state: task.kind !== "transcribe_audio" ? "obsolete" : "invalidated",
         errorCode,
         leaseUntil: null,
         fence: { increment: 1 },
@@ -271,8 +276,8 @@ export class ProductionTasks implements OnModuleDestroy {
             })
           : null;
       const grant =
-        initial.kind === "compose_story"
-          ? await this.stories.grantIn(tx, initial)
+        initial.kind !== "transcribe_audio"
+          ? await this.textOwner(initial).grantIn(tx, initial)
           : await this.participation.processingGrant(tx, {
               ...initial,
               sourceAssistedSessionId: sourceClip!.assistedSessionId,
@@ -304,7 +309,7 @@ export class ProductionTasks implements OnModuleDestroy {
           where: { id: task.projectId },
         });
         if (
-          task.kind === "compose_story" ||
+          task.kind !== "transcribe_audio" ||
           task.processingGrant ||
           p.accessEpoch !== task.accessEpoch
         )
@@ -320,8 +325,8 @@ export class ProductionTasks implements OnModuleDestroy {
           });
         return null;
       }
-      if (task.kind === "compose_story")
-        return this.claimStory(tx, task, grant!);
+      if (task.kind !== "transcribe_audio")
+        return this.claimText(tx, task, grant!);
       if (
         !this.asr ||
         task.configurationHash !==
@@ -407,7 +412,7 @@ export class ProductionTasks implements OnModuleDestroy {
       };
     });
   }
-  private async claimStory(
+  private async claimText(
     tx: Prisma.TransactionClient,
     task: ProductionTask,
     grant: Prisma.JsonObject,
@@ -424,10 +429,10 @@ export class ProductionTasks implements OnModuleDestroy {
       !config ||
       !this.text ||
       task.configurationHash !==
-        hash(JSON.stringify(this.stories.configuration()))
+        hash(JSON.stringify(this.textOwner(task).configuration()))
     )
       return stop("CONFIGURATION_CHANGED");
-    const dependencies = await this.stories.inputsIn(tx, task);
+    const dependencies = await this.textOwner(task).inputsIn(tx, task);
     if (dependencies.state !== "ready") {
       await tx.productionTask.update({
         where: { id: task.id },
@@ -447,7 +452,7 @@ export class ProductionTasks implements OnModuleDestroy {
     });
     if (attempt && attempt.state !== "preparing")
       return stop("PROVIDER_UNKNOWN");
-    if (!(await this.storyCapacity(tx, task, attempt ? 0 : 1)))
+    if (!(await this.textCapacity(tx, task, attempt ? 0 : 1)))
       return stop("PROVIDER_BUDGET_EXHAUSTED");
     if (!attempt)
       await tx.taskAttempt.create({
@@ -480,7 +485,7 @@ export class ProductionTasks implements OnModuleDestroy {
       }),
     };
   }
-  private async runStory(id: string) {
+  private async runText(id: string) {
     const claimed = await this.claim(id);
     if (!claimed?.input) return;
     const task = claimed.task;
@@ -496,9 +501,20 @@ export class ProductionTasks implements OnModuleDestroy {
       );
     });
     if (!maySend) return;
-    const result = await this.text!.generate("story", claimed.input);
+    const result = await this.text!.generate(
+      task.kind === "ask_followup" ? "question" : "story",
+      claimed.input,
+    );
     await this.db.$transaction(async (tx) => {
       const current = await this.currentClaim(tx, task);
+      if (
+        task.kind === "ask_followup" &&
+        result.output &&
+        !(await this.followups.acceptsIn(tx, task, result.output))
+      ) {
+        result.state = "failed";
+        result.failure = "invalid_output";
+      }
       await tx.taskAttemptObservation.upsert({
         where: {
           requestId_fence: {
@@ -526,14 +542,20 @@ export class ProductionTasks implements OnModuleDestroy {
         },
       });
       if (!current) return;
-      if (result.state === "succeeded" && result.output)
-        await this.stories.applyIn(tx, task, result.output);
-      const noContent = ["declined", "not_applicable"].includes(result.state);
+      const questionFinish =
+        task.kind === "ask_followup" &&
+        ["finished", "declined", "not_applicable"].includes(result.state);
+      if ((result.state === "succeeded" || questionFinish) && result.output)
+        await this.textOwner(task).applyIn(tx, task, result.output);
+      const noContent =
+        task.kind === "compose_story" &&
+        ["declined", "not_applicable"].includes(result.state);
       await tx.productionTask.update({
         where: { id },
         data: {
-          state:
-            result.state === "unknown"
+          state: questionFinish
+            ? "succeeded"
+            : result.state === "unknown"
               ? "manual_review"
               : noContent
                 ? "no_speech"
@@ -547,7 +569,9 @@ export class ProductionTasks implements OnModuleDestroy {
                   ? "NO_CONTENT"
                   : null,
           completedAt:
-            result.state === "succeeded" || noContent ? new Date() : null,
+            result.state === "succeeded" || noContent || questionFinish
+              ? new Date()
+              : null,
           failedAt: result.state === "failed" ? new Date() : null,
           leaseUntil: null,
         },
@@ -565,8 +589,8 @@ export class ProductionTasks implements OnModuleDestroy {
           })
         : null;
     const allowed =
-      claim.kind === "compose_story"
-        ? !!(await this.stories.grantIn(tx, claim))
+      claim.kind !== "transcribe_audio"
+        ? !!(await this.textOwner(claim).grantIn(tx, claim))
         : await this.participation.processingAllowed(tx, {
             ...claim,
             sourceAssistedSessionId: sourceClip!.assistedSessionId,
@@ -597,7 +621,7 @@ export class ProductionTasks implements OnModuleDestroy {
       });
       return false;
     }
-    if (row.kind === "compose_story") return true;
+    if (row.kind !== "transcribe_audio") return true;
     const asset = await tx.recordingAsset.findUnique({
       where: { id: row.assetId! },
     });
@@ -625,7 +649,7 @@ export class ProductionTasks implements OnModuleDestroy {
       where: { id },
       select: { kind: true },
     });
-    if (kind?.kind === "compose_story") return this.runStory(id);
+    if (kind && kind.kind !== "transcribe_audio") return this.runText(id);
     const claimed = await this.claim(id);
     if (!claimed) return;
     const { task, submit } = claimed;
@@ -769,7 +793,7 @@ export class ProductionTasks implements OnModuleDestroy {
       });
     });
   }
-  private async storyCapacity(
+  private async textCapacity(
     tx: Prisma.TransactionClient,
     task: ProductionTask,
     additional: number,
@@ -783,7 +807,10 @@ export class ProductionTasks implements OnModuleDestroy {
       }),
       ids = (
         await tx.productionTask.findMany({
-          where: { projectId: task.projectId, kind: "compose_story" },
+          where: {
+            projectId: task.projectId,
+            kind: { in: ["compose_story", "ask_followup"] },
+          },
           select: { id: true },
         })
       ).map((t) => t.id);
@@ -800,12 +827,12 @@ export class ProductionTasks implements OnModuleDestroy {
     tx: Prisma.TransactionClient,
     task: ProductionTask,
   ) {
-    if (task.kind === "compose_story") {
+    if (task.kind !== "transcribe_audio") {
       if (
         task.state !== "failed" ||
         !this.config.generation ||
         task.configurationHash !==
-          hash(JSON.stringify(this.stories.configuration())) ||
+          hash(JSON.stringify(this.textOwner(task).configuration())) ||
         (task.deadline && task.deadline.getTime() <= Date.now())
       )
         return false;
@@ -818,7 +845,7 @@ export class ProductionTasks implements OnModuleDestroy {
         (await tx.taskRetryCommand.count({
           where: { projectId: task.projectId },
         })) < budget.retries &&
-        this.storyCapacity(tx, task, 1)
+        this.textCapacity(tx, task, 1)
       );
     }
     if (
@@ -865,8 +892,8 @@ export class ProductionTasks implements OnModuleDestroy {
     });
     if (!initial) throw new NotFoundException();
     if (
-      !(initial.kind === "compose_story"
-        ? await this.stories.grantIn(tx, initial)
+      !(initial.kind !== "transcribe_audio"
+        ? await this.textOwner(initial).grantIn(tx, initial)
         : await this.participation.processingAllowed(tx, initial))
     )
       throw new ConflictException();
@@ -972,7 +999,7 @@ export class ProductionTasks implements OnModuleDestroy {
             !task ||
             (task.kind === "transcribe_audio"
               ? !clip
-              : !(await this.stories.grantIn(tx, task)))
+              : !(await this.textOwner(task).grantIn(tx, task)))
           )
             throw new ForbiddenException();
           await this.retryIn(

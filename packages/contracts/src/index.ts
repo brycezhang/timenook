@@ -113,9 +113,10 @@ export interface ActualPlanQuestion {
     | PlanContent["starters"][number]
     | { text: string; intent: string };
   source?: {
-    kind: "plan" | "photo" | "free-narration" | "self-written";
+    kind: "plan" | "photo" | "free-narration" | "self-written" | "follow-up";
     rewritesQuestionKey?: string;
-    original?: PlanQuestion;
+    generationTaskId?: string;
+    original?: PlanQuestion | Record<string, unknown>;
   };
   answerRef: string | null;
 }
@@ -131,3 +132,5 @@ export * from "./photos";
 export * from "./tasks";
 
 export * from "./stories";
+
+export * from "./followups";

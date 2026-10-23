@@ -13,7 +13,7 @@ export interface ProductionTaskView {
   id: string;
   projectId: string;
   clipId: string | null;
-  kind: "transcribe_audio" | "compose_story";
+  kind: "transcribe_audio" | "compose_story" | "ask_followup";
   state: ProductionTaskState;
   inputHash: string;
   queuedAt: string;
@@ -46,9 +46,9 @@ export interface ProductionTaskView {
     polls: number;
     reservedCostFen: number;
     actualCostFen: number | null;
-    usage?:Record<string,number>|null;
-    model?:string|null;
-    failure?:string|null;
+    usage?: Record<string, number> | null;
+    model?: string | null;
+    failure?: string | null;
     observations: {
       action: string;
       state: string;

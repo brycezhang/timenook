@@ -410,6 +410,202 @@ function syntheticAudio(seconds: 1 | 0.5 = 1) {
       : "test/fixtures/synthetic-576ms.mp3",
   );
 }
+test("displaying a rewritten question appends actual history within the same interview and preserves its starting question", async () => {
+  const p = await bound();
+  const started = await interview(p);
+  const base = `/v1/projects/${p.projectId}/interviews/${started.id}`;
+  const command = {
+    clientQuestionId: randomUUID(),
+    expectedVersion: 1,
+    expectedActualQuestionId: started.actualQuestion.id,
+    expectedPlanRevision: 1,
+    selfWritten: {
+      text: "那条小路上，您想再说说什么？",
+      intent: "本人改写的补充问题",
+    },
+  };
+  const displayed = data(
+    await request("POST", `${base}/actual-question`, p.narrator.token, command),
+  );
+  assert.equal(displayed.id, started.id);
+  assert.equal(displayed.actualQuestion.id, started.actualQuestion.id);
+  assert.equal(displayed.questionVersion, 2);
+  assert.equal(
+    displayed.currentQuestion.snapshot.text,
+    command.selfWritten.text,
+  );
+  assert.equal(displayed.currentQuestion.planRevision, 1);
+  assert.equal(displayed.currentQuestion.source.kind, "self-written");
+  assert.equal(displayed.currentQuestion.answerRef, started.id);
+  const restored = data(await request("GET", base, p.narrator.token), 200);
+  assert.deepEqual(
+    restored.questionHistory.map((q: any) => ({
+      id: q.question.id,
+      parent: q.parentActualQuestionId,
+      sequence: q.sequence,
+    })),
+    [
+      { id: started.actualQuestion.id, parent: null, sequence: 1 },
+      {
+        id: displayed.currentQuestion.id,
+        parent: started.actualQuestion.id,
+        sequence: 2,
+      },
+    ],
+  );
+  assert.equal(
+    data(
+      await request(
+        "POST",
+        `${base}/actual-question`,
+        p.narrator.token,
+        command,
+      ),
+    ).currentQuestion.id,
+    displayed.currentQuestion.id,
+  );
+});
+test("recording permission pins the displayed question while later sealing preserves each original answer source", async () => {
+  const p = await bound();
+  const started = await interview(p);
+  const base = `/v1/projects/${p.projectId}/interviews/${started.id}`;
+  const permission = data(
+    await request("POST", `${base}/recording-start`, p.narrator.token, {
+      actualQuestionId: started.actualQuestion.id,
+      expectedQuestionVersion: 1,
+    }),
+  );
+  assert.equal(permission.actualQuestionId, started.actualQuestion.id);
+  const displayed = data(
+    await request("POST", `${base}/actual-question`, p.narrator.token, {
+      clientQuestionId: randomUUID(),
+      expectedVersion: 1,
+      expectedActualQuestionId: started.actualQuestion.id,
+      expectedPlanRevision: 1,
+      selfWritten: { text: "当时您还留意到了什么？", intent: "本人选择的细节" },
+    }),
+  );
+  assert.equal(
+    (
+      await request("POST", `${base}/recording-start`, p.narrator.token, {
+        actualQuestionId: started.actualQuestion.id,
+        expectedQuestionVersion: 1,
+      })
+    ).statusCode,
+    409,
+  );
+  const bytes = syntheticAudio();
+  const source = {
+    bytes: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+  for (const actualQuestionId of [
+    permission.actualQuestionId,
+    displayed.currentQuestion.id,
+  ]) {
+    const clip = data(
+      await request("POST", `${base}/clips`, p.narrator.token, {
+        clientClipId: randomUUID(),
+        actualQuestionId,
+        ...source,
+      }),
+    );
+    assert.equal(clip.actualQuestionId, actualQuestionId);
+    const form = data(
+      await request(
+        "POST",
+        `${base}/clips/${clip.id}/upload`,
+        p.narrator.token,
+      ),
+    );
+    assert.equal(
+      (await formUpload(app, form, bytes, {}, p.narrator.token)).statusCode,
+      204,
+    );
+    const sealed = data(
+      await request("POST", `${base}/clips/${clip.id}/seal`, p.narrator.token),
+    );
+    assert.equal(sealed.state, "sealed");
+    assert.equal(sealed.actualQuestionId, actualQuestionId);
+  }
+  const restored = data(await request("GET", base, p.narrator.token), 200);
+  assert.deepEqual(
+    restored.clips.map((clip: any) => clip.actualQuestionId).sort(),
+    [permission.actualQuestionId, displayed.currentQuestion.id].sort(),
+  );
+});
+test("actual-question display serializes the current version and requires live collection permission", async () => {
+  const p = await bound(),
+    started = await interview(p);
+  const base = `/v1/projects/${p.projectId}/interviews/${started.id}`;
+  const command = {
+    expectedVersion: 1,
+    expectedActualQuestionId: started.actualQuestion.id,
+    expectedPlanRevision: 1,
+    selfWritten: { text: "这件事您还想补充什么？", intent: "本人补充" },
+  };
+  const responses = await Promise.all(
+    [1, 2].map(() =>
+      request("POST", `${base}/actual-question`, p.narrator.token, {
+        ...command,
+        clientQuestionId: randomUUID(),
+      }),
+    ),
+  );
+  assert.deepEqual(responses.map((r) => r.statusCode).sort(), [201, 409]);
+  const current = data(await request("GET", base, p.narrator.token), 200);
+  assert.equal(current.questionHistory.length, 2);
+  assert.equal(
+    (
+      await request("POST", `${base}/actual-question`, p.narrator.token, {
+        ...command,
+        clientQuestionId: randomUUID(),
+        expectedPlanRevision: 999,
+        expectedVersion: 2,
+        expectedActualQuestionId: current.currentQuestion.id,
+      })
+    ).statusCode,
+    409,
+  );
+  data((await choose(p, p.narrator.token, "collection", false)).response);
+  assert.equal(
+    (
+      await request("POST", `${base}/actual-question`, p.narrator.token, {
+        ...command,
+        clientQuestionId: randomUUID(),
+        expectedVersion: 2,
+        expectedActualQuestionId: current.currentQuestion.id,
+      })
+    ).statusCode,
+    403,
+  );
+});
+test("an original upload with an unknown response replays its old command when the restored manifest includes its question", async () => {
+  const p = await bound(),
+    started = await interview(p);
+  const base = `/v1/projects/${p.projectId}/interviews/${started.id}/clips`;
+  const bytes = syntheticAudio(),
+    key = randomUUID();
+  const command = {
+    clientClipId: randomUUID(),
+    bytes: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+  const original = data(
+    await request("POST", base, p.narrator.token, command, key),
+  );
+  const restored = data(
+    await request(
+      "POST",
+      base,
+      p.narrator.token,
+      { ...command, actualQuestionId: started.actualQuestion.id },
+      key,
+    ),
+  );
+  assert.equal(restored.id, original.id);
+  assert.equal(restored.actualQuestionId, started.actualQuestion.id);
+});
 async function interview(p: Awaited<ReturnType<typeof bound>>) {
   data((await choose(p, p.narrator.token, "collection", true)).response);
   return data(
@@ -777,6 +973,60 @@ test("withdrawal during object copying fences the final transaction and retains 
       .statusCode,
     403,
   );
+});
+
+test("collection-only actual-question commands return the current recording context without private question history", async () => {
+  const p = await project(),
+    current = await state(p, p.buyer.token);
+  const session = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+      {
+        ...notice(),
+        purpose: "collection",
+        granted: true,
+        expectedBindingVersion: 0,
+        expectedAccessEpoch: current.accessEpoch,
+      },
+    ),
+  );
+  const collection = { assistedSessionId: session.id };
+  const startCommand = {
+    ...collection,
+    clientInterviewId: randomUUID(),
+    expectedPlanRevision: 1,
+    starterKind: "free-narration",
+  };
+  const base = `/v1/projects/${p.projectId}/interviews`;
+  const started = data(
+    await request("POST", base, p.buyer.token, startCommand),
+  );
+  assert.equal(started.questionHistory, undefined);
+  const displayed = data(
+    await request(
+      "POST",
+      `${base}/${started.id}/actual-question`,
+      p.buyer.token,
+      {
+        ...collection,
+        clientQuestionId: randomUUID(),
+        expectedVersion: 1,
+        expectedActualQuestionId: started.actualQuestion.id,
+        expectedPlanRevision: 1,
+        selfWritten: {
+          text: "您想补充哪个细节？",
+          intent: "本人选择的补充问题",
+        },
+      },
+    ),
+  );
+  assert.equal(displayed.currentQuestion.snapshot.text, "您想补充哪个细节？");
+  assert.equal(displayed.questionHistory, undefined);
+  const replay = data(await request("POST", base, p.buyer.token, startCommand));
+  assert.equal(replay.questionHistory, undefined);
+  assert.equal(replay.currentQuestion.id, displayed.currentQuestion.id);
 });
 
 test("collection-only assisted operators start and resume their own pending intent without gaining private history or original audio", async () => {

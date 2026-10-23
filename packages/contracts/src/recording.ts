@@ -24,7 +24,19 @@ export interface RecordingInterview {
   projectId: string;
   subjectId: string;
   actualQuestion: ActualPlanQuestion;
-  clips: { id: string; clientClipId: string; state: string }[];
+  currentQuestion: ActualPlanQuestion;
+  questionVersion: number;
+  questionHistory?: {
+    sequence: number;
+    parentActualQuestionId: string | null;
+    question: ActualPlanQuestion;
+  }[];
+  clips: {
+    id: string;
+    clientClipId: string;
+    state: string;
+    actualQuestionId: string;
+  }[];
   usage: { reservedMs: number; consumedMs: number };
 }
 export interface RecordingContext {
