@@ -966,6 +966,10 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
             ? r.url().endsWith("/tasks/status")
             : /\/assets\/[^/]+\/content$/.test(r.url())) && r.status() === 401,
       );
+      await page.evaluate((expiresAt) => {
+        const boundary = Date.parse(expiresAt);
+        Date.now = () => boundary;
+      }, current.session.expiresAt);
       release();
       await denied;
       await expect(

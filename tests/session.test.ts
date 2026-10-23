@@ -15,6 +15,7 @@ const identity = {
 let storage: Map<string, unknown>;
 let requests: WechatMiniprogram.RequestOption[];
 let downloads: WechatMiniprogram.DownloadFileOption[];
+let uploads: WechatMiniprogram.UploadFileOption[];
 let failSessionRemoval: boolean;
 let reply: (request: WechatMiniprogram.RequestOption) => void;
 const envelope = (data: unknown) => ({
@@ -50,6 +51,7 @@ beforeEach(() => {
   storage = new Map([["timenook.frontend.v1", { privateDemo: "unchanged" }]]);
   requests = [];
   downloads = [];
+  uploads = [];
   failSessionRemoval = false;
   reply = (request) => success(request, 201, envelope(identity));
   (globalThis as { wx?: unknown }).wx = {
@@ -66,6 +68,10 @@ beforeEach(() => {
       options.success?.({ code: "synthetic-device-code", errMsg: "login:ok" }),
     downloadFile: (options: WechatMiniprogram.DownloadFileOption) => {
       downloads.push(options);
+      return {};
+    },
+    uploadFile: (options: WechatMiniprogram.UploadFileOption) => {
+      uploads.push(options);
       return {};
     },
     request: (options: WechatMiniprogram.RequestOption) => {
@@ -249,7 +255,9 @@ test("401 clears the current session while network errors preserve it and never 
   );
 });
 
-test("an unauthorized private photo download clears the current login and preserves its temporary path for cleanup", async () => {
+test("an unauthorized private photo download crossing local expiresAt clears the current login and preserves its temporary path", async (t) => {
+  let now = Date.parse(identity.session.expiresAt) - 1;
+  t.mock.method(Date, "now", () => now);
   const client = new SessionClient(api);
   await client.login();
   const photoId = "55555555-5555-4555-8555-555555555555";
@@ -259,6 +267,7 @@ test("an unauthorized private photo download clears the current login and preser
     photoId,
     "66666666-6666-4666-8666-666666666666",
   );
+  now = Date.parse(identity.session.expiresAt);
   downloadSuccess(downloads[0], {
     statusCode: 401,
     tempFilePath: "denied-private-photo",
@@ -270,6 +279,125 @@ test("an unauthorized private photo download clears the current login and preser
   assert.equal(storage.has(`timenook.session.v1:${api}`), false);
   assert.equal(await client.restore(), null);
 });
+
+const uploadForm = {
+  url: "/v1/photos/objects",
+  storage: "local-simulator" as const,
+  fields: {},
+  expiresAt: "2100-01-01T00:00:00Z",
+};
+function uploadSuccess(
+  options: WechatMiniprogram.UploadFileOption,
+  statusCode: number,
+) {
+  // Device transport telemetry is outside this controlled upload fixture.
+  options.success?.({
+    statusCode,
+    data: "",
+    errMsg: "uploadFile:ok",
+  } as WechatMiniprogram.UploadFileSuccessCallbackResult);
+}
+test("an in-flight upload 401 at local expiresAt invalidates its owned identity while expired credentials cannot start another request", async (t) => {
+  let now = Date.parse(identity.session.expiresAt) - 1;
+  t.mock.method(Date, "now", () => now);
+  const client = new SessionClient(api),
+    events: string[] = [];
+  await client.login();
+  client.onInvalidated((context) => events.push(context));
+  const pending = client.uploadPhoto(uploadForm, "pending-original");
+  assert.equal(uploads.length, 1);
+  now = Date.parse(identity.session.expiresAt);
+  const sent = requests.length;
+  await assert.rejects(client.request("/users/me"), {
+    code: "UNAUTHENTICATED",
+    status: 401,
+  });
+  await assert.rejects(
+    client.downloadPhoto(
+      identity.user.id,
+      identity.session.id,
+      "55555555-5555-4555-8555-555555555555",
+      "66666666-6666-4666-8666-666666666666",
+    ),
+    { code: "UNAUTHENTICATED", status: 401 },
+  );
+  await assert.rejects(client.uploadPhoto(uploadForm, "pending-original"), {
+    code: "UNAUTHENTICATED",
+    status: 401,
+  });
+  assert.equal(requests.length, sent);
+  assert.equal(downloads.length, 0);
+  assert.equal(uploads.length, 1);
+  assert.deepEqual(events, []);
+  uploadSuccess(uploads[0], 401);
+  await assert.rejects(pending, { code: "UNAUTHENTICATED", status: 401 });
+  assert.equal(storage.has(`timenook.session.v1:${api}`), false);
+  assert.equal(client.context(), "");
+  assert.deepEqual(events, [`${identity.user.id}:${identity.session.id}`]);
+});
+
+for (const transport of ["request", "download", "upload"] as const) {
+  test(`an old account's ${transport} 401 crossing its expiresAt cannot invalidate the newer login`, async (t) => {
+    let now = Date.parse(identity.session.expiresAt) - 1;
+    t.mock.method(Date, "now", () => now);
+    const client = new SessionClient(api),
+      events: string[] = [];
+    await client.login();
+    client.onInvalidated((context) => events.push(context));
+    reply = () => {};
+    const pending =
+      transport === "request"
+        ? client.request("/users/me")
+        : transport === "download"
+          ? client.downloadPhoto(
+              identity.user.id,
+              identity.session.id,
+              "55555555-5555-4555-8555-555555555555",
+              "66666666-6666-4666-8666-666666666666",
+            )
+          : client.uploadPhoto(uploadForm, "old-pending-original");
+    const held = requests[requests.length - 1];
+    const other = {
+      user: { id: "77777777-7777-4777-8777-777777777777" },
+      session: {
+        id: "88888888-8888-4888-8888-888888888888",
+        token: "b".repeat(43),
+        expiresAt: "2100-01-01T00:00:00Z",
+      },
+    };
+    reply = (request) => success(request, 201, envelope(other));
+    await client.login();
+    now = Date.parse(identity.session.expiresAt);
+    if (transport === "request") {
+      success(held, 401, {
+        error: { code: "UNAUTHENTICATED" },
+        meta: envelope(null).meta,
+      });
+      await assert.rejects(pending, { code: "UNAUTHENTICATED", status: 401 });
+    } else if (transport === "download") {
+      downloadSuccess(downloads[0], {
+        statusCode: 401,
+        tempFilePath: "expired-old-account-photo",
+        errMsg: "downloadFile:ok",
+      });
+      const result = await pending;
+      assert.equal(
+        result && typeof result === "object" && "tempFilePath" in result
+          ? result.tempFilePath
+          : null,
+        "expired-old-account-photo",
+      );
+    } else {
+      uploadSuccess(uploads[0], 401);
+      await assert.rejects(pending, { code: "STALE_RESPONSE" });
+    }
+    assert.deepEqual(events, []);
+    assert.deepEqual(storage.get(`timenook.session.v1:${api}`), other);
+    assert.equal(client.context(), `${other.user.id}:${other.session.id}`);
+    reply = (request) => success(request, 200, envelope(other.user));
+    assert.deepEqual(await client.restore(), other.user);
+  });
+}
 
 test("a previous account's delayed photo-download 401 cannot clear the newer login", async () => {
   const client = new SessionClient(api);

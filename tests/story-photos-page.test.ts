@@ -27,6 +27,12 @@ const compiled = await build({
   define: { __TIMENOOK_API_BASE_URL__: JSON.stringify(base) },
 });
 function harness() {
+  let now = Date.now();
+  class DeviceDate extends Date {
+    static now() {
+      return now;
+    }
+  }
   const storage = new Map<string, unknown>([
       ["timenook.mode.v1", "live"],
       [`timenook.session.v1:${base}`, login],
@@ -46,6 +52,7 @@ function harness() {
     failSessionRemoval = false,
     chooseOptions: any;
   runInNewContext(compiled.outputFiles[0].text, {
+    Date: DeviceDate,
     setTimeout,
     clearTimeout,
     setInterval,
@@ -139,6 +146,9 @@ function harness() {
     navigations,
     saved,
     removed,
+    expireSession() {
+      now = Date.parse(login.session.expiresAt);
+    },
     fail() {
       failManifest = true;
     },
@@ -691,7 +701,7 @@ async function leaveInterviewWithStatusPending(h: ReturnType<typeof harness>) {
   p.onHide();
   return status;
 }
-test("the active photo page clears private material and controlled previews when the hidden interview's current session expires", async (t) => {
+test("the active photo page clears private material when the hidden interview's in-flight 401 crosses local expiresAt", async (t) => {
   const h = harness(),
     snapshot = reviewMaterial(),
     status = await leaveInterviewWithStatusPending(h);
@@ -712,6 +722,7 @@ test("the active photo page clears private material and controlled previews when
     .shift()
     .success({ statusCode: 200, tempFilePath: "cross-page-private-preview" });
   await previewing;
+  h.expireSession();
   respond(status, undefined, 401);
   await tick();
   assert.equal(h.storage.has(`timenook.session.v1:${base}`), false);
@@ -729,7 +740,7 @@ test("the active photo page clears private material and controlled previews when
     ),
   );
 });
-test("the active interview clears private task and draft state when a hidden photo download expires its session", async (t) => {
+test("the active interview clears private state when a hidden photo download's 401 crosses local expiresAt", async (t) => {
   const h = harness(),
     snapshot = reviewMaterial(),
     status = await leaveInterviewWithStatusPending(h);
@@ -766,6 +777,7 @@ test("the active interview clears private task and draft state when a hidden pho
   h.interviewPage.customText({ detail: { value: "采访私人草稿" } });
   const originals = [...h.saved];
   assert.equal(originals.length, 3, "two photos and one pending audio file");
+  h.expireSession();
   held.success({ statusCode: 401, tempFilePath: "hidden-photo-denied" });
   await previewing;
   await tick();
@@ -793,6 +805,7 @@ test("an old interview's late 401 preserves the new account's active photo draft
       ...login.session,
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       token: "b".repeat(43),
+      expiresAt: "2100-01-01T00:00:00Z",
     },
   };
   h.storage.set(`timenook.session.v1:${base}`, other);
@@ -815,6 +828,7 @@ test("an old interview's late 401 preserves the new account's active photo draft
     .shift()
     .success({ statusCode: 200, tempFilePath: "new-account-private-preview" });
   await previewing;
+  h.expireSession();
   respond(status, undefined, 401);
   await tick();
   assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), other);

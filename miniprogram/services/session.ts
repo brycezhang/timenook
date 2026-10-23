@@ -127,7 +127,7 @@ export class SessionClient {
         error instanceof ApiFailure &&
         error.status === 401 &&
         generation === this.generation &&
-        this.stored()?.session.token === stored.session.token
+        this.persisted()?.session.token === stored.session.token
       )
         this.invalidate(stored);
       throw error;
@@ -162,7 +162,7 @@ export class SessionClient {
               result.statusCode === 401 &&
               generation === this.generation &&
               dataMode() === "live" &&
-              this.stored()?.session.token === stored.session.token
+              this.persisted()?.session.token === stored.session.token
             )
               this.invalidate(stored);
             // The media owner still needs this path to remove denied or stale bytes.
@@ -214,10 +214,16 @@ export class SessionClient {
       }),
     );
     this.assertCurrent(generation);
+    if (
+      result === 401 &&
+      this.persisted()?.session.token === stored.session.token
+    ) {
+      this.invalidate(stored);
+      throw new ApiFailure("UNAUTHENTICATED", 401);
+    }
     if (this.stored()?.session.token !== stored.session.token)
       throw new ApiFailure("STALE_RESPONSE");
     if (result < 200 || result >= 300) {
-      if (result === 401) this.invalidate(stored);
       throw new ApiFailure(
         result === 401 ? "UNAUTHENTICATED" : "UPLOAD_FAILED",
         result,
@@ -235,12 +241,17 @@ export class SessionClient {
     return `timenook.session.v1:${this.apiBaseUrl}`;
   }
   private stored(): LoginResult | null {
-    const value: unknown = wx.getStorageSync(this.storageKey);
-    return loginResult(value) &&
+    const value = this.persisted();
+    return value &&
       value.session.token !== this.invalidatedToken &&
       Date.parse(value.session.expiresAt) > Date.now()
       ? value
       : null;
+  }
+  private persisted(): LoginResult | null {
+    // Expiry blocks new credentials, but does not change an in-flight request's owner.
+    const value: unknown = wx.getStorageSync(this.storageKey);
+    return loginResult(value) ? value : null;
   }
   private invalidate(stored: LoginResult) {
     // Fail closed even if the device cannot remove its persisted session.
