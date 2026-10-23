@@ -151,6 +151,10 @@ Page({
   catalog() {
     go("purchase");
   },
+  invite() {
+    const project = this.data.activeOrder?.project;
+    if (project) go("invite", `projectId=${project.id}`);
+  },
   project() {
     home();
   },

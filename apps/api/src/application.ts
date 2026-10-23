@@ -1,4 +1,9 @@
 import { AdminTermsController } from "./payments/admin-terms-controller";
+import {
+  Participation,
+  ParticipationController,
+} from "./identity/participation";
+import { AdminCareController } from "./identity/admin-care-controller";
 import { validateWechatPayConfig } from "./payments/wechat-pay";
 import {
   Orders,
@@ -99,6 +104,8 @@ class HealthController {
     PaymentWebhookController,
     HealthController,
     IdentityController,
+    ParticipationController,
+    AdminCareController,
     AdminController,
     CatalogController,
     AdminCatalogController,
@@ -115,6 +122,15 @@ export async function createApplication(
     paymentFetch?: typeof fetch;
   } = {},
 ): Promise<NestFastifyApplication> {
+  if (
+    config.participation &&
+    (config.environment !== "test" ||
+      config.participation.mode !== "synthetic-d08" ||
+      config.payments?.mode !== "local-verification")
+  )
+    throw new ConfigurationError(
+      "D08 synthetic participation requires isolated local payment verification tests",
+    );
   if (
     config.payments &&
     (config.environment !== "test" ||
@@ -221,6 +237,7 @@ export async function createApplication(
         : []),
       { provide: WECHAT_FETCH, useValue: options.wechatFetch ?? fetch },
       IdentityAccess,
+      Participation,
       AdminAccess,
       Catalog,
       Orders,

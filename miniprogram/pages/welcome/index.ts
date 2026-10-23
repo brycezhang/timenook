@@ -1,12 +1,54 @@
 import { type Project } from "../../domain/model";
 import { go, home, read, required, save } from "../../services/store";
+import { dataMode, setDataMode } from "../../services/mode";
+import { sessionClient, ApiFailure } from "../../services/session";
+import { participationClient } from "../../services/participation";
+import { paymentKey } from "../../services/payments";
+import {
+  CONSENT_PURPOSES,
+  type ConsentPurpose,
+  type ParticipationState,
+  type InvitationView,
+  type ProjectCareRequestView,
+} from "../../../packages/contracts/src";
 type E = {
   currentTarget: { dataset: Record<string, string> };
   detail: { value: string };
 };
 Page({
-  data: { p: null as Project | null, agreed: false, missing: false },
+  data: {
+    p: null as Project | null,
+    agreed: false,
+    missing: false,
+    mode: dataMode(),
+    invitation: null as InvitationView | null,
+    participation: null as ParticipationState | null,
+    memberships: [] as { projectId: string; state: string }[],
+    status: "",
+    busy: false,
+    loggedIn: false,
+    accountId: "",
+    targetUserId: "",
+    supportCaseRef: "",
+    careRequests: [] as ProjectCareRequestView[],
+    purposeLabels: [
+      { purpose: "collection", label: "采集并保存讲述和照片" },
+      { purpose: "ai", label: "交由AI处理素材" },
+      { purpose: "sharing", label: "向本项目发起人共享资料" },
+    ],
+  },
+  inviteToken: "",
+  projectId: "",
+  generation: 0,
+  intent: null as { input: string; key: string } | null,
   onLoad(q) {
+    if (q.token || q.projectId) setDataMode("live");
+    if (dataMode() === "live") {
+      this.inviteToken = q.token ?? "";
+      this.projectId = q.projectId ?? "";
+      this.setData({ mode: "live", p: null });
+      return;
+    }
     if (q.preview === "1" && !read()) {
       this.setData({ missing: true });
       return;
@@ -18,10 +60,269 @@ Page({
     }
     this.setData({ p, agreed: p.consent });
   },
+  onHide() {
+    ++this.generation;
+    this.setData({
+      participation: null,
+      invitation: null,
+      memberships: [],
+      careRequests: [],
+      busy: false,
+    });
+  },
+  onUnload() {
+    this.onHide();
+  },
+  async onShow() {
+    if (this.data.busy) return;
+    if (dataMode() === "live") await this.refreshLive();
+  },
+  recoverExpiredSession(error: unknown, generation: number, context: string) {
+    if (
+      generation !== this.generation ||
+      dataMode() !== "live" ||
+      !context ||
+      sessionClient.context() ||
+      !(error instanceof ApiFailure) ||
+      (error.status !== 401 &&
+        !(error.code === "STALE_RESPONSE" && error.status === 0))
+    )
+      return false;
+    this.setData({
+      busy: false,
+      loggedIn: false,
+      accountId: "",
+      participation: null,
+      invitation: null,
+      memberships: [],
+      careRequests: [],
+      supportCaseRef: "",
+      status: "登录已失效，请重新登录",
+    });
+    return true;
+  },
+  async refreshLive() {
+    const generation = ++this.generation;
+    const context = sessionClient.context();
+    this.setData({
+      mode: "live",
+      participation: null,
+      invitation: null,
+      memberships: [],
+      careRequests: [],
+      supportCaseRef: "",
+      status: "",
+      busy: true,
+      loggedIn: !!context,
+      accountId: context.split(":")[0] ?? "",
+    });
+    const activePage = () =>
+      generation === this.generation && dataMode() === "live";
+    const current = () => activePage() && context === sessionClient.context();
+    try {
+      if (this.projectId) {
+        const participation = await participationClient.state(this.projectId);
+        if (!current()) return;
+        const careRequests = await participationClient.careRequests(
+          this.projectId,
+        );
+        if (current()) this.setData({ participation, careRequests });
+      } else if (this.inviteToken) {
+        const invitation = await participationClient.preview(this.inviteToken);
+        if (current()) this.setData({ invitation });
+      } else if (context) {
+        const result = await participationClient.memberships();
+        if (current())
+          this.setData({
+            memberships: result.projects,
+            status: result.projects.length
+              ? "选择参与项目"
+              : "还没有参与项目，请使用本人邀请入口",
+          });
+      }
+    } catch (error) {
+      if (this.recoverExpiredSession(error, generation, context)) return;
+      if (current())
+        this.setData({
+          status:
+            error instanceof ApiFailure && error.status === 403
+              ? "等待发起人核对申请；旧账号或无权限账号不能读取项目"
+              : error instanceof Error
+                ? error.message
+                : "查询失败",
+        });
+    } finally {
+      if (current()) this.setData({ busy: false });
+    }
+  },
+  async loginLive() {
+    if (this.data.busy) return;
+    const generation = ++this.generation;
+    this.setData({ busy: true, status: "", participation: null });
+    try {
+      await sessionClient.login();
+      if (generation === this.generation) await this.refreshLive();
+    } catch (error) {
+      if (generation === this.generation)
+        this.setData({
+          busy: false,
+          status: error instanceof Error ? error.message : "登录失败",
+        });
+    }
+  },
+  async openParticipation(e: E) {
+    this.projectId = e.currentTarget.dataset.id;
+    await this.refreshLive();
+  },
+  async chooseConsent(e: E) {
+    const state = this.data.participation;
+    const purpose = e.currentTarget.dataset.purpose as ConsentPurpose;
+    const granted = e.currentTarget.dataset.granted === "true";
+    if (
+      !state ||
+      this.data.busy ||
+      state.role !== "narrator" ||
+      state.policyStatus !== "synthetic-only" ||
+      !CONSENT_PURPOSES.includes(purpose)
+    )
+      return;
+    const input = JSON.stringify({
+      id: state.projectId,
+      purpose,
+      granted,
+      epoch: state.accessEpoch,
+      version: state.bindingVersion,
+    });
+    if (this.intent?.input !== input)
+      this.intent = { input, key: paymentKey() };
+    const context = sessionClient.context();
+    const generation = this.generation;
+    this.setData({ busy: true, status: "" });
+    try {
+      const participation = await participationClient.choose(
+        state,
+        purpose,
+        granted,
+        this.intent.key,
+      );
+      if (
+        context === sessionClient.context() &&
+        generation === this.generation
+      ) {
+        this.intent = null;
+        this.setData({ participation, status: "用途选择已保存" });
+      }
+    } catch (error) {
+      if (this.recoverExpiredSession(error, generation, context)) return;
+      if (context === sessionClient.context() && generation === this.generation)
+        this.setData({
+          participation: null,
+          status:
+            error instanceof Error ? error.message : "保存未确认，请重新查询",
+        });
+    } finally {
+      if (context === sessionClient.context() && generation === this.generation)
+        this.setData({ busy: false });
+    }
+  },
+  targetInput(e: E) {
+    this.setData({ targetUserId: e.detail.value.trim() });
+  },
+  async requestRebind() {
+    const state = this.data.participation;
+    if (!state || this.data.busy || !this.data.targetUserId) return;
+    const context = sessionClient.context();
+    const generation = this.generation;
+    const input = JSON.stringify({
+      projectId: state.projectId,
+      target: this.data.targetUserId,
+      version: state.bindingVersion,
+    });
+    if (this.intent?.input !== input)
+      this.intent = { input, key: paymentKey() };
+    this.setData({ busy: true, status: "", supportCaseRef: "" });
+    try {
+      const care = await participationClient.care(
+        state,
+        this.data.targetUserId,
+        this.intent.key,
+      );
+      if (context !== sessionClient.context() || generation !== this.generation)
+        return;
+      const careRequests = await participationClient.careRequests(
+        state.projectId,
+      );
+      if (
+        context === sessionClient.context() &&
+        generation === this.generation
+      ) {
+        this.intent = null;
+        this.setData({
+          supportCaseRef: care.supportCaseRef,
+          careRequests,
+          status:
+            "换绑申请已记录，须由客服核验本人；此申请不会授予目标账号权限",
+        });
+      }
+    } catch (error) {
+      if (this.recoverExpiredSession(error, generation, context)) return;
+      if (context === sessionClient.context() && generation === this.generation)
+        this.setData({
+          status: error instanceof Error ? error.message : "申请未确认",
+        });
+    } finally {
+      if (context === sessionClient.context() && generation === this.generation)
+        this.setData({ busy: false });
+    }
+  },
   agree() {
     this.setData({ agreed: !this.data.agreed });
   },
-  accept() {
+  async accept() {
+    if (dataMode() === "live") {
+      if (
+        this.data.busy ||
+        !this.data.invitation ||
+        !sessionClient.context() ||
+        this.data.invitation.policyStatus !== "synthetic-only"
+      )
+        return;
+      const context = sessionClient.context();
+      const generation = this.generation;
+      this.setData({ busy: true, status: "" });
+      try {
+        const application = await participationClient.apply(
+          this.inviteToken,
+          this.data.invitation.noticeVersion,
+        );
+        if (
+          context === sessionClient.context() &&
+          generation === this.generation
+        ) {
+          this.projectId = application.projectId;
+          this.setData({
+            invitation: null,
+            status: "已申请参与，等待发起人核对；申请不授予内容权限",
+          });
+        }
+      } catch (error) {
+        if (this.recoverExpiredSession(error, generation, context)) return;
+        if (
+          context === sessionClient.context() &&
+          generation === this.generation
+        )
+          this.setData({
+            status: error instanceof Error ? error.message : "申请失败",
+          });
+      } finally {
+        if (
+          context === sessionClient.context() &&
+          generation === this.generation
+        )
+          this.setData({ busy: false });
+      }
+      return;
+    }
     const p = required();
     p.consent = true;
     p.role = "narrator";

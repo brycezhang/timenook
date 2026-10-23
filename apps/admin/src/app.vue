@@ -13,6 +13,7 @@ import BasicLayout from "./layouts/basic.vue";
 import Runtime from "./views/runtime.vue";
 import Catalog from "./views/catalog.vue";
 import ServiceTerms from "./views/service-terms.vue";
+import Care from "./views/care.vue";
 const view = ref("runtime");
 const state = ref<AdminState | null>(null),
   secret = ref(""),
@@ -25,6 +26,11 @@ const canManageTerms = computed(
     state.value?.operator?.permissions.includes(
       ADMIN_PERMISSIONS.writeServiceTerms,
     ) ?? false,
+);
+const canManageCare = computed(
+  () =>
+    state.value?.operator?.permissions.includes(ADMIN_PERMISSIONS.writeCare) ??
+    false,
 );
 const canReadRuntime = computed(
   () =>
@@ -125,7 +131,10 @@ onMounted(() => {
       class="notice"
       role="alert"
     />
-    <nav v-if="canReadCatalog || canManageTerms" class="catalog-navigation">
+    <nav
+      v-if="canReadCatalog || canManageTerms || canManageCare"
+      class="catalog-navigation"
+    >
       <Button
         :type="view === 'runtime' ? 'primary' : 'default'"
         @click="view = 'runtime'"
@@ -142,6 +151,12 @@ onMounted(() => {
         @click="view = 'terms'"
         >服务期限</Button
       >
+      <Button
+        v-if="canManageCare"
+        :type="view === 'care' ? 'primary' : 'default'"
+        @click="view = 'care'"
+        >客服工单</Button
+      >
     </nav>
     <Catalog
       v-if="view === 'catalog' && canReadCatalog"
@@ -155,6 +170,15 @@ onMounted(() => {
     />
     <ServiceTerms
       v-else-if="view === 'terms' && canManageTerms"
+      :csrf="state.csrfToken"
+      @expired="
+        perform(async () => {
+          throw { error: { code: 'UNAUTHENTICATED' } };
+        })
+      "
+    />
+    <Care
+      v-else-if="view === 'care' && canManageCare"
       :csrf="state.csrfToken"
       @expired="
         perform(async () => {

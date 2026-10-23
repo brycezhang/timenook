@@ -163,3 +163,33 @@ export const serviceTermsApi = {
     ).data;
   },
 };
+
+import type { CareCase } from "@timenook/contracts";
+export const careApi = {
+  async list() {
+    return (
+      await client.get<ApiResponse<{ requests: CareCase[] }>>("/care-requests")
+    ).data;
+  },
+  async read(id: string) {
+    return (await client.get<ApiResponse<CareCase>>(`/care-requests/${id}`))
+      .data;
+  },
+  async rebind(care: CareCase, evidenceRef: string, key: string, csrf: string) {
+    return (
+      await client.post<
+        ApiResponse<{ bindingVersion: number; accessEpoch: number }>
+      >(
+        `/projects/${care.projectId}/rebind`,
+        {
+          supportCaseRef: `record:${care.id}`,
+          targetUserId: care.targetUserId,
+          expectedBindingVersion: care.sourceBindingVersion,
+          noticeVersion: "synthetic-d08-v1",
+          evidenceRef,
+        },
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
+};

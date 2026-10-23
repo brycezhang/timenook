@@ -7,5 +7,5 @@ export function setDataMode(mode: DataMode): void {
 }
 
 export function livePageAllowed(page: string): boolean {
-  return page === "home" || page === "purchase" || page === "order";
+  return ["home", "purchase", "order", "invite", "welcome"].includes(page);
 }

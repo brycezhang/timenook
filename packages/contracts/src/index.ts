@@ -75,3 +75,4 @@ export * from "./audio-probe";
 
 export * from "./catalog";
 export * from "./payments";
+export * from "./participation";

@@ -1,3 +1,25 @@
+<view wx:if="{{mode === 'live'}}" class="page">
+  <view class="title">邀请与参与管理</view>
+  <view class="soft section">隔离合成验证 · D08 本人核验及告知规则尚未正式冻结，不能用于真实资料采集。</view>
+  <view class="section note">请本人申请后，在线下核对账号再确认。付款和邀请转发都不会授予资料权限。</view>
+  <view wx:if="{{status}}" class="soft section">{{status}}</view>
+  <button wx:if="{{!loggedIn}}" class="btn section" bindtap="loginLive" disabled="{{busy}}">微信登录后继续邀请</button>
+  <button class="link" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button>
+  <view wx:if="{{participation}}" class="section">
+    <view class="small muted">项目：{{participation.projectId}}</view>
+    <view>绑定版本：{{participation.bindingVersion}}</view>
+    <button class="btn section" bindtap="share" disabled="{{busy || participation.bindingVersion > 0 || participation.policyStatus !== 'synthetic-only'}}">准备本人邀请</button>
+    <button wx:if="{{inviteToken}}" class="btn secondary section" open-type="share">发送已准备的邀请</button>
+    <view wx:if="{{inviteToken}}" class="note">邀请仅用于申请参与，24小时到期；重新准备会使旧邀请失效。</view>
+    <view wx:for="{{requests}}" wx:key="id" class="paper section">
+      <view>待核对的申请账号</view><view class="small muted">{{item.applicantUserId}}</view>
+      <button class="btn secondary section" data-id="{{item.id}}" bindtap="approve" disabled="{{busy}}">已核对本人，确认绑定</button>
+    </view>
+    <view wx:if="{{participation.bindingVersion > 0}}" class="section note">已绑定。本人须分别授权采集、AI 和共享；换绑请由本人或发起人提交客服申请。</view>
+  </view>
+  <button class="link" bindtap="project">返回首页</button>
+</view>
+<block wx:else="">
 <view class="page"
   ><view class="center"
     ><view class="success-icon"
@@ -34,3 +56,4 @@
   ><button class="link" bindtap="project">回到我的项目</button
   ><view class="demo-note">本机演示项目 · 尚未真实支付</view></view
 >
+</block>
