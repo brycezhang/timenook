@@ -1409,48 +1409,123 @@ for (const action of [
   });
 }
 
-test("an old follow-up success cannot clear a newer expired account's page or its draft after a project switch", async () => {
+for (const outcome of ["success", "network failure"] as const)
+  test(`an old follow-up ${outcome} cannot clear a newer expired account's page or its draft after a project switch`, async () => {
+    const h = harness();
+    await ready(h);
+    const pending = h.page.requestFollowup(),
+      held = h.requests.shift();
+    h.page.onHide();
+    const other = structuredClone(login),
+      nextProject = "99999999-9999-4999-8999-999999999999";
+    other.user.id = "88888888-8888-4888-8888-888888888888";
+    other.session.id = "77777777-7777-4777-8777-777777777777";
+    other.session.token = "c".repeat(43);
+    h.storage.set(`timenook.session.v1:${base}`, other);
+    h.page.onLoad({ projectId: nextProject });
+    const showing = h.page.onShow();
+    respond(h.requests.shift(), {
+      ...context,
+      interviews: [
+        {
+          ...interview,
+          projectId: nextProject,
+          actualQuestion: {
+            ...question,
+            projectId: nextProject,
+            snapshot: { text: "新账号的私人问题", intent: "具体场景" },
+          },
+        },
+      ],
+    });
+    await showing;
+    h.page.customText({ detail: { value: "新账号草稿" } });
+    h.expireSession();
+    if (outcome === "network failure")
+      held.fail({ errMsg: "request:fail timeout" });
+    else
+      respond(
+        held,
+        { interviewId, task: null, result: null, canFinish: true, usage: 0 },
+        202,
+      );
+    await pending;
+    assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), other);
+    assert.equal(h.page.data.question, "新账号的私人问题");
+    assert.equal(h.page.data.interview.projectId, nextProject);
+    assert.equal(h.page.data.customText, "新账号草稿");
+    assert.equal(h.page.data.busy, false);
+    assert.equal(typeof h.page.stopSessionWatch, "function");
+    h.page.onUnload();
+  });
+
+test("an owned follow-up network timeout at its captured exact expiry clears private state while preserving pending audio", async () => {
+  const h = harness();
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const original = structuredClone(
+    [...h.storage.entries()].find(([key]) => key.includes("recording")),
+  );
+  assert.ok(original);
+  const key = `timenook.session.v1:${base}`,
+    identity = structuredClone(h.storage.get(key)) as typeof login;
+  const pending = h.page.requestFollowup(),
+    held = h.requests.shift();
+  assert.equal(held.header.authorization, `Bearer ${identity.session.token}`);
+  h.expireSession();
+  assert.deepEqual(
+    h.storage.get(key),
+    identity,
+    "only the device clock advanced before the network completed",
+  );
+  held.fail({ errMsg: "request:fail timeout" });
+  await pending;
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.followup, null);
+  assert.equal(h.page.data.followupText, "");
+  assert.equal(h.page.stopSessionWatch, undefined);
+  assert.equal(h.page.followupPoll, undefined);
+  assert.equal(h.storage.has(key), false);
+  assert.deepEqual(
+    [...h.storage.entries()].find(([key]) => key.includes("recording")),
+    original,
+  );
+  assert.equal(h.files.size, 1);
+  h.page.onUnload();
+});
+
+test("a follow-up network failure in a valid session retains the private question and original request for recovery", async () => {
   const h = harness();
   await ready(h);
   const pending = h.page.requestFollowup(),
-    held = h.requests.shift();
-  h.page.onHide();
-  const other = structuredClone(login),
-    nextProject = "99999999-9999-4999-8999-999999999999";
-  other.user.id = "88888888-8888-4888-8888-888888888888";
-  other.session.id = "77777777-7777-4777-8777-777777777777";
-  other.session.token = "c".repeat(43);
-  h.storage.set(`timenook.session.v1:${base}`, other);
-  h.page.onLoad({ projectId: nextProject });
-  const showing = h.page.onShow();
-  respond(h.requests.shift(), {
-    ...context,
-    interviews: [
-      {
-        ...interview,
-        projectId: nextProject,
-        actualQuestion: {
-          ...question,
-          projectId: nextProject,
-          snapshot: { text: "新账号的私人问题", intent: "具体场景" },
-        },
-      },
-    ],
-  });
-  await showing;
-  h.page.customText({ detail: { value: "新账号草稿" } });
-  h.expireSession();
+    held = h.requests.shift(),
+    identity = structuredClone(h.storage.get(`timenook.session.v1:${base}`));
+  held.fail({ errMsg: "request:fail timeout" });
+  await pending;
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.data.question, question.snapshot.text);
+  assert.equal(h.page.data.interview.id, interviewId);
+  assert.equal(h.page.data.canRecord, true);
+  assert.equal(typeof h.page.stopSessionWatch, "function");
+  assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), identity);
+  const recovering = h.page.requestFollowup(),
+    retried = h.requests.shift();
+  assert.ok(held.header["Idempotency-Key"]);
+  assert.equal(
+    retried.header["Idempotency-Key"],
+    held.header["Idempotency-Key"],
+  );
+  assert.equal(retried.data.clientRequestId, held.data.clientRequestId);
   respond(
-    held,
+    retried,
     { interviewId, task: null, result: null, canFinish: true, usage: 0 },
     202,
   );
-  await pending;
-  assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), other);
-  assert.equal(h.page.data.question, "新账号的私人问题");
-  assert.equal(h.page.data.interview.projectId, nextProject);
-  assert.equal(h.page.data.customText, "新账号草稿");
+  await recovering;
   assert.equal(h.page.data.busy, false);
-  assert.equal(typeof h.page.stopSessionWatch, "function");
   h.page.onUnload();
 });

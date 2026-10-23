@@ -525,3 +525,52 @@ test("a failed device session removal cannot reuse the rejected token and a succ
   reply = (request) => success(request, 200, envelope(other.user));
   assert.deepEqual(await client.restore(), other.user);
 });
+
+for (const outcome of [
+  "network",
+  "http503",
+  "http401-cleanup-failure",
+] as const) {
+  test(`a request completing with ${outcome} at exact expiry invalidates its owner once and retains the original error`, async (t) => {
+    let now = Date.parse(identity.session.expiresAt) - 1;
+    t.mock.method(Date, "now", () => now);
+    const client = new SessionClient(api),
+      events: string[] = [];
+    await client.login();
+    client.onInvalidated((owner) => events.push(owner));
+    reply = () => {};
+    const pending = client.request("/users/me"),
+      held = requests[requests.length - 1]!;
+    assert.equal(
+      held.header?.authorization,
+      `Bearer ${identity.session.token}`,
+    );
+    now = Date.parse(identity.session.expiresAt);
+    if (outcome === "network")
+      held.fail?.({
+        errMsg: "request:fail timeout",
+      } as WechatMiniprogram.RequestFailCallbackErr);
+    else {
+      failSessionRemoval = outcome === "http401-cleanup-failure";
+      success(held, failSessionRemoval ? 401 : 503, {
+        error: {
+          code: failSessionRemoval ? "UNAUTHENTICATED" : "SERVICE_UNAVAILABLE",
+        },
+        meta: envelope(null).meta,
+      });
+    }
+    await assert.rejects(pending, {
+      code:
+        outcome === "network"
+          ? "NETWORK_ERROR"
+          : outcome === "http503"
+            ? "SERVICE_UNAVAILABLE"
+            : "UNAUTHENTICATED",
+      status: outcome === "network" ? 0 : outcome === "http503" ? 503 : 401,
+    });
+    assert.equal(client.context(), "");
+    assert.deepEqual(events, [`${identity.user.id}:${identity.session.id}`]);
+    assert.equal(storage.has(`timenook.session.v1:${api}`), failSessionRemoval);
+    assert.equal(client.sessionCleanupPending(), failSessionRemoval);
+  });
+}

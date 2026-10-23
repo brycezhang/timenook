@@ -514,7 +514,7 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
       Object.entries(localStorage).filter(([key]) => key.includes("recording")),
     );
     expect(pending.length).toBeGreaterThan(0);
-    // Delay a genuine successful HTTP response across the device's exact session expiry.
+    // Drop a genuine successful HTTP response at exact device expiry to model a transport timeout.
     await page.route(
       `**/interviews/${first.id}/follow-up/finish`,
       async (route) => {
@@ -523,7 +523,7 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
         await page.evaluate((expiresAt) => {
           Date.now = () => Date.parse(expiresAt);
         }, narrator.session.expiresAt);
-        await route.fulfill({ response });
+        await route.abort("timedout");
       },
     );
     await page
@@ -544,7 +544,8 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
         ),
       ),
     ).toEqual(pending);
-    expect(errors).toEqual([]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("net::ERR_TIMED_OUT");
   } catch (error) {
     await writeFile(
       "/tmp/timenook-t17-browser-state.json",
