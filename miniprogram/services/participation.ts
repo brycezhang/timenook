@@ -4,6 +4,7 @@ import {
   type InvitationView,
   type ParticipationState,
   type BindingApplication,
+  type ProjectCareRequestView,
 } from "../../packages/contracts/src";
 import { sessionClient } from "./session";
 import { paymentKey } from "./payments";
@@ -129,5 +130,23 @@ export const participationClient = {
         },
       },
     );
+  },
+  async careRequests(id: string) {
+    if (!uuid(id)) throw new Error("项目编号无效");
+    const result = await sessionClient.request<{
+      requests: ProjectCareRequestView[];
+    }>(`/projects/${id}/care-requests`);
+    if (
+      !Array.isArray(result?.requests) ||
+      !result.requests.every(
+        (item) =>
+          uuid(item.id) &&
+          item.kind === "rebind" &&
+          ["open", "completed"].includes(item.state) &&
+          Number.isFinite(Date.parse(item.createdAt)),
+      )
+    )
+      throw new Error("工单状态无效，请重新查询");
+    return result.requests;
   },
 };

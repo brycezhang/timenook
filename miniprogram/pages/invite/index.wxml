@@ -3,6 +3,7 @@
   <view class="soft section">隔离合成验证 · D08 本人核验及告知规则尚未正式冻结，不能用于真实资料采集。</view>
   <view class="section note">请本人申请后，在线下核对账号再确认。付款和邀请转发都不会授予资料权限。</view>
   <view wx:if="{{status}}" class="soft section">{{status}}</view>
+  <button wx:if="{{!loggedIn}}" class="btn section" bindtap="loginLive" disabled="{{busy}}">微信登录后继续邀请</button>
   <button class="link" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button>
   <view wx:if="{{participation}}" class="section">
     <view class="small muted">项目：{{participation.projectId}}</view>

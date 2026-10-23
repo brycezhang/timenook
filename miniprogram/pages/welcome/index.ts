@@ -9,6 +9,7 @@ import {
   type ConsentPurpose,
   type ParticipationState,
   type InvitationView,
+  type ProjectCareRequestView,
 } from "../../../packages/contracts/src";
 type E = {
   currentTarget: { dataset: Record<string, string> };
@@ -29,6 +30,7 @@ Page({
     accountId: "",
     targetUserId: "",
     supportCaseRef: "",
+    careRequests: [] as ProjectCareRequestView[],
     purposeLabels: [
       { purpose: "collection", label: "采集并保存讲述和照片" },
       { purpose: "ai", label: "交由AI处理素材" },
@@ -64,6 +66,7 @@ Page({
       participation: null,
       invitation: null,
       memberships: [],
+      careRequests: [],
       busy: false,
     });
   },
@@ -71,7 +74,31 @@ Page({
     this.onHide();
   },
   async onShow() {
+    if (this.data.busy) return;
     if (dataMode() === "live") await this.refreshLive();
+  },
+  recoverExpiredSession(error: unknown, generation: number, context: string) {
+    if (
+      generation !== this.generation ||
+      dataMode() !== "live" ||
+      !context ||
+      sessionClient.context() ||
+      !(error instanceof ApiFailure) ||
+      error.status !== 401
+    )
+      return false;
+    this.setData({
+      busy: false,
+      loggedIn: false,
+      accountId: "",
+      participation: null,
+      invitation: null,
+      memberships: [],
+      careRequests: [],
+      supportCaseRef: "",
+      status: error.message,
+    });
+    return true;
   },
   async refreshLive() {
     const generation = ++this.generation;
@@ -81,19 +108,24 @@ Page({
       participation: null,
       invitation: null,
       memberships: [],
+      careRequests: [],
+      supportCaseRef: "",
       status: "",
       busy: true,
       loggedIn: !!context,
       accountId: context.split(":")[0] ?? "",
     });
-    const current = () =>
-      generation === this.generation &&
-      context === sessionClient.context() &&
-      dataMode() === "live";
+    const activePage = () =>
+      generation === this.generation && dataMode() === "live";
+    const current = () => activePage() && context === sessionClient.context();
     try {
       if (this.projectId) {
         const participation = await participationClient.state(this.projectId);
-        if (current()) this.setData({ participation });
+        if (!current()) return;
+        const careRequests = await participationClient.careRequests(
+          this.projectId,
+        );
+        if (current()) this.setData({ participation, careRequests });
       } else if (this.inviteToken) {
         const invitation = await participationClient.preview(this.inviteToken);
         if (current()) this.setData({ invitation });
@@ -108,6 +140,7 @@ Page({
           });
       }
     } catch (error) {
+      if (this.recoverExpiredSession(error, generation, context)) return;
       if (current())
         this.setData({
           status:
@@ -179,6 +212,7 @@ Page({
         this.setData({ participation, status: "用途选择已保存" });
       }
     } catch (error) {
+      if (this.recoverExpiredSession(error, generation, context)) return;
       if (context === sessionClient.context() && generation === this.generation)
         this.setData({
           participation: null,
@@ -212,6 +246,11 @@ Page({
         this.data.targetUserId,
         this.intent.key,
       );
+      if (context !== sessionClient.context() || generation !== this.generation)
+        return;
+      const careRequests = await participationClient.careRequests(
+        state.projectId,
+      );
       if (
         context === sessionClient.context() &&
         generation === this.generation
@@ -219,11 +258,13 @@ Page({
         this.intent = null;
         this.setData({
           supportCaseRef: care.supportCaseRef,
+          careRequests,
           status:
             "换绑申请已记录，须由客服核验本人；此申请不会授予目标账号权限",
         });
       }
     } catch (error) {
+      if (this.recoverExpiredSession(error, generation, context)) return;
       if (context === sessionClient.context() && generation === this.generation)
         this.setData({
           status: error instanceof Error ? error.message : "申请未确认",
@@ -264,6 +305,7 @@ Page({
           });
         }
       } catch (error) {
+        if (this.recoverExpiredSession(error, generation, context)) return;
         if (
           context === sessionClient.context() &&
           generation === this.generation

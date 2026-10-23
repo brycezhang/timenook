@@ -17,10 +17,36 @@ export interface ParticipationState {
   noticeVersion: string;
   policyStatus: "synthetic-only" | "pending";
   choices: { purpose: ConsentPurpose; granted: boolean | null }[];
+  consent: ConsentDecisionView[];
   canCollect: boolean;
   canProcessAi: boolean;
   canRead: boolean;
   careAvailable: boolean;
+}
+export interface ConsentDecisionView {
+  subjectId: string;
+  operatorUserId: string;
+  purpose: ConsentPurpose;
+  granted: boolean;
+  noticeVersion: string;
+  method: string;
+  evidenceRef: string;
+  bindingVersion: number;
+  accessEpoch: number;
+  createdAt: string;
+}
+export interface CareBindingChangeView {
+  subjectId: string;
+  sourceBindingVersion: number;
+  bindingVersion: number;
+  accessEpoch: number;
+  operatorId: string;
+  supportCaseId: string | null;
+  noticeVersion: string;
+  method: string;
+  evidenceRef: string;
+  requestId: string;
+  createdAt: string;
 }
 export interface BindingApplication {
   id: string;
@@ -36,13 +62,13 @@ export interface CareCase {
   state: "open" | "completed";
   completedBy: string | null;
   kind: "rebind";
+  createdAt: string;
   supportCaseRef?: string;
-  changes?: {
-    sourceBindingVersion: number;
-    bindingVersion: number;
-    accessEpoch: number;
-    evidenceRef: string;
-    operatorId: string;
-    requestId: string;
-  }[];
+  changes?: CareBindingChangeView[];
+}
+export interface ProjectCareRequestView {
+  id: string;
+  kind: "rebind";
+  state: "open" | "completed";
+  createdAt: string;
 }

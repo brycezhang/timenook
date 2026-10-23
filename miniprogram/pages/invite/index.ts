@@ -1,7 +1,7 @@
 import { type Project } from "../../domain/model";
 import { asset, go, home, notify, required } from "../../services/store";
 import { dataMode } from "../../services/mode";
-import { sessionClient } from "../../services/session";
+import { sessionClient, ApiFailure } from "../../services/session";
 import { participationClient } from "../../services/participation";
 import { paymentKey } from "../../services/payments";
 import type {
@@ -22,6 +22,7 @@ Page({
     inviteToken: "",
     busy: false,
     status: "",
+    loggedIn: false,
   },
   projectId: "",
   generation: 0,
@@ -43,12 +44,54 @@ Page({
     this.onHide();
   },
   async onShow() {
+    if (this.data.busy) return;
     if (dataMode() === "live") {
       await this.refreshLive();
       return;
     }
     const p = required();
     this.setData({ mode: "demo", p, bookImage: asset(p) });
+  },
+  recoverExpiredSession(error: unknown, generation: number, context: string) {
+    if (
+      generation !== this.generation ||
+      dataMode() !== "live" ||
+      !context ||
+      sessionClient.context() ||
+      !(error instanceof ApiFailure) ||
+      error.status !== 401
+    )
+      return false;
+    this.setData({
+      busy: false,
+      loggedIn: false,
+      participation: null,
+      requests: [],
+      inviteToken: "",
+      status: error.message,
+    });
+    return true;
+  },
+  async loginLive() {
+    if (this.data.busy) return;
+    const generation = ++this.generation;
+    this.setData({
+      busy: true,
+      status: "",
+      participation: null,
+      inviteToken: "",
+    });
+    try {
+      await sessionClient.login();
+      if (generation === this.generation && dataMode() === "live")
+        await this.refreshLive();
+    } catch (error) {
+      if (generation === this.generation)
+        this.setData({
+          busy: false,
+          status: error instanceof Error ? error.message : "登录失败",
+        });
+    }
   },
   async refreshLive() {
     const generation = ++this.generation;
@@ -60,6 +103,7 @@ Page({
       requests: [],
       status: "",
       busy: true,
+      loggedIn: !!context,
     });
     const current = () =>
       generation === this.generation &&
@@ -72,6 +116,7 @@ Page({
       const result = await participationClient.requests(this.projectId);
       if (current()) this.setData({ requests: result.requests });
     } catch (error) {
+      if (this.recoverExpiredSession(error, generation, context)) return;
       if (current())
         this.setData({
           status: error instanceof Error ? error.message : "查询失败",
@@ -104,6 +149,7 @@ Page({
       this.approvalIntent = null;
       await this.refreshLive();
     } catch (error) {
+      if (this.recoverExpiredSession(error, generation, context)) return;
       if (context === sessionClient.context() && generation === this.generation)
         this.setData({
           status:
@@ -159,6 +205,7 @@ Page({
           });
         }
       } catch (error) {
+        if (this.recoverExpiredSession(error, generation, context)) return;
         if (
           context === sessionClient.context() &&
           generation === this.generation

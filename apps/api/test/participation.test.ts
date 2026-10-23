@@ -516,6 +516,22 @@ test("three purpose decisions stay separate; rejection keeps care and orders, sh
     403,
   );
   const history = await state(p, p.narrator.token);
+  assert.deepEqual(
+    Object.keys(history.consent[0]).sort(),
+    [
+      "subjectId",
+      "operatorUserId",
+      "purpose",
+      "granted",
+      "noticeVersion",
+      "method",
+      "evidenceRef",
+      "bindingVersion",
+      "accessEpoch",
+      "createdAt",
+    ].sort(),
+    "public consent history exposes only its declared product and audit fields",
+  );
   assert.ok(
     history.consent.every(
       (c: any) =>
@@ -785,6 +801,16 @@ test("care rebinding requires a tracked case, D08 evidence and admin authority, 
     403,
   );
   const newState = await state(p, replacement.token);
+  assert.equal(
+    (
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/care-requests`,
+        p.narrator.token,
+      )
+    ).statusCode,
+    403,
+  );
   assert.equal(newState.canRead, false);
   assert.deepEqual(newState.consent, []);
   const oldRelogin = await login(p.narrator.who);
@@ -825,6 +851,23 @@ test("care rebinding requires a tracked case, D08 evidence and admin authority, 
       headers: operator,
     }),
     200,
+  );
+  assert.deepEqual(
+    Object.keys(caseView.changes[0]).sort(),
+    [
+      "subjectId",
+      "sourceBindingVersion",
+      "bindingVersion",
+      "accessEpoch",
+      "operatorId",
+      "supportCaseId",
+      "noticeVersion",
+      "method",
+      "evidenceRef",
+      "requestId",
+      "createdAt",
+    ].sort(),
+    "care history exposes only its declared traceability fields",
   );
   assert.equal(caseView.changes[0].sourceBindingVersion, 1);
   assert.equal(caseView.changes[0].operatorId, caseView.completedBy);

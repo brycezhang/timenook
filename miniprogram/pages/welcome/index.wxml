@@ -29,6 +29,7 @@
       <input class="input section" placeholder="目标账号编号" value="{{targetUserId}}" bindinput="targetInput" disabled="{{busy}}"/>
       <button class="btn secondary section" bindtap="requestRebind" disabled="{{busy || !targetUserId || participation.bindingVersion === 0 || participation.policyStatus !== 'synthetic-only'}}">提交客服换绑申请</button>
       <view wx:if="{{supportCaseRef}}" class="note section">工单：{{supportCaseRef}}</view>
+      <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="small muted">换绑工单：record:{{item.id}}</view><view class="note">处理状态：{{item.state === 'open' ? '待客服核验' : '已完成'}}</view></view>
     </view>
   </view>
   <button class="link" bindtap="back">返回首页</button>

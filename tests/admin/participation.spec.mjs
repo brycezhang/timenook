@@ -314,7 +314,7 @@ async function sessionPage(context, session, route) {
   const page = await context.newPage();
   page.on("pageerror", (error) => runtimeErrors.push(error.message));
   page.on("console", (message) => {
-    if (message.type() === "error" && !message.text().includes("403"))
+    if (message.type() === "error" && !/\b40[13]\b/.test(message.text()))
       runtimeErrors.push(message.text());
   });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -424,6 +424,22 @@ test("mini-program invitation and separate choices feed the shared care form, wh
   const careHttp = await careResponse;
   expect(careHttp.status()).toBe(201);
   const care = (await careHttp.json()).data;
+  await expect(
+    narrator.getByText("处理状态：待客服核验", { exact: true }),
+  ).toBeVisible();
+  await narrator.goto("http://127.0.0.1:5174/#/welcome");
+  await narrator
+    .getByRole("button", {
+      name: `查看本人的用途选择 · ${projectId}`,
+      exact: true,
+    })
+    .click();
+  await expect(
+    narrator.getByText(`换绑工单：record:${care.id}`, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    narrator.getByText("处理状态：待客服核验", { exact: true }),
+  ).toBeVisible();
   await page.goto("./");
   watch(page);
   await page.getByLabel("管理员账号").fill(account.username);
@@ -460,6 +476,17 @@ test("mini-program invitation and separate choices feed the shared care form, wh
     page.getByText("来源绑定版本：1", { exact: true }),
   ).toBeVisible();
   await page.screenshot({ path: "/tmp/timenook-t11-care-mobile.png" });
+  await buyer.goto(`http://127.0.0.1:5174/#/welcome?projectId=${projectId}`);
+  await expect(
+    buyer.getByText(`换绑工单：record:${care.id}`, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    buyer.getByText("处理状态：已完成", { exact: true }),
+  ).toBeVisible();
+  await buyer
+    .getByText("处理状态：已完成", { exact: true })
+    .scrollIntoViewIfNeeded();
+  await buyer.screenshot({ path: "/tmp/timenook-t11-care-result-mobile.png" });
   await narrator.getByRole("button", { name: "重新查询参与状态" }).click();
   await expect(
     narrator.getByText("等待发起人核对申请；旧账号或无权限账号不能读取项目", {
@@ -479,6 +506,22 @@ test("mini-program invitation and separate choices feed the shared care form, wh
     3,
   );
   await expect(replacement.getByText(/未获采集许可/)).toBeVisible();
+  const revoked = await api.inject({
+    method: "DELETE",
+    url: `/v1/sessions/${replacementSession.session.id}`,
+    headers: { authorization: `Bearer ${replacementSession.session.token}` },
+  });
+  expect(revoked.statusCode, revoked.body).toBe(204);
+  await replacement.getByRole("button", { name: "重新查询参与状态" }).click();
+  await expect(
+    replacement.getByRole("button", { name: "微信登录后参与", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    replacement.getByText("登录已失效，请重新登录", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    replacement.getByRole("button", { name: "重新查询参与状态" }),
+  ).toBeEnabled();
   for (const target of [buyer, narrator, replacement, page]) {
     expect(await target.locator("vite-error-overlay").count()).toBe(0);
     expect(await target.locator(".preview-error").count()).toBe(0);

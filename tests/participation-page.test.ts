@@ -58,6 +58,11 @@ function harness(name: string) {
         requests.push(r);
         return {};
       },
+      login: (options: WechatMiniprogram.LoginOption) =>
+        options.success?.({
+          code: "synthetic-relogin-code",
+          errMsg: "login:ok",
+        }),
       navigateTo: ({ url }: { url: string }) => routes.push(url),
       reLaunch: ({ url }: { url: string }) => routes.push(url),
       showToast: () => {},
@@ -74,13 +79,31 @@ function respond(
   assert.ok(r, "expected public platform request");
   r.success?.({
     statusCode,
-    data: { data, meta: { requestId: "synthetic" } },
+    data:
+      statusCode < 400
+        ? { data, meta: { requestId: "synthetic" } }
+        : {
+            error: {
+              code: statusCode === 401 ? "UNAUTHENTICATED" : "FORBIDDEN",
+            },
+            meta: { requestId: "synthetic" },
+          },
     header: {},
     cookies: [],
     errMsg: "ok",
   } as unknown as WechatMiniprogram.RequestSuccessCallbackResult);
 }
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+async function completeProjectState(
+  requests: WechatMiniprogram.RequestOption[],
+  value: unknown,
+) {
+  respond(requests.shift()!, value);
+  await tick();
+  const query = requests.shift()!;
+  assert.equal(query?.url, `${base}/projects/${projectId}/care-requests`);
+  respond(query, { requests: [] });
+}
 const current = {
   projectId,
   subjectId: "44444444-4444-4444-8444-444444444444",
@@ -146,6 +169,59 @@ test("actual live invitation page prepares a server token for native sharing and
   respond(requests.shift()!, { requests: [] });
   await approving;
 });
+test("welcome refresh releases its own expired session and can log in again while an older 401 cannot replace a newer account", async () => {
+  const { page, requests, storage } = harness("welcome");
+  page.onLoad({ projectId });
+  const expired = page.refreshLive();
+  respond(requests.shift()!, undefined, 401);
+  await expired;
+  assert.equal(storage.has(`timenook.session.v1:${base}`), false);
+  assert.equal(page.data.busy, false);
+  assert.equal(page.data.loggedIn, false);
+  assert.equal(page.data.accountId, "");
+  assert.match(page.data.status, /登录已失效/);
+  const loggingIn = page.loginLive();
+  await page.onShow();
+  await tick();
+  assert.equal(requests[0].url, `${base}/sessions/wechat`);
+  respond(requests.shift()!, login, 201);
+  await tick();
+  await completeProjectState(requests, current);
+  await loggingIn;
+  assert.equal(page.data.busy, false);
+  assert.equal(page.data.loggedIn, true);
+  const old = page.refreshLive();
+  const oldRequest = requests.shift()!;
+  const nextLogin = {
+    user: { id: "77777777-7777-4777-8777-777777777777" },
+    session: {
+      ...login.session,
+      id: "88888888-8888-4888-8888-888888888888",
+      token: "z".repeat(43),
+    },
+  };
+  storage.set(`timenook.session.v1:${base}`, nextLogin);
+  const next = page.refreshLive();
+  const nextRequest = requests.shift()!;
+  respond(oldRequest, undefined, 401);
+  await old;
+  assert.equal(page.data.busy, true);
+  assert.equal(page.data.loggedIn, true);
+  assert.equal(page.data.accountId, nextLogin.user.id);
+  assert.equal(page.data.status, "");
+  assert.deepEqual(storage.get(`timenook.session.v1:${base}`), nextLogin);
+  respond(nextRequest, current);
+  await tick();
+  respond(requests.shift()!, { requests: [] });
+  await next;
+  assert.equal(page.data.busy, false);
+  const leaving = page.refreshLive();
+  page.onHide();
+  page.setData({ status: "页面已离开" });
+  respond(requests.shift()!, undefined, 401);
+  await leaving;
+  assert.equal(page.data.status, "页面已离开");
+});
 test("actual welcome page applies without a total consent switch, then submits separate decisions with current epochs and drops late account responses", async () => {
   const { page, requests, storage } = harness("welcome");
   page.onLoad({ token: "b".repeat(43) });
@@ -173,7 +249,7 @@ test("actual welcome page applies without a total consent switch, then submits s
   await applying;
   assert.match(page.data.status, /等待发起人/);
   const refreshing = page.refreshLive();
-  respond(requests.shift()!, current);
+  await completeProjectState(requests, current);
   await refreshing;
   const choice = page.chooseConsent({
     currentTarget: { dataset: { purpose: "collection", granted: "true" } },
@@ -193,3 +269,134 @@ test("actual welcome page applies without a total consent switch, then submits s
   await late;
   assert.equal(page.data.participation, null);
 });
+test("welcome restores open and completed care requests on reentry and does not query care after project authorization is rejected", async () => {
+  const { page, requests } = harness("welcome");
+  page.onLoad({ projectId });
+  const show = page.onShow();
+  respond(requests.shift()!, current);
+  await tick();
+  assert.equal(requests[0]?.url, `${base}/projects/${projectId}/care-requests`);
+  const openCase = {
+    id: "55555555-5555-4555-8555-555555555555",
+    kind: "rebind",
+    state: "open",
+    createdAt: "2026-10-23T01:00:00.000Z",
+  };
+  respond(requests.shift()!, { requests: [openCase] });
+  await show;
+  assert.equal(page.data.careRequests[0].state, "open");
+  page.onHide();
+  assert.equal(page.data.careRequests.length, 0);
+  const reentry = page.onShow();
+  respond(requests.shift()!, current);
+  await tick();
+  respond(requests.shift()!, {
+    requests: [{ ...openCase, state: "completed" }],
+  });
+  await reentry;
+  assert.equal(page.data.careRequests[0].id, openCase.id);
+  assert.equal(page.data.careRequests[0].state, "completed");
+  const revoked = page.refreshLive();
+  respond(requests.shift()!, undefined, 403);
+  await revoked;
+  assert.equal(page.data.participation, null);
+  assert.equal(page.data.careRequests.length, 0);
+  assert.equal(requests.length, 0);
+});
+for (const action of ["accept", "chooseConsent", "requestRebind"])
+  test(`welcome ${action} releases an expired session and exposes login again`, async () => {
+    const { page, requests } = harness("welcome");
+    page.onLoad(
+      action === "accept" ? { token: "b".repeat(43) } : { projectId },
+    );
+    const showing = page.onShow();
+    if (action === "accept")
+      respond(requests.shift()!, {
+        inviter: "发起人",
+        process: ["说一段"],
+        purposes: ["collection", "ai", "sharing"],
+        noticeVersion: "synthetic-d08-v1",
+        policyStatus: "synthetic-only",
+        choice: "可撤回",
+      });
+    else await completeProjectState(requests, current);
+    await showing;
+    if (action === "requestRebind")
+      page.targetInput({
+        detail: { value: "77777777-7777-4777-8777-777777777777" },
+      });
+    const acting =
+      action === "chooseConsent"
+        ? page.chooseConsent({
+            currentTarget: {
+              dataset: { purpose: "collection", granted: "true" },
+            },
+          })
+        : page[action]();
+    respond(requests.shift()!, undefined, 401);
+    await acting;
+    assert.equal(page.data.busy, false);
+    assert.equal(page.data.loggedIn, false);
+    assert.equal(page.data.participation, null);
+    assert.match(page.data.status, /登录已失效/);
+  });
+for (const action of ["refreshLive", "share", "approve"])
+  test(`invite ${action} releases an expired session and exposes login again`, async () => {
+    const { page, requests, storage } = harness("invite");
+    page.onLoad({ projectId });
+    if (action !== "refreshLive") {
+      const showing = page.onShow();
+      respond(requests.shift()!, {
+        ...current,
+        role: "initiator",
+        bindingVersion: 0,
+      });
+      await tick();
+      respond(requests.shift()!, { requests: [] });
+      await showing;
+    }
+    const acting =
+      action === "approve"
+        ? page.approve({
+            currentTarget: {
+              dataset: { id: "55555555-5555-4555-8555-555555555555" },
+            },
+          })
+        : page[action]();
+    respond(requests.shift()!, undefined, 401);
+    await acting;
+    assert.equal(page.data.busy, false);
+    assert.equal(page.data.loggedIn, false);
+    assert.equal(page.data.participation, null);
+    assert.equal(page.data.inviteToken, "");
+    assert.match(page.data.status, /登录已失效/);
+    if (action === "refreshLive") {
+      const relogin = page.loginLive();
+      await page.onShow();
+      await tick();
+      respond(requests.shift()!, login, 201);
+      await tick();
+      respond(requests.shift()!, {
+        ...current,
+        role: "initiator",
+        bindingVersion: 0,
+      });
+      await tick();
+      respond(requests.shift()!, { requests: [] });
+      await relogin;
+      assert.equal(page.data.loggedIn, true);
+      assert.equal(page.data.busy, false);
+      const late = page.share();
+      const pending = requests.shift()!;
+      storage.set(`timenook.session.v1:${base}`, {
+        ...login,
+        session: { ...login.session, token: "z".repeat(43) },
+      });
+      page.onHide();
+      page.setData({ status: "页面已离开" });
+      respond(pending, undefined, 401);
+      await late;
+      assert.equal(page.data.status, "页面已离开");
+      assert.equal(page.data.busy, false);
+    }
+  });

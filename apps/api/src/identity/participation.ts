@@ -40,6 +40,11 @@ import { IdentityAccess } from "./identity-access";
 import { ProjectServiceTerms } from "../projects/service-terms";
 import { idempotencyKey } from "../payments/orders";
 import { CONSENT_PURPOSES } from "@timenook/contracts";
+import type {
+  ConsentPurpose,
+  ParticipationState,
+  CareBindingChangeView,
+} from "@timenook/contracts";
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 const CARE_SELECT = {
@@ -396,11 +401,23 @@ export class Participation implements OnModuleDestroy {
     p: Awaited<ReturnType<Participation["project"]>>,
     subject: Awaited<ReturnType<Participation["subject"]>>,
     userId: string,
-  ) {
+  ): Promise<ParticipationState> {
     const narrator = subject.boundUserId === userId;
     const records = await tx.consentRecord.findMany({
       where: { projectId: p.id, bindingVersion: subject.bindingVersion },
       orderBy: { sequence: "asc" },
+      select: {
+        subjectId: true,
+        operatorUserId: true,
+        purpose: true,
+        granted: true,
+        noticeVersion: true,
+        method: true,
+        evidenceRef: true,
+        bindingVersion: true,
+        accessEpoch: true,
+        createdAt: true,
+      },
     });
     const granted = Object.fromEntries(
       records.map((record) => [record.purpose, record.granted]),
@@ -422,7 +439,13 @@ export class Participation implements OnModuleDestroy {
         purpose,
         granted: granted[purpose] ?? null,
       })),
-      consent: narrator ? records : [],
+      consent: narrator
+        ? records.map((record) => ({
+            ...record,
+            purpose: record.purpose as ConsentPurpose,
+            createdAt: record.createdAt.toISOString(),
+          }))
+        : [],
       careAvailable: true,
       canCollect: narrator && collection && terms.canRecord,
       canProcessAi: narrator && collection && granted.ai === true,
@@ -589,12 +612,31 @@ export class Participation implements OnModuleDestroy {
       select: CARE_SELECT,
     });
     if (!row) throw new NotFoundException();
+    const changes: CareBindingChangeView[] = (
+      await this.db.bindingChange.findMany({
+        where: { supportCaseId: id },
+        select: {
+          subjectId: true,
+          sourceBindingVersion: true,
+          bindingVersion: true,
+          accessEpoch: true,
+          operatorId: true,
+          supportCaseId: true,
+          noticeVersion: true,
+          method: true,
+          evidenceRef: true,
+          requestId: true,
+          createdAt: true,
+        },
+      })
+    ).map((change) => ({
+      ...change,
+      createdAt: change.createdAt.toISOString(),
+    }));
     return {
       ...row,
       supportCaseRef: `record:${id}`,
-      changes: await this.db.bindingChange.findMany({
-        where: { supportCaseId: id },
-      }),
+      changes,
     };
   }
   async rebind(
