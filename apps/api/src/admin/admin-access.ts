@@ -34,6 +34,8 @@ const ROUTE_ACTIONS: Record<string, string> = {
   "GET /v1/admin/care-requests": "care.list",
   "GET /v1/admin/care-requests/:id": "care.read",
   "POST /v1/admin/projects/:id/rebind": "care.rebind",
+  "POST /v1/admin/projects/:id/care-requests": "care.open",
+  "POST /v1/admin/care-requests/:id/verify": "care.verify",
   "GET /v1/admin/service-terms/:id": "service-terms.read",
   "POST /v1/admin/service-terms/:id/pause": "service-terms.pause",
   "GET /v1/admin/session": "admin.session",

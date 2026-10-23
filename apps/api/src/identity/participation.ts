@@ -12,6 +12,7 @@ import {
   Injectable,
   OnModuleDestroy,
   ForbiddenException,
+  BadRequestException,
   NotFoundException,
   ConflictException,
   ServiceUnavailableException,
@@ -32,18 +33,23 @@ import {
   IsIn,
   IsBoolean,
   IsUUID,
+  IsOptional,
+  ValidateIf,
 } from "class-validator";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient, type AssistedSession } from "@prisma/client";
 import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
 import { IdentityAccess } from "./identity-access";
 import { ProjectServiceTerms } from "../projects/service-terms";
 import { idempotencyKey } from "../payments/orders";
-import { CONSENT_PURPOSES } from "@timenook/contracts";
+import { CONSENT_PURPOSES, ASSISTED_PURPOSES } from "@timenook/contracts";
 import type {
   ConsentPurpose,
   ParticipationState,
   CareBindingChangeView,
+  CareCase,
+  AssistedSessionView,
+  AssistedPurpose,
 } from "@timenook/contracts";
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -51,13 +57,36 @@ const CARE_SELECT = {
   id: true,
   projectId: true,
   requesterId: true,
+  requesterSubjectId: true,
+  operatorId: true,
+  operatorRealm: true,
   targetUserId: true,
   sourceBindingVersion: true,
+  sourceAccessEpoch: true,
   kind: true,
   state: true,
   completedBy: true,
   createdAt: true,
 } as const;
+function careView(
+  row: Prisma.CareRequestGetPayload<{ select: typeof CARE_SELECT }>,
+): CareCase {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    requesterId: row.requesterId,
+    requesterSubjectId: row.requesterSubjectId,
+    operatorId: row.operatorId,
+    operatorRealm: row.operatorRealm as CareCase["operatorRealm"],
+    targetUserId: row.targetUserId,
+    sourceBindingVersion: row.sourceBindingVersion,
+    sourceAccessEpoch: row.sourceAccessEpoch,
+    kind: row.kind as CareCase["kind"],
+    state: row.state as CareCase["state"],
+    completedBy: row.completedBy,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
 class ParticipationNoticeDto {
   @ApiProperty({ enum: ["synthetic-d08-v1"] })
   @Equals("synthetic-d08-v1")
@@ -69,6 +98,23 @@ class ParticipationNoticeDto {
   @IsString()
   @Matches(/^synthetic:[^\r\n]{3,160}$/)
   evidenceRef!: string;
+}
+class AssistedSessionDto extends ParticipationNoticeDto {
+  @ApiProperty({
+    format: "uuid",
+    required: false,
+    description:
+      "Latest observed session for this purpose; omit only when none exists",
+  })
+  @IsOptional()
+  @IsUUID()
+  expectedSessionId?: string;
+  @ApiProperty({ enum: ASSISTED_PURPOSES })
+  @IsIn(ASSISTED_PURPOSES)
+  purpose!: (typeof ASSISTED_PURPOSES)[number];
+  @ApiProperty() @IsBoolean() granted!: boolean;
+  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
+  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedAccessEpoch!: number;
 }
 class ApprovalDto {
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
@@ -87,17 +133,26 @@ class RevokeDto extends ParticipationNoticeDto {
 class ConsentDto extends RevokeDto {
   @ApiProperty() @IsBoolean() granted!: boolean;
 }
-class CareRequestDto {
-  @ApiProperty({ enum: ["rebind"] }) @Equals("rebind") kind!: "rebind";
-  @ApiProperty({ format: "uuid" }) @IsUUID() targetUserId!: string;
-  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedBindingVersion!: number;
+export class CareRequestDto {
+  @ApiProperty({ enum: ["rebind", "withdraw", "export", "delete"] })
+  @IsIn(["rebind", "withdraw", "export", "delete"])
+  kind!: "rebind" | "withdraw" | "export" | "delete";
+  @ApiProperty({ format: "uuid", required: false })
+  @ValidateIf((o) => o.kind === "rebind")
+  @IsUUID()
+  targetUserId?: string;
+  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
+}
+export class VerifyCareDto extends ParticipationNoticeDto {
+  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
+  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedAccessEpoch!: number;
 }
 export class RebindDto extends ParticipationNoticeDto {
   @ApiProperty({ pattern: "^record:[a-f0-9-]{36}$" })
   @Matches(/^record:[a-f0-9-]{36}$/)
   supportCaseRef!: string;
   @ApiProperty({ format: "uuid" }) @IsUUID() targetUserId!: string;
-  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedBindingVersion!: number;
+  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
 }
 @Injectable()
 export class Participation implements OnModuleDestroy {
@@ -340,17 +395,7 @@ export class Participation implements OnModuleDestroy {
         where: { projectId: p.id, consumedAt: null },
         data: { consumedAt: new Date() },
       });
-      // The application explicitly records本人 participation; the server owns
-      // both the stable fact key and timestamp, in this binding transaction.
-      await this.terms.recordFact(
-        {
-          projectId: p.id,
-          eventId: `subject-participation:${subject.id}`,
-          kind: "subject_participation",
-          occurredAt: new Date(),
-        },
-        tx,
-      );
+      await this.terms.ensureSubjectParticipation(tx, p.id, subject.id);
       await tx.participationCommand.create({
         data: {
           projectId: p.id,
@@ -409,6 +454,7 @@ export class Participation implements OnModuleDestroy {
       select: {
         subjectId: true,
         operatorUserId: true,
+        operatorAdminId: true,
         purpose: true,
         granted: true,
         noticeVersion: true,
@@ -419,13 +465,31 @@ export class Participation implements OnModuleDestroy {
         createdAt: true,
       },
     });
+    const decisions = new Map(
+      records.map((record) => [record.purpose, record]),
+    );
     const granted = Object.fromEntries(
-      records.map((record) => [record.purpose, record.granted]),
+      [...decisions].map(([purpose, record]) => [purpose, record.granted]),
     );
     const enabled =
       this.config.environment === "test" &&
       this.config.participation?.mode === "synthetic-d08";
-    const collection = enabled && granted.collection === true;
+    const effective: Partial<Record<ConsentPurpose, boolean>> = {};
+    // Sequence orders the actual purpose decisions. Assisted choices produce
+    // permission only while their latest matching session remains valid.
+    for (const [key, record] of decisions) {
+      const purpose = key as ConsentPurpose;
+      if (record.method === "assisted") {
+        const session = await this.latestAssisted(tx, p.id, purpose);
+        effective[purpose] =
+          record.granted &&
+          this.activeAssisted(session, p, subject) &&
+          session.evidenceRef === record.evidenceRef &&
+          session.operatorUserId === record.operatorUserId;
+      } else
+        effective[purpose] = record.granted && record.method === "self_wechat";
+    }
+    const collection = enabled && effective.collection === true;
     const terms = await this.terms.read(p.id, undefined, tx);
     return {
       projectId: p.id,
@@ -440,18 +504,20 @@ export class Participation implements OnModuleDestroy {
         granted: granted[purpose] ?? null,
       })),
       consent: narrator
-        ? records.map((record) => ({
+        ? records.map(({ operatorAdminId, ...record }) => ({
             ...record,
+            ...(operatorAdminId ? { operatorAdminId } : {}),
             purpose: record.purpose as ConsentPurpose,
             createdAt: record.createdAt.toISOString(),
           }))
         : [],
       careAvailable: true,
       canCollect: narrator && collection && terms.canRecord,
-      canProcessAi: narrator && collection && granted.ai === true,
+      canProcessAi: narrator && collection && effective.ai === true,
       canRead:
         collection &&
-        (narrator || (p.order.buyerId === userId && granted.sharing === true)),
+        (narrator ||
+          (p.order.buyerId === userId && effective.sharing === true)),
     };
   }
   async consent(
@@ -540,54 +606,16 @@ export class Participation implements OnModuleDestroy {
         throw new ForbiddenException();
       if (body) {
         this.policy();
-        const hash = digest(JSON.stringify(body));
-        const prior = await tx.careRequest.findUnique({
-          where: {
-            projectId_requesterId_idempotencyKey: {
-              projectId: id,
-              requesterId: user.id,
-              idempotencyKey: key!,
-            },
-          },
-        });
-        if (prior) {
-          if (prior.requestHash !== hash) throw new ConflictException();
-          return {
-            id: prior.id,
-            projectId: id,
-            state: prior.state,
-            supportCaseRef: `record:${prior.id}`,
-          };
-        }
-        if (body.targetUserId === p.order.buyerId)
-          throw new ForbiddenException();
-        if (
-          !subject.boundUserId ||
-          subject.bindingVersion !== body.expectedBindingVersion ||
-          body.targetUserId === subject.boundUserId
-        )
-          throw new ConflictException();
-        const target = await tx.wechatIdentity.findFirst({
-          where: {
-            userId: body.targetUserId,
-            appId: this.config.wechat?.appId,
-          },
-        });
-        if (!target) throw new NotFoundException();
-        const row = await tx.careRequest.create({
-          data: {
-            id: randomUUID(),
-            projectId: id,
-            requesterId: user.id,
-            targetUserId: body.targetUserId,
-            sourceBindingVersion: body.expectedBindingVersion,
-            kind: "rebind",
-            idempotencyKey: key!,
-            requestHash: hash,
-          },
-          select: CARE_SELECT,
-        });
-        return { ...row, supportCaseRef: `record:${row.id}` };
+        return this.createCare(
+          tx,
+          p,
+          subject,
+          body,
+          key!,
+          user.id,
+          "product",
+          subject.boundUserId === user.id ? user.id : null,
+        );
       }
       return {
         requests: await tx.careRequest.findMany({
@@ -598,18 +626,187 @@ export class Participation implements OnModuleDestroy {
       };
     });
   }
+  private async createCare(
+    tx: Prisma.TransactionClient,
+    p: Awaited<ReturnType<Participation["project"]>>,
+    subject: Awaited<ReturnType<Participation["subject"]>>,
+    body: CareRequestDto,
+    key: string,
+    operatorId: string,
+    operatorRealm: "product" | "admin",
+    requesterId: string | null,
+  ) {
+    const hash = digest(JSON.stringify(body));
+    const prior = await tx.careRequest.findUnique({
+      where: {
+        projectId_operatorId_operatorRealm_idempotencyKey: {
+          projectId: p.id,
+          operatorId,
+          operatorRealm,
+          idempotencyKey: key,
+        },
+      },
+    });
+    if (prior) {
+      if (prior.requestHash !== hash) throw new ConflictException();
+      return { ...careView(prior), supportCaseRef: `record:${prior.id}` };
+    }
+    if (subject.bindingVersion !== body.expectedBindingVersion)
+      throw new ConflictException();
+    if (body.kind === "rebind") {
+      if (body.targetUserId === p.order.buyerId) throw new ForbiddenException();
+      if (subject.boundUserId === body.targetUserId)
+        throw new ConflictException();
+      if (
+        !(await tx.wechatIdentity.findFirst({
+          where: {
+            userId: body.targetUserId,
+            appId: this.config.wechat?.appId,
+          },
+        }))
+      )
+        throw new NotFoundException();
+    } else if (body.targetUserId) throw new BadRequestException();
+    const row = await tx.careRequest.create({
+      data: {
+        id: randomUUID(),
+        projectId: p.id,
+        requesterId,
+        requesterSubjectId: requesterId ? null : subject.id,
+        operatorId,
+        operatorRealm,
+        targetUserId: body.targetUserId ?? null,
+        sourceBindingVersion: subject.bindingVersion,
+        sourceAccessEpoch: p.accessEpoch,
+        kind: body.kind,
+        idempotencyKey: key,
+        requestHash: hash,
+      },
+      select: CARE_SELECT,
+    });
+    return { ...careView(row), supportCaseRef: `record:${row.id}` };
+  }
+  async openCareCase(
+    tx: Prisma.TransactionClient,
+    id: string,
+    body: CareRequestDto,
+    key: string,
+    operatorId: string,
+  ) {
+    this.policy();
+    const p = await this.project(tx, id, true);
+    const subject = await this.subject(tx, id);
+    return this.createCare(
+      tx,
+      p,
+      subject,
+      body,
+      key,
+      operatorId,
+      "admin",
+      null,
+    );
+  }
+  async verifyCare(
+    tx: Prisma.TransactionClient,
+    id: string,
+    body: VerifyCareDto,
+    key: string,
+    operatorId: string,
+  ) {
+    this.policy();
+    const found = await tx.careRequest.findUnique({ where: { id } });
+    if (!found) throw new NotFoundException();
+    const p = await this.project(tx, found.projectId, true);
+    const subject = await this.subject(tx, p.id);
+    await tx.$queryRaw`SELECT id FROM care_requests WHERE id=${id}::uuid FOR UPDATE`;
+    const care = (await tx.careRequest.findUnique({ where: { id } }))!;
+    const hash = digest(JSON.stringify(body));
+    const result = () => ({
+      id,
+      state: "verified",
+      currentAccessRevoked: care.kind === "withdraw",
+      fulfillment: "pending-consumer",
+    });
+    if (care.state === "verified") {
+      if (
+        care.verificationKey !== key ||
+        care.verificationHash !== hash ||
+        care.verifiedBy !== operatorId
+      )
+        throw new ConflictException();
+      return result();
+    }
+    if (
+      care.kind === "rebind" ||
+      care.state !== "open" ||
+      subject.bindingVersion !== body.expectedBindingVersion ||
+      care.sourceBindingVersion !== subject.bindingVersion ||
+      p.accessEpoch !== body.expectedAccessEpoch ||
+      care.sourceAccessEpoch !== p.accessEpoch
+    )
+      throw new ConflictException();
+    let epoch: number | null = null;
+    if (care.kind === "withdraw") {
+      epoch = (
+        await tx.project.update({
+          where: { id: p.id },
+          data: { accessEpoch: { increment: 1 } },
+        })
+      ).accessEpoch;
+      for (const purpose of CONSENT_PURPOSES)
+        await tx.consentRecord.create({
+          data: {
+            id: randomUUID(),
+            projectId: p.id,
+            subjectId: subject.id,
+            operatorAdminId: operatorId,
+            bindingVersion: subject.bindingVersion,
+            accessEpoch: epoch,
+            purpose,
+            granted: false,
+            noticeVersion: body.noticeVersion,
+            evidenceRef: body.evidenceRef,
+            method: "care_verified",
+          },
+        });
+    }
+    await tx.careRequest.update({
+      where: { id },
+      data: {
+        state: "verified",
+        verifiedBy: operatorId,
+        verifiedAt: new Date(),
+        verificationKey: key,
+        verificationHash: hash,
+        verificationEvidence: body.evidenceRef,
+        verificationNotice: body.noticeVersion,
+        revokedAccessEpoch: epoch,
+      },
+    });
+    return result();
+  }
   async careCases(id?: string) {
     if (!id)
       return {
-        requests: await this.db.careRequest.findMany({
-          orderBy: { createdAt: "desc" },
-          take: 100,
-          select: CARE_SELECT,
-        }),
+        requests: (
+          await this.db.careRequest.findMany({
+            orderBy: { createdAt: "desc" },
+            take: 100,
+            select: CARE_SELECT,
+          })
+        ).map(careView),
       };
     const row = await this.db.careRequest.findUnique({
       where: { id },
-      select: CARE_SELECT,
+      select: {
+        ...CARE_SELECT,
+        verifiedBy: true,
+        verifiedAt: true,
+        verificationEvidence: true,
+        verificationNotice: true,
+        revokedAccessEpoch: true,
+      },
     });
     if (!row) throw new NotFoundException();
     const changes: CareBindingChangeView[] = (
@@ -634,8 +831,18 @@ export class Participation implements OnModuleDestroy {
       createdAt: change.createdAt.toISOString(),
     }));
     return {
-      ...row,
+      ...careView(row),
       supportCaseRef: `record:${id}`,
+      verification: row.verifiedBy
+        ? {
+            operatorAdminId: row.verifiedBy,
+            createdAt: row.verifiedAt?.toISOString(),
+            evidenceRef: row.verificationEvidence,
+            noticeVersion: row.verificationNotice,
+            method: "care_verified",
+            accessEpoch: row.revokedAccessEpoch,
+          }
+        : null,
       changes,
     };
   }
@@ -675,7 +882,7 @@ export class Participation implements OnModuleDestroy {
     const care = await tx.careRequest.findUnique({ where: { id: caseId } });
     if (!care || care.projectId !== id) throw new NotFoundException();
     if (
-      !subject.boundUserId ||
+      care.kind !== "rebind" ||
       subject.bindingVersion !== body.expectedBindingVersion ||
       care.sourceBindingVersion !== subject.bindingVersion ||
       care.targetUserId !== body.targetUserId ||
@@ -687,6 +894,7 @@ export class Participation implements OnModuleDestroy {
       where: { userId: body.targetUserId, appId: this.config.wechat?.appId },
     });
     if (!target) throw new NotFoundException();
+    await this.terms.ensureSubjectParticipation(tx, id, subject.id);
     const rebound = await tx.projectSubject.update({
       where: { id: subject.id },
       data: {
@@ -759,6 +967,314 @@ export class Participation implements OnModuleDestroy {
       };
     });
   }
+  private latestAssisted(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    purpose: AssistedPurpose,
+  ) {
+    return tx.assistedSession.findFirst({
+      where: { projectId, purpose },
+      orderBy: { sequence: "desc" },
+    });
+  }
+  private activeAssisted(
+    row: AssistedSession | null,
+    p: Awaited<ReturnType<Participation["project"]>>,
+    subject: Awaited<ReturnType<Participation["subject"]>>,
+  ): row is AssistedSession {
+    return (
+      !!row &&
+      row.projectId === p.id &&
+      row.subjectId === subject.id &&
+      row.operatorUserId === p.order.buyerId &&
+      row.granted &&
+      !!row.evidenceRef &&
+      row.bindingVersion === subject.bindingVersion &&
+      row.accessEpoch === p.accessEpoch &&
+      row.expiresAt.getTime() > Date.now()
+    );
+  }
+  // Public transactional boundary for authenticated content owners. They must
+  // pass their real logged-in operator and keep this transaction through the
+  // protected write. There is no preflight HTTP grant for content operations.
+  async authorizeAssisted(
+    tx: Prisma.TransactionClient,
+    command: {
+      projectId: string;
+      sessionId: string;
+      operatorUserId: string;
+      purpose: (typeof ASSISTED_PURPOSES)[number];
+    },
+  ) {
+    this.policy();
+    const p = await this.project(tx, command.projectId, true);
+    const subject = await this.subject(tx, p.id);
+    const row = await this.latestAssisted(tx, p.id, command.purpose);
+    if (
+      !this.activeAssisted(row, p, subject) ||
+      row.id !== command.sessionId ||
+      row.operatorUserId !== command.operatorUserId
+    )
+      throw new ForbiddenException();
+    if (
+      command.purpose === "collection" &&
+      !(await this.terms.read(p.id, undefined, tx)).canRecord
+    )
+      throw new ForbiddenException();
+    return {
+      subjectId: subject.id,
+      operatorUserId: row.operatorUserId,
+      bindingVersion: subject.bindingVersion,
+      accessEpoch: p.accessEpoch,
+    };
+  }
+  // The content owner supplies the actual immutable version/hash it has read
+  // and validated, then writes its own confirmation in this same transaction.
+  // This stores evidence only; it cannot manufacture or confirm content.
+  async recordAssistedVersionEvidence(
+    tx: Prisma.TransactionClient,
+    command: {
+      projectId: string;
+      sessionId: string;
+      operatorUserId: string;
+      content: { kind: "story" | "book"; versionId: string; hash: string };
+      noticeVersion: string;
+      evidenceRef: string;
+      idempotencyKey: string;
+    },
+  ) {
+    const purpose =
+      command.content.kind === "story"
+        ? "story_confirmation"
+        : "book_confirmation";
+    const actor = await this.authorizeAssisted(tx, { ...command, purpose });
+    if (
+      !["story", "book"].includes(command.content.kind) ||
+      !/^[-a-f0-9]{36}$/.test(command.content.versionId) ||
+      !/^([a-f0-9]{64})$/.test(command.content.hash) ||
+      command.noticeVersion !== "synthetic-d08-v1" ||
+      !/^synthetic:[^\r\n]{3,160}$/.test(command.evidenceRef) ||
+      !/^[-A-Za-z0-9_:]{8,128}$/.test(command.idempotencyKey)
+    )
+      throw new BadRequestException();
+    const hash = digest(JSON.stringify(command));
+    const view = (row: {
+      id: string;
+      subjectId: string;
+      operatorUserId: string;
+      contentKind: string;
+      versionId: string;
+      contentHash: string;
+      evidenceRef: string;
+    }) => ({
+      id: row.id,
+      subjectId: row.subjectId,
+      operatorUserId: row.operatorUserId,
+      content: {
+        kind: row.contentKind,
+        versionId: row.versionId,
+        hash: row.contentHash,
+      },
+      evidenceRef: row.evidenceRef,
+    });
+    const prior = await tx.assistedVersionEvidence.findUnique({
+      where: {
+        projectId_idempotencyKey: {
+          projectId: command.projectId,
+          idempotencyKey: command.idempotencyKey,
+        },
+      },
+    });
+    if (prior) {
+      if (prior.requestHash !== hash) throw new ConflictException();
+      return view(prior);
+    }
+    if (
+      (await tx.assistedSession.findFirst({
+        where: {
+          projectId: command.projectId,
+          evidenceRef: command.evidenceRef,
+        },
+      })) ||
+      (await tx.assistedVersionEvidence.findFirst({
+        where: {
+          projectId: command.projectId,
+          evidenceRef: command.evidenceRef,
+        },
+      }))
+    )
+      throw new ConflictException();
+    return view(
+      await tx.assistedVersionEvidence.create({
+        data: {
+          id: randomUUID(),
+          projectId: command.projectId,
+          ...actor,
+          sessionId: command.sessionId,
+          contentKind: command.content.kind,
+          versionId: command.content.versionId,
+          contentHash: command.content.hash,
+          noticeVersion: command.noticeVersion,
+          evidenceRef: command.evidenceRef,
+          idempotencyKey: command.idempotencyKey,
+          requestHash: hash,
+        },
+      }),
+    );
+  }
+  private assistedView(
+    row: {
+      id: string;
+      projectId: string;
+      subjectId: string;
+      operatorUserId: string;
+      purpose: string;
+      granted: boolean;
+      noticeVersion: string;
+      evidenceRef: string;
+      bindingVersion: number;
+      accessEpoch: number;
+      createdAt: Date;
+      expiresAt: Date;
+    },
+    bindingVersion: number,
+    accessEpoch: number,
+    latestSessionId: string,
+  ): AssistedSessionView {
+    return {
+      id: row.id,
+      projectId: row.projectId,
+      subjectId: row.subjectId,
+      operatorUserId: row.operatorUserId,
+      purpose: row.purpose as AssistedPurpose,
+      granted: row.granted,
+      noticeVersion: row.noticeVersion,
+      evidenceRef: row.evidenceRef,
+      bindingVersion: row.bindingVersion,
+      accessEpoch: row.accessEpoch,
+      createdAt: row.createdAt.toISOString(),
+      expiresAt: row.expiresAt.toISOString(),
+      state: !row.granted
+        ? "rejected"
+        : row.id !== latestSessionId ||
+            row.bindingVersion !== bindingVersion ||
+            row.accessEpoch !== accessEpoch
+          ? "revoked"
+          : row.expiresAt.getTime() <= Date.now()
+            ? "expired"
+            : "active",
+    };
+  }
+  async assisted(
+    id: string,
+    authorization?: string,
+    body?: AssistedSessionDto,
+    key?: string,
+  ) {
+    const user = await this.identity.current(authorization);
+    this.policy();
+    return this.db.$transaction(async (tx) => {
+      const p = await this.project(tx, id, true);
+      if (p.order.buyerId !== user.id) throw new ForbiddenException();
+      const subject = await this.subject(tx, id);
+      if (!body) {
+        const sessions = await tx.assistedSession.findMany({
+          where: { projectId: id, operatorUserId: user.id },
+          orderBy: { sequence: "desc" },
+        });
+        const latest = new Map<string, string>();
+        for (const row of sessions)
+          if (!latest.has(row.purpose)) latest.set(row.purpose, row.id);
+        return {
+          sessions: sessions.map((row) =>
+            this.assistedView(
+              row,
+              subject.bindingVersion,
+              p.accessEpoch,
+              latest.get(row.purpose)!,
+            ),
+          ),
+        };
+      }
+      const latest = await this.latestAssisted(tx, id, body.purpose);
+      const hash = digest(JSON.stringify(body));
+      const prior = await tx.assistedSession.findUnique({
+        where: {
+          projectId_operatorUserId_idempotencyKey: {
+            projectId: id,
+            operatorUserId: user.id,
+            idempotencyKey: key!,
+          },
+        },
+      });
+      if (prior) {
+        if (prior.requestHash !== hash) throw new ConflictException();
+        return this.assistedView(
+          prior,
+          subject.bindingVersion,
+          p.accessEpoch,
+          latest!.id,
+        );
+      }
+      if (
+        (await tx.assistedSession.findFirst({
+          where: { projectId: id, evidenceRef: body.evidenceRef },
+        })) ||
+        (await tx.assistedVersionEvidence.findFirst({
+          where: { projectId: id, evidenceRef: body.evidenceRef },
+        }))
+      )
+        throw new ConflictException();
+      if (
+        subject.bindingVersion !== body.expectedBindingVersion ||
+        p.accessEpoch !== body.expectedAccessEpoch ||
+        (latest?.id ?? null) !== (body.expectedSessionId ?? null)
+      )
+        throw new ConflictException();
+      const row = await tx.assistedSession.create({
+        data: {
+          id: randomUUID(),
+          projectId: id,
+          subjectId: subject.id,
+          operatorUserId: user.id,
+          purpose: body.purpose,
+          granted: body.granted,
+          noticeVersion: body.noticeVersion,
+          evidenceRef: body.evidenceRef,
+          bindingVersion: subject.bindingVersion,
+          accessEpoch: p.accessEpoch,
+          idempotencyKey: key!,
+          requestHash: hash,
+          expiresAt: new Date(Date.now() + 15 * 60000),
+        },
+      });
+      if (CONSENT_PURPOSES.includes(body.purpose as ConsentPurpose))
+        await tx.consentRecord.create({
+          data: {
+            id: randomUUID(),
+            projectId: id,
+            subjectId: subject.id,
+            bindingVersion: subject.bindingVersion,
+            accessEpoch: p.accessEpoch,
+            operatorUserId: user.id,
+            granteeUserId: body.purpose === "sharing" ? user.id : null,
+            purpose: body.purpose,
+            granted: body.granted,
+            noticeVersion: body.noticeVersion,
+            evidenceRef: body.evidenceRef,
+            method: "assisted",
+          },
+        });
+      if (body.granted)
+        await this.terms.ensureSubjectParticipation(tx, id, subject.id);
+      return this.assistedView(
+        row,
+        subject.bindingVersion,
+        p.accessEpoch,
+        row.id,
+      );
+    });
+  }
   async onModuleDestroy() {
     await this.db.$disconnect();
     await this.terms.close();
@@ -774,6 +1290,35 @@ export class ParticipationController {
   async memberships(@Req() req: FastifyRequest) {
     return {
       data: await this.participation.memberships(req.headers.authorization),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post("projects/:id/assisted-sessions")
+  @Header("Cache-Control", "no-store")
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  async assisted(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: AssistedSessionDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.participation.assisted(
+        id,
+        req.headers.authorization,
+        body,
+        idempotencyKey(req),
+      ),
+      meta: { requestId: req.id },
+    };
+  }
+  @Get("projects/:id/assisted-sessions")
+  @Header("Cache-Control", "no-store")
+  async assistedState(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.participation.assisted(id, req.headers.authorization),
       meta: { requestId: req.id },
     };
   }

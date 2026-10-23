@@ -13,7 +13,7 @@ const login = {
   },
 };
 const bundles = await Promise.all(
-  ["invite", "welcome"].map(
+  ["invite", "welcome", "assisted"].map(
     async (page) =>
       [
         page,
@@ -563,3 +563,207 @@ for (const name of ["welcome", "invite"])
     assert.equal(page.data.busy, false);
     assert.equal(page.data.participation, null);
   });
+
+test("actual assisted page separately records consent and refusal with fresh evidence then recovers rights requests", async () => {
+  const { page, requests } = harness("assisted");
+  page.onLoad({ projectId });
+  const showing = page.onShow();
+  assert.equal(requests[0]?.url, `${base}/projects/${projectId}/participation`);
+  respond(requests.shift()!, {
+    ...current,
+    role: "initiator",
+    bindingVersion: 0,
+  });
+  await tick();
+  respond(requests.shift()!, { sessions: [] });
+  await tick();
+  respond(requests.shift()!, { requests: [] });
+  await showing;
+  const chosen = page.chooseAssisted({
+    currentTarget: { dataset: { purpose: "collection", granted: "true" } },
+  });
+  const post = requests.shift()!;
+  assert.equal(post.url, `${base}/projects/${projectId}/assisted-sessions`);
+  const body = post.data as Record<string, unknown>;
+  assert.equal(body.purpose, "collection");
+  assert.equal(body.granted, true);
+  assert.match(String(body.evidenceRef), /^synthetic:/);
+  assert.equal(body.expectedBindingVersion, 0);
+  respond(
+    post,
+    {
+      id: "55555555-5555-4555-8555-555555555555",
+      projectId,
+      subjectId: current.subjectId,
+      operatorUserId: login.user.id,
+      purpose: "collection",
+      granted: true,
+      noticeVersion: "synthetic-d08-v1",
+      evidenceRef: body.evidenceRef,
+      bindingVersion: 0,
+      accessEpoch: 2,
+      createdAt: "2026-01-01T00:00:00Z",
+      expiresAt: "2099-01-01T00:00:00Z",
+      state: "active",
+    },
+    201,
+  );
+  await tick();
+  respond(requests.shift()!, {
+    ...current,
+    role: "initiator",
+    bindingVersion: 0,
+    accessEpoch: 2,
+  });
+  await tick();
+  respond(requests.shift()!, { sessions: [] });
+  await tick();
+  respond(requests.shift()!, { requests: [] });
+  await chosen;
+  assert.match(page.data.status, /已保存/);
+  assert.equal(page.data.busy, false);
+  const refusal = page.chooseAssisted({
+    currentTarget: { dataset: { purpose: "ai", granted: "false" } },
+  });
+  const denied = requests.shift()!;
+  assert.equal((denied.data as any).granted, false);
+  assert.notEqual((denied.data as any).evidenceRef, body.evidenceRef);
+  respond(denied, {}, 403);
+  await refusal;
+  assert.equal(page.data.busy, false);
+  assert.match(page.data.status, /未确认|重新查询/);
+});
+
+test("assisted page releases a pending operation after an account change and ignores its old result", async () => {
+  const { page, requests, storage } = harness("assisted");
+  page.onLoad({ projectId });
+  const showing = page.onShow();
+  storage.set(`timenook.session.v1:${base}`, {
+    ...login,
+    user: { id: "66666666-6666-4666-8666-666666666666" },
+    session: {
+      ...login.session,
+      id: "77777777-7777-4777-8777-777777777777",
+      token: "z".repeat(43),
+    },
+  });
+  respond(requests.shift()!, {
+    ...current,
+    role: "initiator",
+    bindingVersion: 0,
+  });
+  await showing;
+  assert.equal(page.data.participation, null);
+  assert.equal(page.data.busy, false);
+  assert.match(page.data.status, /账号已变化/);
+});
+
+for (const expiration of ["401", "local-ttl"]) {
+  test(`assisted ${expiration} expiry releases busy and clears subject data before relogin`, async () => {
+    const clock = { now: Date.parse("2026-10-23T00:00:00Z") };
+    const { page, requests } = harness("assisted", clock);
+    page.onLoad({ projectId });
+    const showing = page.onShow();
+    if (expiration === "local-ttl")
+      clock.now = Date.parse(login.session.expiresAt) + 1;
+    respond(
+      requests.shift()!,
+      { ...current, role: "initiator", bindingVersion: 0 },
+      expiration === "401" ? 401 : 200,
+    );
+    await showing;
+    assert.equal(page.data.busy, false);
+    assert.equal(page.data.loggedIn, false);
+    assert.equal(page.data.participation, null);
+    assert.equal(page.data.sessions.length, 0);
+    assert.match(page.data.status, /登录已失效/);
+  });
+}
+
+test("assisted rights submission reads the tracked case again and page departure fences old results", async () => {
+  const { page, requests } = harness("assisted");
+  page.onLoad({ projectId });
+  const showing = page.onShow();
+  respond(requests.shift()!, {
+    ...current,
+    role: "initiator",
+    bindingVersion: 0,
+  });
+  await tick();
+  respond(requests.shift()!, { sessions: [] });
+  await tick();
+  respond(requests.shift()!, { requests: [] });
+  await showing;
+  const submitting = page.requestRight({
+    currentTarget: { dataset: { kind: "delete" } },
+  });
+  const posted = requests.shift()!;
+  assert.equal(posted.url, `${base}/projects/${projectId}/care-requests`);
+  assert.equal((posted.data as any).kind, "delete");
+  respond(posted, { supportCaseRef: "record:synthetic" }, 201);
+  await tick();
+  const recovered = requests.shift()!;
+  assert.equal(recovered.method, "GET");
+  assert.equal(recovered.url, `${base}/projects/${projectId}/care-requests`);
+  respond(recovered, {
+    requests: [
+      {
+        id: "55555555-5555-4555-8555-555555555555",
+        kind: "delete",
+        state: "verified",
+        createdAt: "2026-10-23T00:00:00Z",
+      },
+    ],
+  });
+  await submitting;
+  assert.equal(page.data.careRequests[0].state, "verified");
+  assert.match(page.data.status, /尚未完成/);
+  const late = page.refresh();
+  const pending = requests.shift()!;
+  page.onHide();
+  respond(pending, { ...current, role: "initiator", bindingVersion: 0 });
+  await late;
+  assert.equal(page.data.participation, null);
+  assert.equal(page.data.busy, false);
+  assert.equal(requests.length, 0);
+});
+
+test("assisted renewal sends the latest observed purpose session as its compare-and-swap precondition", async () => {
+  const { page, requests } = harness("assisted");
+  page.onLoad({ projectId });
+  const showing = page.onShow();
+  const prior = {
+    id: "55555555-5555-4555-8555-555555555555",
+    projectId,
+    subjectId: current.subjectId,
+    operatorUserId: login.user.id,
+    purpose: "collection",
+    granted: true,
+    noticeVersion: "synthetic-d08-v1",
+    evidenceRef: "synthetic:previous",
+    bindingVersion: 0,
+    accessEpoch: 0,
+    createdAt: "2026-01-01T00:00:00Z",
+    expiresAt: "2099-01-01T00:00:00Z",
+    state: "active",
+  };
+  respond(requests.shift()!, {
+    ...current,
+    role: "initiator",
+    bindingVersion: 0,
+    accessEpoch: 0,
+  });
+  await tick();
+  respond(requests.shift()!, { sessions: [prior] });
+  await tick();
+  respond(requests.shift()!, { requests: [] });
+  await showing;
+  const choosing = page.chooseAssisted({
+    currentTarget: { dataset: { purpose: "collection", granted: "true" } },
+  });
+  const command = requests.shift()!;
+  assert.equal((command.data as any).expectedSessionId, prior.id);
+  respond(command, {}, 403);
+  await choosing;
+  assert.equal(page.data.busy, false);
+});

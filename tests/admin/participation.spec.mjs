@@ -29,7 +29,8 @@ let api,
   productSession,
   narratorSession,
   replacementSession,
-  projectId;
+  projectId,
+  assistedProjectId;
 const logs = [];
 const runtimeErrors = [];
 function start(command, args, options) {
@@ -67,6 +68,7 @@ async function waitFor(url) {
   throw new Error("Local HTTPS server did not start");
 }
 let env;
+let adminCookies;
 test.beforeAll(async () => {
   privateDir = mkdtempSync(join(tmpdir(), "t11-browser-"));
   if (existsSync(".env")) process.loadEnvFile(".env");
@@ -230,6 +232,36 @@ test.beforeAll(async () => {
     await api.inject({ method: "GET", url: `/v1/orders/${order.id}`, headers }),
     200,
   ).project.id;
+  const assistedHeaders = { ...headers, "idempotency-key": randomUUID() };
+  const assistedOrder = responseData(
+    await api.inject({
+      method: "POST",
+      url: "/v1/orders",
+      headers: assistedHeaders,
+      payload: {
+        packageVersionId: versionId,
+        recipient: { relationshipLabel: "朋友" },
+        shippingRegionCode: "CN-110000",
+      },
+    }),
+  );
+  responseData(
+    await api.inject({
+      method: "POST",
+      url: `/v1/orders/${assistedOrder.id}/payment`,
+      headers: assistedHeaders,
+      payload: {},
+    }),
+  );
+  paid(assistedOrder.outTradeNo);
+  assistedProjectId = responseData(
+    await api.inject({
+      method: "GET",
+      url: `/v1/orders/${assistedOrder.id}`,
+      headers: assistedHeaders,
+    }),
+    200,
+  ).project.id;
   narratorSession = await loginProduct("synthetic-narrator");
   replacementSession = await loginProduct("synthetic-replacement");
   responseData(
@@ -314,7 +346,10 @@ async function sessionPage(context, session, route) {
   const page = await context.newPage();
   page.on("pageerror", (error) => runtimeErrors.push(error.message));
   page.on("console", (message) => {
-    if (message.type() === "error" && !/\b40[13]\b/.test(message.text()))
+    if (
+      message.type() === "error" &&
+      !/\b(?:40[13]|503)\b/.test(message.text())
+    )
       runtimeErrors.push(message.text());
   });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -446,11 +481,13 @@ test("mini-program invitation and separate choices feed the shared care form, wh
   await page.getByLabel("密码", { exact: true }).fill(account.password);
   await page.getByRole("button", { name: "继续验证" }).click();
   const secret = await page.getByTestId("enrollment-secret").textContent();
+
   await page.getByLabel("六位验证码").fill(await generate({ secret }));
   await page.getByRole("button", { name: "验证并登录" }).click();
   await expect(
     page.getByRole("button", { name: "客服工单", exact: true }),
   ).toBeVisible({ timeout: 5000 });
+  adminCookies = await page.context().cookies();
   await page.getByRole("button", { name: "客服工单", exact: true }).click();
   await page
     .getByRole("button", { name: `查看 ${care.id}`, exact: true })
@@ -527,5 +564,228 @@ test("mini-program invitation and separate choices feed the shared care form, wh
     expect(await target.locator(".preview-error").count()).toBe(0);
   }
   expect(errors).toEqual([]);
+  expect(runtimeErrors).toEqual([]);
+});
+
+test("assisted subject choices and Care manual intake preserve real actors and pending rights fulfillment", async ({
+  page,
+  browser,
+}) => {
+  const buyer = await sessionPage(
+    await browser.newContext(),
+    productSession,
+    `assisted?projectId=${assistedProjectId}`,
+  );
+  await expect(
+    buyer.getByText("本人在场，同机协助", { exact: true }),
+  ).toBeVisible();
+  const collection = buyer
+    .locator(".paper")
+    .filter({ has: buyer.getByText("采集并保存讲述和照片", { exact: true }) });
+  let releaseConsent;
+  const consentGate = new Promise((resolve) => {
+    releaseConsent = resolve;
+  });
+  await buyer.route("**/assisted-sessions", async (route) => {
+    if (route.request().method() === "POST") await consentGate;
+    await route.continue();
+  });
+  await collection
+    .getByRole("button", { name: "本人同意此用途，记录当次证据", exact: true })
+    .click();
+  await expect(
+    buyer.getByText("正在查询或保存，请稍候…", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    collection.getByRole("button", {
+      name: "本人同意此用途，记录当次证据",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  const consentResponse = buyer.waitForResponse(
+    (r) =>
+      r.url().endsWith("/assisted-sessions") && r.request().method() === "POST",
+  );
+  releaseConsent();
+  const consentHttp = await consentResponse;
+  expect(consentHttp.status(), await consentHttp.text()).toBe(201);
+  await expect(buyer.getByText("当次许可有效", { exact: true })).toBeVisible();
+  await buyer.unroute("**/assisted-sessions");
+  const ai = buyer
+    .locator(".paper")
+    .filter({ has: buyer.getByText("交由 AI 处理素材", { exact: true }) });
+  await ai.getByRole("button", { name: "本人拒绝此用途", exact: true }).click();
+  await expect(buyer.getByText("本人已拒绝", { exact: true })).toBeVisible();
+  const sharing = buyer.locator(".paper").filter({
+    has: buyer.getByText("向本项目发起人共享资料", { exact: true }),
+  });
+  await buyer.route(
+    "**/assisted-sessions",
+    (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: { code: "NOT_CONFIGURED", message: "synthetic unavailable" },
+          meta: { requestId: "synthetic" },
+        }),
+      }),
+    { times: 1 },
+  );
+  await sharing
+    .getByRole("button", { name: "本人同意此用途，记录当次证据", exact: true })
+    .click();
+  await expect(buyer.getByText(/操作未确认，请重新查询/)).toBeVisible();
+  await buyer
+    .getByRole("button", { name: "重新查询协助与工单状态", exact: true })
+    .click();
+  // Explicit expired-session fixture; observe its state only through the real
+  // session HTTP and rendered page, without waiting for a short natural TTL.
+  const expiredDb = new PrismaClient({ datasourceUrl: databaseUrl });
+  const subject = await expiredDb.projectSubject.findUnique({
+    where: { projectId: assistedProjectId },
+  });
+  const project = await expiredDb.project.findUnique({
+    where: { id: assistedProjectId },
+  });
+  await expiredDb.assistedSession.create({
+    data: {
+      id: randomUUID(),
+      projectId: assistedProjectId,
+      subjectId: subject.id,
+      operatorUserId: productSession.user.id,
+      purpose: "collection",
+      granted: true,
+      noticeVersion: "synthetic-d08-v1",
+      evidenceRef: `synthetic:expired-fixture-${randomUUID()}`,
+      bindingVersion: 0,
+      accessEpoch: project.accessEpoch,
+      idempotencyKey: randomUUID(),
+      requestHash: "f".repeat(64),
+      createdAt: new Date(Date.now() - 20 * 60000),
+      expiresAt: new Date(Date.now() - 5 * 60000),
+    },
+  });
+  await expiredDb.$disconnect();
+  await buyer
+    .getByRole("button", { name: "重新查询协助与工单状态", exact: true })
+    .click();
+  await expect(
+    buyer.getByText("证据已过期，请取得新的当次证据", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    buyer.getByText(/当次有效期至：.*设备时间 UTC\+08:00/).first(),
+  ).toBeVisible();
+  const renewalResponse = buyer.waitForResponse(
+    (r) =>
+      r.url().endsWith("/assisted-sessions") && r.request().method() === "POST",
+  );
+  await collection
+    .getByRole("button", { name: "本人同意此用途，记录当次证据", exact: true })
+    .click();
+  const renewalHttp = await renewalResponse;
+  expect(renewalHttp.status(), await renewalHttp.text()).toBe(201);
+  const renewalBody = renewalHttp.request().postDataJSON();
+  expect(renewalBody.expectedSessionId).toBeTruthy();
+  await expect(buyer.getByText("当次许可有效", { exact: true })).toBeVisible();
+  await buyer
+    .getByRole("button", { name: "记录本人完整资料导出申请", exact: true })
+    .click();
+  await expect(
+    buyer.getByText(
+      "本人申请已记录，等待客服核验；导出交付与删除执行尚未完成",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await buyer.reload();
+  await expect(buyer.getByText(/资料导出：待客服核验/)).toBeVisible();
+  for (const width of [390, 768]) {
+    await buyer.setViewportSize({ width, height: 900 });
+    const metrics = await buyer.locator(".assisted-page").evaluate((el) => ({
+      overflow: el.scrollWidth > el.clientWidth,
+      body: parseFloat(getComputedStyle(el).fontSize),
+      buttons: [...el.querySelectorAll("button")].map((b) => ({
+        w: b.getBoundingClientRect().width,
+        h: b.getBoundingClientRect().height,
+      })),
+    }));
+    expect(metrics.overflow).toBe(false);
+    expect(metrics.body).toBeGreaterThanOrEqual(20);
+    expect(metrics.buttons.every((b) => b.w >= 48 && b.h >= 48)).toBe(true);
+  }
+  await buyer.screenshot({ path: "/tmp/timenook-t12-assisted-mobile.png" });
+  if (adminCookies) {
+    await page.context().addCookies(adminCookies);
+    await page.goto("./");
+  } else {
+    await page.goto("./");
+    await page.getByLabel("管理员账号").fill(account.username);
+    await page.getByLabel("密码", { exact: true }).fill(account.password);
+    await page.getByRole("button", { name: "继续验证" }).click();
+    const secret = await page.getByTestId("enrollment-secret").textContent();
+    await page.getByLabel("六位验证码").fill(await generate({ secret }));
+    await page.getByRole("button", { name: "验证并登录" }).click();
+  }
+  await page.getByRole("button", { name: "客服工单", exact: true }).click();
+  await expect(page.getByLabel("代录项目编号")).toBeVisible();
+  await page.getByLabel("代录项目编号").fill(assistedProjectId);
+  await page.getByLabel("代录申请类型").selectOption("delete");
+  await page.getByRole("button", { name: "代录本人申请", exact: true }).click();
+  await expect(
+    page.getByText("代录申请已记录，等待独立核验。", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "本人删除申请", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("D08 核验证据引用")
+    .fill("synthetic:browser无微信本人核验");
+  await page.getByRole("button", { name: "核验本人申请", exact: true }).click();
+  await expect(
+    page.getByText(
+      "本人申请已核验，导出交付、删除执行与后续联动仍待对应流程处理。",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await page.getByLabel("代录申请类型").selectOption("withdraw");
+  await page.getByRole("button", { name: "代录本人申请", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "本人撤回申请", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "核验本人申请", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByLabel("D08 核验证据引用")
+    .fill("synthetic:browser独立撤回核验");
+  await page.getByRole("button", { name: "核验本人申请", exact: true }).click();
+  await expect(
+    page.getByText(
+      "本人申请已核验，导出交付、删除执行与后续联动仍待对应流程处理。",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await buyer
+    .getByRole("button", { name: "重新查询协助与工单状态", exact: true })
+    .click();
+  await expect(
+    buyer.getByText(/撤回：当前访问已撤销，后续联动待处理/),
+  ).toBeVisible();
+  await page.screenshot({ path: "/tmp/timenook-t12-care-rights-desktop.png" });
+  await buyer.goto(
+    `http://127.0.0.1:5174/#/welcome?projectId=${assistedProjectId}`,
+  );
+  await expect(buyer.getByText(/撤回工单：record:/)).toBeVisible();
+  await expect(
+    buyer.getByText("处理状态：当前访问已撤销，后续联动待处理", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    buyer.getByRole("button", {
+      name: "提交客服本人账号绑定申请",
+      exact: true,
+    }),
+  ).toBeVisible();
   expect(runtimeErrors).toEqual([]);
 });

@@ -1,0 +1,18 @@
+.assisted-page {
+  font-size: 40rpx;
+  overflow-wrap: anywhere;
+}
+.assisted-page .note,
+.assisted-page .soft,
+.assisted-page .section-title {
+  font-size: 40rpx;
+  line-height: 1.6;
+}
+.assisted-page button {
+  min-width: 48px;
+  min-height: 48px;
+  height: auto;
+  white-space: normal;
+  line-height: 1.5;
+  padding: 24rpx;
+}

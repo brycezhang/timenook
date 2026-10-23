@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { before, after, test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
+import { Participation } from "../src/identity/participation";
 import { createApplication } from "../src/application";
 import type { ApiConfig } from "../src/config";
 import { paymentConfig, paymentFetch, paid, callback } from "./payment-fixture";
@@ -999,5 +1000,996 @@ test("expired or superseded invitations cannot apply or approve, and D08 is fail
       {},
     ),
     /D08 synthetic participation/,
+  );
+});
+
+test("assisted collection binds the real unbound subject and logged-in operator, never creates a narrator account", async () => {
+  const p = await project();
+  const current = await state(p, p.buyer.token);
+  const session = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+      {
+        ...notice(),
+        purpose: "collection",
+        granted: true,
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+      },
+    ),
+  );
+  assert.equal(session.subjectId, p.subjectId);
+  assert.equal(session.operatorUserId, p.buyer.id);
+  assert.equal(session.purpose, "collection");
+  assert.equal(session.state, "active");
+  assert.equal(session.bindingVersion, 0);
+  assert.ok(Date.parse(session.expiresAt) > Date.now());
+  const result = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+    ),
+    200,
+  );
+  assert.equal(result.sessions[0].id, session.id);
+  const after = await state(p, p.buyer.token);
+  assert.deepEqual(after.choices, [
+    { purpose: "collection", granted: true },
+    { purpose: "ai", granted: null },
+    { purpose: "sharing", granted: null },
+  ]);
+  assert.equal(after.role, "initiator");
+  assert.equal(after.bindingVersion, 0);
+  assert.equal(after.canRead, false);
+  const terms = data(
+    await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token),
+    200,
+  ).project.terms;
+  assert.ok(terms.creation.startsAt);
+});
+
+test("assisted authorization rejects payment-only, wrong-purpose, missing evidence and exact server expiry", async (t) => {
+  const p = await project();
+  const outsider = await login();
+  const current = await state(p, p.buyer.token);
+  const body = {
+    ...notice(),
+    purpose: "collection",
+    granted: true,
+    expectedBindingVersion: 0,
+    expectedAccessEpoch: current.accessEpoch,
+  };
+  const { evidenceRef, ...missing } = body;
+  assert.equal(
+    (
+      await request(
+        "POST",
+        `/v1/projects/${p.projectId}/assisted-sessions`,
+        p.buyer.token,
+        missing,
+      )
+    ).statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await request(
+        "POST",
+        `/v1/projects/${p.projectId}/assisted-sessions`,
+        outsider.token,
+        body,
+      )
+    ).statusCode,
+    403,
+  );
+  const session = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+      body,
+    ),
+  );
+  const authorize = (
+    id: string,
+    purpose: "collection" | "ai" | "story_confirmation",
+    operatorUserId = p.buyer.id,
+  ) =>
+    db.$transaction((tx) =>
+      app.get(Participation).authorizeAssisted(tx, {
+        projectId: p.projectId,
+        sessionId: id,
+        operatorUserId,
+        purpose,
+      }),
+    );
+  await assert.rejects(authorize(randomUUID(), "collection"), { status: 403 });
+  await assert.rejects(authorize(session.id, "ai"), { status: 403 });
+  await assert.rejects(authorize(session.id, "story_confirmation"), {
+    status: 403,
+  });
+  await assert.rejects(authorize(session.id, "collection", outsider.id), {
+    status: 403,
+  });
+  assert.equal(
+    (await authorize(session.id, "collection")).subjectId,
+    p.subjectId,
+  );
+  t.mock.method(Date, "now", () => Date.parse(session.expiresAt));
+  await assert.rejects(authorize(session.id, "collection"), { status: 403 });
+  assert.equal(
+    data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/assisted-sessions`,
+        p.buyer.token,
+      ),
+      200,
+    ).sessions[0].state,
+    "expired",
+  );
+});
+
+async function assist(
+  p: Awaited<ReturnType<typeof project>>,
+  purpose = "collection",
+  granted = true,
+  evidenceRef = `synthetic:${randomUUID()}`,
+  key = randomUUID(),
+  target = app,
+) {
+  const current = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/participation`,
+      p.buyer.token,
+      undefined,
+      randomUUID(),
+      target,
+    ),
+    200,
+  );
+  const sessions = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+      undefined,
+      randomUUID(),
+      target,
+    ),
+    200,
+  ).sessions;
+  const expectedSessionId = sessions.find(
+    (row: any) => row.purpose === purpose,
+  )?.id;
+  return request(
+    "POST",
+    `/v1/projects/${p.projectId}/assisted-sessions`,
+    p.buyer.token,
+    {
+      noticeVersion: "synthetic-d08-v1",
+      evidenceRef,
+      purpose,
+      granted,
+      ...(expectedSessionId ? { expectedSessionId } : {}),
+      expectedBindingVersion: current.bindingVersion,
+      expectedAccessEpoch: current.accessEpoch,
+    },
+    key,
+    target,
+  );
+}
+test("assisted renewal requires new evidence, refusal invalidates prior sessions and later WeChat binding preserves the first participation clock", async () => {
+  const p = await project();
+  const first = data(await assist(p));
+  const start = data(
+    await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token),
+    200,
+  ).project.terms.creation.startsAt;
+  assert.equal(
+    (await assist(p, "collection", true, first.evidenceRef)).statusCode,
+    409,
+  );
+  const renewed = data(await assist(p));
+  assert.notEqual(renewed.id, first.id);
+  assert.equal(
+    data(await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token), 200)
+      .project.terms.creation.startsAt,
+    start,
+  );
+  const refused = data(await assist(p, "collection", false));
+  assert.equal(refused.state, "rejected");
+  await assert.rejects(
+    db.$transaction((tx) =>
+      app.get(Participation).authorizeAssisted(tx, {
+        projectId: p.projectId,
+        sessionId: renewed.id,
+        operatorUserId: p.buyer.id,
+        purpose: "collection",
+      }),
+    ),
+    { status: 403 },
+  );
+  const narrator = await login();
+  const invite = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/invitations`,
+      p.buyer.token,
+    ),
+  );
+  const application = data(
+    await request(
+      "POST",
+      `/v1/invitations/${invite.token}/requests`,
+      narrator.token,
+      notice(),
+    ),
+  );
+  data(
+    await request(
+      "POST",
+      `/v1/binding-requests/${application.id}/approve`,
+      p.buyer.token,
+      approval(),
+    ),
+  );
+  assert.equal(
+    data(await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token), 200)
+      .project.terms.creation.startsAt,
+    start,
+  );
+  assert.equal((await state(p, narrator.token)).subjectId, p.subjectId);
+  const restarted = await createApplication(config, {
+    wechatFetch,
+    paymentFetch,
+  });
+  try {
+    assert.equal(
+      data(
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/assisted-sessions`,
+          p.buyer.token,
+          undefined,
+          randomUUID(),
+          restarted,
+        ),
+        200,
+      ).sessions.find((row: any) => row.id === first.id).state,
+      "revoked",
+    );
+  } finally {
+    await restarted.close();
+  }
+});
+
+test("trusted content owners record independent evidence for their actual immutable versions in the same transaction", async () => {
+  // These are explicit synthetic content-owner fixtures, not a story/book product registry.
+  const p = await project();
+  const service = app.get(Participation);
+  const recording = data(await assist(p));
+  const story = {
+    kind: "story" as const,
+    versionId: randomUUID(),
+    hash: "a".repeat(64),
+  };
+  const command = {
+    projectId: p.projectId,
+    operatorUserId: p.buyer.id,
+    sessionId: recording.id,
+    content: story,
+    ...notice(),
+    evidenceRef: `synthetic:${randomUUID()}`,
+    idempotencyKey: randomUUID(),
+  };
+  await assert.rejects(
+    db.$transaction((tx) => service.recordAssistedVersionEvidence(tx, command)),
+    { status: 403 },
+  );
+  const session = data(await assist(p, "story_confirmation"));
+  const valid = { ...command, sessionId: session.id };
+  await assert.rejects(
+    db.$transaction((tx) =>
+      service.recordAssistedVersionEvidence(tx, {
+        ...valid,
+        evidenceRef: session.evidenceRef,
+      }),
+    ),
+    { status: 409 },
+  );
+  const confirmed = await db.$transaction((tx) =>
+    service.recordAssistedVersionEvidence(tx, valid),
+  );
+  assert.equal(confirmed.subjectId, p.subjectId);
+  assert.equal(confirmed.operatorUserId, p.buyer.id);
+  assert.deepEqual(confirmed.content, story);
+  assert.equal(confirmed.evidenceRef, valid.evidenceRef);
+  assert.equal(
+    (
+      await db.$transaction((tx) =>
+        service.recordAssistedVersionEvidence(tx, valid),
+      )
+    ).id,
+    confirmed.id,
+  );
+  await assert.rejects(
+    db.$transaction((tx) =>
+      service.recordAssistedVersionEvidence(tx, {
+        ...valid,
+        content: { ...story, hash: "b".repeat(64) },
+      }),
+    ),
+    { status: 409 },
+  );
+  await assert.rejects(
+    db.$transaction((tx) =>
+      service.recordAssistedVersionEvidence(tx, {
+        ...valid,
+        idempotencyKey: randomUUID(),
+      }),
+    ),
+    { status: 409 },
+  );
+  const next = {
+    ...valid,
+    content: { ...story, versionId: randomUUID(), hash: "c".repeat(64) },
+    idempotencyKey: randomUUID(),
+    evidenceRef: `synthetic:${randomUUID()}`,
+  };
+  await assert.rejects(
+    db.$transaction(async (tx) => {
+      await service.recordAssistedVersionEvidence(tx, next);
+      throw new Error("synthetic owner rollback");
+    }),
+    /owner rollback/,
+  );
+  const afterRollback = await db.$transaction((tx) =>
+    service.recordAssistedVersionEvidence(tx, {
+      ...next,
+      content: { ...next.content, hash: "d".repeat(64) },
+    }),
+  );
+  assert.equal(afterRollback.content.hash, "d".repeat(64));
+  await assert.rejects(
+    db.$transaction((tx) =>
+      service.recordAssistedVersionEvidence(tx, {
+        ...next,
+        idempotencyKey: randomUUID(),
+        content: {
+          kind: "book",
+          versionId: randomUUID(),
+          hash: "e".repeat(64),
+        },
+        evidenceRef: `synthetic:${randomUUID()}`,
+      }),
+    ),
+    { status: 403 },
+  );
+});
+
+test("Care first WeChat binding starts from the same unbound subject and records the proxy operator without a fake requester account", async () => {
+  const p = await project();
+  data(await assist(p));
+  const started = data(
+    await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token),
+    200,
+  ).project.terms.creation.startsAt;
+  const narrator = await login();
+  const operator = await paymentAdmin(config, app, ["care:write"]);
+  const care = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/care-requests`,
+      p.buyer.token,
+      { kind: "rebind", targetUserId: narrator.id, expectedBindingVersion: 0 },
+    ),
+  );
+  const detail = data(
+    await app.inject({
+      method: "GET",
+      url: `/v1/admin/care-requests/${care.id}`,
+      headers: operator,
+    }),
+    200,
+  );
+  assert.equal(detail.requesterId, null);
+  assert.equal(detail.requesterSubjectId, p.subjectId);
+  assert.equal(detail.operatorId, p.buyer.id);
+  assert.equal(detail.operatorRealm, "product");
+  const body = {
+    ...notice(),
+    supportCaseRef: `record:${care.id}`,
+    targetUserId: narrator.id,
+    expectedBindingVersion: 0,
+  };
+  const key = randomUUID();
+  const change = () =>
+    app.inject({
+      method: "POST",
+      url: `/v1/admin/projects/${p.projectId}/rebind`,
+      headers: { ...operator, "idempotency-key": key },
+      payload: body,
+    });
+  const changed = data(await change());
+  assert.equal(changed.subjectId, p.subjectId);
+  assert.equal(changed.bindingVersion, 1);
+  assert.deepEqual(data(await change()), changed);
+  assert.equal((await state(p, narrator.token)).subjectId, p.subjectId);
+  assert.equal(
+    data(await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token), 200)
+      .project.terms.creation.startsAt,
+    started,
+  );
+  const priorSession = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+    ),
+    200,
+  ).sessions[0];
+  await assert.rejects(
+    db.$transaction((tx) =>
+      app.get(Participation).authorizeAssisted(tx, {
+        projectId: p.projectId,
+        sessionId: priorSession.id,
+        operatorUserId: p.buyer.id,
+        purpose: "collection",
+      }),
+    ),
+    { status: 403 },
+  );
+});
+
+test("unbound subject rights requests recover through Care and verified withdrawal revokes current access with the real admin actor", async () => {
+  const p = await project();
+  data(await assist(p, "collection"));
+  data(await assist(p, "sharing"));
+  const session = data(await assist(p));
+  const operator = await paymentAdmin(config, app, [
+    "care:write",
+    "audit:read",
+  ]);
+  const observer = await paymentAdmin(config, app, ["ops:read"]);
+  const current = await state(p, p.buyer.token);
+  const key = randomUUID();
+  const body = { kind: "withdraw", expectedBindingVersion: 0 };
+  const create = () =>
+    request(
+      "POST",
+      `/v1/projects/${p.projectId}/care-requests`,
+      p.buyer.token,
+      body,
+      key,
+    );
+  const care = data(await create());
+  assert.equal(data(await create()).id, care.id);
+  assert.equal(care.requesterId, null);
+  assert.equal(care.requesterSubjectId, p.subjectId);
+  assert.equal(care.operatorId, p.buyer.id);
+  assert.equal(
+    data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/care-requests`,
+        p.buyer.token,
+      ),
+      200,
+    ).requests[0].state,
+    "open",
+  );
+  const verification = {
+    ...notice(),
+    expectedBindingVersion: 0,
+    expectedAccessEpoch: current.accessEpoch,
+  };
+  const verifyKey = randomUUID();
+  const verify = (
+    headers: Record<string, string> = operator,
+    payload: object = verification,
+  ) =>
+    app.inject({
+      method: "POST",
+      url: `/v1/admin/care-requests/${care.id}/verify`,
+      headers: { ...headers, "idempotency-key": verifyKey },
+      payload,
+    });
+  assert.equal((await verify(observer)).statusCode, 403);
+  const { "x-csrf-token": csrf, ...noCsrf } = operator;
+  assert.equal((await verify(noCsrf)).statusCode, 403);
+  const verified = data(await verify());
+  assert.equal(verified.state, "verified");
+  assert.equal(verified.currentAccessRevoked, true);
+  assert.deepEqual(data(await verify()), verified);
+  const after = await state(p, p.buyer.token);
+  assert.equal(after.accessEpoch, current.accessEpoch + 1);
+  assert.ok(after.choices.every((choice: any) => choice.granted === false));
+  assert.equal(after.canRead, false);
+  await assert.rejects(
+    db.$transaction((tx) =>
+      app.get(Participation).authorizeAssisted(tx, {
+        projectId: p.projectId,
+        sessionId: session.id,
+        operatorUserId: p.buyer.id,
+        purpose: "collection",
+      }),
+    ),
+    { status: 403 },
+  );
+  const detail = data(
+    await app.inject({
+      method: "GET",
+      url: `/v1/admin/care-requests/${care.id}`,
+      headers: operator,
+    }),
+    200,
+  );
+  assert.equal(detail.verification.method, "care_verified");
+  assert.ok(detail.verification.operatorAdminId);
+  assert.equal(detail.verification.evidenceRef, verification.evidenceRef);
+  assert.equal(detail.requesterSubjectId, p.subjectId);
+  assert.equal(detail.requesterId, null);
+  const exported = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/care-requests`,
+      p.buyer.token,
+      { kind: "export", expectedBindingVersion: 0 },
+    ),
+  );
+  const exportVerified = data(
+    await app.inject({
+      method: "POST",
+      url: `/v1/admin/care-requests/${exported.id}/verify`,
+      headers: { ...operator, "idempotency-key": randomUUID() },
+      payload: {
+        ...notice(),
+        expectedBindingVersion: 0,
+        expectedAccessEpoch: after.accessEpoch,
+      },
+    }),
+  );
+  assert.equal(exportVerified.state, "verified");
+  assert.equal(exportVerified.currentAccessRevoked, false);
+  assert.equal(exportVerified.fulfillment, "pending-consumer");
+});
+
+test("assisted decisions serialize on the project and persistence faults roll back sessions, participation and consent", async () => {
+  const p = await project();
+  const body = {
+    ...notice(),
+    evidenceRef: `synthetic:${randomUUID()}`,
+    purpose: "collection",
+    granted: true,
+    expectedBindingVersion: 0,
+    expectedAccessEpoch: 0,
+  };
+  const outcomes = await Promise.all([
+    request(
+      "POST",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+      body,
+    ),
+    request(
+      "POST",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+      { ...body, evidenceRef: `synthetic:${randomUUID()}` },
+    ),
+  ]);
+  assert.deepEqual(outcomes.map((r) => r.statusCode).sort(), [201, 409]);
+  const q = await project();
+  const initial = await state(q, q.buyer.token);
+  const key = randomUUID();
+  const command = { ...body, evidenceRef: `synthetic:${randomUUID()}` };
+  await db.$executeRawUnsafe(
+    "CREATE FUNCTION reject_t12_consent() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic T12 consent fault'; END $$",
+  );
+  await db.$executeRawUnsafe(
+    "CREATE TRIGGER t12_consent_fault AFTER INSERT ON consent_records FOR EACH ROW WHEN (NEW.method='assisted') EXECUTE FUNCTION reject_t12_consent()",
+  );
+  try {
+    assert.equal(
+      (
+        await request(
+          "POST",
+          `/v1/projects/${q.projectId}/assisted-sessions`,
+          q.buyer.token,
+          command,
+          key,
+        )
+      ).statusCode,
+      500,
+    );
+    assert.equal(
+      (await state(q, q.buyer.token)).accessEpoch,
+      initial.accessEpoch,
+    );
+    assert.deepEqual(
+      data(
+        await request(
+          "GET",
+          `/v1/projects/${q.projectId}/assisted-sessions`,
+          q.buyer.token,
+        ),
+        200,
+      ).sessions,
+      [],
+    );
+    assert.equal(
+      data(await request("GET", `/v1/orders/${q.orderId}`, q.buyer.token), 200)
+        .project.terms.creation.startsAt,
+      null,
+    );
+  } finally {
+    await db.$executeRawUnsafe(
+      "DROP TRIGGER t12_consent_fault ON consent_records",
+    );
+    await db.$executeRawUnsafe("DROP FUNCTION reject_t12_consent()");
+  }
+  const created = data(
+    await request(
+      "POST",
+      `/v1/projects/${q.projectId}/assisted-sessions`,
+      q.buyer.token,
+      command,
+      key,
+    ),
+  );
+  assert.equal(
+    data(
+      await request(
+        "POST",
+        `/v1/projects/${q.projectId}/assisted-sessions`,
+        q.buyer.token,
+        command,
+        key,
+      ),
+    ).id,
+    created.id,
+  );
+});
+
+test("Care manual intake names the subject and admin separately; withdrawal faults roll back permission, evidence and case verification", async () => {
+  const p = await project();
+  data(await assist(p));
+  const initial = await state(p, p.buyer.token);
+  const operator = await paymentAdmin(config, app, [
+    "care:write",
+    "audit:read",
+  ]);
+  const key = randomUUID(),
+    body = { kind: "withdraw", expectedBindingVersion: 0 };
+  const intake = () =>
+    app.inject({
+      method: "POST",
+      url: `/v1/admin/projects/${p.projectId}/care-requests`,
+      headers: { ...operator, "idempotency-key": key },
+      payload: body,
+    });
+  const care = data(await intake());
+  assert.equal(data(await intake()).id, care.id);
+  assert.equal(care.requesterId, null);
+  assert.equal(care.requesterSubjectId, p.subjectId);
+  assert.equal(care.operatorRealm, "admin");
+  assert.notEqual(care.operatorId, p.buyer.id);
+  const verificationKey = randomUUID();
+  const verify = () =>
+    app.inject({
+      method: "POST",
+      url: `/v1/admin/care-requests/${care.id}/verify`,
+      headers: { ...operator, "idempotency-key": verificationKey },
+      payload: {
+        ...notice(),
+        expectedBindingVersion: 0,
+        expectedAccessEpoch: initial.accessEpoch,
+      },
+    });
+  await db.$executeRawUnsafe(
+    "CREATE FUNCTION reject_t12_verification() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic T12 verification fault'; END $$",
+  );
+  await db.$executeRawUnsafe(
+    "CREATE TRIGGER t12_verification_fault AFTER UPDATE ON care_requests FOR EACH ROW WHEN (NEW.state='verified') EXECUTE FUNCTION reject_t12_verification()",
+  );
+  try {
+    assert.equal((await verify()).statusCode, 500);
+    assert.equal(
+      (await state(p, p.buyer.token)).accessEpoch,
+      initial.accessEpoch,
+    );
+    const detail = data(
+      await app.inject({
+        method: "GET",
+        url: `/v1/admin/care-requests/${care.id}`,
+        headers: operator,
+      }),
+      200,
+    );
+    assert.equal(detail.state, "open");
+    assert.equal(detail.verification, null);
+  } finally {
+    await db.$executeRawUnsafe(
+      "DROP TRIGGER t12_verification_fault ON care_requests",
+    );
+    await db.$executeRawUnsafe("DROP FUNCTION reject_t12_verification()");
+  }
+  assert.equal(data(await verify()).state, "verified");
+});
+
+test("assisted purposes remain independently active, same-purpose renewal replaces only itself, and refusal never changes another purpose", async () => {
+  const p = await project();
+  const collection = data(await assist(p, "collection"));
+  const ai = data(await assist(p, "ai"));
+  const sharing = data(await assist(p, "sharing"));
+  const sessions = () =>
+    request(
+      "GET",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+    );
+  assert.deepEqual(
+    data(await sessions(), 200).sessions.map((row: any) => row.state),
+    ["active", "active", "active"],
+  );
+  const authorize = (row: any) =>
+    db.$transaction((tx) =>
+      app
+        .get(Participation)
+        .authorizeAssisted(tx, {
+          projectId: p.projectId,
+          sessionId: row.id,
+          operatorUserId: p.buyer.id,
+          purpose: row.purpose,
+        }),
+    );
+  for (const row of [collection, ai, sharing])
+    assert.equal((await authorize(row)).subjectId, p.subjectId);
+  assert.equal(
+    data(
+      await request("GET", `/v1/projects/${p.projectId}`, p.buyer.token),
+      200,
+    ).bookTitle,
+    "私人标题不能泄露",
+  );
+  const originalEpoch = (await state(p, p.buyer.token)).accessEpoch;
+  const rejected = data(await assist(p, "ai", false));
+  assert.equal(rejected.state, "rejected");
+  assert.equal((await state(p, p.buyer.token)).accessEpoch, originalEpoch);
+  await assert.rejects(authorize(ai), { status: 403 });
+  for (const row of [collection, sharing])
+    assert.equal((await authorize(row)).subjectId, p.subjectId);
+  const renewed = data(await assist(p, "collection"));
+  await assert.rejects(authorize(collection), { status: 403 });
+  assert.equal((await authorize(renewed)).subjectId, p.subjectId);
+  assert.equal((await authorize(sharing)).subjectId, p.subjectId);
+  await assert.rejects(authorize(ai), { status: 403 });
+});
+
+test("assisted sharing expiry at the exact deadline stops private project reads while collection is still active", async (t) => {
+  const p = await project();
+  const sharing = data(await assist(p, "sharing"));
+  const collection = data(await assist(p, "collection"));
+  assert.ok(Date.parse(collection.expiresAt) > Date.parse(sharing.expiresAt));
+  assert.equal(
+    data(
+      await request("GET", `/v1/projects/${p.projectId}`, p.buyer.token),
+      200,
+    ).canRead,
+    true,
+  );
+  t.mock.method(Date, "now", () => Date.parse(sharing.expiresAt));
+  assert.equal(
+    (await request("GET", `/v1/projects/${p.projectId}`, p.buyer.token))
+      .statusCode,
+    403,
+  );
+  const listed = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+    ),
+    200,
+  ).sessions;
+  assert.equal(
+    listed.find((row: any) => row.id === sharing.id).state,
+    "expired",
+  );
+  assert.equal((await state(p, p.buyer.token)).canRead, false);
+  assert.equal(
+    (
+      await db.$transaction((tx) =>
+        app
+          .get(Participation)
+          .authorizeAssisted(tx, {
+            projectId: p.projectId,
+            sessionId: collection.id,
+            operatorUserId: p.buyer.id,
+            purpose: "collection",
+          }),
+      )
+    ).subjectId,
+    p.subjectId,
+  );
+});
+
+test("assisted same-purpose CAS rejects concurrent and late decisions even when all session times are equal", async () => {
+  const p = await project();
+  await db.$executeRawUnsafe(
+    "CREATE FUNCTION same_t12_session_time() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.created_at := '2000-01-01T00:00:00Z'::timestamptz; RETURN NEW; END $$",
+  );
+  await db.$executeRawUnsafe(
+    "CREATE TRIGGER t12_same_time BEFORE INSERT ON assisted_sessions FOR EACH ROW EXECUTE FUNCTION same_t12_session_time()",
+  );
+  try {
+    const first = data(await assist(p));
+    const epoch = (await state(p, p.buyer.token)).accessEpoch;
+    const body = {
+      ...notice(),
+      evidenceRef: `synthetic:${randomUUID()}`,
+      purpose: "collection",
+      granted: true,
+      expectedBindingVersion: 0,
+      expectedAccessEpoch: epoch,
+      expectedSessionId: first.id,
+    };
+    const key = randomUUID();
+    const outcomes = await Promise.all([
+      request(
+        "POST",
+        `/v1/projects/${p.projectId}/assisted-sessions`,
+        p.buyer.token,
+        body,
+        key,
+      ),
+      request(
+        "POST",
+        `/v1/projects/${p.projectId}/assisted-sessions`,
+        p.buyer.token,
+        { ...body, evidenceRef: `synthetic:${randomUUID()}` },
+      ),
+    ]);
+    assert.deepEqual(outcomes.map((r) => r.statusCode).sort(), [201, 409]);
+    const winner = data(outcomes.find((r) => r.statusCode === 201)!);
+    const listed = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/assisted-sessions`,
+        p.buyer.token,
+      ),
+      200,
+    ).sessions;
+    assert.equal(listed[0].id, winner.id);
+    assert.equal(listed[0].createdAt, first.createdAt);
+    assert.equal(
+      listed.find((row: any) => row.id === first.id).state,
+      "revoked",
+    );
+    const late = await request(
+      "POST",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+      { ...body, granted: false, evidenceRef: `synthetic:${randomUUID()}` },
+    );
+    assert.equal(late.statusCode, 409);
+    const otherPurposes = await Promise.all([
+      request(
+        "POST",
+        `/v1/projects/${p.projectId}/assisted-sessions`,
+        p.buyer.token,
+        {
+          ...body,
+          purpose: "ai",
+          expectedSessionId: undefined,
+          evidenceRef: `synthetic:${randomUUID()}`,
+        },
+      ),
+      request(
+        "POST",
+        `/v1/projects/${p.projectId}/assisted-sessions`,
+        p.buyer.token,
+        {
+          ...body,
+          purpose: "sharing",
+          expectedSessionId: undefined,
+          evidenceRef: `synthetic:${randomUUID()}`,
+        },
+      ),
+    ]);
+    assert.deepEqual(
+      otherPurposes.map((r) => r.statusCode),
+      [201, 201],
+    );
+    const replay = await request(
+      "POST",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+      body,
+      key,
+    );
+    if (outcomes[0].statusCode === 201)
+      assert.equal(data(replay).id, winner.id);
+    else assert.equal(replay.statusCode, 409);
+  } finally {
+    await db.$executeRawUnsafe(
+      "DROP TRIGGER t12_same_time ON assisted_sessions",
+    );
+    await db.$executeRawUnsafe("DROP FUNCTION same_t12_session_time()");
+  }
+});
+
+test("narrator and Care global revocations keep old assisted sessions invalid after unrelated fresh grants", async () => {
+  const p = await bound();
+  const collection = data(await assist(p, "collection"));
+  const ai = data(await assist(p, "ai"));
+  const sharing = data(await assist(p, "sharing"));
+  const oldEpoch = (await state(p, p.buyer.token)).accessEpoch;
+  const authorize = (row: any) =>
+    db.$transaction((tx) =>
+      app
+        .get(Participation)
+        .authorizeAssisted(tx, {
+          projectId: p.projectId,
+          sessionId: row.id,
+          operatorUserId: p.buyer.id,
+          purpose: row.purpose,
+        }),
+    );
+  data((await choose(p, p.narrator.token, "ai", false)).response);
+  assert.equal((await state(p, p.buyer.token)).accessEpoch, oldEpoch + 1);
+  for (const row of [collection, ai, sharing])
+    await assert.rejects(authorize(row), { status: 403 });
+  data(await assist(p, "ai"));
+  for (const row of [collection, ai, sharing])
+    await assert.rejects(authorize(row), { status: 403 });
+  assert.equal(
+    (await request("GET", `/v1/projects/${p.projectId}`, p.buyer.token))
+      .statusCode,
+    403,
+  );
+  const freshCollection = data(await assist(p, "collection"));
+  const freshSharing = data(await assist(p, "sharing"));
+  assert.equal(
+    data(
+      await request("GET", `/v1/projects/${p.projectId}`, p.buyer.token),
+      200,
+    ).canRead,
+    true,
+  );
+  const current = await state(p, p.buyer.token),
+    operator = await paymentAdmin(config, app, ["care:write"]);
+  const care = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/care-requests`,
+      p.buyer.token,
+      { kind: "withdraw", expectedBindingVersion: current.bindingVersion },
+    ),
+  );
+  data(
+    await app.inject({
+      method: "POST",
+      url: `/v1/admin/care-requests/${care.id}/verify`,
+      headers: { ...operator, "idempotency-key": randomUUID() },
+      payload: {
+        ...notice(),
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+      },
+    }),
+  );
+  data(await assist(p, "ai"));
+  for (const row of [freshCollection, freshSharing])
+    await assert.rejects(authorize(row), { status: 403 });
+  assert.equal(
+    (await request("GET", `/v1/projects/${p.projectId}`, p.buyer.token))
+      .statusCode,
+    403,
   );
 });

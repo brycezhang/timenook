@@ -1,0 +1,1 @@
+ALTER TABLE assisted_sessions ADD COLUMN sequence SERIAL NOT NULL UNIQUE;

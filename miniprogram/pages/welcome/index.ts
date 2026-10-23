@@ -261,7 +261,9 @@ Page({
           supportCaseRef: care.supportCaseRef,
           careRequests,
           status:
-            "换绑申请已记录，须由客服核验本人；此申请不会授予目标账号权限",
+            state.bindingVersion === 0
+              ? "本人账号绑定申请已记录，须由客服核验本人；此申请不会授予目标账号权限"
+              : "换绑申请已记录，须由客服核验本人；此申请不会授予目标账号权限",
         });
       }
     } catch (error) {
@@ -328,6 +330,9 @@ Page({
     p.role = "narrator";
     save(p);
     home();
+  },
+  assisted() {
+    go("assisted", `projectId=${this.projectId}`);
   },
   privacy() {
     go("service", "kind=privacy");

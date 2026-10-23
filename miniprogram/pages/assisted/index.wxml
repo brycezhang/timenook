@@ -1,0 +1,31 @@
+<view class="page assisted-page">
+  <view class="title">本人在场，同机协助</view>
+  <view class="soft section">隔离合成验证：真实 D08 证据、核验渠道与时限待冻结。本页点击不能作为可靠本人核验。</view>
+  <view class="note section">请把说明读给讲述者听，由本人分别选择。发起人只负责操作设备，付款不能代替本人同意。</view>
+  <view wx:if="{{busy}}" class="section" role="status">正在查询或保存，请稍候…</view>
+  <view wx:if="{{status}}" class="soft section" role="alert">{{status}}</view>
+  <button wx:if="{{!loggedIn}}" class="btn section" disabled="{{busy}}" bindtap="login">发起人微信登录</button>
+  <button class="btn secondary section" disabled="{{busy}}" bindtap="refresh">重新查询协助与工单状态</button>
+  <block wx:if="{{participation}}">
+    <view class="note section">三项用途分别选择；可以拒绝或申请撤回。故事与书稿须在看过或听读实际版本后另行确认，每次重新留证。</view>
+    <view wx:for="{{purposes}}" wx:key="purpose" class="paper section">
+      <view class="section-title">{{item.label}}</view>
+      <button class="btn section" data-purpose="{{item.purpose}}" data-granted="true" bindtap="chooseAssisted" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">本人同意此用途，记录当次证据</button>
+      <button class="btn secondary section" data-purpose="{{item.purpose}}" data-granted="false" bindtap="chooseAssisted" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">本人拒绝此用途</button>
+    </view>
+    <view wx:for="{{sessions}}" wx:key="id" class="section paper">
+      <view>{{item.purpose === 'collection' ? '采集保存' : item.purpose === 'ai' ? 'AI处理' : item.purpose === 'sharing' ? '向发起人共享' : '逐次内容确认'}}</view>
+      <view class="note">{{item.state === 'active' ? '当次许可有效' : item.state === 'expired' ? '证据已过期，请取得新的当次证据' : item.state === 'rejected' ? '本人已拒绝' : '许可已撤销，请重新查询和取得证据'}}</view>
+      <view class="note">当次有效期至：{{item.expiresAtLabel}}</view>
+    </view>
+    <view class="paper section">
+      <view class="section-title">无个人微信的本人权利</view>
+      <view class="note section">请由操作人代录本人的申请，客服须按既定流程另行核验。当前真实渠道与期限待冻结；申请不代表已完成导出或删除。</view>
+      <button class="btn secondary section" bindtap="requestRight" data-kind="withdraw" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">记录本人撤回申请</button>
+      <button class="btn secondary section" bindtap="requestRight" data-kind="export" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">记录本人完整资料导出申请</button>
+      <button class="btn secondary section" bindtap="requestRight" data-kind="delete" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">记录本人删除申请</button>
+      <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="note">工单 record:{{item.id}}</view><view>{{item.kind === 'withdraw' ? '撤回' : item.kind === 'export' ? '资料导出' : item.kind === 'delete' ? '删除' : '本人账号绑定'}}：{{item.state === 'open' ? '待客服核验' : item.kind === 'rebind' ? '账号绑定已完成' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : '已核验，后续交付或执行待完成'}}</view></view>
+    </view>
+  </block>
+  <button class="btn secondary section" bindtap="back">返回本人参与页</button>
+</view>
