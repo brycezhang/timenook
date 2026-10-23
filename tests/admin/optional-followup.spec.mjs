@@ -500,6 +500,50 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
       .getByRole("button", { name: "整理或查看故事", exact: true })
       .click();
     await expect(page).toHaveURL(new RegExp(`story.*interviewId=${first.id}`));
+    await page.goto(
+      `${base}/#/interview?projectId=${projectId}&interviewId=${first.id}`,
+    );
+    await page.getByRole("button", { name: "开始说", exact: true }).click();
+    await page
+      .getByRole("button", { name: "说完了，停止录音", exact: true })
+      .click();
+    await expect(
+      page.getByText("本机文件已保存，尚待封存", { exact: true }),
+    ).toBeVisible();
+    const pending = await page.evaluate(() =>
+      Object.entries(localStorage).filter(([key]) => key.includes("recording")),
+    );
+    expect(pending.length).toBeGreaterThan(0);
+    // Delay a genuine successful HTTP response across the device's exact session expiry.
+    await page.route(
+      `**/interviews/${first.id}/follow-up/finish`,
+      async (route) => {
+        const response = await route.fetch();
+        expect(response.status()).toBe(201);
+        await page.evaluate((expiresAt) => {
+          Date.now = () => Date.parse(expiresAt);
+        }, narrator.session.expiresAt);
+        await route.fulfill({ response });
+      },
+    );
+    await page
+      .getByRole("button", { name: "跳过追问，继续原问题或整理", exact: true })
+      .click();
+    await expect(page.getByText(/当前权限已失效/)).toBeVisible();
+    await expect(
+      page.locator(".live-interview .interview-question"),
+    ).toHaveCount(0);
+    await expect(page.locator(".optional-followup")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "开始说", exact: true }),
+    ).toHaveCount(0);
+    expect(
+      await page.evaluate(() =>
+        Object.entries(localStorage).filter(([key]) =>
+          key.includes("recording"),
+        ),
+      ),
+    ).toEqual(pending);
     expect(errors).toEqual([]);
   } catch (error) {
     await writeFile(

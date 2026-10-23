@@ -378,18 +378,20 @@ export class Followups {
         .some((h) => normalize(h.snapshot.text) === normalize(snapshot.text))
     )
       return "REPEATED_QUESTION";
-    const current = input.transcripts
-      .filter((t) => t.question.id === q.id)
-      .at(-1)
-      ?.transcript.trim();
+    // A later segment such as a water break cannot erase an explicit stop in this story's frozen input.
     if (
-      current &&
-      /(?:不想|不愿(?:意)?)(?:再)?(?:说|谈|回答|聊)|不要(?:再)?(?:问|追问)/.test(
-        current,
+      input.transcripts.some((t) =>
+        /(?:不想|不愿(?:意)?)(?:再)?(?:说|谈|回答|聊)|不要(?:再)?(?:问|追问)/.test(
+          t.transcript,
+        ),
       )
     )
       return "DECLINED";
-    if (current && /(?:说完了|讲完了|就到这里|结束吧)/.test(current))
+    if (
+      input.transcripts.some((t) =>
+        /(?:说完了|讲完了|就到这里|结束吧)/.test(t.transcript),
+      )
+    )
       return "USER_FINISHED";
     return null;
   }

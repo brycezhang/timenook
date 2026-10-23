@@ -1666,3 +1666,81 @@ test("a rule-finished intent replays its frozen decision after preferences chang
     0,
   );
 });
+
+for (const [stop, reason] of [
+  ["这件事说到这里，我不想再谈这段经历了。", "DECLINED"],
+  ["这一段讲完了，结束吧。", "USER_FINISHED"],
+] as const)
+  test(`an earlier same-question ${reason} is not hidden by a later water break and stays an uncharged terminal intent`, async () => {
+    const p = await bound(),
+      i = await interview(p),
+      transport = providerTransport;
+    const answers = [stop, "我先喝一口水。"];
+    let query = 0;
+    providerTransport = async (input, init) => {
+      const response = await transport(input, init);
+      if (String(input).endsWith("/query")) {
+        const body = (await response.json()) as any;
+        body.result.text = answers[query++];
+        return Response.json(body, {
+          headers: { "X-Api-Status-Code": "20000000" },
+        });
+      }
+      return response;
+    };
+    try {
+      await readyInput(p, i);
+      await readyInput(p, i);
+    } finally {
+      providerTransport = transport;
+    }
+    assert.equal(query, 2);
+    const url = `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`,
+      key = randomUUID(),
+      command = {
+        clientRequestId: randomUUID(),
+        actualQuestionId: i.actualQuestion.id,
+        expectedQuestionVersion: 1,
+      },
+      before = textRequests.length;
+    const view = data(
+      await request("POST", url, p.narrator.token, command, key),
+      202,
+    );
+    assert.equal(view.task, null);
+    assert.equal(view.finishReason, reason);
+    assert.equal(view.usage, 0);
+    const intent = await db.followupGeneration.findUniqueOrThrow({
+      where: { taskId: command.clientRequestId },
+    });
+    assert.deepEqual(
+      (intent.input as any).transcripts.map((t: any) => t.transcript),
+      answers,
+    );
+    assert.equal(intent.charged, false);
+    assert.equal(
+      (
+        await db.productionTask.findUniqueOrThrow({
+          where: { id: intent.taskId },
+        })
+      ).state,
+      "succeeded",
+    );
+    assert.equal(
+      await db.taskAttempt.count({ where: { taskId: intent.taskId } }),
+      0,
+    );
+    assert.equal(
+      await db.taskOutbox.count({ where: { taskId: intent.taskId } }),
+      0,
+    );
+    await app.get(ProductionTasks).run(intent.taskId);
+    const replay = data(
+      await request("POST", url, p.narrator.token, command, key),
+      202,
+    );
+    assert.equal(replay.task, null);
+    assert.equal(replay.finishReason, reason);
+    assert.equal(replay.usage, 0);
+    assert.equal(textRequests.length, before);
+  });

@@ -125,7 +125,10 @@ export class SessionClient {
     } catch (error) {
       if (
         error instanceof ApiFailure &&
-        error.status === 401 &&
+        (error.status === 401 ||
+          (error.code === "STALE_RESPONSE" &&
+            dataMode() === "live" &&
+            Date.parse(stored.session.expiresAt) <= Date.now())) &&
         generation === this.generation &&
         this.persisted()?.session.token === stored.session.token
       )

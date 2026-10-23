@@ -32,6 +32,12 @@ function harness(options: { deferSaves?: boolean } = {}) {
     handlers: Record<string, ((v?: any) => void)[]> = {},
     pendingSaves: any[] = [],
     navigation: any[] = [];
+  let now = Date.now();
+  class DeviceDate extends Date {
+    static now() {
+      return now;
+    }
+  }
   let page: any,
     saves = 0,
     failManifest = false,
@@ -39,6 +45,7 @@ function harness(options: { deferSaves?: boolean } = {}) {
   const emit = (event: string, v?: any) =>
     handlers[event]?.forEach((fn) => fn(v));
   runInNewContext(compiled.outputFiles[0].text, {
+    Date: DeviceDate,
     setTimeout,
     clearTimeout,
     setInterval,
@@ -110,6 +117,9 @@ function harness(options: { deferSaves?: boolean } = {}) {
     emit,
     pendingSaves,
     navigation,
+    expireSession() {
+      now = Date.parse(login.session.expiresAt);
+    },
     get saves() {
       return saves;
     },
@@ -1262,5 +1272,185 @@ test("a displayed follow-up can be rewritten and skipped while pending audio kee
   assert.equal(h.page.data.question, "");
   assert.equal(h.page.data.followup, null);
   assert.equal(h.files.size, 1);
+  h.page.onUnload();
+});
+
+test("a follow-up request crossing exact local expiry clears the private page and preserves pending audio", async () => {
+  const h = harness();
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const manifest = [...h.storage.entries()].find(([key]) =>
+    key.includes("recording"),
+  );
+  assert.ok(manifest);
+  const original = structuredClone(manifest);
+  const request = h.page.requestFollowup();
+  const held = h.requests.shift();
+  assert.equal(h.page.data.busy, true);
+  h.expireSession();
+  respond(
+    held,
+    { interviewId, task: null, result: null, canFinish: true, usage: 0 },
+    202,
+  );
+  await request;
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.followup, null);
+  assert.equal(h.page.data.followupText, "");
+  assert.equal(h.page.stopSessionWatch, undefined);
+  assert.equal(h.page.followupPoll, undefined);
+  assert.deepEqual(
+    [...h.storage.entries()].find(([key]) => key.includes("recording")),
+    original,
+  );
+  assert.equal(h.files.size, 1);
+  h.page.onUnload();
+});
+
+for (const action of [
+  "retry",
+  "rewrite",
+  "skip",
+  "refresh",
+  "display",
+] as const) {
+  test(`a follow-up ${action} crossing exact local expiry clears its owned private page without deleting original audio`, async () => {
+    const h = harness(),
+      taskId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const displayed = {
+      ...question,
+      id: taskId,
+      source: { kind: "follow-up", generationTaskId: taskId },
+      snapshot: { text: "那一年您最记得哪个场景？", intent: "scene" },
+    };
+    h.page.onLoad({ projectId });
+    const showing = h.page.onShow();
+    respond(h.requests.shift(), {
+      ...context,
+      interviews: [
+        { ...interview, currentQuestion: displayed, questionVersion: 2 },
+      ],
+    });
+    await showing;
+    await start(h);
+    await h.page.record();
+    await tick();
+    const manifest = [...h.storage.entries()].find(([key]) =>
+      key.includes("recording"),
+    );
+    assert.ok(manifest);
+    const original = structuredClone(manifest);
+    const view = {
+      interviewId,
+      actualQuestionId: displayed.id,
+      questionVersion: 2,
+      planRevision: 1,
+      task: { id: taskId, state: "failed", errorCode: "PROVIDER_FAILED" },
+      result: null,
+      canFinish: true,
+      usage: 1,
+    };
+    if (action === "retry") {
+      const querying = h.page.refreshFollowup();
+      respond(h.requests.shift(), view, 201);
+      await querying;
+    }
+    h.page.followupText({ detail: { value: "那一年您最记得哪件事？" } });
+    const pending =
+      action === "retry"
+        ? h.page.retryFollowup()
+        : action === "rewrite"
+          ? h.page.rewriteFollowup()
+          : action === "skip"
+            ? h.page.skipFollowup()
+            : h.page.refreshFollowup();
+    let held = h.requests.shift();
+    if (action === "display") {
+      respond(
+        held,
+        {
+          ...view,
+          task: { id: taskId, state: "succeeded" },
+          result: { action: "ask", question: "下一个场景？" },
+        },
+        201,
+      );
+      await tick();
+      held = h.requests.shift();
+      assert.match(held.url, /actual-question$/);
+    }
+    h.expireSession();
+    respond(
+      held,
+      action === "rewrite" || action === "display"
+        ? { ...interview, currentQuestion: displayed, questionVersion: 3 }
+        : view,
+      201,
+    );
+    await pending;
+    assert.equal(h.page.data.busy, false);
+    assert.equal(h.page.data.question, "");
+    assert.equal(h.page.data.interview, null);
+    assert.equal(h.page.data.followup, null);
+    assert.equal(h.page.data.followupText, "");
+    assert.equal(h.page.stopSessionWatch, undefined);
+    assert.equal(h.page.followupPoll, undefined);
+    assert.equal(h.page.timerHandle, undefined);
+    assert.deepEqual(
+      [...h.storage.entries()].find(([key]) => key.includes("recording")),
+      original,
+    );
+    assert.equal(h.files.size, 1);
+    h.page.onUnload();
+  });
+}
+
+test("an old follow-up success cannot clear a newer expired account's page or its draft after a project switch", async () => {
+  const h = harness();
+  await ready(h);
+  const pending = h.page.requestFollowup(),
+    held = h.requests.shift();
+  h.page.onHide();
+  const other = structuredClone(login),
+    nextProject = "99999999-9999-4999-8999-999999999999";
+  other.user.id = "88888888-8888-4888-8888-888888888888";
+  other.session.id = "77777777-7777-4777-8777-777777777777";
+  other.session.token = "c".repeat(43);
+  h.storage.set(`timenook.session.v1:${base}`, other);
+  h.page.onLoad({ projectId: nextProject });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        projectId: nextProject,
+        actualQuestion: {
+          ...question,
+          projectId: nextProject,
+          snapshot: { text: "新账号的私人问题", intent: "具体场景" },
+        },
+      },
+    ],
+  });
+  await showing;
+  h.page.customText({ detail: { value: "新账号草稿" } });
+  h.expireSession();
+  respond(
+    held,
+    { interviewId, task: null, result: null, canFinish: true, usage: 0 },
+    202,
+  );
+  await pending;
+  assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), other);
+  assert.equal(h.page.data.question, "新账号的私人问题");
+  assert.equal(h.page.data.interview.projectId, nextProject);
+  assert.equal(h.page.data.customText, "新账号草稿");
+  assert.equal(h.page.data.busy, false);
+  assert.equal(typeof h.page.stopSessionWatch, "function");
   h.page.onUnload();
 });
