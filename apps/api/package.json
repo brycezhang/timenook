@@ -13,7 +13,8 @@
     "openapi": "pnpm build && node --env-file-if-exists=../../.env dist/openapi.js",
     "admin:create": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.admin-local dist/admin/admin-cli.js create",
     "probe:identity": "node --env-file-if-exists=../../.env --env-file=../../.env.probe-local dist/probe/probe-cli.js",
-    "probe:api": "node --env-file-if-exists=../../.env --env-file=../../.env.probe-local dist/main.js"
+    "probe:api": "node --env-file-if-exists=../../.env --env-file=../../.env.probe-local dist/main.js",
+    "start:worker": "node --env-file-if-exists=../../.env dist/tasks/worker-main.js"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.3",
@@ -26,6 +27,7 @@
     "@prisma/client": "6.19.3",
     "@timenook/contracts": "workspace:*",
     "ali-oss": "6.23.0",
+    "bullmq": "5.81.5",
     "class-transformer": "0.5.1",
     "class-validator": "0.14.2",
     "fastify": "5.11.3",

@@ -1,3 +1,4 @@
+import { createTranscription } from "../tasks/tasks";
 import {
   Body,
   Controller,
@@ -525,9 +526,10 @@ export class Recordings implements OnModuleDestroy {
             ...actor,
           },
         });
-        await tx.sealedInput.create({
+        const input = await tx.sealedInput.create({
           data: { id: randomUUID(), projectId, clipId: clip.id },
         });
+        await createTranscription(tx, clip, asset, input, this.config);
         const sealed = await tx.recordingIntent.update({
           where: { id: row.id },
           data: {

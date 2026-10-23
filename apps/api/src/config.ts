@@ -17,6 +17,14 @@ export interface ApiConfig {
     storageRoot: string;
     oss?: ProbeOssConfig;
   };
+  transcription?: {
+    mode: "synthetic-local";
+    configVersion: string;
+    doubao: import("./probe/ai-providers").DoubaoConfig;
+    pollIntervalMs: number;
+    submissionReservationFen: number;
+    deadlineMs: number;
+  };
   sessionTtlSeconds?: number;
   redisKeyPrefix?: string;
   loginLimitPerMinute?: number;

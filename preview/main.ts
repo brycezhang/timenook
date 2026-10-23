@@ -123,11 +123,11 @@ const wx: any = {
     const url = new URL(options.url, location.origin);
     const supported =
       ((!options.method || options.method === "GET") &&
-        /\/v1\/(recipient-types|packages\/current|orders(?:\/[a-f0-9-]{36})?|participations|invitations\/[A-Za-z0-9_-]{43}|projects\/[a-f0-9-]{36}\/(?:participation|binding-requests|care-requests|assisted-sessions|plan|interviews(?:\/[a-f0-9-]{36}(?:\/clips\/[a-f0-9-]{36}(?:\/content)?)?)?))$/.test(
+        /\/v1\/(recipient-types|packages\/current|orders(?:\/[a-f0-9-]{36})?|participations|invitations\/[A-Za-z0-9_-]{43}|projects\/[a-f0-9-]{36}\/(?:participation|binding-requests|care-requests|assisted-sessions|tasks(?:\/[a-f0-9-]{36})?|plan|interviews(?:\/[a-f0-9-]{36}(?:\/clips\/[a-f0-9-]{36}(?:\/content)?)?)?))$/.test(
           url.pathname,
         )) ||
       (options.method === "POST" &&
-        /\/v1\/(?:orders(?:\/[a-f0-9-]{36}\/(?:payment|close))?|projects\/[a-f0-9-]{36}\/(?:invitations|consents(?:\/revoke)?|care-requests|assisted-sessions|plan(?:\/preferences)?|interviews(?:\/context|\/[a-f0-9-]{36}\/(?:resume|recording-start)|\/[a-f0-9-]{36}\/clips(?:\/[a-f0-9-]{36}\/(?:upload|seal|status|release))?)?)|invitations\/[A-Za-z0-9_-]{43}\/requests|binding-requests\/[a-f0-9-]{36}\/approve)$/.test(
+        /\/v1\/(?:orders(?:\/[a-f0-9-]{36}\/(?:payment|close))?|projects\/[a-f0-9-]{36}\/(?:invitations|consents(?:\/revoke)?|care-requests|assisted-sessions|tasks(?:\/status|\/[a-f0-9-]{36}\/retry)|plan(?:\/preferences)?|interviews(?:\/context|\/[a-f0-9-]{36}\/(?:resume|recording-start)|\/[a-f0-9-]{36}\/clips(?:\/[a-f0-9-]{36}\/(?:upload|seal|status|release))?)?)|invitations\/[A-Za-z0-9_-]{43}\/requests|binding-requests\/[a-f0-9-]{36}\/approve)$/.test(
           url.pathname,
         ));
     void (async () => {

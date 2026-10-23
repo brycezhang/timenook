@@ -222,3 +222,19 @@ export const careApi = {
     ).data;
   },
 };
+
+import type { ProductionTaskView } from "@timenook/contracts";
+export const tasksApi = {
+  async list() {
+    return (await client.get<ApiResponse<ProductionTaskView[]>>("/tasks")).data;
+  },
+  async retry(task: ProductionTaskView, key: string, csrf: string) {
+    return (
+      await client.post<ApiResponse<ProductionTaskView>>(
+        `/projects/${task.projectId}/tasks/${task.id}/retry`,
+        {},
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
+};

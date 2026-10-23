@@ -1,3 +1,9 @@
+import { AdminTasksController } from "./tasks/admin-tasks";
+import {
+  ProductionTasks,
+  ProductionTasksController,
+  TASK_OBJECTS,
+} from "./tasks/tasks";
 import {
   Recordings,
   RecordingsController,
@@ -136,6 +142,31 @@ export async function createApplication(
   } = {},
 ): Promise<NestFastifyApplication> {
   if (
+    config.transcription &&
+    (config.environment !== "test" ||
+      !config.recording ||
+      config.transcription.mode !== "synthetic-local" ||
+      !options.aiFetch ||
+      options.aiFetch === fetch ||
+      !/^synthetic-[a-z0-9-]+$/.test(config.transcription.configVersion) ||
+      !Number.isInteger(config.transcription.pollIntervalMs) ||
+      config.transcription.pollIntervalMs < 0 ||
+      config.transcription.pollIntervalMs > 60000 ||
+      !Number.isSafeInteger(config.transcription.submissionReservationFen) ||
+      config.transcription.submissionReservationFen < 0 ||
+      !Number.isSafeInteger(config.transcription.deadlineMs) ||
+      config.transcription.deadlineMs < 30000 ||
+      config.transcription.deadlineMs > 86400000 ||
+      !config.transcription.doubao.apiKey.startsWith("synthetic-") ||
+      !config.transcription.doubao.resourceId.startsWith("synthetic-") ||
+      !Number.isInteger(config.transcription.doubao.fetchWindowSeconds) ||
+      config.transcription.doubao.fetchWindowSeconds < 1 ||
+      config.transcription.doubao.fetchWindowSeconds > 3600)
+  )
+    throw new ConfigurationError(
+      "Transcription requires explicit isolated synthetic recording and transport",
+    );
+  if (
     config.recording &&
     (config.environment !== "test" ||
       config.recording.mode !== "synthetic-local" ||
@@ -249,7 +280,12 @@ export async function createApplication(
         ? [PersonalPlanController, InterviewsController]
         : []),
       ...(config.recording
-        ? [RecordingsController, RecordingObjectsController]
+        ? [
+            RecordingsController,
+            RecordingObjectsController,
+            ProductionTasksController,
+            AdminTasksController,
+          ]
         : []),
       ...(config.audioProbe
         ? [
@@ -262,9 +298,19 @@ export async function createApplication(
     providers: [
       { provide: API_CONFIG, useValue: config },
       Infrastructure,
+      { provide: AI_FETCH, useValue: options.aiFetch ?? fetch },
       ...(config.recording
         ? [
             Recordings,
+            ProductionTasks,
+            {
+              provide: TASK_OBJECTS,
+              useValue:
+                options.recordingObjects ??
+                (config.recording.oss
+                  ? new OssProbeObjects(config.recording.oss)
+                  : new LocalProbeObjects(config.recording.storageRoot)),
+            },
             {
               provide: RECORDING_OBJECTS,
               useValue:
