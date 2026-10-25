@@ -36,3 +36,10 @@ CREATE TRIGGER immutable_book_version BEFORE UPDATE ON book_versions FOR EACH RO
 CREATE TRIGGER immutable_book_output BEFORE UPDATE ON book_outputs FOR EACH ROW EXECUTE FUNCTION immutable_story_content();
 CREATE TRIGGER immutable_book_entry BEFORE UPDATE ON book_audio_entries FOR EACH ROW EXECUTE FUNCTION immutable_story_content();
 CREATE TRIGGER immutable_book_reference BEFORE UPDATE ON book_story_references FOR EACH ROW EXECUTE FUNCTION immutable_story_content();
+CREATE TABLE book_cover_versions (
+ project_id UUID NOT NULL REFERENCES projects(id),version INTEGER NOT NULL CHECK(version>0),
+ salutation TEXT NOT NULL CHECK(length(salutation)<=120),photo_asset_id UUID,
+ created_by UUID NOT NULL REFERENCES users(id),created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(project_id,version),FOREIGN KEY(project_id,photo_asset_id) REFERENCES photo_assets(project_id,id)
+);
+CREATE TRIGGER immutable_book_cover BEFORE UPDATE ON book_cover_versions FOR EACH ROW EXECUTE FUNCTION immutable_story_content();

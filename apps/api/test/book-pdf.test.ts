@@ -54,10 +54,19 @@ async function confirmedStory(
   withPhoto = false,
   long = false,
   text?: string,
+  materials?: {
+    caption?: string;
+    portrait?: boolean;
+    notes?: { id: string; text: string }[];
+  },
 ) {
   const p = await readyStory(existing);
   const photo = withPhoto
-    ? await storyPhoto(p, "合成照片：那年家门前的红墙")
+    ? await storyPhoto(
+        p,
+        materials?.caption ?? "合成照片：那年家门前的红墙",
+        materials?.portrait ? { width: 120, height: 180 } : undefined,
+      )
     : null;
   const story = data(
     await request(
@@ -92,7 +101,7 @@ async function confirmedStory(
           item,
           reason: "本人核对后保留约略年代",
         })),
-        notes: [],
+        notes: materials?.notes ?? [],
       },
     ),
   );
@@ -241,7 +250,17 @@ test("the actual directory omits empty chapters and the full long manuscript ret
       ],
     }),
   );
-  const context = data(await request("GET", base, p.narrator.token), 200),
+  const contextBeforeCover = data(
+      await request("GET", base, p.narrator.token),
+      200,
+    ),
+    context = data(
+      await request("POST", base + "/cover", p.narrator.token, {
+        expectedVersion: contextBeforeCover.cover.version,
+        salutation: "献给这些年一路相伴的家人",
+        photoAssetId: contextBeforeCover.coverPhotoOptions[0].assetId,
+      }),
+    ),
     book = data(
       await request("POST", base + "/versions", p.narrator.token, {
         expectedInputHash: context.inputHash,
@@ -485,6 +504,10 @@ test("sharing revocation rejects an initiator's PDF and replay and fences the ol
 });
 
 test("the same durable render task resumes after API restart and Redis queue loss", async () => {
+  // Earlier independent cases intentionally leave queued books. This recovery
+  // proof owns a fresh disposable fixture, not a deadline for that backlog.
+  await stopBookFixture();
+  await startBookFixture();
   const p = await confirmedStory(),
     base = `/v1/projects/${p.projectId}/book`,
     ctx = data(await request("GET", base, p.narrator.token), 200),
@@ -513,19 +536,40 @@ test("the same durable render task resumes after API restart and Redis queue los
   await restartBookApplication();
   const runtime = await startProductionWorker(app);
   try {
+    const completed: string[] = [];
     const wake = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(Error("render worker timeout")),
-        20000,
-      );
+      const timer = setTimeout(() => {
+        void db.productionTask
+          .findMany({
+            where: { projectId: p.projectId },
+            select: {
+              id: true,
+              state: true,
+              kind: true,
+              errorCode: true,
+              nextRunAt: true,
+              leaseUntil: true,
+            },
+          })
+          .then(
+            (tasks) =>
+              reject(
+                Error(
+                  `render worker timeout: ${JSON.stringify({ completed, tasks })}`,
+                ),
+              ),
+            (error) => reject(error),
+          );
+      }, 90000);
       runtime.worker.on("completed", (job) => {
+        completed.push(job.data.taskId);
         if (job.data.taskId === book.task.id) {
           clearTimeout(timer);
           resolve();
         }
       });
     });
-    await runtime.recoverDue();
+    assert.equal(await runtime.recoverDue(), 1);
     await wake;
     const done = data(
       await request("GET", base + `/versions/${book.id}`, p.narrator.token),
@@ -792,5 +836,417 @@ test("generation replay and render retry retain the same applicable material exp
   } finally {
     if (previous === undefined) delete config.books!.maxPhotoBytes;
     else config.books!.maxPhotoBytes = previous;
+  }
+});
+
+async function inspectDownloadedBook(bytes: Uint8Array) {
+  const { getDocument, OPS } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const document = await getDocument({
+    data: new Uint8Array(bytes),
+    useSystemFonts: false,
+    isEvalSupported: false,
+  }).promise;
+  const normalize = (s: string) =>
+    s
+      .normalize("NFKC")
+      .replace(/⻔/g, "门")
+      .replace(/⻚/g, "页")
+      .replace(/⻓/g, "长")
+      .replace(/\s/g, "");
+  const pages: { text: string; images: number }[] = [];
+  try {
+    for (let number = 1; number <= document.numPages; number++) {
+      const page = await document.getPage(number),
+        content = await page.getTextContent(),
+        operators = await page.getOperatorList();
+      let text = content.items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join("")
+        .replace(/^书稿预览 · 制作规格待核验/, "")
+        .replace(new RegExp(`第${number}[页⻚]$`), "");
+      pages.push({
+        text: normalize(text),
+        images: operators.fnArray.filter((op) =>
+          [
+            OPS.paintImageXObject,
+            OPS.paintInlineImageXObject,
+            OPS.paintImageXObjectRepeat,
+          ].includes(op),
+        ).length,
+      });
+      page.cleanup();
+    }
+    return { pages, text: pages.map((p) => p.text).join(""), normalize };
+  } finally {
+    await document.destroy();
+  }
+}
+async function preserveReviewBook(bookId: string, name: string) {
+  if (process.env.T20_REVIEW_ARTIFACT_DIR)
+    await cp(
+      join(config.books!.storageRoot, bookId, "1"),
+      join(process.env.T20_REVIEW_ARTIFACT_DIR, name),
+      { recursive: true, errorOnExist: true, force: false },
+    );
+}
+test("a valid portrait photograph and300-character caption flow across pages in the confirmed full book", async () => {
+  const ending = "这就是照片说明的最后一句。",
+    caption =
+      (
+        "这一张照片的说明开始。" +
+        "这幅照片记录了我年轻时家门前的红墙和每天走过的那条路。".repeat(20)
+      ).slice(0, 300 - ending.length) + ending,
+    note = "这是紧随照片说明的本人补充。";
+  const p = await confirmedStory(undefined, true, false, undefined, {
+      caption,
+      portrait: true,
+      notes: [{ id: randomUUID(), text: note }],
+    }),
+    base = `/v1/projects/${p.projectId}/book`,
+    context = data(await request("GET", base, p.narrator.token), 200),
+    book = data(
+      await request("POST", base + "/versions", p.narrator.token, {
+        expectedInputHash: context.inputHash,
+      }),
+      202,
+    );
+  await app.get(ProductionTasks).run(book.task.id);
+  const current = data(
+    await request("GET", base + `/versions/${book.id}`, p.narrator.token),
+    200,
+  );
+  assert.equal(current.state, "ready", JSON.stringify(current.task));
+  const pdf = await request(
+    "GET",
+    base + `/versions/${book.id}/pdf`,
+    p.narrator.token,
+  );
+  assert.equal(pdf.statusCode, 200);
+  const inspected = await inspectDownloadedBook(pdf.rawPayload);
+  assert.equal(inspected.pages.length, current.pageCount);
+  assert.ok(inspected.text.includes(inspected.normalize(caption)));
+  assert.ok(
+    inspected.text.indexOf(inspected.normalize(caption)) <
+      inspected.text.indexOf(inspected.normalize(note)),
+  );
+  const first = inspected.pages.findIndex((p) =>
+      p.text.includes(inspected.normalize(caption.slice(0, 20))),
+    ),
+    last = inspected.pages.findIndex((p) =>
+      p.text.includes(inspected.normalize(caption.slice(-20))),
+    );
+  assert.ok(last > first);
+  assert.ok(
+    inspected.pages.slice(0, first + 1).reduce((n, p) => n + p.images, 0) >= 2,
+  );
+  await preserveReviewBook(book.id, "portrait-caption");
+});
+test("a valid4500-character participant note is complete across actual PDF pages", async () => {
+  const note =
+    "那一年我把这些日子一件件记下，想把大家笑着说话的样子也留在书里。"
+      .repeat(200)
+      .slice(0, 4500);
+  const p = await confirmedStory(undefined, false, false, undefined, {
+      notes: [{ id: randomUUID(), text: note }],
+    }),
+    base = `/v1/projects/${p.projectId}/book`,
+    context = data(await request("GET", base, p.narrator.token), 200),
+    book = data(
+      await request("POST", base + "/versions", p.narrator.token, {
+        expectedInputHash: context.inputHash,
+      }),
+      202,
+    );
+  await app.get(ProductionTasks).run(book.task.id);
+  const current = data(
+    await request("GET", base + `/versions/${book.id}`, p.narrator.token),
+    200,
+  );
+  assert.equal(current.state, "ready", JSON.stringify(current.task));
+  const pdf = await request(
+    "GET",
+    base + `/versions/${book.id}/pdf`,
+    p.narrator.token,
+  );
+  assert.equal(pdf.statusCode, 200);
+  const inspected = await inspectDownloadedBook(pdf.rawPayload);
+  assert.equal(inspected.pages.length, current.pageCount);
+  assert.ok(inspected.text.includes(inspected.normalize(note)));
+  assert.ok(current.pageCount > 7);
+  await preserveReviewBook(book.id, "participant-note");
+});
+
+test("cover settings freeze an allowed salutation and photo and invalidate an earlier book on optimistic change", async () => {
+  const p = await confirmedStory(undefined, true, false, undefined, {
+      portrait: true,
+    }),
+    base = `/v1/projects/${p.projectId}/book`,
+    context = data(await request("GET", base, p.narrator.token), 200);
+  assert.deepEqual(context.cover, {
+    version: 0,
+    salutation: "",
+    photoAssetId: null,
+  });
+  assert.equal(context.coverPhotoOptions.length, 1);
+  const photo = context.coverPhotoOptions[0];
+  assert.equal(photo.interviewId, p.interviewId);
+  assert.ok(photo.bytes > 0);
+  const before = data(
+      await request("POST", base + "/versions", p.narrator.token, {
+        expectedInputHash: context.inputHash,
+      }),
+      202,
+    ),
+    body = {
+      expectedVersion: 0,
+      salutation: "献给我亲爱的家人",
+      photoAssetId: photo.assetId,
+    },
+    key = randomUUID();
+  const [a, b] = await Promise.all([
+    request("POST", base + "/cover", p.narrator.token, body, key),
+    request("POST", base + "/cover", p.narrator.token, body, key),
+  ]);
+  const saved = data(a);
+  assert.deepEqual(data(b).cover, saved.cover);
+  assert.equal(saved.cover.version, 1);
+  assert.equal(saved.current.state, "obsolete");
+  assert.equal(
+    (await request("POST", base + "/cover", p.narrator.token, body)).statusCode,
+    409,
+  );
+  assert.equal(
+    (
+      await request("POST", base + "/cover", p.narrator.token, {
+        ...body,
+        expectedVersion: 1,
+        photoAssetId: randomUUID(),
+      })
+    ).statusCode,
+    400,
+  );
+  const next = data(
+    await request("POST", base + "/versions", p.narrator.token, {
+      expectedInputHash: saved.inputHash,
+    }),
+    202,
+  );
+  assert.equal(next.version, before.version + 1);
+  assert.equal(next.snapshot.cover.salutation, body.salutation);
+  assert.deepEqual(next.snapshot.cover.photo, photo);
+  await app.get(ProductionTasks).run(next.task.id);
+  const current = data(
+    await request("GET", base + `/versions/${next.id}`, p.narrator.token),
+    200,
+  );
+  assert.equal(current.state, "ready", JSON.stringify(current.task));
+  const pdf = await request(
+    "GET",
+    base + `/versions/${next.id}/pdf`,
+    p.narrator.token,
+  );
+  assert.equal(pdf.statusCode, 200);
+  const inspected = await inspectDownloadedBook(pdf.rawPayload);
+  assert.ok(
+    inspected.pages[0].text.includes(inspected.normalize(body.salutation)),
+  );
+  assert.equal(inspected.pages[0].images, 1);
+  assert.equal(
+    inspected.pages.reduce((n, p) => n + p.images, 0),
+    3,
+  );
+  const cleared = data(
+    await request("POST", base + "/cover", p.buyer.token, {
+      expectedVersion: 1,
+      salutation: "另一份称呼",
+      photoAssetId: null,
+    }),
+  );
+  assert.equal(cleared.current.state, "obsolete");
+  assert.equal(cleared.cover.version, 2);
+  assert.deepEqual(
+    data(
+      await request("GET", base + `/versions/${next.id}`, p.narrator.token),
+      200,
+    ).snapshot,
+    next.snapshot,
+  );
+  await preserveReviewBook(next.id, "cover-photo");
+});
+
+test("the fixed cover keeps a full120-character title and salutation with a portrait on the cover page", async () => {
+  const p = await confirmedStory(undefined, true, false, undefined, {
+      portrait: true,
+    }),
+    project = `/v1/projects/${p.projectId}`,
+    base = project + "/book",
+    title = "岁月中的那些人与事和家的故事".repeat(12).slice(0, 120),
+    salutation = "献给这些年一起走过的家人和朋友".repeat(12).slice(0, 120);
+  data(
+    await request("POST", project + "/metadata", p.narrator.token, {
+      expectedVersion: 0,
+      bookTitle: title,
+    }),
+  );
+  const context = data(await request("GET", base, p.narrator.token), 200),
+    saved = data(
+      await request("POST", base + "/cover", p.narrator.token, {
+        expectedVersion: 0,
+        salutation,
+        photoAssetId: context.coverPhotoOptions[0].assetId,
+      }),
+    ),
+    book = data(
+      await request("POST", base + "/versions", p.narrator.token, {
+        expectedInputHash: saved.inputHash,
+      }),
+      202,
+    );
+  await app.get(ProductionTasks).run(book.task.id);
+  const current = data(
+    await request("GET", base + `/versions/${book.id}`, p.narrator.token),
+    200,
+  );
+  assert.equal(current.state, "ready", JSON.stringify(current.task));
+  const pdf = await request(
+    "GET",
+    base + `/versions/${book.id}/pdf`,
+    p.narrator.token,
+  );
+  assert.equal(pdf.statusCode, 200);
+  const inspected = await inspectDownloadedBook(pdf.rawPayload);
+  assert.ok(inspected.pages[0].text.includes(inspected.normalize(title)));
+  assert.ok(inspected.pages[0].text.includes(inspected.normalize(salutation)));
+  assert.equal(inspected.pages[0].images, 1);
+  data(
+    await request(
+      "POST",
+      project + `/stories/${p.story.id}/decisions`,
+      p.narrator.token,
+      {
+        revisionId: p.story.revision.id,
+        expectedVersion: p.story.version,
+        contentHash: p.story.revision.contentHash,
+        confirmed: true,
+        allowInBook: false,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: `synthetic:本人取消入书-${randomUUID()}`,
+      },
+    ),
+  );
+  const noLongerAllowed = data(
+    await request("GET", base, p.narrator.token),
+    200,
+  );
+  assert.deepEqual(noLongerAllowed.coverPhotoOptions, []);
+  assert.equal(noLongerAllowed.current.state, "obsolete");
+  assert.equal(
+    (
+      await request("POST", base + "/versions", p.narrator.token, {
+        expectedInputHash: noLongerAllowed.inputHash,
+      })
+    ).statusCode,
+    409,
+  );
+  await preserveReviewBook(book.id, "cover-max-text");
+});
+
+test("a ready PDF remains readable when its raw derived cover expires and reports separate preview access", async (t) => {
+  const template = await db.packageVersion.findFirstOrThrow({
+      where: { realm: "local", purpose: "local_preview" },
+    }),
+    snapshot = structuredClone(template.snapshot) as any;
+  snapshot.admission.d03.retention.derivedPhotos.duration.value = 1;
+  const draftId = randomUUID(),
+    versionId = randomUUID();
+  await db.packageDraft.create({
+    data: { id: draftId, realm: "local", ...snapshot },
+  });
+  await db.packageVersion.create({
+    data: {
+      id: versionId,
+      realm: "local",
+      purpose: "local_preview",
+      draftId,
+      draftRevision: 1,
+      snapshot,
+      publicOffer: {
+        title: "合成独立照片期限套餐",
+        price: { value: 99900, unit: "fen", currency: "CNY" },
+      },
+    },
+  });
+  const p = await confirmedStory(await bound(versionId), true),
+    base = `/v1/projects/${p.projectId}/book`,
+    context = data(await request("GET", base, p.narrator.token), 200),
+    photo = context.coverPhotoOptions[0],
+    saved = data(
+      await request("POST", base + "/cover", p.narrator.token, {
+        expectedVersion: 0,
+        salutation: "献给家人",
+        photoAssetId: photo.assetId,
+      }),
+    ),
+    book = data(
+      await request("POST", base + "/versions", p.narrator.token, {
+        expectedInputHash: saved.inputHash,
+      }),
+      202,
+    );
+  await app.get(ProductionTasks).run(book.task.id);
+  const expiresAt = new Date(Date.now() + 60000),
+    occurredAt = new Date(expiresAt.getTime() - 86400000);
+  // One controlled delivery fact; only JS Date advances past the declared raw-photo expiry.
+  await db.projectServiceEvent.create({
+    data: {
+      projectId: p.projectId,
+      eventId: `synthetic-delivery:${randomUUID()}`,
+      kind: "delivery_completed",
+      occurredAt,
+    },
+  });
+  const image = `/v1/projects/${p.projectId}/interviews/${photo.interviewId}/photos/${photo.id}/assets/${photo.assetId}/content`,
+    before = data(
+      await request("GET", base + `/versions/${book.id}`, p.narrator.token),
+      200,
+    );
+  assert.equal((await request("GET", image, p.narrator.token)).statusCode, 200);
+  t.mock.timers.enable({ apis: ["Date"], now: expiresAt.getTime() + 1 });
+  try {
+    assert.equal(
+      (await request("GET", image, p.narrator.token)).statusCode,
+      403,
+    );
+    const after = data(
+        await request("GET", base + `/versions/${book.id}`, p.narrator.token),
+        200,
+      ),
+      current = data(await request("GET", base, p.narrator.token), 200).current,
+      pdf = await request(
+        "GET",
+        base + `/versions/${book.id}/pdf`,
+        p.narrator.token,
+      );
+    assert.equal(after.state, "ready");
+    assert.equal(current.snapshotHash, before.snapshotHash);
+    assert.equal(after.inputHash, before.inputHash);
+    assert.deepEqual(after.snapshot, before.snapshot);
+    assert.equal(pdf.statusCode, 200);
+    assert.equal(
+      createHash("sha256").update(pdf.rawPayload).digest("hex"),
+      before.pdf.sha256,
+    );
+    assert.deepEqual(after.coverPhotoAccess, {
+      allowed: false,
+      expiresAt: null,
+    });
+    assert.deepEqual(current.coverPhotoAccess, after.coverPhotoAccess);
+    assert.deepEqual(before.coverPhotoAccess, {
+      allowed: true,
+      expiresAt: expiresAt.toISOString(),
+    });
+    assert.ok(Date.parse(before.accessExpiresAt) > expiresAt.getTime());
+  } finally {
+    t.mock.timers.reset();
   }
 });

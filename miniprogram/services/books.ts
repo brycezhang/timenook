@@ -23,6 +23,10 @@ function version(value: BookVersionView, projectId: string): BookVersionView {
     typeof value.snapshot.cover?.title !== "string" ||
     !Array.isArray(value.snapshot.chapters) ||
     !value.task ||
+    !value.coverPhotoAccess ||
+    typeof value.coverPhotoAccess.allowed !== "boolean" ||
+    (value.coverPhotoAccess.expiresAt !== null &&
+      !Number.isFinite(Date.parse(value.coverPhotoAccess.expiresAt))) ||
     (value.accessExpiresAt !== null &&
       !Number.isFinite(Date.parse(value.accessExpiresAt)))
   )
@@ -45,6 +49,11 @@ function context(value: BookContext, projectId: string): BookContext {
     !Array.isArray(value.directory?.chapters) ||
     !Number.isSafeInteger(value.directory.version) ||
     !Array.isArray(value.eligibleStories) ||
+    !value.cover ||
+    !Number.isSafeInteger(value.cover.version) ||
+    value.cover.version < 0 ||
+    typeof value.cover.salutation !== "string" ||
+    !Array.isArray(value.coverPhotoOptions) ||
     (value.accessExpiresAt !== null &&
       !Number.isFinite(Date.parse(value.accessExpiresAt)))
   )
@@ -53,6 +62,21 @@ function context(value: BookContext, projectId: string): BookContext {
   return value;
 }
 export const bookClient = {
+  async reviseCover(
+    projectId: string,
+    expectedVersion: number,
+    input: { salutation: string; photoAssetId: string | null },
+    key: string,
+  ) {
+    validProject(projectId);
+    return context(
+      await sessionClient.request<BookContext>(
+        `/projects/${projectId}/book/cover`,
+        { key, data: { expectedVersion, ...input } },
+      ),
+      projectId,
+    );
+  },
   async read(projectId: string) {
     validProject(projectId);
     return context(

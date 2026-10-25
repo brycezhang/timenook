@@ -37,26 +37,34 @@ export async function renderBook(
   await mkdir(output, { recursive: true, mode: 0o700 });
   try {
     const chapters = [];
+    const staged = new Set<string>();
+    async function stagePhoto(
+      p: NonNullable<BookSnapshot["cover"]["photo"]>,
+      widthMm: number,
+      heightMm: number,
+    ) {
+      const bytes = photos[p.assetId];
+      if (!bytes || hash(bytes) !== p.sha256)
+        throw Error("BOOK_PHOTO_INTEGRITY");
+      const file = `${p.assetId}.png`,
+        scale = Math.min(widthMm / p.width, heightMm / p.height);
+      if (!staged.has(p.assetId)) {
+        await writeFile(join(output, file), bytes, { mode: 0o600, flag: "wx" });
+        staged.add(p.assetId);
+      }
+      return {
+        file,
+        sha256: p.sha256,
+        widthMm: p.width * scale,
+        heightMm: p.height * scale,
+        caption: p.caption,
+      };
+    }
     for (const chapter of snapshot.chapters)
       for (const [index, story] of chapter.stories.entries()) {
         const images = [];
         for (const p of story.photos) {
-          const bytes = photos[p.assetId];
-          if (!bytes || hash(bytes) !== p.sha256)
-            throw Error("BOOK_PHOTO_INTEGRITY");
-          const scale = Math.min(100 / p.width, 145 / p.height),
-            file = `${p.assetId}.png`;
-          await writeFile(join(output, file), bytes, {
-            mode: 0o600,
-            flag: "wx",
-          });
-          images.push({
-            file,
-            sha256: p.sha256,
-            widthMm: p.width * scale,
-            heightMm: p.height * scale,
-            caption: p.caption,
-          });
+          images.push(await stagePhoto(p, 100, 145));
         }
         chapters.push({
           title: story.title,
@@ -74,6 +82,10 @@ export async function renderBook(
     const book = {
       scope: "synthetic-product-book",
       title: snapshot.cover.title,
+      salutation: snapshot.cover.salutation,
+      coverPhoto: snapshot.cover.photo
+        ? await stagePhoto(snapshot.cover.photo, 100, 70)
+        : null,
       entryBaseUrl: entries.length
         ? entries[0].url.slice(0, -entries[0].id.length)
         : undefined,
@@ -135,6 +147,7 @@ export async function renderBook(
       .join("");
     const expected = [
       snapshot.cover.title,
+      snapshot.cover.salutation,
       snapshot.provenance.notice,
       ...snapshot.chapters.flatMap((c) => [
         c.title,
@@ -155,9 +168,10 @@ export async function renderBook(
       entries.some((e) => !codes.includes(e.url))
     )
       throw Error("BOOK_QR_MISMATCH");
-    const photoCount = snapshot.chapters.flatMap((c) =>
-      c.stories.flatMap((s) => s.photos),
-    ).length;
+    const photoCount =
+      (snapshot.cover.photo ? 1 : 0) +
+      snapshot.chapters.flatMap((c) => c.stories.flatMap((s) => s.photos))
+        .length;
     if (
       inspection.pages.reduce((n: number, p: any) => n + p.imageCount, 0) <
       photoCount + entries.length

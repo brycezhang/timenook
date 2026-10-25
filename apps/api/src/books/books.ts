@@ -27,7 +27,17 @@ import {
   ApiOperation,
   ApiOkResponse,
 } from "@nestjs/swagger";
-import { IsInt, Min, Max, IsArray, Matches } from "class-validator";
+import {
+  IsInt,
+  Min,
+  Max,
+  IsArray,
+  Matches,
+  IsString,
+  MaxLength,
+  IsUUID,
+  ValidateIf,
+} from "class-validator";
 import {
   Prisma,
   PrismaClient,
@@ -46,6 +56,7 @@ import type {
   BookVersionView,
   PlanDirectory,
   PhotoMaterials,
+  BookCoverSettings,
 } from "@timenook/contracts";
 import { API_CONFIG, ApiConfig } from "../config";
 import { Participation } from "../identity/participation";
@@ -77,6 +88,21 @@ class GenerateBookDto {
   @ApiProperty({ pattern: "^[a-f0-9]{64}$" })
   @Matches(/^[a-f0-9]{64}$/)
   expectedInputHash!: string;
+}
+class SaveBookCoverDto {
+  @ApiProperty({ minimum: 0 })
+  @IsInt()
+  @Min(0)
+  @Max(2147483646)
+  expectedVersion!: number;
+  @ApiProperty({ maxLength: 120 })
+  @IsString()
+  @MaxLength(120)
+  salutation!: string;
+  @ApiProperty({ nullable: true, format: "uuid" })
+  @ValidateIf((_o, value) => value !== null)
+  @IsUUID()
+  photoAssetId!: string | null;
 }
 class BookDirectoryDto {
   @ApiProperty() @IsInt() @Min(1) @Max(2147483646) expectedVersion!: number;
@@ -132,7 +158,7 @@ export class Books implements OnModuleDestroy {
       },
       storageScope: probeStorageScope(this.config.recording),
       outputStore: c?.storageRoot,
-      template: "t20-a5-v2",
+      template: "t20-a5-v3",
       chromium: "145.0.7632.6",
       fontSha256:
         "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
@@ -150,7 +176,10 @@ export class Books implements OnModuleDestroy {
     projectId: string,
     snapshot: BookSnapshot,
   ) {
-    if (snapshot.chapters.some((c) => c.stories.some((s) => s.photos.length))) {
+    if (
+      snapshot.cover.photo ||
+      snapshot.chapters.some((c) => c.stories.some((s) => s.photos.length))
+    ) {
       const terms = await this.terms.read(projectId, undefined, tx);
       if (
         !terms.retention?.derivedPhotos ||
@@ -241,8 +270,10 @@ export class Books implements OnModuleDestroy {
           if (!asset) throw new ConflictException();
           return {
             id: p.photoId,
+            interviewId: story.interviewId,
             assetId: asset.id,
             sha256: asset.sha256,
+            bytes: asset.bytes,
             caption: p.caption,
             width: asset.width,
             height: asset.height,
@@ -268,8 +299,30 @@ export class Books implements OnModuleDestroy {
           ]
         : stored.chapters;
     const directory = { ...stored, chapters, contentHash: digest(chapters) };
+    const coverRow = await tx.bookCoverVersion.findFirst({
+        where: { projectId },
+        orderBy: { version: "desc" },
+      }),
+      cover: BookCoverSettings = {
+        version: coverRow?.version ?? 0,
+        salutation: coverRow?.salutation ?? "",
+        photoAssetId: coverRow?.photoAssetId ?? null,
+      },
+      coverPhotoOptions = [
+        ...new Map(
+          eligible
+            .flatMap((story) => story.photos)
+            .map((photo) => [photo.assetId, photo]),
+        ).values(),
+      ],
+      coverPhoto =
+        coverPhotoOptions.find(
+          (photo) => photo.assetId === cover.photoAssetId,
+        ) ?? null;
     const selected = chapters.flatMap((c) => c.storyRefs),
-      invalid = selected.some((id) => !eligible.some((s) => s.id === id));
+      invalid =
+        selected.some((id) => !eligible.some((s) => s.id === id)) ||
+        !!(cover.photoAssetId && !coverPhoto);
     const actual = chapters
       .map((c) => ({
         key: c.key,
@@ -283,7 +336,10 @@ export class Books implements OnModuleDestroy {
       schemaVersion: "t20-v1",
       cover: {
         title: project.bookTitle ?? order.bookTitle,
-        template: "t20-a5-v2",
+        template: "t20-a5-v3",
+        version: cover.version,
+        salutation: cover.salutation,
+        photo: coverPhoto,
       },
       plan: {
         revision: plan.revision,
@@ -322,6 +378,8 @@ export class Books implements OnModuleDestroy {
     return {
       snapshot,
       eligible,
+      cover,
+      coverPhotoOptions,
       inputHash,
       invalid,
       project,
@@ -363,6 +421,21 @@ export class Books implements OnModuleDestroy {
             : task.state === "queued"
               ? "queued"
               : "failed";
+    const snapshot = row.snapshot as unknown as BookSnapshot,
+      coverRule = snapshot.cover.photo
+        ? (await this.terms.read(row.projectId, undefined, tx)).retention
+            ?.derivedPhotos
+        : undefined,
+      coverExpiresAt = this.expiry(
+        accessExpiresAt,
+        coverRule?.expiresAt ?? null,
+      ),
+      canPreviewCover = !!(
+        snapshot.cover.photo &&
+        coverRule &&
+        coverRule.state !== "expired" &&
+        (!coverExpiresAt || Date.parse(coverExpiresAt) > Date.now())
+      );
     return {
       id: row.id,
       projectId: row.projectId,
@@ -370,13 +443,17 @@ export class Books implements OnModuleDestroy {
       state,
       inputHash: row.inputHash,
       snapshotHash: row.snapshotHash,
-      snapshot: row.snapshot as unknown as BookSnapshot,
+      snapshot,
       task: { id: task.id, state: task.state, errorCode: task.errorCode },
       pageCount: output?.pageCount ?? null,
       pdf: output ? { sha256: output.sha256, bytes: output.bytes } : null,
       toc: output ? (output.manifest as any).toc.entries : null,
       renderer: output ? (output.manifest as any).renderer : null,
       accessExpiresAt,
+      coverPhotoAccess: {
+        allowed: canPreviewCover,
+        expiresAt: canPreviewCover ? coverExpiresAt : null,
+      },
     };
   }
   private async contextIn(
@@ -394,6 +471,8 @@ export class Books implements OnModuleDestroy {
       projectId,
       inputHash: draft.inputHash,
       directory: draft.snapshot.directory,
+      cover: draft.cover,
+      coverPhotoOptions: draft.coverPhotoOptions,
       eligibleStories: draft.eligible.map(
         ({ id, revisionId, version, contentHash, title }) => ({
           id,
@@ -415,6 +494,67 @@ export class Books implements OnModuleDestroy {
       authorization,
       undefined,
       (tx, actor) => this.contextIn(tx, projectId, actor.accessExpiresAt),
+    );
+  }
+  saveCover(
+    projectId: string,
+    body: SaveBookCoverDto,
+    authorization?: string,
+    key?: string,
+  ) {
+    key = this.key(key);
+    return this.participation.withPlanAccess(
+      projectId,
+      authorization,
+      undefined,
+      async (tx, actor) => {
+        const where = {
+            projectId,
+            actorId: actor.userId,
+            action: "cover",
+            key: key!,
+          },
+          requestHash = digest(body),
+          prior = await tx.bookCommand.findUnique({
+            where: { projectId_actorId_action_key: where },
+          });
+        if (prior) {
+          if (prior.requestHash !== requestHash) throw new ConflictException();
+          return this.contextIn(tx, projectId, actor.accessExpiresAt);
+        }
+        const draft = await this.draftIn(tx, projectId);
+        if (draft.cover.version !== body.expectedVersion)
+          throw new ConflictException();
+        if (
+          body.photoAssetId &&
+          !draft.coverPhotoOptions.some(
+            (photo) => photo.assetId === body.photoAssetId,
+          )
+        )
+          throw new BadRequestException();
+        const salutation = body.salutation.trim();
+        const changed =
+          salutation !== draft.cover.salutation ||
+          body.photoAssetId !== draft.cover.photoAssetId;
+        if (changed)
+          await tx.bookCoverVersion.create({
+            data: {
+              projectId,
+              version: draft.cover.version + 1,
+              salutation,
+              photoAssetId: body.photoAssetId,
+              createdBy: actor.userId,
+            },
+          });
+        await tx.bookCommand.create({
+          data: {
+            ...where,
+            requestHash,
+            resultId: String(draft.cover.version + (changed ? 1 : 0)),
+          },
+        });
+        return this.contextIn(tx, projectId, actor.accessExpiresAt);
+      },
     );
   }
   private key(key?: string) {
@@ -877,9 +1017,12 @@ export class Books implements OnModuleDestroy {
     try {
       const snapshot = initial.snapshot as unknown as BookSnapshot,
         photos: Record<string, Buffer> = {};
-      const references = snapshot.chapters.flatMap((chapter) =>
-        chapter.stories.flatMap((story) => story.photos),
-      );
+      const references = [
+        ...(snapshot.cover.photo ? [snapshot.cover.photo] : []),
+        ...snapshot.chapters.flatMap((chapter) =>
+          chapter.stories.flatMap((story) => story.photos),
+        ),
+      ];
       if (references.length > 128) throw Error("BOOK_IMAGE_INPUT_LIMIT");
       const assets: {
         id: string;
@@ -887,6 +1030,7 @@ export class Books implements OnModuleDestroy {
         sha256: string;
         objectKey: string;
       }[] = [];
+      const loadedIds = new Set<string>();
       let totalBytes = 0;
       for (const photo of references) {
         const asset = await this.db.photoAsset.findFirst({
@@ -906,6 +1050,7 @@ export class Books implements OnModuleDestroy {
           asset.storageScope !== scope
         )
           throw Error("BOOK_PHOTO_CHANGED");
+        if (loadedIds.has(asset.id)) continue;
         totalBytes += asset.bytes;
         if (
           asset.bytes > 16777216 ||
@@ -913,6 +1058,7 @@ export class Books implements OnModuleDestroy {
         )
           throw Error("BOOK_IMAGE_INPUT_LIMIT");
         assets.push(asset);
+        loadedIds.add(asset.id);
       }
       // Metadata limits are checked for the entire input before the first object is read.
       for (const asset of assets) {
@@ -1031,6 +1177,24 @@ export class BooksController {
   ) {
     return {
       data: await this.books.context(id, req.headers.authorization),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post("cover")
+  @Header("Cache-Control", "no-store")
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  async cover(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() body: SaveBookCoverDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.books.saveCover(
+        id,
+        body,
+        req.headers.authorization,
+        req.headers["idempotency-key"] as string,
+      ),
       meta: { requestId: req.id },
     };
   }

@@ -1,5 +1,21 @@
 import type { PlanDirectory } from "./index";
 
+export interface BookPhoto {
+  /** Product photo ID, used with the authenticated Media gateway. */
+  id: string;
+  interviewId: string;
+  assetId: string;
+  sha256: string;
+  bytes: number;
+  caption: string;
+  width: number;
+  height: number;
+}
+export interface BookCoverSettings {
+  version: number;
+  salutation: string;
+  photoAssetId: string | null;
+}
 export interface BookStory {
   id: string;
   revisionId: string;
@@ -9,14 +25,7 @@ export interface BookStory {
   paragraphs: string[];
   notes: { id: string; text: string }[];
   provenance: { origin: "ai" | "participant"; label: string };
-  photos: {
-    id: string;
-    assetId: string;
-    sha256: string;
-    caption: string;
-    width: number;
-    height: number;
-  }[];
+  photos: BookPhoto[];
   audio: {
     clipId: string;
     assetId: string;
@@ -27,7 +36,13 @@ export interface BookStory {
 }
 export interface BookSnapshot {
   schemaVersion: "t20-v1";
-  cover: { title: string; template: string };
+  cover: {
+    title: string;
+    template: string;
+    version: number;
+    salutation: string;
+    photo: BookPhoto | null;
+  };
   plan: { revision: number; contentHash: string; content: object };
   directory: PlanDirectory;
   chapters: { key: string; title: string; stories: BookStory[] }[];
@@ -55,11 +70,15 @@ export interface BookVersionView {
   toc: { title: string; page: number }[] | null;
   renderer: object | null;
   accessExpiresAt: string | null;
+  /** Live access to the separate raw thumbnail; never part of the book snapshot. */
+  coverPhotoAccess: { allowed: boolean; expiresAt: string | null };
 }
 export interface BookContext {
   projectId: string;
   inputHash: string;
   directory: PlanDirectory;
+  cover: BookCoverSettings;
+  coverPhotoOptions: BookPhoto[];
   eligibleStories: {
     id: string;
     revisionId: string;

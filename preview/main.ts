@@ -147,7 +147,7 @@ const wx: any = {
           url.pathname,
         )) ||
       (options.method === "POST" &&
-        /\/v1\/projects\/[a-f0-9-]{36}\/book\/(?:directory|versions(?:\/[a-f0-9-]{36}\/retry)?)$/.test(
+        /\/v1\/projects\/[a-f0-9-]{36}\/book\/(?:cover|directory|versions(?:\/[a-f0-9-]{36}\/retry)?)$/.test(
           url.pathname,
         )) ||
       storyConfirmationSupported ||
@@ -476,6 +476,7 @@ function renderElement(el: Element, scope: any, parent: Node) {
     }
     if (attr.name === "mode") {
       if (v === "aspectFill") out.style.objectFit = "cover";
+      if (v === "aspectFit") out.style.objectFit = "contain";
       if (v === "widthFix") out.style.height = "auto";
       continue;
     }

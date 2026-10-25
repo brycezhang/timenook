@@ -6,11 +6,16 @@ import { projectOverviewClient } from "../../services/project-overview";
 import type {
   BookContext,
   BookVersionView,
+  BookCoverSettings,
   PlanDirectory,
 } from "../../../packages/contracts/src";
 import { bookClient } from "../../services/books";
 import { ApiFailure } from "../../services/session";
 import { paymentKey } from "../../services/payments";
+import {
+  clearPhotoPreviews,
+  privatePhotoPreview,
+} from "../../services/story-photos";
 type E = {
   currentTarget: { dataset: Record<string, string> };
   detail: { value: string };
@@ -23,6 +28,7 @@ Page({
     excerpts: [] as { id: string; title: string; text: string }[],
     stateLabel: "",
     draft: null as PlanDirectory["chapters"] | null,
+    draftVersion: 0,
     draftRows: [] as {
       key: string;
       title: string;
@@ -30,6 +36,13 @@ Page({
       stories: { id: string; title: string }[];
     }[],
     editing: false,
+    coverEditing: false,
+    coverDirty: false,
+    coverDraft: null as Omit<BookCoverSettings, "version"> | null,
+    coverDraftVersion: 0,
+    coverOptions: [] as { assetId: string; label: string; selected: boolean }[],
+    coverImage: "",
+    coverStatus: "",
     dirty: false,
     busy: false,
     status: "",
@@ -42,6 +55,9 @@ Page({
   generation: 0,
   generateRequest: null as { hash: string; key: string } | null,
   retryRequest: null as { id: string; key: string } | null,
+  coverRequest: null as { input: string; key: string } | null,
+  coverFile: "",
+  coverAssetId: "",
   stopSessionWatch: undefined as (() => void) | undefined,
   expiry: undefined as ReturnType<typeof setTimeout> | undefined,
   onLoad(q) {
@@ -60,13 +76,22 @@ Page({
       if (this.expiry) clearTimeout(this.expiry);
       this.generateRequest = null;
       this.retryRequest = null;
+      this.coverRequest = null;
+      this.clearCover();
       this.setData({
         context: null,
         version: null,
         excerpts: [],
         draft: null,
+        draftVersion: 0,
         draftRows: [],
         editing: false,
+        coverEditing: false,
+        coverDirty: false,
+        coverDraft: null,
+        coverDraftVersion: 0,
+        coverOptions: [],
+        coverStatus: "",
         dirty: false,
         busy: false,
       });
@@ -92,7 +117,89 @@ Page({
       this.data.version?.accessExpiresAt,
     ].some((value) => !!value && Date.parse(value) <= Date.now());
   },
-  accept(value: BookContext, resetDraft = true) {
+  clearCover() {
+    const path = this.coverFile;
+    this.coverFile = "";
+    this.coverAssetId = "";
+    this.setData({ coverImage: "" });
+    if (path) void clearPhotoPreviews([path]).catch(() => {});
+  },
+  coverExpired() {
+    const access = this.data.version?.coverPhotoAccess;
+    return (
+      !access?.allowed ||
+      (!!access.expiresAt && Date.parse(access.expiresAt) <= Date.now())
+    );
+  },
+  async loadCover(generation: number, owner: string) {
+    if (!this.current(generation, owner)) return;
+    this.watch(owner);
+    const photo = this.data.version?.snapshot.cover.photo;
+    if (
+      photo &&
+      !this.coverExpired() &&
+      this.coverAssetId === photo.assetId &&
+      this.data.coverImage
+    )
+      return;
+    this.clearCover();
+    this.setData({ coverStatus: "" });
+    if (!photo) return;
+    if (this.coverExpired()) {
+      this.setData({
+        coverStatus: "封面照片预览已到期，请从完整 PDF 核对照片。",
+      });
+      return;
+    }
+    try {
+      const path = await privatePhotoPreview(
+        this.projectId,
+        photo.interviewId,
+        photo.id,
+        { id: photo.assetId, bytes: photo.bytes, sha256: photo.sha256 },
+        () =>
+          this.current(generation, owner) &&
+          !this.coverExpired() &&
+          this.data.version?.snapshot.cover.photo?.assetId === photo.assetId,
+      );
+      if (!this.current(generation, owner)) {
+        await clearPhotoPreviews([path]);
+        return;
+      }
+      this.coverFile = path;
+      this.coverAssetId = photo.assetId;
+      this.setData({ coverImage: path });
+    } catch (error) {
+      if (!this.current(generation, owner)) return;
+      this.clearCover();
+      if (error instanceof ApiFailure && error.status === 401) throw error;
+      if (error instanceof ApiFailure && error.status === 403) {
+        let fresh: BookVersionView;
+        try {
+          fresh = await bookClient.readVersion(
+            this.projectId,
+            this.data.version!.id,
+          );
+        } catch (failure) {
+          if (
+            failure instanceof ApiFailure &&
+            [401, 403].includes(failure.status)
+          )
+            throw failure;
+          throw new ApiFailure("AUTHORIZATION_RECHECK_FAILED", 403);
+        }
+        if (!this.current(generation, owner) || !this.data.context) return;
+        this.accept({ ...this.data.context, current: fresh }, false, false);
+      }
+      if (this.current(generation, owner))
+        this.setData({
+          coverStatus: this.coverExpired()
+            ? "封面照片预览已到期，请从完整 PDF 核对照片。"
+            : "封面照片暂时无法预览，请从完整 PDF 核对照片。",
+        });
+    }
+  },
+  accept(value: BookContext, resetDraft = true, resetCover = true) {
     if (
       value.accessExpiresAt &&
       Date.parse(value.accessExpiresAt) <= Date.now()
@@ -122,11 +229,83 @@ Page({
       ...(resetDraft
         ? {
             draft: JSON.parse(JSON.stringify(value.directory.chapters)),
+            draftVersion: value.directory.version,
             dirty: false,
+          }
+        : {}),
+      ...(resetCover
+        ? {
+            coverDraft: {
+              salutation: value.cover.salutation,
+              photoAssetId: value.cover.photoAssetId,
+            },
+            coverDraftVersion: value.cover.version,
+            coverDirty: false,
           }
         : {}),
     });
     this.updateDraftRows();
+    this.updateCoverOptions();
+  },
+  updateCoverOptions() {
+    this.setData({
+      coverOptions: (this.data.context?.coverPhotoOptions || []).map(
+        (photo, index) => ({
+          assetId: photo.assetId,
+          label: photo.caption || `已确认照片${index + 1}`,
+          selected: photo.assetId === this.data.coverDraft?.photoAssetId,
+        }),
+      ),
+    });
+  },
+  editCover() {
+    if (!this.data.busy && this.data.context)
+      this.setData({ coverEditing: !this.data.coverEditing });
+  },
+  salutation(e: E) {
+    if (!this.data.coverDraft || this.data.busy) return;
+    this.setData({
+      coverDraft: { ...this.data.coverDraft, salutation: e.detail.value },
+      coverDirty: true,
+    });
+  },
+  chooseCoverPhoto(e: E) {
+    if (!this.data.coverDraft || this.data.busy) return;
+    const assetId = e.currentTarget.dataset.assetId || null;
+    if (
+      assetId &&
+      !this.data.context?.coverPhotoOptions.some((p) => p.assetId === assetId)
+    )
+      return;
+    this.setData({
+      coverDraft: { ...this.data.coverDraft, photoAssetId: assetId },
+      coverDirty: true,
+    });
+    this.updateCoverOptions();
+  },
+  async saveCover() {
+    if (!this.data.context || !this.data.coverDraft || !this.data.coverDirty)
+      return;
+    const expectedVersion = this.data.coverDraftVersion,
+      input = { ...this.data.coverDraft },
+      serialized = JSON.stringify({ expectedVersion, ...input });
+    if (this.coverRequest?.input !== serialized)
+      this.coverRequest = { input: serialized, key: paymentKey() };
+    const key = this.coverRequest.key;
+    return this.perform(async (generation: number, owner: string) => {
+      const value = await bookClient.reviseCover(
+        this.projectId,
+        expectedVersion,
+        input,
+        key,
+      );
+      if (this.current(generation, owner)) {
+        this.coverRequest = null;
+        this.accept(value, !this.data.dirty, true);
+        await this.loadCover(generation, owner);
+        this.setData({ status: "书封已保存，请生成新书稿" });
+      }
+    }, true);
   },
   updateDraftRows() {
     const eligible = this.data.context?.eligibleStories || [];
@@ -212,7 +391,7 @@ Page({
   },
   async saveDirectory() {
     if (!this.data.context || !this.data.draft || !this.data.dirty) return;
-    const expectedVersion = this.data.context.directory.version,
+    const expectedVersion = this.data.draftVersion,
       chapters = JSON.parse(
         JSON.stringify(this.data.draft),
       ) as PlanDirectory["chapters"];
@@ -223,36 +402,61 @@ Page({
         chapters,
       );
       if (this.current(generation, owner)) {
-        this.accept(value);
+        this.accept(value, true, !this.data.coverDirty);
+        await this.loadCover(generation, owner);
         this.setData({ status: "目录已保存，请生成新书稿" });
       }
     }, true);
   },
   watch(context: string) {
     if (this.expiry) clearTimeout(this.expiry);
-    this.expiry = setTimeout(() => {
-      if (
-        dataMode() !== "live" ||
-        context !== sessionClient.context() ||
-        (this.data.context?.accessExpiresAt &&
-          Date.parse(this.data.context.accessExpiresAt) <= Date.now())
-      ) {
-        this.onHide();
-        this.setData({ status: "授权已到期或账号已变化，请重新查询" });
-        return;
-      }
-      if (
-        ["queued", "rendering"].includes(this.data.version?.state || "") &&
-        !this.data.busy
-      ) {
-        void this.perform(async (generation: number, owner: string) => {
-          const value = await bookClient.read(this.projectId);
-          if (this.current(generation, owner))
-            this.accept(value, !this.data.dirty);
-        });
-      }
-      this.watch(context);
-    }, 1000);
+    this.expiry = setTimeout(
+      () => {
+        if (
+          dataMode() !== "live" ||
+          context !== sessionClient.context() ||
+          (this.data.context?.accessExpiresAt &&
+            Date.parse(this.data.context.accessExpiresAt) <= Date.now())
+        ) {
+          this.onHide();
+          this.setData({ status: "授权已到期或账号已变化，请重新查询" });
+          return;
+        }
+        if (this.data.version?.snapshot.cover.photo && this.coverExpired()) {
+          this.clearCover();
+          this.setData({
+            coverStatus: "封面照片预览已到期，请从完整 PDF 核对照片。",
+          });
+        }
+        if (
+          ["queued", "rendering"].includes(this.data.version?.state || "") &&
+          !this.data.busy
+        ) {
+          void this.perform(async (generation: number, owner: string) => {
+            const value = await bookClient.read(this.projectId);
+            if (this.current(generation, owner)) {
+              this.accept(value, !this.data.dirty, !this.data.coverDirty);
+              await this.loadCover(generation, owner);
+            }
+          });
+        }
+        this.watch(context);
+      },
+      Math.max(
+        1,
+        Math.min(
+          1000,
+          ...[
+            this.data.context?.accessExpiresAt,
+            this.data.version?.accessExpiresAt,
+            this.data.version?.coverPhotoAccess.expiresAt,
+          ]
+            .filter((value): value is string => !!value)
+            .map((value) => Date.parse(value) - Date.now())
+            .filter((value) => value > 0),
+        ),
+      ),
+    );
   },
   async perform(
     work: (generation: number, context: string) => Promise<void>,
@@ -283,7 +487,13 @@ Page({
         (error instanceof ApiFailure && [401, 403].includes(error.status))
       ) {
         this.onHide();
-        this.setData({ status: "授权已失效或账号已变化，请重新查询" });
+        this.setData({
+          status:
+            error instanceof ApiFailure &&
+            error.code === "AUTHORIZATION_RECHECK_FAILED"
+              ? "资料权限未能重新核对，请重新查询"
+              : "授权已失效或账号已变化，请重新查询",
+        });
       } else
         this.setData({
           status:
@@ -303,7 +513,13 @@ Page({
     }
   },
   async generate() {
-    if (!this.data.context || this.data.dirty || this.data.busy) return;
+    if (
+      !this.data.context ||
+      this.data.dirty ||
+      this.data.coverDirty ||
+      this.data.busy
+    )
+      return;
     const inputHash = this.data.context.inputHash;
     if (this.generateRequest?.hash !== inputHash)
       this.generateRequest = { hash: inputHash, key: paymentKey() };
@@ -313,6 +529,7 @@ Page({
       if (this.current(generation, owner) && this.data.context) {
         this.generateRequest = null;
         this.accept({ ...this.data.context, current: value }, false);
+        await this.loadCover(generation, owner);
         this.watch(owner);
       }
     }, true);
@@ -328,6 +545,7 @@ Page({
       if (this.current(generation, owner) && this.data.context) {
         this.retryRequest = null;
         this.accept({ ...this.data.context, current: value }, false);
+        await this.loadCover(generation, owner);
         this.watch(owner);
       }
     }, true);
@@ -340,19 +558,26 @@ Page({
         this.setData({ status: "登录已失效，请重新登录" });
       });
       return this.perform(async (generation: number, context: string) => {
+        this.clearCover();
         this.setData({
           live: true,
           context: null,
           version: null,
           excerpts: [],
           draft: null,
+          draftVersion: 0,
           dirty: false,
           editing: false,
+          coverEditing: false,
+          coverDirty: false,
+          coverDraft: null,
+          coverOptions: [],
         });
         const value = await bookClient.read(this.projectId);
         if (this.current(generation, context)) {
           this.accept(value);
           this.watch(context);
+          await this.loadCover(generation, context);
         }
       });
     }

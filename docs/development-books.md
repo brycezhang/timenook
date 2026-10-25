@@ -4,7 +4,7 @@
 
 ## 确定版本
 
-生成请求携带最近查询的 `inputHash` 和 `Idempotency-Key`，在项目授权事务中一次保存封面书名、个人大纲、实际入书目录、本人已确认且允许入书的故事版本、全文、照片及说明、原声清单、来源标识与候选规格。二维码入口先分配后渲染；同一故事版本复用稳定入口，片段保持顺序。入口 ID 只是定位符，不能授予回听权限。
+生成请求携带最近查询的 `inputHash` 和 `Idempotency-Key`，在项目授权事务中一次保存封面书名、称呼与可选照片、个人大纲、实际入书目录、本人已确认且允许入书的故事版本、全文、照片及说明、原声清单、来源标识与候选规格。书封使用独立不可变版本；可选照片来自当前已确认且允许入书的故事素材，保存时校验确切资产，撤回来源许可后不能继续使用。二维码入口先分配后渲染；同一故事版本复用稳定入口，片段保持顺序。入口 ID 只是定位符，不能授予回听权限。
 
 书稿与最终输出分别保存不可变快照/hash。后台只读取该快照，使用固定 Chromium、字体与共享分页内核，在受限子进程中渲染并独立检查实际 PDF 的文本、图片、二维码、纸张尺寸和页数。原声入口明确关联讲述者原始录音，人工校对后的文稿保留 AI 整理来源。候选标识版本不代表 D08 法规与供应商准入已核验。
 
@@ -14,16 +14,19 @@
 
 所有接口使用产品会话 Bearer，重新检查当前项目/讲述者权限及期限；响应禁止缓存。
 
-| 接口                                                   | 用途                                                      |
-| ------------------------------------------------------ | --------------------------------------------------------- |
-| `GET /v1/projects/:id/book`                            | 查询输入 token、实际目录、可入书故事及最近书稿            |
-| `POST /v1/projects/:id/book/directory`                 | 携带目录 `expectedVersion` 保存章节、顺序和故事归属       |
-| `POST /v1/projects/:id/book/versions`                  | 携带 `expectedInputHash` 冻结书稿并进入共享任务，返回 202 |
-| `GET /v1/projects/:id/book/versions/:versionId`        | 查询同一版本、处理状态、目录页码及文件摘要                |
-| `POST /v1/projects/:id/book/versions/:versionId/retry` | 在合法权限与有限重试范围内重试当前渲染                    |
-| `GET /v1/projects/:id/book/versions/:versionId/pdf`    | 鉴权下载完整 PDF，读取后再次核对权限与版本                |
+| 接口                                                   | 用途                                                                 |
+| ------------------------------------------------------ | -------------------------------------------------------------------- |
+| `GET /v1/projects/:id/book`                            | 查询输入 token、实际目录、可入书故事及最近书稿                       |
+| `POST /v1/projects/:id/book/cover`                     | 携带书封 `expectedVersion` 保存称呼及可选 `photoAssetId`；照片可清除 |
+| `POST /v1/projects/:id/book/directory`                 | 携带目录 `expectedVersion` 保存章节、顺序和故事归属                  |
+| `POST /v1/projects/:id/book/versions`                  | 携带 `expectedInputHash` 冻结书稿并进入共享任务，返回 202            |
+| `GET /v1/projects/:id/book/versions/:versionId`        | 查询同一版本、处理状态、目录页码及文件摘要                           |
+| `POST /v1/projects/:id/book/versions/:versionId/retry` | 在合法权限与有限重试范围内重试当前渲染                               |
+| `GET /v1/projects/:id/book/versions/:versionId/pdf`    | 鉴权下载完整 PDF，读取后再次核对权限与版本                           |
 
 所有 POST 均须 `Idempotency-Key`。冲突或未知网络结果按原 key 查询/重放，不把超时当作已失败并另造一次书稿。小程序成书页的封面、节选、目录和页数均读取该版本；完整文稿页另提供完整 PDF。离页、换号及失权清除私有视图和下载临时文件。
+
+`BookVersionView.coverPhotoAccess` 单独返回当前封面原图的许可与期限，不写入冻结快照或 hash。原图 `derivedPhotos` 到期只清理该预览；仍在 `bookPdf`/`confirmedStories` 期限内的完整 PDF 保持可读。图片出现意外 403 时重新查询该书稿的权限，书稿拒绝访问或无法重新核验时清除私有状态。
 
 ## 本地验证
 

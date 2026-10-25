@@ -1,4 +1,4 @@
-export const TEMPLATE_VERSION = "t20-a5-v2";
+export const TEMPLATE_VERSION = "t20-a5-v3";
 export const CSS = `
 @page { size: 148mm 210mm; margin: 0; }
 * { box-sizing: border-box; }
@@ -17,7 +17,12 @@ p { margin: 0 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .toc-row span:last-child { flex: 0 0 10mm; text-align: right; }
 figure { margin: 0 0 6mm; } .photo { display: block; object-fit: contain; }
 .qr { display: block; width: 32mm; height: 32mm; image-rendering: pixelated; }
-figcaption { font-size: 10px; color: #718178; }
+figcaption, .photo-caption { font-size: 10px; color: #718178; }
+.photo-caption { margin: 0 0 6mm; }
+.cover-title { font-size:22px; line-height:1.3; margin:4mm 0; }
+.cover-salutation { font-size:14px; line-height:1.6; margin:0 0 4mm; overflow-wrap:anywhere; white-space:normal; }
+.cover-photo { display:block; margin:0 auto 3mm; object-fit:contain; }
+.cover-notice { font-size:10px; line-height:1.6; margin:0; }
 `;
 
 // Executed in fixed Chromium; only textContent and prevalidated local data URLs enter DOM.
@@ -68,12 +73,69 @@ export function paginate({ book, guesses }) {
     n.textContent = value;
     return n;
   }
-  block(text("h1", book.title));
-  block(text("p", "技术试验文件 · 规格待印厂确认"));
+  function flowText(value, className) {
+    let chars = Array.from(value);
+    while (chars.length) {
+      const p = text("p", chars.join(""));
+      if (className) p.className = className;
+      content.append(p);
+      if (fits(p)) break;
+      let low = 0,
+        high = chars.length;
+      while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        p.textContent = chars.slice(0, mid).join("");
+        if (fits(p)) low = mid;
+        else high = mid - 1;
+      }
+      // Keep a closing mark with its preceding character and an opening mark
+      // with its following character across a physical page boundary.
+      while (
+        low > 0 &&
+        (/^[，。！？、；：）】》」』”’]$/.test(chars[low] ?? "") ||
+          /^[（【《「『“‘]$/.test(chars[low - 1] ?? ""))
+      )
+        low--;
+      if (low === 0) {
+        p.remove();
+        if (content.children.length === 0) throw Error("BLOCK_TOO_LARGE");
+        content = page();
+        continue;
+      }
+      p.textContent = chars.slice(0, low).join("");
+      chars = chars.slice(low);
+      content = page();
+    }
+  }
   if (book.scope === "synthetic-product-book") {
+    const cover = document.createElement("div"),
+      title = text("h1", book.title);
+    title.className = "cover-title";
+    cover.append(title);
+    if (book.salutation) {
+      const salutation = text("div", book.salutation);
+      salutation.className = "cover-salutation";
+      cover.append(salutation);
+    }
+    if (book.coverPhoto) {
+      const img = document.createElement("img");
+      img.className = "cover-photo";
+      img.src = book.coverPhoto.data;
+      img.style.width = `${book.coverPhoto.widthMm}mm`;
+      img.style.height = `${book.coverPhoto.heightMm}mm`;
+      cover.append(img);
+    }
+    const notice = text("p", "技术试验文件 · 规格待印厂确认");
+    notice.className = "cover-notice";
+    cover.append(notice);
+    content.append(cover);
+    if (!fits(cover)) throw Error("COVER_LAYOUT_OVERFLOW");
     content = page();
     block(text("h2", book.title));
     block(text("p", "岁月成书 · 本人讲述"));
+  } else {
+    block(text("h1", book.title));
+    block(text("p", "技术试验文件 · 规格待印厂确认"));
   }
   content = page();
   block(text("h2", "目录"));
@@ -117,39 +179,7 @@ export function paginate({ book, guesses }) {
       if (chapter.provenance) block(text("p", chapter.provenance));
       if (chapter.qr) originalEntry(chapter);
     }
-    for (const paragraph of chapter.paragraphs) {
-      let chars = Array.from(paragraph);
-      while (chars.length) {
-        const p = text("p", chars.join(""));
-        content.append(p);
-        if (fits(p)) break;
-        let low = 0,
-          high = chars.length;
-        while (low < high) {
-          const mid = Math.ceil((low + high) / 2);
-          p.textContent = chars.slice(0, mid).join("");
-          if (fits(p)) low = mid;
-          else high = mid - 1;
-        }
-        // Keep a closing mark with its preceding character and an opening mark
-        // with its following character across a physical page boundary.
-        while (
-          low > 0 &&
-          (/^[，。！？、；：）】》」』”’]$/.test(chars[low] ?? "") ||
-            /^[（【《「『“‘]$/.test(chars[low - 1] ?? ""))
-        )
-          low--;
-        if (low === 0) {
-          p.remove();
-          if (content.children.length === 0) throw Error("BLOCK_TOO_LARGE");
-          content = page();
-          continue;
-        }
-        p.textContent = chars.slice(0, low).join("");
-        chars = chars.slice(low);
-        content = page();
-      }
-    }
+    for (const paragraph of chapter.paragraphs) flowText(paragraph);
     for (const photo of chapter.photos ??
       (chapter.photo ? [chapter.photo] : [])) {
       const figure = document.createElement("figure"),
@@ -159,12 +189,18 @@ export function paginate({ book, guesses }) {
       img.style.width = `${photo.widthMm}mm`;
       img.style.height = `${photo.heightMm}mm`;
       figure.append(img);
-      if (photo.caption) figure.append(text("figcaption", photo.caption));
-      block(figure);
+      if (book.scope === "synthetic-product-book" && photo.caption) {
+        figure.style.marginBottom = "0";
+        block(figure);
+        flowText(photo.caption, "photo-caption");
+      } else {
+        if (photo.caption) figure.append(text("figcaption", photo.caption));
+        block(figure);
+      }
     }
     if (chapter.qr && book.scope !== "synthetic-product-book")
       originalEntry(chapter);
-    for (const note of chapter.notes ?? []) block(text("p", note));
+    for (const note of chapter.notes ?? []) flowText(note);
     if (chapter.provenance && book.scope !== "synthetic-product-book")
       block(text("p", chapter.provenance));
     if (pages.length > 128) throw Error("PAGE_LIMIT");

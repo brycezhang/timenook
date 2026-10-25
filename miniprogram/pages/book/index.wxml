@@ -9,6 +9,10 @@
         <view class="live-cover section">
           <view class="eyebrow">时光里 · 岁月成书</view>
           <view class="title serif">{{version.snapshot.cover.title}}</view>
+          <view wx:if="{{version.snapshot.cover.salutation}}" class="cover-salutation-display">{{version.snapshot.cover.salutation}}</view>
+          <image wx:if="{{coverImage}}" class="book-cover-photo" src="{{coverImage}}" mode="aspectFit" />
+          <view wx:if="{{coverStatus}}" class="note section">{{coverStatus}}</view>
+          <view wx:if="{{version.snapshot.cover.photo}}" class="note">{{version.snapshot.cover.photo.caption}}</view>
           <view>书稿第 {{version.version}} 版</view>
           <view wx:if="{{version.pageCount}}">{{version.pageCount}} 页 · {{excerpts.length}} 篇故事</view>
         </view>
@@ -23,12 +27,22 @@
         <button wx:if="{{version.state === 'failed'}}" class="btn section" bindtap="retry" disabled="{{busy}}">重试生成本版</button>
         <view class="note section">当前为合成测试规格，尚未开放正式生产。</view>
       </block>
-      <button class="btn section" bindtap="generate" disabled="{{busy || dirty || !context.eligibleStories.length || (version && (version.state === 'queued' || version.state === 'rendering'))}}">生成完整书稿</button>
+      <button class="btn section" bindtap="generate" disabled="{{busy || dirty || coverDirty || !context.eligibleStories.length || (version && (version.state === 'queued' || version.state === 'rendering'))}}">生成完整书稿</button>
+      <button class="btn secondary section" bindtap="editCover" disabled="{{busy}}">{{coverEditing ? '收起书封编辑' : '调整书封'}}</button>
+      <view wx:if="{{coverEditing && coverDraft}}" class="cover-editor section">
+        <label>称呼<input class="cover-salutation" data-field="cover-salutation" value="{{coverDraft.salutation}}" bindinput="salutation" maxlength="120" placeholder="可留空，例如：写给一路同行的你" /></label>
+        <view class="section">封面照片（可选）</view>
+        <view class="note section">从本人已确认并允许入书的照片中选用。</view>
+        <button class="btn secondary section" data-asset-id="" bindtap="chooseCoverPhoto" disabled="{{busy}}">{{coverDraft.photoAssetId ? '不使用封面照片' : '已选：不使用封面照片'}}</button>
+        <button wx:for="{{coverOptions}}" wx:key="assetId" class="btn secondary section" data-asset-id="{{item.assetId}}" bindtap="chooseCoverPhoto" disabled="{{busy}}">{{item.selected ? '已选封面照片：' : '选用封面照片：'}}{{item.label}}</button>
+        <button class="btn section" bindtap="saveCover" disabled="{{busy || !coverDirty}}">保存书封</button>
+        <view class="note section">保存后请重新生成，当前书稿保留原书封。</view>
+      </view>
       <button class="btn secondary section" bindtap="editDirectory" disabled="{{busy}}">{{editing ? '收起目录编辑' : '调整入书目录'}}</button>
       <block wx:if="{{editing}}">
         <view class="section note">只安排已确认且允许入书的故事。空章节不会印入书稿。</view>
         <view wx:for="{{draftRows}}" wx:for-item="chapter" wx:for-index="chapterIndex" wx:key="key" class="directory-card">
-          <label>第 {{chapterIndex + 1}} 章名称<input class="directory-title" value="{{chapter.title}}" data-chapter="{{chapterIndex}}" bindinput="chapterTitle" maxlength="80" /></label>
+          <label>第 {{chapterIndex + 1}} 章名称<input class="directory-title" data-field="directory-title-{{chapter.key}}" value="{{chapter.title}}" data-chapter="{{chapterIndex}}" bindinput="chapterTitle" maxlength="80" /></label>
           <view class="directory-actions">
             <button class="btn secondary" bindtap="moveChapter" data-chapter="{{chapterIndex}}" data-direction="-1" disabled="{{busy || chapterIndex === 0}}">章节上移</button>
             <button class="btn secondary" bindtap="moveChapter" data-chapter="{{chapterIndex}}" data-direction="1" disabled="{{busy || chapterIndex === draftRows.length - 1}}">章节下移</button>
@@ -47,7 +61,7 @@
       <button class="btn secondary section" bindtap="settings">修改书名</button>
       <button class="btn secondary section" bindtap="project">返回项目，核对故事</button>
     </block>
-    <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">{{dirty ? '重新查询，放弃未保存修改' : '重新查询'}}</button>
+    <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">{{dirty || coverDirty ? '重新查询，放弃未保存修改' : '重新查询'}}</button>
   </view>
   <view class="tabs live-tabs"><button class="tab" bindtap="project">项目</button><button class="tab active" bindtap="book">成书</button><button class="tab" bindtap="account">我的</button></view>
 </block>

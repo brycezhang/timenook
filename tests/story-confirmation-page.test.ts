@@ -749,6 +749,8 @@ test("renamed live project title is fresh in account while book waits for a gene
   book.respond(0, {
     projectId,
     inputHash: "a".repeat(64),
+    cover: { version: 0, salutation: "", photoAssetId: null },
+    coverPhotoOptions: [],
     directory: { version: 1, contentHash: "b".repeat(64), chapters: [] },
     eligibleStories: [],
     current: null,

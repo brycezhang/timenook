@@ -22,6 +22,7 @@ test.beforeAll(async () => {
     fixture = apiRequire("./dist-test/test/book-fixture.js");
     await fixture.startBookFixture();
     project = await fixture.readyStory();
+    const photo = await fixture.storyPhoto(project, "合成照片：门前的红墙");
     const { data, request } = fixture;
     const path = `/v1/projects/${project.projectId}/stories/${project.story.id}`;
     const revision = data(
@@ -45,6 +46,7 @@ test.beforeAll(async () => {
           reason: "合成样本：保留模糊年代，不补写未知事实。",
         })),
         notes: [],
+        photoSnapshotId: photo.id,
       }),
     );
     project.story = data(
@@ -356,6 +358,29 @@ test("actual directory edits invalidate the previous PDF and empty chapters do n
     await expect(
       page.getByRole("button", { name: "调整入书目录", exact: true }),
     ).toBeVisible();
+    await page.getByRole("button", { name: "调整书封", exact: true }).click();
+    await page.locator(".cover-salutation").click();
+    await page.locator(".cover-salutation").pressSequentially("给一路陪伴的人");
+    await expect(page.locator(".cover-salutation")).toHaveValue(
+      "给一路陪伴的人",
+    );
+    await page
+      .getByRole("button", {
+        name: "选用封面照片：合成照片：门前的红墙",
+        exact: true,
+      })
+      .click();
+    const covering = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().endsWith(`${path.slice(3)}/cover`),
+    );
+    await page.getByRole("button", { name: "保存书封", exact: true }).click();
+    const coverResponse = await covering;
+    expect(coverResponse.status()).toBe(201);
+    const settings = (await coverResponse.json()).data;
+    expect(settings.cover.salutation).toBe("给一路陪伴的人");
+    expect(settings.current.state).toBe("obsolete");
     await page
       .getByRole("button", { name: "调整入书目录", exact: true })
       .click();
@@ -400,6 +425,13 @@ test("actual directory edits invalidate the previous PDF and empty chapters do n
       200,
     ).current;
     expect(changed.version).toBe(previous.version + 1);
+    expect(changed.snapshot.cover.salutation).toBe("给一路陪伴的人");
+    expect(changed.snapshot.cover.photo.assetId).toBe(
+      settings.cover.photoAssetId,
+    );
+    expect(changed.snapshot.cover.photo.sha256).toBe(
+      changed.snapshot.chapters[0].stories[0].photos[0].sha256,
+    );
     expect(changed.snapshot.chapters.map((chapter) => chapter.title)).toEqual([
       "我走过的那些日子",
     ]);
@@ -413,6 +445,17 @@ test("actual directory edits invalidate the previous PDF and empty chapters do n
       previous.snapshot.chapters[0].stories[0].entry.id,
     );
     expect(changed.pdf.sha256).not.toBe(previous.pdf.sha256);
+    await expect(page.locator(".live-cover .book-cover-photo")).toBeVisible();
+    await expect
+      .poll(() =>
+        page
+          .locator(".live-cover .book-cover-photo")
+          .evaluate((node) => node.complete && node.naturalWidth > 0),
+      )
+      .toBe(true);
+    await expect(
+      page.locator(".live-cover").getByText("给一路陪伴的人", { exact: true }),
+    ).toBeVisible();
     const phoneWidth = await page
       .locator("#phone")
       .evaluate((node) => node.getBoundingClientRect().width);

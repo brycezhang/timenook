@@ -1096,3 +1096,14 @@ model BookCommand {
  @@id([projectId,actorId,action,key])
  @@map("book_commands")
 }
+
+model BookCoverVersion {
+ projectId String @map("project_id") @db.Uuid
+ version Int
+ salutation String
+ photoAssetId String? @map("photo_asset_id") @db.Uuid
+ createdBy String @map("created_by") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@id([projectId,version])
+ @@map("book_cover_versions")
+}

@@ -490,9 +490,10 @@ export async function readyStory(existing?: Awaited<ReturnType<typeof bound>>) {
 export async function storyPhoto(
   p: Awaited<ReturnType<typeof readyStory>>,
   caption: string,
+  pixels = { width: 120, height: 80 },
 ) {
   const bytes = await sharp({
-      create: { width: 120, height: 80, channels: 3, background: "#e54334" },
+      create: { ...pixels, channels: 3, background: "#e54334" },
     })
       .jpeg()
       .toBuffer(),

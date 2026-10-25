@@ -135,7 +135,13 @@ function version(state = "ready"): any {
     snapshotHash: "b".repeat(64),
     snapshot: {
       schemaVersion: "t20-v1",
-      cover: { title: "小路与岁月", template: "fixed" },
+      cover: {
+        title: "小路与岁月",
+        template: "fixed",
+        version: 0,
+        salutation: "",
+        photo: null,
+      },
       plan: { revision: 2, contentHash: "e".repeat(64), content: {} },
       directory: {
         version: 4,
@@ -189,12 +195,15 @@ function version(state = "ready"): any {
     toc: state === "ready" ? [{ title: "故乡", page: 4 }] : null,
     renderer: null,
     accessExpiresAt: null,
+    coverPhotoAccess: { allowed: true, expiresAt: null },
   };
 }
 function context(current: any = version()): any {
   return {
     projectId,
     inputHash: "a".repeat(64),
+    cover: { version: 0, salutation: "", photoAssetId: null },
+    coverPhotoOptions: [],
     directory: version().snapshot.directory,
     eligibleStories: [
       {
@@ -495,3 +504,358 @@ test("an already expired private manuscript clears before issuing any PDF downlo
   assert.equal(h.page.data.version, null);
   assert.equal(h.page.data.busy, false);
 });
+
+const coverPhoto = {
+  id: "88888888-8888-4888-8888-888888888888",
+  interviewId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  assetId: "99999999-9999-4999-8999-999999999999",
+  bytes: 4567,
+  sha256: "f".repeat(64),
+  caption: "门前那棵树",
+  width: 600,
+  height: 800,
+};
+test("cover edits save a salutation and one permitted photo with a pinned version, preserve conflict drafts, then obsolete the prior book", async () => {
+  const h = harness(),
+    input = context();
+  input.cover = { version: 2, salutation: "给我的家人", photoAssetId: null };
+  input.coverPhotoOptions = [coverPhoto];
+  h.page.onLoad({ projectId });
+  const show = h.page.onShow();
+  h.respond(0, input);
+  await show;
+  h.page.editCover();
+  h.page.salutation({ detail: { value: "写给一路同行的你" } });
+  h.page.chooseCoverPhoto({
+    currentTarget: { dataset: { assetId: coverPhoto.assetId } },
+  });
+  const saving = h.page.saveCover();
+  assert.equal(h.requests[1].url, `${base}/projects/${projectId}/book/cover`);
+  assert.equal(h.requests[1].data.expectedVersion, 2);
+  assert.equal(h.requests[1].data.salutation, "写给一路同行的你");
+  assert.equal(h.requests[1].data.photoAssetId, coverPhoto.assetId);
+  h.respond(1, undefined, 409);
+  await saving;
+  assert.equal(h.page.data.coverDraft.salutation, "写给一路同行的你");
+  assert.equal(h.page.data.coverDirty, true);
+  const saved = h.page.saveCover(),
+    response = context(version("obsolete"));
+  response.cover = {
+    version: 3,
+    salutation: "写给一路同行的你",
+    photoAssetId: coverPhoto.assetId,
+  };
+  response.coverPhotoOptions = [coverPhoto];
+  h.respond(2, response, 201);
+  await saved;
+  assert.equal(h.page.data.coverDirty, false);
+  assert.equal(h.page.data.version.state, "obsolete");
+  assert.equal(h.page.data.coverDraftVersion, 3);
+  assert.equal(
+    h.page.data.version.snapshot.cover.salutation,
+    "",
+    "old frozen cover does not silently adopt the draft",
+  );
+  h.page.onUnload();
+});
+
+test("book polling never rebases unsaved cover or directory edits onto another participant's newer versions", async () => {
+  const h = harness(),
+    input = context(version("queued"));
+  input.cover.version = 2;
+  h.page.onLoad({ projectId });
+  const show = h.page.onShow();
+  h.respond(0, input);
+  await show;
+  h.page.chapterTitle({
+    currentTarget: { dataset: { chapter: "0" } },
+    detail: { value: "我正在编辑的目录" },
+  });
+  h.page.salutation({ detail: { value: "我正在编辑的称呼" } });
+  h.timers[h.timers.length - 1].callback();
+  await tick();
+  const newer = context(version("queued"));
+  newer.directory.version = 5;
+  newer.cover = {
+    version: 3,
+    salutation: "另一位参与人保存的称呼",
+    photoAssetId: null,
+  };
+  h.respond(1, newer);
+  await tick();
+  assert.equal(h.page.data.coverDraft.salutation, "我正在编辑的称呼");
+  assert.equal(h.page.data.draft[0].title, "我正在编辑的目录");
+  const saveDirectory = h.page.saveDirectory();
+  assert.equal(h.requests[2].data.expectedVersion, 4);
+  h.respond(2, undefined, 409);
+  await saveDirectory;
+  const saveCover = h.page.saveCover();
+  assert.equal(h.requests[3].data.expectedVersion, 2);
+  h.respond(3, undefined, 409);
+  await saveCover;
+  assert.equal(h.page.data.coverDirty, true);
+  assert.equal(h.page.data.dirty, true);
+  h.page.onUnload();
+});
+
+for (const surface of ["book", "manuscript"]) {
+  test(`${surface} preserves an authorized ready book after optional cover Media access expires, and the complete PDF remains usable`, async () => {
+    const h = harness(surface),
+      frozen = version();
+    frozen.snapshot.cover.photo = coverPhoto;
+    h.page.onLoad({ projectId, versionId });
+    const show = h.page.onShow();
+    h.respond(0, surface === "book" ? context(frozen) : frozen);
+    await tick();
+    h.downloads[0].success({
+      statusCode: 403,
+      tempFilePath: "wxfile://expired-derived-cover.png",
+    });
+    await tick();
+    assert.equal(
+      h.requests[1]?.url,
+      `${base}/projects/${projectId}/book/versions/${versionId}`,
+      "ambiguous Media403 must revalidate the book boundary",
+    );
+    const retained = version();
+    retained.snapshot.cover.photo = coverPhoto;
+    retained.coverPhotoAccess = {
+      allowed: false,
+      expiresAt: new Date(h.clock.now - 1).toISOString(),
+    };
+    h.respond(1, retained);
+    await show;
+    assert.equal(h.page.data.version.id, versionId);
+    assert.equal(h.page.data.version.state, "ready");
+    assert.equal(h.page.data.coverImage, "");
+    assert.ok(h.removed.includes("wxfile://expired-derived-cover.png"));
+    if (surface === "manuscript") {
+      const opening = h.page.openPdf();
+      assert.equal(
+        h.downloads[1].url,
+        `${base}/projects/${projectId}/book/versions/${versionId}/pdf`,
+      );
+      h.downloads[1].success({
+        statusCode: 200,
+        tempFilePath: "wxfile://still-authorized.pdf",
+      });
+      await opening;
+      assert.equal(h.opened.length, 1);
+    } else {
+      h.page.manuscript();
+      assert.equal(
+        h.routes[0],
+        `/pages/manuscript/index?projectId=${projectId}&versionId=${versionId}`,
+      );
+    }
+    h.page.onUnload();
+  });
+  test(`${surface} clears only the raw cover image at derived-photo expiry while book access remains active`, async () => {
+    const h = harness(surface),
+      frozen = version();
+    frozen.snapshot.cover.photo = coverPhoto;
+    frozen.accessExpiresAt = new Date(h.clock.now + 60000).toISOString();
+    frozen.coverPhotoAccess = {
+      allowed: true,
+      expiresAt: new Date(h.clock.now + 1000).toISOString(),
+    };
+    const value = context(frozen);
+    value.accessExpiresAt = frozen.accessExpiresAt;
+    h.page.onLoad({ projectId, versionId });
+    const show = h.page.onShow();
+    h.respond(0, surface === "book" ? value : frozen);
+    await tick();
+    h.downloads[0].success({
+      statusCode: 200,
+      tempFilePath: "wxfile://short-lived-cover.png",
+    });
+    await show;
+    h.clock.now += 1000;
+    h.timers[h.timers.length - 1].callback();
+    assert.equal(h.page.data.coverImage, "");
+    assert.equal(h.page.data.version.id, versionId);
+    assert.ok(h.removed.includes("wxfile://short-lived-cover.png"));
+    h.page.onUnload();
+  });
+  test(`${surface} skips an expired raw-photo preview while keeping the already authorized complete book`, async () => {
+    const h = harness(surface),
+      frozen = version();
+    frozen.snapshot.cover.photo = coverPhoto;
+    frozen.coverPhotoAccess = {
+      allowed: false,
+      expiresAt: new Date(h.clock.now - 1).toISOString(),
+    };
+    h.page.onLoad({ projectId, versionId });
+    const show = h.page.onShow();
+    h.respond(0, surface === "book" ? context(frozen) : frozen);
+    await show;
+    assert.equal(h.downloads.length, 0);
+    assert.equal(h.page.data.version.id, versionId);
+    assert.equal(h.page.data.coverImage, "");
+    assert.match(h.page.data.coverStatus, /完整 PDF/);
+    h.page.onUnload();
+  });
+  test(`${surface} discards a raw-photo response at its own expiry without expiring the complete book`, async () => {
+    const h = harness(surface),
+      frozen = version();
+    frozen.snapshot.cover.photo = coverPhoto;
+    frozen.coverPhotoAccess = {
+      allowed: true,
+      expiresAt: new Date(h.clock.now + 1000).toISOString(),
+    };
+    h.page.onLoad({ projectId, versionId });
+    const show = h.page.onShow();
+    h.respond(0, surface === "book" ? context(frozen) : frozen);
+    await tick();
+    h.clock.now += 1000;
+    h.timers[h.timers.length - 1].callback();
+    assert.equal(h.page.data.version.id, versionId);
+    h.downloads[0].success({
+      statusCode: 200,
+      tempFilePath: "wxfile://late-derived-photo.png",
+    });
+    await show;
+    assert.ok(h.removed.includes("wxfile://late-derived-photo.png"));
+    assert.equal(h.page.data.version.id, versionId);
+    assert.equal(h.page.data.coverImage, "");
+    assert.equal(h.page.data.busy, false);
+    h.page.onUnload();
+  });
+  test(`${surface} clears private book state if an unexpected Media403 cannot be reauthorized`, async () => {
+    const h = harness(surface),
+      frozen = version();
+    frozen.snapshot.cover.photo = coverPhoto;
+    h.page.onLoad({ projectId, versionId });
+    const show = h.page.onShow();
+    h.respond(0, surface === "book" ? context(frozen) : frozen);
+    await tick();
+    h.downloads[0].success({
+      statusCode: 403,
+      tempFilePath: "wxfile://unverified-cover.png",
+    });
+    await tick();
+    h.requests[1].fail({ errMsg: "offline" });
+    await show;
+    assert.equal(h.page.data.version, null);
+    assert.equal(h.page.data.coverImage, "");
+    assert.match(h.page.data.status, /重新核对/);
+    assert.ok(h.removed.includes("wxfile://unverified-cover.png"));
+    h.page.onUnload();
+  });
+  test(`${surface} displays only the frozen cover salutation and authenticated exact photo, then removes the temporary preview`, async () => {
+    const h = harness(surface),
+      frozen = version();
+    frozen.snapshot.cover = {
+      ...frozen.snapshot.cover,
+      version: 2,
+      salutation: "写给一路同行的你",
+      photo: coverPhoto,
+    };
+    h.page.onLoad({ projectId, versionId });
+    const show = h.page.onShow();
+    h.respond(0, surface === "book" ? context(frozen) : frozen);
+    await tick();
+    assert.equal(
+      h.downloads[0]?.url,
+      `${base}/projects/${projectId}/interviews/${coverPhoto.interviewId}/photos/${coverPhoto.id}/assets/${coverPhoto.assetId}/content`,
+    );
+    assert.equal(
+      h.downloads[0].header.authorization,
+      `Bearer ${login.session.token}`,
+    );
+    h.downloads[0].success({
+      statusCode: 200,
+      tempFilePath: "wxfile://cover-photo.png",
+    });
+    await show;
+    assert.equal(
+      h.page.data.version.snapshot.cover.salutation,
+      "写给一路同行的你",
+    );
+    assert.equal(h.page.data.coverImage, "wxfile://cover-photo.png");
+    h.page.onHide();
+    assert.equal(h.page.data.coverImage, "");
+    assert.ok(h.removed.includes("wxfile://cover-photo.png"));
+  });
+  test(`${surface} clears an expired snapshot while its cover image is still downloading and discards the late photo`, async () => {
+    const h = harness(surface),
+      frozen = version();
+    frozen.snapshot.cover.photo = coverPhoto;
+    frozen.accessExpiresAt = new Date(h.clock.now + 1000).toISOString();
+    const value = context(frozen);
+    value.accessExpiresAt = frozen.accessExpiresAt;
+    h.page.onLoad({ projectId, versionId });
+    const show = h.page.onShow();
+    h.respond(0, surface === "book" ? value : frozen);
+    await tick();
+    assert.ok(
+      h.timers.length,
+      "private version must be watched while the photo is in flight",
+    );
+    h.clock.now += 1000;
+    h.timers[h.timers.length - 1].callback();
+    assert.equal(h.page.data.version, null);
+    assert.equal(h.page.data.coverImage, "");
+    h.downloads[0].success({
+      statusCode: 200,
+      tempFilePath: "wxfile://expired-cover.png",
+    });
+    await show;
+    assert.ok(h.removed.includes("wxfile://expired-cover.png"));
+    assert.equal(h.page.data.coverImage, "");
+  });
+  test(`${surface} clears private version data when a denied cover download is followed by a denied Book recheck, without deleting originals`, async () => {
+    const h = harness(surface),
+      frozen = version();
+    frozen.snapshot.cover.photo = coverPhoto;
+    h.storage.set("originals", ["wxfile://original.png"]);
+    h.page.onLoad({ projectId, versionId });
+    const show = h.page.onShow();
+    h.respond(0, surface === "book" ? context(frozen) : frozen);
+    await tick();
+    h.downloads[0].success({
+      statusCode: 403,
+      tempFilePath: "wxfile://denied-cover.png",
+    });
+    await tick();
+    assert.equal(
+      h.requests[1].url,
+      `${base}/projects/${projectId}/book/versions/${versionId}`,
+    );
+    h.respond(1, undefined, 403);
+    await show;
+    assert.equal(h.page.data.version, null);
+    assert.equal(h.page.data.coverImage, "");
+    assert.ok(h.removed.includes("wxfile://denied-cover.png"));
+    assert.ok(!h.removed.includes("wxfile://original.png"));
+    assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), login);
+    assert.deepEqual(h.storage.get("originals"), ["wxfile://original.png"]);
+    h.page.onUnload();
+  });
+  test(`${surface} discards a cover image arriving after the active account changed`, async () => {
+    const h = harness(surface),
+      frozen = version();
+    frozen.snapshot.cover.photo = coverPhoto;
+    h.page.onLoad({ projectId, versionId });
+    const show = h.page.onShow();
+    h.respond(0, surface === "book" ? context(frozen) : frozen);
+    await tick();
+    h.storage.set(`timenook.session.v1:${base}`, {
+      ...login,
+      session: {
+        ...login.session,
+        id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        token: "b".repeat(43),
+      },
+    });
+    h.downloads[0].success({
+      statusCode: 200,
+      tempFilePath: "wxfile://old-account-cover.png",
+    });
+    await show;
+    assert.equal(h.page.data.version, null);
+    assert.equal(h.page.data.coverImage, "");
+    assert.ok(h.removed.includes("wxfile://old-account-cover.png"));
+    h.page.onUnload();
+  });
+}

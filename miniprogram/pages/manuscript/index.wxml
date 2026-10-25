@@ -3,8 +3,9 @@
     <view class="title">完整书稿</view>
     <view wx:if="{{status}}" class="note section">{{status}}</view>
     <block wx:if="{{version}}">
-      <view class="manuscript-cover section"><view class="eyebrow">时光里 · 岁月成书</view><view class="title">{{version.snapshot.cover.title}}</view><view>第 {{version.version}} 版 · {{version.pageCount || '待核对'}} 页</view></view>
+      <view class="manuscript-cover section"><view class="eyebrow">时光里 · 岁月成书</view><view class="title">{{version.snapshot.cover.title}}</view><view wx:if="{{version.snapshot.cover.salutation}}" class="cover-salutation-display">{{version.snapshot.cover.salutation}}</view><image wx:if="{{coverImage}}" class="book-cover-photo" src="{{coverImage}}" mode="aspectFit" /><view wx:if="{{version.snapshot.cover.photo}}" class="note">{{version.snapshot.cover.photo.caption}}</view><view>第 {{version.version}} 版 · {{version.pageCount || '待核对'}} 页</view></view>
       <button class="btn section" bindtap="openPdf" disabled="{{busy || version.state !== 'ready'}}">打开完整 PDF</button>
+      <view wx:if="{{coverStatus}}" class="note section">{{coverStatus}}</view>
       <view class="note section">请逐页核对 PDF 中的全文、照片、原声入口和页数。</view>
       <view wx:for="{{version.snapshot.chapters}}" wx:for-item="chapter" wx:key="key">
         <view class="title section">{{chapter.title}}</view>

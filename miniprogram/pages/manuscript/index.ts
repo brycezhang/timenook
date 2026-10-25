@@ -3,6 +3,10 @@ import { go, required, save, toast } from "../../services/store";
 import { dataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
 import { bookClient } from "../../services/books";
+import {
+  clearPhotoPreviews,
+  privatePhotoPreview,
+} from "../../services/story-photos";
 import type { BookVersionView } from "../../../packages/contracts/src";
 type E = {
   currentTarget: { dataset: Record<string, string> };
@@ -14,6 +18,8 @@ Page({
     version: null as BookVersionView | null,
     busy: false,
     status: "",
+    coverImage: "",
+    coverStatus: "",
     p: null as Project | null,
     stories: [] as Project["stories"],
     pending: 0,
@@ -24,6 +30,7 @@ Page({
   versionId: "",
   generation: 0,
   file: "",
+  coverFile: "",
   expiry: undefined as ReturnType<typeof setTimeout> | undefined,
   stopSessionWatch: undefined as (() => void) | undefined,
   onLoad(q) {
@@ -46,7 +53,8 @@ Page({
     this.stopSessionWatch = undefined;
     this.removeFile(this.file);
     this.file = "";
-    this.setData({ version: null, busy: false });
+    this.clearCover();
+    this.setData({ version: null, busy: false, coverStatus: "" });
   },
   onUnload() {
     this.onHide();
@@ -54,6 +62,78 @@ Page({
   accessExpired() {
     const value = this.data.version?.accessExpiresAt;
     return !!value && Date.parse(value) <= Date.now();
+  },
+  clearCover() {
+    const path = this.coverFile;
+    this.coverFile = "";
+    this.setData({ coverImage: "" });
+    if (path) void clearPhotoPreviews([path]).catch(() => {});
+  },
+  coverExpired() {
+    const access = this.data.version?.coverPhotoAccess;
+    return (
+      !access?.allowed ||
+      (!!access.expiresAt && Date.parse(access.expiresAt) <= Date.now())
+    );
+  },
+  async loadCover(generation: number, owner: string) {
+    if (!this.current(generation, owner)) return;
+    this.watch(owner);
+    this.clearCover();
+    this.setData({ coverStatus: "" });
+    const photo = this.data.version?.snapshot.cover.photo;
+    if (!photo) return;
+    if (this.coverExpired()) {
+      this.setData({
+        coverStatus: "封面照片预览已到期，请从完整 PDF 核对照片。",
+      });
+      return;
+    }
+    try {
+      const path = await privatePhotoPreview(
+        this.projectId,
+        photo.interviewId,
+        photo.id,
+        { id: photo.assetId, bytes: photo.bytes, sha256: photo.sha256 },
+        () => this.current(generation, owner) && !this.coverExpired(),
+      );
+      if (!this.current(generation, owner)) {
+        await clearPhotoPreviews([path]);
+        return;
+      }
+      this.coverFile = path;
+      this.setData({ coverImage: path });
+    } catch (error) {
+      if (!this.current(generation, owner)) return;
+      this.clearCover();
+      if (error instanceof ApiFailure && error.status === 401) throw error;
+      if (error instanceof ApiFailure && error.status === 403) {
+        let fresh: BookVersionView;
+        try {
+          fresh = await bookClient.readVersion(this.projectId, this.versionId);
+        } catch (failure) {
+          if (
+            failure instanceof ApiFailure &&
+            [401, 403].includes(failure.status)
+          )
+            throw failure;
+          throw new ApiFailure("AUTHORIZATION_RECHECK_FAILED", 403);
+        }
+        if (!this.current(generation, owner)) return;
+        this.setData({
+          version: fresh,
+          ...(fresh.state === "obsolete"
+            ? { status: "内容已变化，请返回重新生成书稿" }
+            : {}),
+        });
+      }
+      if (this.current(generation, owner))
+        this.setData({
+          coverStatus: this.coverExpired()
+            ? "封面照片预览已到期，请从完整 PDF 核对照片。"
+            : "封面照片暂时无法预览，请从完整 PDF 核对照片。",
+        });
+    }
   },
   current(generation: number, owner: string) {
     return (
@@ -65,19 +145,40 @@ Page({
   },
   watch(owner: string) {
     if (this.expiry) clearTimeout(this.expiry);
-    this.expiry = setTimeout(() => {
-      if (
-        dataMode() !== "live" ||
-        owner !== sessionClient.context() ||
-        (this.data.version?.accessExpiresAt &&
-          Date.parse(this.data.version.accessExpiresAt) <= Date.now())
-      ) {
-        this.onHide();
-        this.setData({ status: "授权已到期或账号已变化，请重新查询" });
-        return;
-      }
-      this.watch(owner);
-    }, 1000);
+    this.expiry = setTimeout(
+      () => {
+        if (
+          dataMode() !== "live" ||
+          owner !== sessionClient.context() ||
+          (this.data.version?.accessExpiresAt &&
+            Date.parse(this.data.version.accessExpiresAt) <= Date.now())
+        ) {
+          this.onHide();
+          this.setData({ status: "授权已到期或账号已变化，请重新查询" });
+          return;
+        }
+        if (this.data.version?.snapshot.cover.photo && this.coverExpired()) {
+          this.clearCover();
+          this.setData({
+            coverStatus: "封面照片预览已到期，请从完整 PDF 核对照片。",
+          });
+        }
+        this.watch(owner);
+      },
+      Math.max(
+        1,
+        Math.min(
+          1000,
+          ...[
+            this.data.version?.accessExpiresAt,
+            this.data.version?.coverPhotoAccess.expiresAt,
+          ]
+            .filter((value): value is string => !!value)
+            .map((value) => Date.parse(value) - Date.now())
+            .filter((value) => value > 0),
+        ),
+      ),
+    );
   },
   async perform(work: (generation: number, owner: string) => Promise<void>) {
     if (this.data.busy) return;
@@ -102,7 +203,13 @@ Page({
         (error instanceof ApiFailure && [401, 403].includes(error.status))
       ) {
         this.onHide();
-        this.setData({ status: "授权已失效或账号已变化，请重新查询" });
+        this.setData({
+          status:
+            error instanceof ApiFailure &&
+            error.code === "AUTHORIZATION_RECHECK_FAILED"
+              ? "资料权限未能重新核对，请重新查询"
+              : "授权已失效或账号已变化，请重新查询",
+        });
       } else {
         this.removeFile(this.file);
         this.file = "";
@@ -177,6 +284,7 @@ Page({
   },
   async onShow() {
     if (dataMode() === "live") {
+      this.clearCover();
       this.setData({ live: true, version: null });
       this.stopSessionWatch?.();
       this.stopSessionWatch = sessionClient.onInvalidated(() => {
@@ -204,6 +312,7 @@ Page({
                 : "",
         });
         this.watch(owner);
+        await this.loadCover(generation, owner);
       });
     }
     const p = required();

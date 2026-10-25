@@ -41,7 +41,7 @@ PDF/确认稿期限按 T10 的 `bookPdf`/`confirmedStories` 独立检查，实�
 
 此前同轮相关组合为 **70/70**（Book13 + PrintProbe、Transcription、StoryConfirmation、PersonalPlan，`backend-related-final.log`）；印刷核心 **13/13**（`print-final.log`）。最终两处期限返回和共享重试拒绝的窄修复没有改变渲染器或未受影响的这些分支，按范围引用旧证据，不声称它们是窄修复后同次全量。最后 API typecheck/build/test-compile 均成功。root 另记录全工作区、真实浏览器、25→26 升级/重放、原生编译和最终提交门禁。
 
-## 最终合成产物
+## 初次提交的合成产物（d20260f，已被下述审查修复版替代）
 
 `/tmp/timenook-t20-artifact-final/` 保留 `book.pdf`、`snapshot.json`、`manifest.json`、全部 13 张 `pages/page-*.png` 和 `pages/inspection.json`。最终 manifest 的 `book` 段绑定来源版本和确认稿 hash。
 
@@ -50,3 +50,47 @@ PDF/确认稿期限按 T10 的 `bookPdf`/`confirmedStories` 独立检查，实�
 - QR 在实际第4/5页，各一枚；总计两枚原声码和一张照片。4860字长稿跨页完整，图注与 AI/人工来源保留，空章节没有虚构正文。
 
 root 已逐页查看先前相同版式的13页，并对最终变化的第4/5页二维码和 manifest 再核对。上述产物没有真实讲述者资料。真实微信小程序码/手机扫码与播放、适用 D08 标识/供应商准入、印厂接收/印前转换和实物仍为外部待验，不能据此关闭这些验收项或进行生产。
+
+## d20260f 之后的正式审查修复
+
+正式 Spec 审查指出两处 P2：完整照片说明/附记被当作不可分块，合法内容会失败；以及 PRD 8.2 的称呼和可选封面照片缺失。它们均已修复，没有引入新的排版引擎或上传系统。
+
+### 长说明及附记
+
+沿用 T04 原有字符二分分页及标点边界规则，抽出同一个文字流函数，正文、产品照片说明及本人附记共同消费。照片仍作为确定尺寸图片，说明按原顺序紧随图片并可跨页，全部附记继续完整排版。探针原有照片路径及布局保持。
+
+`review-pagination-red.log` 从真实录音/故事生成、公开照片及故事版本/本人确认到书稿任务，复现 145mm 肖像照片+300字说明、4500字本人附记均无法出稿；`review-pagination-green.log` 两项通过。测试另从鉴权下载的 PDF 独立使用 PDF.js 提取各页，逐一核对完整文字、实际页数、图像和照片→说明→附记顺序。两类极端样本位于 `/tmp/timenook-t20-pagination-review/`。
+
+### 确定的称呼及封面照片
+
+- 增加 Book 自己的不可变 `BookCoverVersion`：默认 version0、空称呼、不使用封面照片；以当前项目授权、乐观版本和既有 BookCommand 幂等命令保存。已在尚未合并的第26条迁移中加入表/外键/不可变触发器，没有新增第27条，也没有修改 Project/T19 写规则。
+- `GET .../book` 返回 cover 设置和可选照片；`POST .../book/cover` 接受 expectedVersion、最多120字称呼以及可空的 print asset ID。选项只来自当前本人确认并允许入书的故事照片，携带原 interview/photo/asset ID、bytes/hash、说明及尺寸；原有 Media 网关负责当前鉴权读取，不另发公开图片地址。
+- 快照冻结封面设置版本、称呼和确切照片；修改设置、改变故事版本或撤回来源故事的入书许可使待生产书稿失效。选择资产不再可用时保持设置可供纠正，但不能重新生成。封面文字和选定照片进入同一输入/快照 hash。
+- 封面与内页可使用同一资产；准备 buffer 和图片文件按 assetId 去重，两个实际排版位置分别计入独立 PDF 图像检查。封面使用固定字体和保留图片空间的固定版式，完整120字书名与120字称呼及肖像照片可同时留在第一页，没有裁文或把封面图片挪到内页。
+
+`review-cover-red.log` 的公开入口404变为 `review-cover-green.log` 成功；后者同时验证并发幂等、过期版本/未知资产拒绝、旧版失效、快照历史保持、实际下载 PDF 的封面称呼和封面/内页同图。`review-cover-recovery.log` 中的最大长度封面及撤回来源许可检查通过。仅新增一个确定封面 owner，没有自由排版、模板平台或商业政策扩展。
+
+### 旧提交 CI 的测试恢复边界
+
+旧提交 d20260f 的 CI `40169268188` 中，恢复用例在20秒等待内超时，不能计为成功。原用例会把前序独立场景留下的有效 queued 书稿一起调度；这个总等待不是目标任务恢复时延的独立证据。当前用例先重建本票独立可丢弃夹具，再保留真实 Redis 入队→Outbox 已投递→清除隔离队列→API 重启→同一任务恢复的链路，明确断言只有一个 due 任务。等待上限90秒，超时报告完成的 job ID 及目标项目真实任务 state/lease/error。生产资源、租约及任务截止时间没有放宽，也不把这个测试等待写为服务 SLA。
+
+### 审查修复版最终验证及产物
+
+- API 类型、构建及测试编译成功；Book 全文件 **18/18**：`/tmp/timenook-t20-logs/review-book-final.log`。
+- 固定印刷核心 **13/13**：`/tmp/timenook-t20-logs/review-print-final.log`，包含原探针分页/图片/二维码回归。
+- root 另核对真实25→26升级/重放与旧大纲/目录/hash 保持；浏览器、整仓构建以及新固定提交的正式双轴/替代 CI 由 root 记录，本文不先行追认。
+
+当前代表样书为 `/tmp/timenook-t20-review-artifact/`，模板 `t20-a5-v3`，13页、两枚原声码、一张照片同时用于封面及内页（独立 PDF 图像总数4）。封面称呼“献给这些年一路相伴的家人”与当前照片一起冻结。原13页中变动的封面及两处二维码页由 root 单独查看，其余版式证据按未变像素复用；不把旧 v2 文件称作当前输出。
+
+- 当前 PDF SHA256：`238e77324c523ef697c3389d094d16bfb6acdeb18c44e1b94a3ae369b773460b`
+- 当前 snapshotHash：`7577924124cac257168f4a817eb1baaeebe4a27ee333dca80e456ee2a6c24842`
+
+真实平台、供应商及 D01/D08、印前/实物仍保持待验；上述工作只修复本票本地工程，未执行 Git/GitHub 写操作、部署、真实采集或生产。
+
+### 独立原图预览期限的最后联动修复
+
+封面缩略图取自原有 Media 网关的 `derivedPhotos`，和已经生成的 `bookPdf`/确认稿分别执行 D03。新增实时 `BookVersionView.coverPhotoAccess={allowed,expiresAt}`：没有封面照片、缺少衍生照片规则或该规则已到期时为 false/null；可用时返回当前 Book/操作身份与衍生照片期限的最早到期。它只描述原始图片预览权限，不进入不可变快照、inputHash、PDF hash 或渲染配置。
+
+真实 HTTP 回归使用一份合成套餐，`derivedPhotos` 1天，`bookPdf`/`confirmedStories` 400天。先完成真实照片/本人版本确认、封面选择及固定 PDF；注入一个受控交付事实，验证原图片200与较早的预览到期时间。只推进 JavaScript Date 越过照片期限后，原图片403，而 Book/确定版本/PDF 均继续200、ready；快照、inputHash 和下载文件 SHA256 全部保持。新字段此时变为 false/null，页面可以只清理自身封面缩略图，不误清除仍可读取的书稿/PDF。未知 Media403 仍须前端重新读取当前 Book 区分全局授权变化，不豁免实际身份或共享撤回。
+
+`review-derived-cover-red.log` 记录真实原图片403/PDF200已经成立，但字段缺失；`review-derived-cover-green.log` 新用例 **1/1**通过。最后 API typecheck/build/test-compile 通过；此前相关 Book **18/18**与印刷 **13/13**按未改渲染/快照范围复用，没有冒称19项是同次全量。没有重跑无关 API 套件，没有修改 SQL、生产政策或最终样书；当前238e…PDF及其视觉检查继续适用。前端对应的原图清理/到期/撤回验证及最终整仓 CI 由 root 记录。

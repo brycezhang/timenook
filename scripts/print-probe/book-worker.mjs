@@ -44,6 +44,7 @@ try {
     font = createFont(fontBytes);
   const allText = [
     book.title,
+    ...(product ? [book.salutation ?? ""] : []),
     ...(book.provenanceNotice ? [book.provenanceNotice] : []),
     ...book.chapters.flatMap((c) => [
       c.title,
@@ -60,6 +61,33 @@ try {
       throw Error("MISSING_FONT_GLYPH");
   const photos = [],
     entries = [];
+  async function loadProductPhoto(photo) {
+    if (
+      !/^[a-f0-9-]{36}\.png$/.test(photo.file) ||
+      typeof photo.caption !== "string" ||
+      photo.caption.length > 5000 ||
+      ![photo.widthMm, photo.heightMm].every(
+        (n) => Number.isFinite(n) && n > 0,
+      ) ||
+      photo.widthMm > 116 ||
+      photo.heightMm > 165
+    )
+      throw Error("INVALID_PHOTO");
+    const bytes = await readFile(join(dirname(input), photo.file));
+    if (bytes.length > 16777216 || sha(bytes) !== photo.sha256)
+      throw Error("PHOTO_INTEGRITY_FAILED");
+    photos.push({ sha256: photo.sha256, caption: photo.caption });
+    return {
+      ...photo,
+      data: `data:image/png;base64,${bytes.toString("base64")}`,
+    };
+  }
+  if (product) {
+    if (typeof book.salutation !== "string" || book.salutation.length > 120)
+      throw Error("INVALID_COVER");
+    if (book.coverPhoto)
+      book.coverPhoto = await loadProductPhoto(book.coverPhoto);
+  }
   for (const chapter of book.chapters) {
     if (
       Object.keys(chapter).some(
@@ -81,25 +109,7 @@ try {
       if (!Array.isArray(chapter.photos) || chapter.photos.length > 128)
         throw Error("INVALID_PHOTO");
       for (const photo of chapter.photos) {
-        if (
-          !/^[a-f0-9-]{36}\.png$/.test(photo.file) ||
-          typeof photo.caption !== "string" ||
-          photo.caption.length > 5000 ||
-          ![photo.widthMm, photo.heightMm].every(
-            (n) => Number.isFinite(n) && n > 0,
-          ) ||
-          photo.widthMm > 116 ||
-          photo.heightMm > 165
-        )
-          throw Error("INVALID_PHOTO");
-        const bytes = await readFile(join(dirname(input), photo.file));
-        if (bytes.length > 16777216 || sha(bytes) !== photo.sha256)
-          throw Error("PHOTO_INTEGRITY_FAILED");
-        loaded.push({
-          ...photo,
-          data: `data:image/png;base64,${bytes.toString("base64")}`,
-        });
-        photos.push({ sha256: photo.sha256, caption: photo.caption });
+        loaded.push(await loadProductPhoto(photo));
       }
       chapter.photos = loaded;
     }
