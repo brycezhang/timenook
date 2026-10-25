@@ -1744,3 +1744,34 @@ for (const [stop, reason] of [
     assert.equal(replay.usage, 0);
     assert.equal(textRequests.length, before);
   });
+
+test("a follow-up relay endpoint change stops the frozen task before any provider submission", async () => {
+  const p = await bound(),
+    i = await interview(p);
+  await readyInput(p, i);
+  const path = `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`;
+  const created = data(
+    await request("POST", path, p.narrator.token, {
+      clientRequestId: randomUUID(),
+      actualQuestionId: i.actualQuestion.id,
+      expectedQuestionVersion: 1,
+    }),
+    202,
+  );
+  const before = textRequests.length;
+  const deepseek = config.generation!.deepseek;
+  const previous = deepseek.baseUrl;
+  Object.assign(deepseek, { baseUrl: "https://cf.api.fan/v1" });
+  try {
+    await app.get(ProductionTasks).run(created.task.id);
+    const current = data(
+      await request("POST", `${path}/status`, p.narrator.token, {}),
+    );
+    assert.equal(current.task.state, "manual_review");
+    assert.equal(current.task.errorCode, "CONFIGURATION_CHANGED");
+    assert.equal(textRequests.length, before);
+  } finally {
+    if (previous === undefined) delete deepseek.baseUrl;
+    else deepseek.baseUrl = previous;
+  }
+});

@@ -7,6 +7,10 @@ date: 2026-10-22
 
 用户决定 TimeNook 使用 legal-agent 所在的阿里云服务器及同一 API 域名，以 path 区分。此决定替代实施规格中“独立 ECS”及交付文档中的首版两台计算节点假设；应用、数据、身份与凭据继续独立。
 
+2026-10-25 补充：[ADR 0011](0011-shared-oss-and-deepseek.md) 确定 OSS 配置和 DeepSeek API key 共用，覆盖本文相应独立要求；本 ADR 的路由、应用进程、数据库、队列及微信身份边界继续适用。
+
+同日后续的 [ADR 0012](0012-cloud-integration-database.md) 确定复用 deed 数据库连接配置、单独建立 `timenook` 库，并将网页/小程序留在本地联调。本轮已部署的受控 API 和正式发布验收分别见[云端记录](../delivery/2026-10-25/cloud-integration.md)。
+
 ## 路由与运行边界
 
 公网基址采用 `https://lawyerapi.threeminreading.com/timenook`。业务 API 使用 `/timenook/v1/...`，健康入口使用 `/timenook/health/live` 与 `/timenook/health/ready`。Nginx 只对 `/timenook/` 前缀剥离该前缀后转发至 TimeNook；服务内部对应 `/v1/...` 和 `/health/...`。既有 legal-agent 的 `/v1/...` 与其他路由保持原状。

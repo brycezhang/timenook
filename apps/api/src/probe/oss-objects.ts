@@ -1,19 +1,40 @@
 import { objectFormat } from "../media/object-format";
 import OSS from "ali-oss";
 import type { ProbeUploadForm } from "@timenook/contracts";
+import type { AsrSource } from "./ai-providers";
 
-export interface ProbeOssConfig {
+interface ProbeOssBase {
   bucket: string;
   region: string;
   accessKeyId: string;
   accessKeySecret: string;
-  securityToken: string;
-  expiresAt: string;
+  keyPrefix?: string;
 }
-/** Candidate OSS provider. STS acquisition/role policy and live bucket acceptance remain external checks. */
+export type ProbeOssConfig = ProbeOssBase &
+  (
+    | { credentialMode?: "sts"; securityToken: string; expiresAt: string }
+    | { credentialMode: "static"; securityToken?: never; expiresAt?: never }
+  );
+
+export function validOssKeyPrefix(prefix: string | undefined): boolean {
+  return (
+    prefix === undefined ||
+    (prefix.length <= 128 &&
+      /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/.test(prefix))
+  );
+}
+/** All provider keys are scoped beneath the configured project prefix. */
 export class OssProbeObjects {
   private readonly client: OSS;
   constructor(private readonly config: ProbeOssConfig) {
+    if (
+      !validOssKeyPrefix(config.keyPrefix) ||
+      (config.credentialMode === "static" &&
+        (!config.keyPrefix?.match(/^timenook(?:\/|$)/) ||
+          config.securityToken ||
+          config.expiresAt))
+    )
+      throw new Error("Invalid shared OSS credential mode or key prefix");
     const options = {
       bucket: config.bucket,
       region: `oss-${config.region}`,
@@ -46,7 +67,7 @@ export class OssProbeObjects {
       Math.min(
         requestedExpiry.getTime(),
         now.getTime() + 120000,
-        Date.parse(this.config.expiresAt) - 5000,
+        this.credentialDeadline() - 5000,
       ),
     );
     if (
@@ -59,11 +80,13 @@ export class OssProbeObjects {
       .replace(/[-:]/g, "")
       .replace(/\.\d{3}/, "");
     const fields: Record<string, string> = {
-      key,
+      key: this.physicalKey(key),
       "x-oss-signature-version": "OSS4-HMAC-SHA256",
       "x-oss-credential": `${this.config.accessKeyId}/${date.slice(0, 8)}/${this.config.region}/oss/aliyun_v4_request`,
       "x-oss-date": date,
-      "x-oss-security-token": this.config.securityToken,
+      ...(this.config.credentialMode === "static"
+        ? {}
+        : { "x-oss-security-token": this.config.securityToken }),
       "x-oss-object-acl": "private",
       success_action_status: "204",
     };
@@ -94,7 +117,7 @@ export class OssProbeObjects {
       },
     };
   }
-  async asrSource(key: string, fetchWindowSeconds: number) {
+  async asrSource(key: string, fetchWindowSeconds: number): Promise<AsrSource> {
     if (
       !/^sealed\/[0-9a-f-]{36}\.mp3$/.test(key) ||
       !Number.isInteger(fetchWindowSeconds) ||
@@ -107,8 +130,9 @@ export class OssProbeObjects {
       Date.now() + expiresSeconds * 1000,
     ).toISOString();
     if (
-      !Number.isFinite(Date.parse(this.config.expiresAt)) ||
-      Date.parse(this.config.expiresAt) < Date.parse(expiresAt) + 5000
+      this.config.credentialMode !== "static" &&
+      (!Number.isFinite(this.credentialDeadline()) ||
+        this.credentialDeadline() < Date.parse(expiresAt) + 5000)
     )
       throw new Error("STS does not cover the ASR fetch window");
     const signer = this.client as OSS & {
@@ -123,21 +147,36 @@ export class OssProbeObjects {
       "GET",
       expiresSeconds,
       undefined,
-      key,
+      this.physicalKey(key),
     );
     const parsed = new URL(url);
     if (
       parsed.protocol !== "https:" ||
       parsed.hostname !==
         `${this.config.bucket}.oss-${this.config.region}.aliyuncs.com` ||
-      parsed.pathname !== `/${key}`
+      parsed.pathname !== `/${this.physicalKey(key)}`
     )
       throw new Error("ASR source must use the public OSS endpoint");
-    return { url, expiresAt, credentialsExpireAt: this.config.expiresAt };
+    return this.config.credentialMode === "static"
+      ? { url, expiresAt, credentialMode: "static", credentialsExpireAt: null }
+      : { url, expiresAt, credentialsExpireAt: this.config.expiresAt };
+  }
+  private physicalKey(key: string): string {
+    objectFormat(key);
+    return this.config.keyPrefix ? `${this.config.keyPrefix}/${key}` : key;
+  }
+  private credentialDeadline(): number {
+    return this.config.credentialMode === "static"
+      ? Infinity
+      : Date.parse(this.config.expiresAt);
   }
   private checkKey(key: string) {
     objectFormat(key);
-    if (Date.parse(this.config.expiresAt) <= Date.now() + 5000)
+    if (
+      this.config.credentialMode !== "static" &&
+      (!Number.isFinite(this.credentialDeadline()) ||
+        this.credentialDeadline() <= Date.now() + 5000)
+    )
       throw new Error("STS credentials expired");
   }
   async put(_key: string, _bytes: Buffer): Promise<void> {
@@ -154,7 +193,7 @@ export class OssProbeObjects {
       bytes.length > objectFormat(key).limit
     )
       throw new Error("Invalid server audio snapshot");
-    await this.client.put(key, bytes, {
+    await this.client.put(this.physicalKey(key), bytes, {
       timeout: 10000,
       mime: objectFormat(key).mime,
       headers: {
@@ -165,7 +204,9 @@ export class OssProbeObjects {
   }
   async read(key: string): Promise<Buffer> {
     this.checkKey(key);
-    const result = await this.client.getStream(key, { timeout: 10000 });
+    const result = await this.client.getStream(this.physicalKey(key), {
+      timeout: 10000,
+    });
     const stream = result.stream;
     const timer = setTimeout(
       () => stream.destroy(new Error("OSS read timed out")),
@@ -198,7 +239,7 @@ export class OssProbeObjects {
     this.checkKey(target);
     if (!objectFormat(source).staging || objectFormat(target).staging)
       throw new Error("Invalid copy direction");
-    await this.client.copy(target, source, {
+    await this.client.copy(this.physicalKey(target), this.physicalKey(source), {
       headers: {
         "x-oss-object-acl": "private",
         "x-oss-metadata-directive": "REPLACE",
@@ -209,6 +250,6 @@ export class OssProbeObjects {
   }
   async remove(key: string) {
     this.checkKey(key);
-    await this.client.delete(key);
+    await this.client.delete(this.physicalKey(key));
   }
 }

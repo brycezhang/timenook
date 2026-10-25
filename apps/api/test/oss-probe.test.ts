@@ -145,6 +145,7 @@ test("ASR source grant signs only a sealed public HTTPS URL and refuses STS shor
     "OSS4-HMAC-SHA256",
   );
   assert.ok(Date.parse(source.expiresAt) >= Date.now() + 600000);
+  assert.ok(typeof source.credentialsExpireAt === "string");
   assert.ok(
     Date.parse(source.credentialsExpireAt) > Date.parse(source.expiresAt),
   );
@@ -157,4 +158,108 @@ test("ASR source grant signs only a sealed public HTTPS URL and refuses STS shor
       expiresAt: new Date(Date.now() + 600000).toISOString(),
     }).asrSource(key, 600),
   );
+});
+
+test("shared static OSS signs only the prefixed private object without inventing STS expiry", async () => {
+  const objects = new OssProbeObjects({
+    bucket: config.bucket,
+    region: config.region,
+    accessKeyId: "synthetic-static-id",
+    accessKeySecret: config.accessKeySecret,
+    credentialMode: "static",
+    keyPrefix: "timenook/probe",
+  });
+  const key = "staging/00000000-0000-4000-8000-000000000004.mp3";
+  const form = await objects.uploadForm(
+    key,
+    15,
+    new Date(now.getTime() + 180000),
+    now,
+  );
+  assert.equal(form.fields.key, `timenook/probe/${key}`);
+  assert.equal(form.expiresAt, new Date(now.getTime() + 120000).toISOString());
+  assert.equal("x-oss-security-token" in form.fields, false);
+  const policy = JSON.parse(
+    Buffer.from(form.fields.policy, "base64").toString(),
+  );
+  assert.ok(
+    policy.conditions.some(
+      (c: unknown) =>
+        JSON.stringify(c) ===
+        JSON.stringify(["eq", "$key", `timenook/probe/${key}`]),
+    ),
+  );
+  assert.ok(!JSON.stringify(form).includes(config.accessKeySecret));
+  for (const invalid of ["../" + key, "/" + key, "timenook/probe/" + key])
+    await assert.rejects(
+      objects.uploadForm(invalid, 15, new Date(now.getTime() + 180000), now),
+    );
+  const grant = await objects.asrSource(key.replace("staging", "sealed"), 600);
+  assert.equal(
+    new URL(grant.url).pathname,
+    `/timenook/probe/${key.replace("staging", "sealed")}`,
+  );
+  assert.equal(grant.credentialMode, "static");
+  assert.equal(grant.credentialsExpireAt, null);
+  assert.equal(
+    new URL(grant.url).searchParams.has("x-oss-security-token"),
+    false,
+  );
+});
+
+test("shared OSS prefixes snapshot, read, copy and deletion while rejecting caller paths", async () => {
+  nock.disableNetConnect();
+  const objects = new OssProbeObjects({
+    bucket: config.bucket,
+    region: config.region,
+    accessKeyId: "synthetic-static-id",
+    accessKeySecret: config.accessKeySecret,
+    credentialMode: "static",
+    keyPrefix: "timenook/probe",
+  });
+  const source = "staging/00000000-0000-4000-8000-000000000004.mp3";
+  const target = source.replace("staging", "sealed");
+  const prefix = "timenook/probe/";
+  const provider = nock(
+    `https://${config.bucket}.oss-${config.region}.aliyuncs.com`,
+    {
+      reqheaders: {
+        authorization: (v: string) => v.startsWith("OSS4-HMAC-SHA256 "),
+      },
+      badheaders: ["x-oss-security-token"],
+    },
+  );
+  try {
+    provider
+      .put(`/${prefix}${source}`, "synthetic-audio")
+      .matchHeader("x-oss-object-acl", "private")
+      .reply(200, "", { etag: '"synthetic"' });
+    await objects.putSnapshot(source, Buffer.from("synthetic-audio"));
+    provider
+      .put(`/${prefix}${target}`)
+      .matchHeader(
+        "x-oss-copy-source",
+        `/${config.bucket}/${encodeURIComponent(prefix + source)}`,
+      )
+      .reply(
+        200,
+        "<CopyObjectResult><LastModified>2026-10-22T00:00:00Z</LastModified><ETag>synthetic</ETag></CopyObjectResult>",
+        { "content-type": "application/xml" },
+      );
+    await objects.copy(source, target);
+    provider
+      .get(`/${prefix}${target}`)
+      .reply(200, Buffer.from("synthetic-audio"));
+    assert.equal((await objects.read(target)).toString(), "synthetic-audio");
+    provider.delete(`/${prefix}${target}`).reply(204);
+    await objects.remove(target);
+    for (const invalid of ["../" + target, "/" + target, prefix + target]) {
+      await assert.rejects(objects.read(invalid));
+      await assert.rejects(objects.remove(invalid));
+    }
+    assert.ok(nock.isDone());
+  } finally {
+    nock.cleanAll();
+    nock.enableNetConnect();
+  }
 });

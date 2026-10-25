@@ -41,3 +41,27 @@ test("AI candidate configuration is explicit, defaults off and fails closed on p
   ])
     assert.throws(() => readConfig({ ...base, ...ai, ...overrides }));
 });
+
+test("DeepSeek relay base URL is explicit, canonical and rejects endpoint URLs or URL credentials", () => {
+  const relay = readConfig({
+    ...base,
+    ...ai,
+    TIMENOOK_PROBE_DEEPSEEK_BASE_URL: "https://cf.api.fan/v1/",
+  });
+  assert.equal(relay.aiProbe?.deepseek.baseUrl, "https://cf.api.fan/v1");
+  for (const value of [
+    "",
+    "http://cf.api.fan/v1",
+    "https://user:secret@cf.api.fan/v1",
+    "https://cf.api.fan/v1?key=secret",
+    "https://cf.api.fan/v1#section",
+    "https://cf.api.fan/v1?",
+    "https://cf.api.fan/v1#",
+    "https://cf.api.fan/v1/chat/completions",
+    "https://cf.api.fan/v1/chat/completions/",
+    " https://cf.api.fan/v1",
+  ])
+    assert.throws(() =>
+      readConfig({ ...base, ...ai, TIMENOOK_PROBE_DEEPSEEK_BASE_URL: value }),
+    );
+});

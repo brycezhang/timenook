@@ -1924,3 +1924,28 @@ test("the photo collection check returns only current authorization and leaves t
     403,
   );
 });
+
+test("a story relay endpoint change stops the frozen task before any provider submission", async () => {
+  const p = await preparedStory();
+  const before = textRequests.length;
+  const deepseek = config.generation!.deepseek;
+  const previous = deepseek.baseUrl;
+  Object.assign(deepseek, { baseUrl: "https://cf.api.fan/v1" });
+  try {
+    await app.get(ProductionTasks).run(p.story.task.id);
+    const current = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/stories/${p.story.id}`,
+        p.narrator.token,
+      ),
+      200,
+    );
+    assert.equal(current.task.state, "manual_review");
+    assert.equal(current.task.errorCode, "CONFIGURATION_CHANGED");
+    assert.equal(textRequests.length, before);
+  } finally {
+    if (previous === undefined) delete deepseek.baseUrl;
+    else deepseek.baseUrl = previous;
+  }
+});
