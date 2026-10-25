@@ -39,7 +39,11 @@ import { createHash, randomUUID } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
 import { isDeepStrictEqual } from "node:util";
-import { StoryComposerInput, validateStoryOutput } from "../probe/ai-providers";
+import {
+  effectiveDeepSeekBaseUrl,
+  StoryComposerInput,
+  validateStoryOutput,
+} from "../probe/ai-providers";
 import { Participation } from "../identity/participation";
 import { Photos } from "../media/photos";
 const hash = (v: string) => createHash("sha256").update(v).digest("hex");
@@ -587,6 +591,7 @@ export class Stories {
     return g
       ? {
           version: g.configVersion,
+          baseUrl: effectiveDeepSeekBaseUrl(g.deepseek.baseUrl),
           model: g.deepseek.model,
           maxTokens: g.deepseek.maxTokens,
           credentialHash: hash(g.deepseek.apiKey),

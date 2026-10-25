@@ -1,6 +1,10 @@
 import type { WechatPayConfig } from "./payments/wechat-pay";
 import type { AiProbeConfig } from "./probe/ai-probe";
-import type { ProbeOssConfig } from "./probe/oss-objects";
+import {
+  effectiveDeepSeekBaseUrl,
+  type DeepSeekConfig,
+} from "./probe/ai-providers";
+import { validOssKeyPrefix, type ProbeOssConfig } from "./probe/oss-objects";
 
 export interface ApiConfig {
   environment: "development" | "test" | "production";
@@ -32,7 +36,7 @@ export interface ApiConfig {
   generation?: {
     mode: "synthetic-local";
     configVersion: string;
-    deepseek: { apiKey: string; model: string; maxTokens: number };
+    deepseek: DeepSeekConfig;
     submissionReservationFen: number;
     maxSubmissions: number;
     deadlineMs: number;
@@ -183,36 +187,63 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
       throw new ConfigurationError("Probe session TTL must be within 1..3600");
     audioProbe = { storageRoot, sessionTtlSeconds: ttl };
     if (env.AUDIO_PROBE_ENABLED === "oss") {
-      const fields = [
+      const credentialMode = env.TIMENOOK_PROBE_OSS_CREDENTIAL_MODE || "sts";
+      const keyPrefix = env.TIMENOOK_PROBE_OSS_KEY_PREFIX || undefined;
+      if (
+        !["sts", "static"].includes(credentialMode) ||
+        !validOssKeyPrefix(keyPrefix) ||
+        (credentialMode === "static" &&
+          (!keyPrefix?.match(/^timenook(?:\/|$)/) ||
+            env.TIMENOOK_PROBE_OSS_SECURITY_TOKEN?.trim() ||
+            env.TIMENOOK_PROBE_OSS_EXPIRES_AT?.trim()))
+      )
+        throw new ConfigurationError(
+          "Invalid OSS credential mode or project key prefix",
+        );
+      for (const field of [
         "BUCKET",
         "REGION",
         "ACCESS_KEY_ID",
         "ACCESS_KEY_SECRET",
-        "SECURITY_TOKEN",
-        "EXPIRES_AT",
-      ] as const;
-      for (const field of fields)
+      ])
         if (!env[`TIMENOOK_PROBE_OSS_${field}`]?.trim())
           throw new ConfigurationError(
-            "TimeNook probe requires complete independent OSS STS configuration",
+            "TimeNook probe requires complete OSS credentials",
           );
-      const oss: ProbeOssConfig = {
+      const common = {
         bucket: env.TIMENOOK_PROBE_OSS_BUCKET!,
         region: env.TIMENOOK_PROBE_OSS_REGION!,
         accessKeyId: env.TIMENOOK_PROBE_OSS_ACCESS_KEY_ID!,
         accessKeySecret: env.TIMENOOK_PROBE_OSS_ACCESS_KEY_SECRET!,
-        securityToken: env.TIMENOOK_PROBE_OSS_SECURITY_TOKEN!,
-        expiresAt: env.TIMENOOK_PROBE_OSS_EXPIRES_AT!,
+        ...(keyPrefix ? { keyPrefix } : {}),
       };
+      let oss: ProbeOssConfig;
+      if (credentialMode === "static") {
+        oss = { ...common, credentialMode: "static" };
+      } else {
+        if (
+          !env.TIMENOOK_PROBE_OSS_SECURITY_TOKEN?.trim() ||
+          !env.TIMENOOK_PROBE_OSS_EXPIRES_AT?.trim()
+        )
+          throw new ConfigurationError(
+            "TimeNook probe requires complete OSS STS configuration",
+          );
+        oss = {
+          ...common,
+          securityToken: env.TIMENOOK_PROBE_OSS_SECURITY_TOKEN,
+          expiresAt: env.TIMENOOK_PROBE_OSS_EXPIRES_AT,
+        };
+        if (
+          !Number.isFinite(Date.parse(oss.expiresAt)) ||
+          Date.parse(oss.expiresAt) <= Date.now() + 10000
+        )
+          throw new ConfigurationError("Probe OSS STS expiration is invalid");
+      }
       if (
         !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(oss.bucket) ||
-        !/^[a-z]{2}-[a-z0-9-]+$/.test(oss.region) ||
-        !Number.isFinite(Date.parse(oss.expiresAt)) ||
-        Date.parse(oss.expiresAt) <= Date.now() + 10000
+        !/^[a-z]{2}-[a-z0-9-]+$/.test(oss.region)
       )
-        throw new ConfigurationError(
-          "Probe OSS bucket/region or STS expiration is invalid",
-        );
+        throw new ConfigurationError("Probe OSS bucket/region is invalid");
       audioProbe.oss = oss;
     }
   } else if (env.AUDIO_PROBE_ENABLED)
@@ -237,12 +268,18 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
         ),
       },
       deepseek: {
+        ...(env.TIMENOOK_PROBE_DEEPSEEK_BASE_URL !== undefined
+          ? { baseUrl: env.TIMENOOK_PROBE_DEEPSEEK_BASE_URL }
+          : {}),
         apiKey: env.TIMENOOK_PROBE_DEEPSEEK_API_KEY ?? "",
         model: env.TIMENOOK_PROBE_DEEPSEEK_MODEL ?? "",
         maxTokens: Number(env.TIMENOOK_PROBE_DEEPSEEK_MAX_TOKENS),
       },
     };
     validateAiProbeConfig(aiProbe);
+    aiProbe.deepseek.baseUrl = effectiveDeepSeekBaseUrl(
+      aiProbe.deepseek.baseUrl,
+    );
   }
   return {
     aiProbe,
@@ -276,6 +313,11 @@ function connectionUrl(
 }
 
 export function validateAiProbeConfig(config: AiProbeConfig) {
+  try {
+    effectiveDeepSeekBaseUrl(config.deepseek.baseUrl);
+  } catch {
+    throw new ConfigurationError("Invalid DeepSeek candidate base URL");
+  }
   if (
     !/^[A-Za-z0-9._-]{1,80}$/.test(config.configVersion) ||
     !["volc.bigasr.auc", "volc.seedasr.auc"].includes(

@@ -6,7 +6,9 @@ export function probeStorageScope(config: ApiConfig["audioProbe"]): string {
   const oss = config?.oss;
   return createHash("sha256")
     .update(
-      oss ? `oss:${oss.bucket}:${oss.region}` : `local:${config?.storageRoot}`,
+      oss
+        ? `oss:${oss.bucket}:${oss.region}${oss.keyPrefix ? `:prefix:${oss.keyPrefix}` : ""}`
+        : `local:${config?.storageRoot}`,
     )
     .digest("hex");
 }

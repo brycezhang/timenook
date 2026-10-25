@@ -391,3 +391,95 @@ test("provider response bodies are bounded and transport failures remain unknown
     { state: "unknown", failure: "transport_or_response_unknown" },
   );
 });
+
+test("ASR accepts explicit static signing without a fabricated credential expiry but keeps URL window checks", async () => {
+  let calls = 0;
+  const provider = new DoubaoFileAsr(config, async () => {
+    calls++;
+    return new Response(null, { headers: { "X-Api-Status-Code": "20000000" } });
+  });
+  assert.equal(
+    (
+      await provider.submit(id, {
+        ...source,
+        credentialMode: "static",
+        credentialsExpireAt: null,
+      })
+    ).state,
+    "accepted",
+  );
+  assert.equal(calls, 1);
+  for (const invalid of [
+    { ...source, credentialsExpireAt: null },
+    { ...source, credentialMode: "unknown" },
+    {
+      ...source,
+      credentialMode: "static",
+      credentialsExpireAt: source.credentialsExpireAt,
+    },
+    {
+      ...source,
+      credentialMode: "static",
+      credentialsExpireAt: null,
+      expiresAt: new Date(Date.now() + 1000).toISOString(),
+    },
+  ])
+    await assert.rejects(
+      provider.submit(id, invalid as Parameters<DoubaoFileAsr["submit"]>[1]),
+      /source/i,
+    );
+  assert.equal(calls, 1);
+});
+
+test("DeepSeek relay preserves its base path and never falls back to another endpoint", async () => {
+  const input = {
+    clipId: id,
+    transcript: "合成讲述",
+    transcriptHash: "a".repeat(64),
+  };
+  for (const baseUrl of [
+    "https://cf.api.fan/v1",
+    "https://cf.api.fan/v1/",
+    "https://relay.synthetic/gateway/openai/v1/",
+  ]) {
+    const calls: string[] = [];
+    const provider = new DeepSeekText(
+      {
+        apiKey: "synthetic-relay-key",
+        model: "synthetic-model",
+        maxTokens: 1024,
+        baseUrl,
+      },
+      async (url, init) => {
+        calls.push(String(url));
+        assert.equal(
+          new Headers(init?.headers).get("Authorization"),
+          "Bearer synthetic-relay-key",
+        );
+        return new Response(null, { status: 401 });
+      },
+    );
+    assert.deepEqual(await provider.generate("story", input), {
+      state: "unknown",
+      failure: "http_error",
+    });
+    assert.deepEqual(calls, [
+      baseUrl.replace(/\/+$/, "") + "/chat/completions",
+    ]);
+  }
+  for (const baseUrl of [
+    "http://relay.synthetic/v1",
+    "https://user:secret@relay.synthetic/v1",
+    "https://relay.synthetic/v1?secret=key",
+    "https://relay.synthetic/v1/chat/completions",
+  ])
+    assert.throws(
+      () =>
+        new DeepSeekText({
+          apiKey: "synthetic",
+          model: "synthetic",
+          maxTokens: 1024,
+          baseUrl,
+        }),
+    );
+});

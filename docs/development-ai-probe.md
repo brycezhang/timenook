@@ -8,18 +8,21 @@
 
 仅在完成账号/样本准入核验后，在私有配置中显式填写以下字段；没有示例密钥、生产默认模型或商业价格。
 
-| 字段                                         | 要求                                                                                             |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `AI_PROBE_ENABLED`                           | `candidate`；默认不注册任何 AI 路由                                                              |
-| `TIMENOOK_PROBE_AI_CONFIG_VERSION`           | 1–80位字母/数字/点/下划线/连字符，记录该次候选参数版本                                           |
-| `TIMENOOK_PROBE_DOUBAO_API_KEY`              | TimeNook 独立账户的新版 API Key；本适配器不混用 legacy App-Key/Access-Key                        |
-| `TIMENOOK_PROBE_DOUBAO_RESOURCE_ID`          | 显式选择已开通标准版 `volc.bigasr.auc`（1.0）或 `volc.seedasr.auc`（2.0）；不支持极速/闲时版混用 |
-| `TIMENOOK_PROBE_DOUBAO_FETCH_WINDOW_SECONDS` | 操作员经取源测试确定的窗口，整数1–43190秒；没有默认值或已实测承诺                                |
-| `TIMENOOK_PROBE_DEEPSEEK_API_KEY`            | TimeNook 独立官方 API 凭据                                                                       |
-| `TIMENOOK_PROBE_DEEPSEEK_MODEL`              | 账号实际可用的明确模型 ID；官方当前示例 `deepseek-flash` 仅是候选资料，代码不将其设为默认        |
-| `TIMENOOK_PROBE_DEEPSEEK_MAX_TOKENS`         | 明确的输出预算，整数1–32768；上限是探针保护界限，非已验证模型能力/套餐额度                       |
+| 字段                                         | 要求                                                                                                                       |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `AI_PROBE_ENABLED`                           | `candidate`；默认不注册任何 AI 路由                                                                                        |
+| `TIMENOOK_PROBE_AI_CONFIG_VERSION`           | 1–80位字母/数字/点/下划线/连字符，记录该次候选参数版本                                                                     |
+| `TIMENOOK_PROBE_DOUBAO_API_KEY`              | TimeNook 独立账户的新版 API Key；本适配器不混用 legacy App-Key/Access-Key                                                  |
+| `TIMENOOK_PROBE_DOUBAO_RESOURCE_ID`          | 显式选择已开通标准版 `volc.bigasr.auc`（1.0）或 `volc.seedasr.auc`（2.0）；不支持极速/闲时版混用                           |
+| `TIMENOOK_PROBE_DOUBAO_FETCH_WINDOW_SECONDS` | 操作员经取源测试确定的窗口，整数1–43190秒；没有默认值或已实测承诺                                                          |
+| `TIMENOOK_PROBE_DEEPSEEK_API_KEY`            | 按 [ADR 0011](adr/0011-shared-oss-and-deepseek.md) 复用 deed 的 DeepSeek API key，仅在私有文件保存                         |
+| `TIMENOOK_PROBE_DEEPSEEK_BASE_URL`           | 当前按 deed 配置 Packy OpenAI 兼容基址 `https://cf.api.fan/v1`，请求路径追加 `/chat/completions`；旧调用省略时兼容官方地址 |
+| `TIMENOOK_PROBE_DEEPSEEK_MODEL`              | 账号实际可用的明确模型 ID；官方当前示例 `deepseek-flash` 仅是候选资料，代码不将其设为默认                                  |
+| `TIMENOOK_PROBE_DEEPSEEK_MAX_TOKENS`         | 明确的输出预算，整数1–32768；上限是探针保护界限，非已验证模型能力/套餐额度                                                 |
 
 真实取源还需要 T02 的完整 `TIMENOOK_PROBE_OSS_*` STS 配置及 `AUDIO_PROBE_ENABLED=oss`。local-simulator 允许封存及创建记录，推进转写返回409；不会把本机地址发给供应商。测试仅替换外部网络，真实运行没有模拟模型回退。
+
+根目录 `.env.probe-local` 的 `TIMENOOK_PROBE_DOUBAO_API_KEY` 是当前豆包 ASR key 的填写位置；同时填写资源 ID 和取源窗口。共用配置来源、尚缺的 STS/模型参数及启用条件见[共用服务配置](development-shared-services.md)。该入口只配置受控探针，不代表正式业务 Worker 已接通真实供应商。
 
 每个 run 固定无秘密配置快照、提示词 `promptVersion=t03-v2`、输出契约 `outputContract=t03-v2` 及包含凭据的配置摘要。任何资源、模型、预算、配置/提示词/输出契约版本或 AI Key 改变，旧 run 的创建重放、非终态推进和新生成返回409；需恢复原配置查询原任务，或人工核实外部任务后创建明确的新测试 run，不能把新 run 宣称为原任务恢复。密钥只在进程配置里，数据库仅存不可逆摘要，响应不返回摘要或凭据。OSS STS 可更新，但必须仍是原 bucket/region。`t03-v1` 的既有结果可按原字段审计读取，不转换成新契约；不能用旧 UUID 执行 v2 提示词或结构。
 

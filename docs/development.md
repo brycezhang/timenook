@@ -25,6 +25,8 @@ Docker Compose 项目名为 timenook-dev，PostgreSQL 监听 127.0.0.1:54329，R
 
 ## 开发入口
 
+与 deed 共用 ECS、OSS 和 DeepSeek 的来源、豆包 ASR key 填写位置及阶段性测试边界见[共用服务配置](development-shared-services.md)。
+
 ```bash
 pnpm dev             # 现有小程序页面源码的浏览器预览，127.0.0.1:5173
 pnpm dev:api         # 构建并启动 API，127.0.0.1:3417；修改后重新运行

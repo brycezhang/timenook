@@ -24,12 +24,14 @@ import {
   DoubaoConfig,
   DoubaoFileAsr,
   DeepSeekText,
+  DeepSeekConfig,
+  effectiveDeepSeekBaseUrl,
 } from "./ai-providers";
 
 export interface AiProbeConfig {
   configVersion: string;
   doubao: DoubaoConfig;
-  deepseek: { apiKey: string; model: string; maxTokens: number };
+  deepseek: DeepSeekConfig;
 }
 export interface AiRunCommand {
   requestId: string;
@@ -47,6 +49,7 @@ function configuration(config: AiProbeConfig) {
       fetchWindowSeconds: config.doubao.fetchWindowSeconds,
     },
     deepseek: {
+      baseUrl: effectiveDeepSeekBaseUrl(config.deepseek.baseUrl),
       model: config.deepseek.model,
       maxTokens: config.deepseek.maxTokens,
       thinking: "disabled",

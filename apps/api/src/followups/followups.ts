@@ -27,7 +27,10 @@ import type {
   PlanContent,
 } from "@timenook/contracts";
 import { claimRecordingCommand } from "../media/recording-command";
-import type { StoryComposerInput } from "../probe/ai-providers";
+import {
+  effectiveDeepSeekBaseUrl,
+  type StoryComposerInput,
+} from "../probe/ai-providers";
 type FollowupInput = Omit<StoryComposerInput, "transcripts" | "preferences"> & {
   currentQuestion: ActualPlanQuestion;
   history: ActualPlanQuestion[];
@@ -73,6 +76,7 @@ export class Followups {
     return g
       ? {
           version: g.configVersion,
+          baseUrl: effectiveDeepSeekBaseUrl(g.deepseek.baseUrl),
           model: g.deepseek.model,
           maxTokens: g.deepseek.maxTokens,
           credentialHash: hash(g.deepseek.apiKey),

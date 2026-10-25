@@ -1534,3 +1534,105 @@ test("v1 synthetic persisted results remain readable but their UUIDs cannot run 
     nock.cleanAll();
   }
 });
+
+test("a relay endpoint change cannot replay or advance a frozen run with the same model and credentials", async () => {
+  const fixture = await ossFixture();
+  const aiProbe = {
+    ...candidate,
+    deepseek: { ...candidate.deepseek, baseUrl: "https://cf.api.fan/v1/" },
+  };
+  const initial = await createApplication({ ...fixture.enabled, aiProbe });
+  let input!: ReturnType<typeof command>;
+  let frozenConfiguration: Record<string, any>;
+  try {
+    input = command(await fixture.clip(initial));
+    const created = await request(
+      initial,
+      fixture.identity.token,
+      "POST",
+      "ai/runs",
+      input,
+    );
+    assert.equal(created.statusCode, 201);
+    frozenConfiguration = created.json().data.configuration;
+  } finally {
+    await initial.close();
+  }
+  let calls = 0;
+  for (const baseUrl of [
+    "https://other-relay.synthetic/v1",
+    "https://cf.api.fan/other/v1",
+  ]) {
+    const changed = await createApplication(
+      {
+        ...fixture.enabled,
+        aiProbe: { ...aiProbe, deepseek: { ...aiProbe.deepseek, baseUrl } },
+      },
+      {
+        aiFetch: async () => {
+          calls++;
+          return new Response(null, {
+            headers: { "X-Api-Status-Code": "20000000" },
+          });
+        },
+      },
+    );
+    try {
+      assert.equal(
+        (
+          await request(
+            changed,
+            fixture.identity.token,
+            "POST",
+            "ai/runs",
+            input,
+          )
+        ).statusCode,
+        409,
+      );
+      assert.equal(
+        (
+          await request(
+            changed,
+            fixture.identity.token,
+            "POST",
+            `ai/runs/${input.requestId}/advance`,
+            {},
+          )
+        ).statusCode,
+        409,
+      );
+    } finally {
+      await changed.close();
+    }
+  }
+  const equivalent = await createApplication({
+    ...fixture.enabled,
+    aiProbe: {
+      ...aiProbe,
+      deepseek: { ...aiProbe.deepseek, baseUrl: "https://cf.api.fan/v1" },
+    },
+  });
+  try {
+    assert.equal(
+      (
+        await request(
+          equivalent,
+          fixture.identity.token,
+          "POST",
+          "ai/runs",
+          input,
+        )
+      ).statusCode,
+      201,
+    );
+    assert.equal(
+      frozenConfiguration!.deepseek.baseUrl,
+      "https://cf.api.fan/v1",
+    );
+    assert.equal(calls, 0);
+  } finally {
+    await equivalent.close();
+    nock.cleanAll();
+  }
+});
