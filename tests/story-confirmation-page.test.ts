@@ -521,7 +521,7 @@ for (const surface of ["correction", "photos", "settings"] as const) {
   }
 }
 
-test("project page distinguishes real optional-followup, transcription and story tasks without counting a followup as a confirmed story", async () => {
+test("project page distinguishes real optional-followup, transcription, story and book tasks without counting a task as a confirmed story", async () => {
   const h = harness("project");
   h.page.onLoad({ projectId });
   const showing = h.page.onShow();
@@ -553,6 +553,14 @@ test("project page distinguishes real optional-followup, transcription and story
       nextAction: "leave_and_return",
       retryable: false,
     },
+    {
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      projectId,
+      kind: "render_book",
+      state: "queued",
+      nextAction: "leave_and_return",
+      retryable: false,
+    },
   ];
   h.respond(1, actual);
   await showing;
@@ -560,6 +568,7 @@ test("project page distinguishes real optional-followup, transcription and story
   assert.equal(h.page.data.taskRows[0].stateLabel, "失败");
   assert.equal(h.page.data.taskRows[1].kindLabel, "录音转写");
   assert.equal(h.page.data.taskRows[2].kindLabel, "故事整理");
+  assert.equal(h.page.data.taskRows[3].kindLabel, "书稿生成");
   assert.equal(h.page.data.pending, 1);
   assert.equal(h.page.data.confirmed, 0);
   assert.equal(h.page.data.liveStories.length, 1);
@@ -704,7 +713,7 @@ test("correction page preserves paragraph sources, records reasons and notes, an
   h.page.onUnload();
 });
 
-test("renamed live project title is read afresh by book and account tabs without demo content", async () => {
+test("renamed live project title is fresh in account while book waits for a generated snapshot without demo content", async () => {
   const settings = harness("settings");
   settings.page.onLoad({ projectId });
   const showing = settings.page.onShow();
@@ -736,9 +745,21 @@ test("renamed live project title is read afresh by book and account tabs without
   const book = harness("book");
   book.page.onLoad({ projectId });
   const bookShowing = book.page.onShow();
-  book.respond(0, renamed);
+  assert.equal(book.requests[0].url, `${base}/projects/${projectId}/book`);
+  book.respond(0, {
+    projectId,
+    inputHash: "a".repeat(64),
+    cover: { version: 0, salutation: "", photoAssetId: null },
+    coverPhotoOptions: [],
+    directory: { version: 1, contentHash: "b".repeat(64), chapters: [] },
+    eligibleStories: [],
+    current: null,
+    accessExpiresAt: null,
+    draftAccess: { allowed: true, expiresAt: null },
+  });
   await bookShowing;
-  assert.equal(book.page.data.overview.bookTitle, "小路与岁月");
+  assert.equal(book.page.data.version, null);
+  assert.match(book.page.data.stateLabel, /生成书稿/);
   book.page.account();
   assert.equal(
     book.routes[book.routes.length - 1],

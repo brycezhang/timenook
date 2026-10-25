@@ -22,6 +22,7 @@ export function livePageAllowed(page: string): boolean {
     "edit-story",
     "settings",
     "book",
+    "manuscript",
     "account",
   ].includes(page);
 }

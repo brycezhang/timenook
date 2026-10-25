@@ -1,5 +1,5 @@
 import { readFile, writeFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { chromium } from "@playwright/test";
 import { create as createFont } from "fontkit";
@@ -19,8 +19,9 @@ try {
   const inputBytes = await readFile(input),
     sourceBook = JSON.parse(inputBytes);
   const book = sourceBook;
+  const product = book.scope === "synthetic-product-book";
   if (
-    book.scope !== "synthetic-local-probe" ||
+    (!product && book.scope !== "synthetic-local-probe") ||
     typeof book.title !== "string" ||
     !book.title ||
     !Array.isArray(book.chapters) ||
@@ -43,7 +44,16 @@ try {
     font = createFont(fontBytes);
   const allText = [
     book.title,
-    ...book.chapters.flatMap((c) => [c.title, ...c.paragraphs]),
+    ...(product ? [book.salutation ?? ""] : []),
+    ...(book.provenanceNotice ? [book.provenanceNotice] : []),
+    ...book.chapters.flatMap((c) => [
+      c.title,
+      ...c.paragraphs,
+      c.sectionTitle ?? "",
+      c.provenance ?? "",
+      ...(c.notes ?? []),
+      ...(c.photos ?? []).map((p) => p.caption ?? ""),
+    ]),
   ].join("");
   if (allText.length > 100000) throw Error("BOOK_TEXT_LIMIT");
   for (const ch of allText)
@@ -51,14 +61,58 @@ try {
       throw Error("MISSING_FONT_GLYPH");
   const photos = [],
     entries = [];
+  async function loadProductPhoto(photo) {
+    if (
+      !/^[a-f0-9-]{36}\.png$/.test(photo.file) ||
+      typeof photo.caption !== "string" ||
+      photo.caption.length > 5000 ||
+      ![photo.widthMm, photo.heightMm].every(
+        (n) => Number.isFinite(n) && n > 0,
+      ) ||
+      photo.widthMm > 116 ||
+      photo.heightMm > 165
+    )
+      throw Error("INVALID_PHOTO");
+    const bytes = await readFile(join(dirname(input), photo.file));
+    if (bytes.length > 16777216 || sha(bytes) !== photo.sha256)
+      throw Error("PHOTO_INTEGRITY_FAILED");
+    photos.push({ sha256: photo.sha256, caption: photo.caption });
+    return {
+      ...photo,
+      data: `data:image/png;base64,${bytes.toString("base64")}`,
+    };
+  }
+  if (product) {
+    if (typeof book.salutation !== "string" || book.salutation.length > 120)
+      throw Error("INVALID_COVER");
+    if (book.coverPhoto)
+      book.coverPhoto = await loadProductPhoto(book.coverPhoto);
+  }
   for (const chapter of book.chapters) {
     if (
       Object.keys(chapter).some(
         (k) =>
-          !["title", "paragraphs", "photoDirectory", "entryId"].includes(k),
+          ![
+            "title",
+            "paragraphs",
+            "photoDirectory",
+            "entryId",
+            ...(product
+              ? ["photos", "sectionTitle", "provenance", "notes"]
+              : []),
+          ].includes(k),
       )
     )
       throw Error("INVALID_BOOK");
+    if (product) {
+      const loaded = [];
+      if (!Array.isArray(chapter.photos) || chapter.photos.length > 128)
+        throw Error("INVALID_PHOTO");
+      for (const photo of chapter.photos) {
+        loaded.push(await loadProductPhoto(photo));
+      }
+      chapter.photos = loaded;
+    }
     if (chapter.photoDirectory) {
       if (typeof chapter.photoDirectory !== "string")
         throw Error("INVALID_PHOTO");
@@ -100,9 +154,11 @@ try {
         throw Error("INVALID_ENTRY");
       const base = new URL(book.entryBaseUrl);
       if (
-        base.protocol !== "http:" ||
-        !["localhost", "127.0.0.1"].includes(base.hostname) ||
-        base.pathname !== "/timenook/v1/probes/print/entries/" ||
+        (product
+          ? base.protocol !== "https:"
+          : base.protocol !== "http:" ||
+            !["localhost", "127.0.0.1"].includes(base.hostname) ||
+            base.pathname !== "/timenook/v1/probes/print/entries/") ||
         base.search ||
         base.hash ||
         base.username ||
@@ -118,7 +174,9 @@ try {
       entries.push({
         id: chapter.entryId,
         url,
-        kind: "ordinary-QR-local-probe",
+        kind: product
+          ? "original-audio-version-entry"
+          : "ordinary-QR-local-probe",
       });
     }
   }
@@ -161,7 +219,7 @@ try {
     join(output, "manifest.json"),
     JSON.stringify(
       {
-        scope: "synthetic-local-probe",
+        scope: book.scope,
         productionReady: false,
         candidate: {
           widthMm: 148,

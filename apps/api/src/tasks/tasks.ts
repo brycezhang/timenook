@@ -1,4 +1,5 @@
 import { Followups } from "../followups/followups";
+import { Books } from "../books/books";
 import { Stories } from "../stories/stories";
 import { probeStorageScope } from "../probe/storage-scope";
 import { ApiProperty } from "@nestjs/swagger";
@@ -14,6 +15,7 @@ import {
   Header,
   HttpCode,
   Injectable,
+  Optional,
   Inject,
   OnModuleDestroy,
   BadRequestException,
@@ -127,6 +129,7 @@ export class ProductionTasks implements OnModuleDestroy {
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(AI_FETCH) transport: typeof fetch,
     @Inject(TASK_OBJECTS) private readonly objects: ProbeObjects,
+    @Optional() private readonly books?: Books,
   ) {
     this.db = new PrismaClient({ datasourceUrl: config.databaseUrl });
     if (config.generation)
@@ -649,6 +652,7 @@ export class ProductionTasks implements OnModuleDestroy {
       where: { id },
       select: { kind: true },
     });
+    if (kind?.kind === "render_book") return this.books?.run(id);
     if (kind && kind.kind !== "transcribe_audio") return this.runText(id);
     const claimed = await this.claim(id);
     if (!claimed) return;
@@ -827,6 +831,8 @@ export class ProductionTasks implements OnModuleDestroy {
     tx: Prisma.TransactionClient,
     task: ProductionTask,
   ) {
+    if (task.kind === "render_book")
+      return this.books ? this.books.retryAllowed(tx, task) : false;
     if (task.kind !== "transcribe_audio") {
       if (
         task.state !== "failed" ||
@@ -891,6 +897,14 @@ export class ProductionTasks implements OnModuleDestroy {
       where: { id, projectId },
     });
     if (!initial) throw new NotFoundException();
+    if (initial.kind === "render_book") {
+      if (!this.books) throw new ConflictException();
+      await this.books.retryIn(tx, initial, actorId, actorRealm, key);
+      return this.view(
+        tx,
+        await tx.productionTask.findUniqueOrThrow({ where: { id } }),
+      );
+    }
     if (
       !(initial.kind !== "transcribe_audio"
         ? await this.textOwner(initial).grantIn(tx, initial)
@@ -982,6 +996,8 @@ export class ProductionTasks implements OnModuleDestroy {
           const task = await tx.productionTask.findFirst({
             where: { id, projectId },
           });
+          // Collection-only assistance cannot dispatch a private book render.
+          if (task?.kind === "render_book") throw new ForbiddenException();
           const clip =
             task?.kind === "transcribe_audio"
               ? await tx.recordingClip.findFirst({

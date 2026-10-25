@@ -156,7 +156,7 @@ onMounted(() => {
         v-if="canReadRuntime"
         :type="view === 'tasks' ? 'primary' : 'default'"
         @click="view = 'tasks'"
-        >转写任务</Button
+        >处理任务</Button
       >
       <Button
         v-if="canManageCare"

@@ -18,9 +18,12 @@ function validate(value: ProjectOverview, projectId: string) {
         task &&
         task.projectId === projectId &&
         typeof task.id === "string" &&
-        ["transcribe_audio", "compose_story", "ask_followup"].includes(
-          task.kind,
-        ),
+        [
+          "transcribe_audio",
+          "compose_story",
+          "ask_followup",
+          "render_book",
+        ].includes(task.kind),
     ) ||
     !value.summary ||
     typeof value.nextStep !== "string" ||

@@ -1,3 +1,30 @@
+<block wx:if="{{live}}">
+  <view class="page live-manuscript">
+    <view class="title">完整书稿</view>
+    <view wx:if="{{status}}" class="note section">{{status}}</view>
+    <block wx:if="{{version}}">
+      <view class="manuscript-cover section"><view class="eyebrow">时光里 · 岁月成书</view><view class="title">{{version.snapshot.cover.title}}</view><view wx:if="{{version.snapshot.cover.salutation}}" class="cover-salutation-display">{{version.snapshot.cover.salutation}}</view><image wx:if="{{coverImage}}" class="book-cover-photo" src="{{coverImage}}" mode="aspectFit" /><view wx:if="{{version.snapshot.cover.photo}}" class="note">{{version.snapshot.cover.photo.caption}}</view><view>第 {{version.version}} 版 · {{version.pageCount || '待核对'}} 页</view></view>
+      <button class="btn section" bindtap="openPdf" disabled="{{busy || version.state !== 'ready'}}">打开完整 PDF</button>
+      <view wx:if="{{coverStatus}}" class="note section">{{coverStatus}}</view>
+      <view class="note section">请逐页核对 PDF 中的全文、照片、原声入口和页数。</view>
+      <view wx:for="{{version.snapshot.chapters}}" wx:for-item="chapter" wx:key="key">
+        <view class="title section">{{chapter.title}}</view>
+        <view wx:for="{{chapter.stories}}" wx:for-item="story" wx:key="id" class="manuscript-chapter">
+          <view class="title">{{story.title}}</view>
+          <text wx:for="{{story.paragraphs}}" wx:key="index" class="manuscript-body">{{item}}</text>
+          <view wx:for="{{story.photos}}" wx:key="assetId" class="note section">照片说明：{{item.caption || '无说明'}}。照片见完整 PDF。</view>
+          <view class="note section">{{story.provenance.label}}</view>
+          <view wx:if="{{story.entry}}" class="note section">本篇关联本人原声，入口位置见完整 PDF。</view>
+        </view>
+      </view>
+      <view class="note section">{{version.snapshot.provenance.notice}}</view>
+      <view class="note section">合成测试规格 {{version.snapshot.specification.widthMm}} × {{version.snapshot.specification.heightMm}} mm，尚未开放正式生产。</view>
+    </block>
+    <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">重新核对本版状态</button>
+    <button class="btn secondary section" bindtap="book">返回成书总览</button>
+  </view>
+</block>
+<block wx:else="">
 <view class="page with-dock manuscript"
   ><view class="manuscript-cover"
     ><view class="eyebrow">时 光 里 · 岁 月 成 书</view
@@ -48,3 +75,5 @@
     >{{pending?'请先确认所有待确认故事':'本机演示 · 不会提交真实生产'}}</view
   ></view
 >
+
+</block>

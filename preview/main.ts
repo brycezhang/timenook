@@ -1,6 +1,7 @@
 import "./base.css";
 import { read as readProject } from "../miniprogram/services/store";
 import { dataMode, livePageAllowed } from "../miniprogram/services/mode";
+import { closePdfDocument, openPdfDocument } from "./pdf-viewer";
 import {
   createRecorder,
   createAudio,
@@ -141,6 +142,14 @@ const wx: any = {
           url.pathname,
         ));
     const supported =
+      ((!options.method || options.method === "GET") &&
+        /\/v1\/projects\/[a-f0-9-]{36}\/book(?:\/versions\/[a-f0-9-]{36})?$/.test(
+          url.pathname,
+        )) ||
+      (options.method === "POST" &&
+        /\/v1\/projects\/[a-f0-9-]{36}\/book\/(?:cover|directory|versions(?:\/[a-f0-9-]{36}\/retry)?)$/.test(
+          url.pathname,
+        )) ||
       storyConfirmationSupported ||
       photoSupported ||
       ((!options.method || options.method === "GET") &&
@@ -258,6 +267,7 @@ const wx: any = {
   getFileSystemManager() {
     return {
       unlink(o: any) {
+        closePdfDocument(o.filePath);
         void removeBlob(o.filePath)
           .then(() => o.success?.({}))
           .catch(() => o.fail?.({}));
@@ -305,8 +315,13 @@ const wx: any = {
     const url = new URL(o.url, location.origin);
     if (
       url.origin !== location.origin ||
-      !/\/v1\/projects\/[a-f0-9-]{36}\/interviews\/[a-f0-9-]{36}\/(?:photos\/[a-f0-9-]{36}\/assets\/[a-f0-9-]{36}|clips\/[a-f0-9-]{36})\/content$/.test(
-        url.pathname,
+      !(
+        /\/v1\/projects\/[a-f0-9-]{36}\/interviews\/[a-f0-9-]{36}\/(?:photos\/[a-f0-9-]{36}\/assets\/[a-f0-9-]{36}|clips\/[a-f0-9-]{36})\/content$/.test(
+          url.pathname,
+        ) ||
+        /\/v1\/projects\/[a-f0-9-]{36}\/book\/versions\/[a-f0-9-]{36}\/pdf$/.test(
+          url.pathname,
+        )
       )
     ) {
       o.fail?.({ errMsg: "downloadFile:fail" });
@@ -324,6 +339,11 @@ const wx: any = {
         }),
       )
       .catch(() => o.fail?.({ errMsg: "downloadFile:fail" }));
+  },
+  openDocument(o: any) {
+    void openPdfDocument(overlay, o, (filePath) => {
+      void removeBlob(filePath).catch(() => {});
+    });
   },
   chooseMedia(o: any) {
     const input = document.createElement("input");
@@ -456,6 +476,7 @@ function renderElement(el: Element, scope: any, parent: Node) {
     }
     if (attr.name === "mode") {
       if (v === "aspectFill") out.style.objectFit = "cover";
+      if (v === "aspectFit") out.style.objectFit = "contain";
       if (v === "widthFix") out.style.height = "auto";
       continue;
     }
