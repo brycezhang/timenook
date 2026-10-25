@@ -449,8 +449,13 @@ test("an actual Redis Worker submits saved audio and releases while the provider
     const delivery = wake(runtime, original.id).then(() => {
       targetCompleted = true;
     });
-    await atProvider;
-    const [first] = await completed;
+    const earlyCompletion = delivery.then(() => {
+      throw new Error(
+        "Target Worker completed before its provider gate was released",
+      );
+    });
+    await Promise.race([atProvider, earlyCompletion]);
+    const [first] = await Promise.race([completed, earlyCompletion]);
     assert.notEqual(first.id, original.id);
     assert.equal((await task(p)).state, "submitting");
     assert.equal(targetCompleted, false);

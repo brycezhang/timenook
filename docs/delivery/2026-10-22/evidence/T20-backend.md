@@ -117,3 +117,17 @@ CI `40173428942` 在既有转写用例中失败：断言目标任务已进入 `w
 修复复用文件内既有 `wake(runtime, targetId)`：其他 job 完成时该目标 Promise 必须仍未结束；释放目标供应商响应后才等待目标 job 完成，并通过公开 HTTP 核对 `waiting_provider`。`finally` 释放夹具、还原 transport 并关闭真实 Worker；既有等待上限没有放宽。定向 **1/1 GREEN**（`review-transcription-target-green.log`），完整转写文件一次 **24/24**（`review-transcription-target-final.log`，47.93秒），API typecheck/test-compile、格式及 diff 检查通过。所有日志位于 `/tmp/timenook-t20-logs/`。
 
 本次逻辑变更仅 `apps/api/test/transcription.test.ts` 及本验证记录。此前冻结的16个后端可执行/契约/SQL文件逐一 SHA256 比较保持不变，不重复运行未受影响的 Book 或渲染器；独立测试修复的最终提交及替代 CI 由 root 记录。
+
+### 22463a8 正式 Standards 审查后的测试失败分支收敛
+
+审查指出上述用例还有独立等待：目标 job 若在进入供应商前拒绝或完成，`wake` 已结束并清除其计时器，而 `atProvider` 永不结束；若目标等待拒绝，清理也可能无法抵达。现在供应商进入信号与非目标完成事件都分别通过 `Promise.race` 连接同一 `delivery`；目标提前完成明确抛出 `Target Worker completed before its provider gate was released`，既有 `wake` 的超时拒绝也穿透这两处等待，随后执行原 `finally`。没有修改 helper、原4秒等待上限或增加计时器/sleep。
+
+可丢弃故障证明脚本 `/tmp/timenook-t20-logs/transcription-wait-fault-proof.py` 从当前编译测试生成临时副本，只改变已有外部夹具信号或 AI 授权输入，仍运行真实 PostgreSQL/Redis、Worker 和公开 HTTP。分别验证：
+
+- `review-transcription-wait-early-completion.log`：目标未获 AI 授权而真实完成该次 job，进入供应商前立即以明确错误退出；清理后公开状态为 queued/AI_AUTHORIZATION_REQUIRED。
+- `review-transcription-wait-provider-entry-timeout.log`：不宣告供应商进入，目标响应保持阻塞；既有 `wake` 超时拒绝第一处等待，`finally` 释放 gate 后关闭 Worker。
+- `review-transcription-wait-other-completion-timeout.log`：目标已进入供应商，但两条提交响应均被夹具阻塞，没有其他完成事件；同一 `wake` 超时拒绝第二处等待，`finally` 释放后关闭 Worker。
+
+这三项故障注入均按预期以错误退出（不是声称它们是成功业务用例），并在 transport 已还原、gate 已释放且 Worker 已关闭后记录 `WAIT_PROOF_CLEANUP_OK`；没有未处理的 Promise 拒绝。所有临时 `.test.js` 副本都在脚本 `finally` 删除，最终确认不存在，不会被后续测试 glob 收集；永久测试中没有新增故障开关或日志。
+
+正常定向 **1/1 GREEN**：`review-transcription-wait-green.log`；完整转写文件再次运行一次 **24/24**：`review-transcription-wait-final.log`（47.73秒）。API typecheck/test-compile、格式及 diff 检查通过。仅转写测试和本记录改动，原16个冻结后端文件哈希继续一致；Book、SQL、渲染器及代表样书没有变化。
