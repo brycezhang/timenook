@@ -423,12 +423,39 @@ test("a sealed recording restores one durable transcription task across replay w
 });
 
 test("an actual Redis Worker submits saved audio and releases while the provider processes", async () => {
-  const p = await sealedInput();
+  const p = await sealedInput(),
+    original = await task(p),
+    previous = providerTransport;
+  // A second real task makes a non-target completion available even in an isolated run.
+  await sealedInput();
+  let entered!: () => void, release!: () => void;
+  const atProvider = new Promise<void>((resolve) => (entered = resolve)),
+    responseGate = new Promise<void>((resolve) => (release = resolve));
+  providerTransport = async (input, init) => {
+    if (
+      String(input).endsWith("/submit") &&
+      new Headers(init?.headers).get("X-Api-Request-Id") ===
+        original.providerRequestId
+    ) {
+      entered();
+      await responseGate;
+    }
+    return previous(input, init);
+  };
   const runtime = await startProductionWorker(app);
   try {
     const completed = once(runtime.worker, "completed");
-    await runtime.recoverDue();
-    await completed;
+    let targetCompleted = false;
+    const delivery = wake(runtime, original.id).then(() => {
+      targetCompleted = true;
+    });
+    await atProvider;
+    const [first] = await completed;
+    assert.notEqual(first.id, original.id);
+    assert.equal((await task(p)).state, "submitting");
+    assert.equal(targetCompleted, false);
+    release();
+    await delivery;
     const tasks = data(
       await request(
         "GET",
@@ -439,6 +466,8 @@ test("an actual Redis Worker submits saved audio and releases while the provider
     );
     assert.equal(tasks[0].state, "waiting_provider");
   } finally {
+    release();
+    providerTransport = previous;
     await runtime.close();
   }
 });

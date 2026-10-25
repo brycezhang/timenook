@@ -107,3 +107,13 @@ root 已逐页查看先前相同版式的13页，并对最终变化的第4/5页�
 `review-source-retention-green.log` 为对应公开 HTTP **1/1 RED→GREEN**：原确认稿到期后 PDF200，下载字节 SHA256、inputHash、snapshotHash及整个冻结内容保持；PDF期限仍为第400天，草稿能力按第1天关闭，所有来源操作403。另验证配置变化仍拒绝PDF、真实书名修改使旧版 obsolete、发起人共享撤回后 Context/Version/PDF 均403，未把到期分离当作全局授权豁免。
 
 完整 Book 文件最终 **21/21**（`review-source-book-final.log`），包括排队任务在来源到期后拒绝 Worker 发布、保持原快照且不产生 PDF、重试403，以及前述原图期限、长说明/附记、封面、队列恢复等回归。API typecheck/build/test-compile 全部通过，`git diff --check` 通过。SQL和渲染器没有改动，未重跑无关 API 或印刷核心；当前样书 SHA256 仍为 `238e77324c523ef697c3389d094d16bfb6acdeb18c44e1b94a3ae369b773460b`，已有逐页视觉及25→26迁移证据继续按未受影响范围使用。前端实时期限清理/权限重查和最终整仓、固定提交审查及替代CI由 root 记录。
+
+### ba44ab0 CI 中共享 Worker 完成事件的测试竞态
+
+CI `40173428942` 在既有转写用例中失败：断言目标任务已进入 `waiting_provider` 时，实际仍是 `submitting`。该用例使用 `once(worker, "completed")` 等待任意 job；`recoverDue` 同时调度前序及当前任务，真实 Worker 并发为2，其他 job 先完成并不表示目标任务已经完成提交。这次只修复测试，没有改变任务、供应商或生产 Worker 行为。
+
+确定性复现仍通过公开 HTTP 保存两条真实合成录音，并使用现有外部供应商夹具的 Promise 阻塞目标提交。另一个真实 Redis job 完成时，明确核对其 ID 不等于目标，目标 HTTP 状态仍是 `submitting`。保留原 `once` 等待的版本稳定复现同一失败（`review-transcription-target-red.log`，1.69秒），没有依赖随机时序或增加 sleep。
+
+修复复用文件内既有 `wake(runtime, targetId)`：其他 job 完成时该目标 Promise 必须仍未结束；释放目标供应商响应后才等待目标 job 完成，并通过公开 HTTP 核对 `waiting_provider`。`finally` 释放夹具、还原 transport 并关闭真实 Worker；既有等待上限没有放宽。定向 **1/1 GREEN**（`review-transcription-target-green.log`），完整转写文件一次 **24/24**（`review-transcription-target-final.log`，47.93秒），API typecheck/test-compile、格式及 diff 检查通过。所有日志位于 `/tmp/timenook-t20-logs/`。
+
+本次逻辑变更仅 `apps/api/test/transcription.test.ts` 及本验证记录。此前冻结的16个后端可执行/契约/SQL文件逐一 SHA256 比较保持不变，不重复运行未受影响的 Book 或渲染器；独立测试修复的最终提交及替代 CI 由 root 记录。
