@@ -1039,3 +1039,60 @@ model StoryCareGrant {
  @@unique([projectId,evidenceRef])
  @@map("story_care_grants")
 }
+model BookVersion {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ version Int
+ taskId String @unique @map("task_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ operatorId String @map("operator_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ inputHash String @map("input_hash") @db.Char(64)
+ snapshotHash String @map("snapshot_hash") @db.Char(64)
+ snapshot Json
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([projectId,version])
+ @@unique([projectId,id])
+ @@map("book_versions")
+}
+model BookOutput {
+ bookId String @id @map("book_id") @db.Uuid
+ objectKey String @map("object_key")
+ sha256 String @db.Char(64)
+ bytes Int
+ pageCount Int @map("page_count")
+ manifest Json
+ inspection Json
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@map("book_outputs")
+}
+model BookAudioEntry {
+ id String @id
+ projectId String @map("project_id") @db.Uuid
+ storyId String @map("story_id") @db.Uuid
+ revisionId String @map("revision_id") @db.Uuid
+ contentHash String @map("content_hash") @db.Char(64)
+ audio Json
+ @@unique([projectId,storyId,revisionId])
+ @@map("book_audio_entries")
+}
+model BookStoryReference {
+ projectId String @map("project_id") @db.Uuid
+ bookId String @map("book_id") @db.Uuid
+ storyId String @map("story_id") @db.Uuid
+ revisionId String @map("revision_id") @db.Uuid
+ contentHash String @map("content_hash") @db.Char(64)
+ @@id([bookId,storyId])
+ @@map("book_story_references")
+}
+model BookCommand {
+ projectId String @map("project_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ action String
+ key String
+ requestHash String @map("request_hash") @db.Char(64)
+ resultId String @map("result_id")
+ @@id([projectId,actorId,action,key])
+ @@map("book_commands")
+}

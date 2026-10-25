@@ -1,3 +1,4 @@
+import { Books, BooksController, BOOK_OBJECTS } from "./books/books";
 import { Followups, FollowupsController } from "./followups/followups";
 import {
   StoryCare,
@@ -158,6 +159,36 @@ export async function createApplication(
     recordingObjects?: ProbeObjects;
   } = {},
 ): Promise<NestFastifyApplication> {
+  if (config.books) {
+    let url: URL;
+    try {
+      url = new URL(config.books.entryBaseUrl);
+    } catch {
+      throw new ConfigurationError("Book original-entry URL is invalid");
+    }
+    if (
+      config.environment !== "test" ||
+      config.books.mode !== "synthetic-local" ||
+      !config.recording ||
+      !config.books.storageRoot.startsWith("/") ||
+      !/^synthetic-/.test(config.books.specificationVersion) ||
+      !/^synthetic-/.test(config.books.provenanceVersion) ||
+      (config.books.maxPhotoBytes !== undefined &&
+        (!Number.isSafeInteger(config.books.maxPhotoBytes) ||
+          config.books.maxPhotoBytes < 1 ||
+          config.books.maxPhotoBytes > 33554432)) ||
+      url.protocol !== "https:" ||
+      !url.hostname.endsWith(".invalid") ||
+      url.pathname !== "/timenook/audio/" ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    )
+      throw new ConfigurationError(
+        "Book rendering requires explicit isolated synthetic specification and provenance",
+      );
+  }
   const generation = config.generation;
   if (
     generation &&
@@ -340,6 +371,7 @@ export async function createApplication(
         ? [
             RecordingsController,
             StoriesController,
+            ...(config.books ? [BooksController] : []),
             FollowupsController,
             StoryCareController,
             AdminStoryCareController,
@@ -376,6 +408,19 @@ export async function createApplication(
       { provide: AI_FETCH, useValue: options.aiFetch ?? fetch },
       ...(config.recording
         ? [
+            ...(config.books
+              ? [
+                  Books,
+                  {
+                    provide: BOOK_OBJECTS,
+                    useValue:
+                      options.recordingObjects ??
+                      (config.recording!.oss
+                        ? new OssProbeObjects(config.recording!.oss)
+                        : new LocalProbeObjects(config.recording!.storageRoot)),
+                  },
+                ]
+              : []),
             Recordings,
             Stories,
             Followups,

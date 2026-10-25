@@ -178,6 +178,13 @@ export class SessionClient {
       `/projects/${projectId}/interviews/${interviewId}/clips/${intentId}/content`,
     );
   }
+  async downloadBook(projectId: string, versionId: string) {
+    if (![projectId, versionId].every((id) => /^[a-f0-9-]{36}$/.test(id)))
+      throw new ApiFailure("INVALID_RESPONSE");
+    return this.downloadContent(
+      `/projects/${projectId}/book/versions/${versionId}/pdf`,
+    );
+  }
   private async downloadContent(path: string) {
     const generation = this.generation,
       stored = this.stored();

@@ -1240,6 +1240,45 @@ export class Participation implements OnModuleDestroy {
     return !!(await this.processingGrant(tx, input));
   }
 
+  /** Book rendering is local material processing, not a new AI submission. */
+  async bookGrantIn(
+    tx: Prisma.TransactionClient,
+    input: {
+      projectId: string;
+      subjectId: string;
+      bindingVersion: number;
+      accessEpoch: number;
+      operatorId: string;
+      processingGrant?: Prisma.JsonValue;
+    },
+  ): Promise<Prisma.JsonObject | null> {
+    this.policy();
+    const project = await this.project(tx, input.projectId, true),
+      subject = await this.subject(tx, input.projectId);
+    if (
+      subject.id !== input.subjectId ||
+      subject.bindingVersion !== input.bindingVersion ||
+      project.accessEpoch !== input.accessEpoch ||
+      !(await this.status(tx, project, subject, input.operatorId)).canRead
+    )
+      return null;
+    const sessions = await Promise.all(
+      ["collection", "sharing"].map((purpose) =>
+        this.latestAssisted(tx, project.id, purpose as AssistedPurpose),
+      ),
+    );
+    const grant: Prisma.JsonObject = {
+      operatorId: input.operatorId,
+      sessions: sessions
+        .filter((row) => this.activeAssisted(row, project, subject))
+        .map((row) => row!.id),
+    };
+    return input.processingGrant &&
+      !isDeepStrictEqual(grant, input.processingGrant)
+      ? null
+      : grant;
+  }
+
   private latestAssisted(
     tx: Prisma.TransactionClient,
     projectId: string,

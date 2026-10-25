@@ -16,6 +16,15 @@ export interface ApiConfig {
   payments?: WechatPayConfig;
   // No production D08 approval exists. This mode only exercises isolated tests.
   participation?: { mode: "synthetic-d08" };
+  books?: {
+    mode: "synthetic-local";
+    storageRoot: string;
+    entryBaseUrl: string;
+    specificationVersion: string;
+    provenanceVersion: string;
+    /** May only lower the local 32 MiB preparation ceiling. */
+    maxPhotoBytes?: number;
+  };
   photos?: {
     mode: "synthetic-local";
     placement: { widthMm: number; heightMm: number };

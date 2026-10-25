@@ -13,7 +13,7 @@ export interface ProductionTaskView {
   id: string;
   projectId: string;
   clipId: string | null;
-  kind: "transcribe_audio" | "compose_story" | "ask_followup";
+  kind: "transcribe_audio" | "compose_story" | "ask_followup" | "render_book";
   state: ProductionTaskState;
   inputHash: string;
   queuedAt: string;

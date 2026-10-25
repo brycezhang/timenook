@@ -1,11 +1,13 @@
 import { readFile, writeFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas } from "@napi-rs/canvas";
 import jsQR from "jsqr";
-const [input, output] = process.argv.slice(2);
+const [input, output, scaleArg] = process.argv.slice(2);
+const scale = Number(scaleArg ?? 2);
 let doc;
 try {
+  if (![2, 3].includes(scale)) throw Error("INVALID_PDF_SCALE");
   if (
     process.env.PRINT_PROBE_ENABLED !== "synthetic-local" ||
     process.env.NODE_ENV === "production"
@@ -22,7 +24,7 @@ try {
   const pages = [];
   for (let n = 1; n <= doc.numPages; n++) {
     const page = await doc.getPage(n),
-      viewport = page.getViewport({ scale: 2 });
+      viewport = page.getViewport({ scale });
     if (viewport.width * viewport.height > 4_000_000)
       throw Error("PDF_PIXEL_LIMIT");
     const canvas = createCanvas(
@@ -43,13 +45,21 @@ try {
     const text = (await page.getTextContent()).items
       .map((i) => i.str ?? "")
       .join("");
+    const operators = await page.getOperatorList();
     pages.push({
       number: n,
       file,
       text,
-      qr: code ? [code.data] : [],
-      widthPt: viewport.width / 2,
-      heightPt: viewport.height / 2,
+      qr: code?.data ? [code.data] : [],
+      imageCount: operators.fnArray.filter((op) =>
+        [
+          OPS.paintImageXObject,
+          OPS.paintInlineImageXObject,
+          OPS.paintImageXObjectRepeat,
+        ].includes(op),
+      ).length,
+      widthPt: viewport.width / scale,
+      heightPt: viewport.height / scale,
     });
     page.cleanup();
   }
@@ -58,7 +68,7 @@ try {
     JSON.stringify(
       {
         renderer: "pdfjs-dist 5.4.624",
-        scale: 2,
+        scale,
         pageCount: doc.numPages,
         pages,
       },

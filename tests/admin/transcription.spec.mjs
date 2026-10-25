@@ -620,9 +620,9 @@ test("the operator page lists sanitized task failures and executes an audited re
     .fill(await generate({ secret: enrollment.trim() }));
   await page.getByRole("button", { name: "验证并登录", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "转写任务", exact: true }),
+    page.getByRole("button", { name: "处理任务", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "转写任务", exact: true }).click();
+  await page.getByRole("button", { name: "处理任务", exact: true }).click();
   await expect(
     page.getByText("PROVIDER_FAILED", { exact: true }).first(),
   ).toBeVisible();

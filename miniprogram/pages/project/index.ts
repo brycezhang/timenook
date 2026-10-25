@@ -19,6 +19,7 @@ function taskLabels(task: ProductionTaskView) {
     transcribe_audio: "录音转写",
     compose_story: "故事整理",
     ask_followup: "可选追问",
+    render_book: "书稿生成",
   }[task.kind];
   const stateLabel = {
     waiting_inputs: "等待原声转写",

@@ -14,14 +14,22 @@ const canRetry = computed(() =>
   props.permissions.includes(ADMIN_PERMISSIONS.retryTasks),
 );
 const intents = new Map<string, string>();
+const kindLabel: Record<ProductionTaskView["kind"], string> = {
+  transcribe_audio: "录音转写",
+  compose_story: "故事整理",
+  ask_followup: "可选追问",
+  render_book: "书稿生成",
+};
 const stateLabel = (state: string) =>
   ({
     queued: "排队中",
     submitting: "正在处理",
     waiting_provider: "等待供应商",
-    succeeded: "转写完成",
+    succeeded: "处理完成",
     no_speech: "无有效语音",
-    failed: "转写失败",
+    failed: "处理失败",
+    obsolete: "内容已变化",
+    waiting_inputs: "等待输入准备完成",
     manual_review: "需要人工接管",
     invalidated: "处理授权已失效",
   })[state] ?? state;
@@ -67,16 +75,17 @@ onMounted(refresh);
   <section class="runtime">
     <div class="page-title">
       <div>
-        <h1>转写任务</h1>
-        <p>按已保存原声恢复处理，查看失败与人工接管状态。</p>
+        <h1>处理任务</h1>
+        <p>查看转写、追问、故事整理与书稿生成的处理状态。</p>
       </div>
     </div>
     <Alert v-if="error" type="error" :message="error" role="alert" />
     <Alert v-if="notice" type="info" :message="notice" role="status" />
     <Button :loading="busy" @click="refresh">重新查询任务</Button>
-    <p v-if="!rows.length && !busy" class="section">暂无转写任务。</p>
+    <p v-if="!rows.length && !busy" class="section">暂无处理任务。</p>
     <article v-for="task in rows" :key="task.id" class="audit-section section">
       <h2>{{ stateLabel(task.state) }}</h2>
+      <p>任务类型：{{ kindLabel[task.kind] }}</p>
       <p>任务：{{ task.id }}</p>
       <p>项目：{{ task.projectId }}</p>
       <p v-if="task.errorCode">{{ task.errorCode }}</p>

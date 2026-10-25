@@ -1,4 +1,4 @@
-export const TEMPLATE_VERSION = "s0-a5-synthetic-v1";
+export const TEMPLATE_VERSION = "t20-a5-v2";
 export const CSS = `
 @page { size: 148mm 210mm; margin: 0; }
 * { box-sizing: border-box; }
@@ -30,7 +30,10 @@ export function paginate({ book, guesses }) {
     sheet.className = "page";
     const header = document.createElement("div");
     header.className = "header";
-    header.textContent = "本地合成样书";
+    header.textContent =
+      book.scope === "synthetic-product-book"
+        ? "书稿预览 · 制作规格待核验"
+        : "本地合成样书";
     const content = document.createElement("div");
     content.className = "content";
     const footer = document.createElement("div");
@@ -67,10 +70,17 @@ export function paginate({ book, guesses }) {
   }
   block(text("h1", book.title));
   block(text("p", "技术试验文件 · 规格待印厂确认"));
+  if (book.scope === "synthetic-product-book") {
+    content = page();
+    block(text("h2", book.title));
+    block(text("p", "岁月成书 · 本人讲述"));
+  }
   content = page();
   block(text("h2", "目录"));
   const tocStart = pages.length;
   for (let i = 0; i < book.chapters.length; i++) {
+    if (book.chapters[i].sectionTitle)
+      block(text("p", book.chapters[i].sectionTitle));
     const row = document.createElement("div");
     row.className = "toc-row";
     row.append(
@@ -80,12 +90,33 @@ export function paginate({ book, guesses }) {
     block(row);
   }
   const tocPages = pages.length - tocStart + 1;
+  function originalEntry(chapter) {
+    const figure = document.createElement("figure"),
+      img = document.createElement("img");
+    img.className = "qr";
+    img.src = chapter.qr;
+    figure.append(
+      img,
+      text(
+        "figcaption",
+        book.scope === "synthetic-product-book"
+          ? "本人原声入口 · 访问需授权"
+          : "合成原声入口 · 需测试身份",
+      ),
+    );
+    block(figure);
+  }
   for (const chapter of book.chapters) {
     content = page();
     const heading = text("h2", chapter.title);
+    if (chapter.sectionTitle) block(text("p", chapter.sectionTitle));
     content.append(heading);
     if (!fits(heading)) throw Error("BLOCK_TOO_LARGE");
     entries.push({ title: chapter.title, page: pages.length });
+    if (book.scope === "synthetic-product-book") {
+      if (chapter.provenance) block(text("p", chapter.provenance));
+      if (chapter.qr) originalEntry(chapter);
+    }
     for (const paragraph of chapter.paragraphs) {
       let chars = Array.from(paragraph);
       while (chars.length) {
@@ -119,25 +150,29 @@ export function paginate({ book, guesses }) {
         content = page();
       }
     }
-    if (chapter.photo) {
+    for (const photo of chapter.photos ??
+      (chapter.photo ? [chapter.photo] : [])) {
       const figure = document.createElement("figure"),
         img = document.createElement("img");
       img.className = "photo";
-      img.src = chapter.photo.data;
-      img.style.width = `${chapter.photo.widthMm}mm`;
-      img.style.height = `${chapter.photo.heightMm}mm`;
+      img.src = photo.data;
+      img.style.width = `${photo.widthMm}mm`;
+      img.style.height = `${photo.heightMm}mm`;
       figure.append(img);
+      if (photo.caption) figure.append(text("figcaption", photo.caption));
       block(figure);
     }
-    if (chapter.qr) {
-      const figure = document.createElement("figure"),
-        img = document.createElement("img");
-      img.className = "qr";
-      img.src = chapter.qr;
-      figure.append(img, text("figcaption", "合成原声入口 · 需测试身份"));
-      block(figure);
-    }
+    if (chapter.qr && book.scope !== "synthetic-product-book")
+      originalEntry(chapter);
+    for (const note of chapter.notes ?? []) block(text("p", note));
+    if (chapter.provenance && book.scope !== "synthetic-product-book")
+      block(text("p", chapter.provenance));
     if (pages.length > 128) throw Error("PAGE_LIMIT");
+  }
+  if (book.provenanceNotice) {
+    content = page();
+    block(text("h2", "制作说明"));
+    block(text("p", book.provenanceNotice));
   }
   for (const sheet of pages) {
     const box = sheet.querySelector(".content");
