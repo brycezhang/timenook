@@ -58,7 +58,7 @@
 
 - 原生微信小程序保留，Vben 采用 web-antd 路线；后端 NestJS/Fastify 模块化单体，API、Worker 和 PDF 渲染分进程。
 - Prisma/PostgreSQL 保存业务事实、约束、版本、Inbox/Outbox；BullMQ/ioredis 负责调度，Redis 丢失可恢复。
-- 阿里云 ECS 与 API 域名复用 legal-agent，TimeNook 以 `/timenook` 路径分流，见 [ADR 0009](../../adr/0009-shared-ecs-api-path.md)。2026-10-25 按 [ADR 0011](../../adr/0011-shared-oss-and-deepseek.md) 进一步共用 deed 的 OSS 配置和 DeepSeek API key，覆盖旧票据对应独立账号/资源要求；应用进程、数据库、队列及微信身份继续独立。ASR 为豆包文件识别，追问/整理为 DeepSeek，供应商经服务端适配器接入，无自动跨供应商回退。共用 Bucket 的前缀、STS 与清理隔离须独立验证。
+- 阿里云 ECS 与 API 域名复用 legal-agent，TimeNook 以 `/timenook` 路径分流，见 [ADR 0009](../../adr/0009-shared-ecs-api-path.md)。2026-10-25 按 [ADR 0011](../../adr/0011-shared-oss-and-deepseek.md) 进一步共用 deed 的 OSS AccessKey 和 DeepSeek API key，覆盖旧票据对应凭据独立要求；Bucket 按后续 [ADR 0013](../../adr/0013-dedicated-oss-bucket.md) 独立为私有 `timenook`。应用进程、数据库、队列及微信身份继续独立。ASR 为豆包文件识别，追问/整理为 DeepSeek，供应商经服务端适配器接入，无自动跨供应商回退。对象前缀、STS 与清理隔离须独立验证。
 - 沿用 T01 已验证的 Node/pnpm 与依赖基线；实际升级时补受影响兼容验证，不重复初始化验收。
 - 登录账号、讲述者 subject 和操作人分别记录；关系、付款、管理员身份都不自动授予私人内容或本人确认权限。
 - 录音先持久保存及封存再转写；原声、原转录和 AI 稿独立，用户等待时可离开、补录和恢复。

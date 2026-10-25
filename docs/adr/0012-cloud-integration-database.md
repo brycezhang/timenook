@@ -9,7 +9,7 @@ date: 2026-10-25
 
 本轮部署为受控联调环境：独立 Linux 用户和 `timenook-api.service`，仅监听回环端口 `4310`，Nginx 将 `/timenook/` 剥离一次后转发。网页使用本地 Vite 代理，小程序本地构建使用公网 HTTPS API 基址。服务器保存凭据，客户端只配置公开地址。
 
-OSS 按 ADR 0011 复用 deed 配置，显式静态凭据模式只在服务端签名，所有探针对象限定于 `timenook/probe/`。STS 仍是可选模式；静态凭据没有虚构的 STS 到期时间，上传及取源 URL 仍各自限时。
+初次联调的 OSS 按 ADR 0011 复用 deed 配置；同日后续 [ADR 0013](0013-dedicated-oss-bucket.md) 将 Bucket 独立为 `timenook`，继续沿用 OSS AccessKey。显式静态凭据模式只在服务端签名，所有探针对象限定于 `timenook/probe/`。STS 仍是可选模式；静态凭据没有虚构的 STS 到期时间，上传及取源 URL 仍各自限时。
 
 用户进一步明确 DeepSeek 通过 Packy 中转。显式沿用 deed 的 `https://cf.api.fan/v1` Base URL 和相同 Packy key，以 Chat Completions 调用账号可用 DeepSeek 模型；端点参与配置快照及变更校验，防止换地址后复用旧任务。具体模型及输出预算是本次候选参数，业务准入、质量和费用仍分别验收。
 

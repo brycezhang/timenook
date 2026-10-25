@@ -2,6 +2,8 @@
 
 API、OSS 与数据库已在 deed 阿里云环境完成本轮受控联调，网页在本机运行。最终 DeepSeek 请求通过 Packy 的 `https://cf.api.fan/v1/chat/completions`；真实合成样本的封存、转写、追问和故事整理均已通过。真实微信登录、支付、设备录音及正式发布/恢复未执行。
 
+同日后续按 [ADR 0013](../../adr/0013-dedicated-oss-bucket.md) 将 OSS Bucket 切换为独立私有 `timenook`。本文早期 OSS/AI 验证使用原 `lawyer-agents` Bucket；新 Bucket 的运行证据单独见 [Bucket 切换记录](oss-bucket.md)。
+
 ## 当前运行交接
 
 | 项目         | 已核实状态                                                                                                       |
@@ -13,7 +15,7 @@ API、OSS 与数据库已在 deed 阿里云环境完成本轮受控联调，网�
 | 服务端 env   | `/data/server/timenook/shared/.env`，root:timenook、mode 640；不含前端发布内容                                   |
 | 数据库       | deed 同一连接主机、端口、账号、密码，实际数据库为 `timenook`；25 条迁移完成                                      |
 | Redis        | deed 云端连接，TimeNook 独立 `timenook-cloud` 键前缀                                                             |
-| OSS          | deed 同一配置，静态 AK 仅服务端使用，所有对象限定于 `timenook/probe/`                                            |
+| OSS          | 当前为独立私有 Bucket `timenook`（上海），静态 AK 沿用 deed，仅服务端使用；对象前缀 `timenook/probe/`，见 [切换记录](oss-bucket.md) |
 | ASR          | 用户提供的豆包 key，`volc.seedasr.auc`，候选取源窗口 600 秒                                                      |
 | DeepSeek     | deed 同一 Packy key；Base URL `https://cf.api.fan/v1`，候选模型 `deepseek-flash`、输出预算 1024                  |
 | AI probe     | `AI_PROBE_ENABLED=candidate`，配置版本 `cloud-packy-2026-10-25`，需要独立短期 probe Bearer                       |

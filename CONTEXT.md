@@ -10,7 +10,7 @@
 - 工程基线：[wutong技术栈对齐](docs/architecture/wutong技术栈对齐.md)，参考wutong-admin的工程组织及ECS/Nginx/systemd发布方式。
 - 上线参数：[决策与待定项](docs/architecture/决策与待定项.md)。
 - 部署入口：与 legal-agent 共用阿里云 ECS 和 `lawyerapi.threeminreading.com`，TimeNook 使用 `/timenook` 前缀；应用、数据及身份独立。目标与已核实状态见 [ADR 0009](docs/adr/0009-shared-ecs-api-path.md)。
-- 2026-10-25 配置调整：与 deed（legal-agent）共用 OSS 配置和 DeepSeek API key；应用、数据库、队列及微信身份仍独立。此项覆盖旧文档对这两项凭据独立的要求，见 [ADR 0011](docs/adr/0011-shared-oss-and-deepseek.md)。豆包 ASR 配置入口及本地测试边界见[共用服务配置](docs/development-shared-services.md)。
+- 2026-10-25 配置调整：OSS 使用独立私有 Bucket `timenook`（上海），停止与 deed（legal-agent）混用 Bucket，见 [ADR 0013](docs/adr/0013-dedicated-oss-bucket.md)。OSS AccessKey 与 DeepSeek API key 继续按 [ADR 0011](docs/adr/0011-shared-oss-and-deepseek.md) 沿用 deed 配置；应用、业务数据、队列及微信身份独立。豆包 ASR 配置入口及本地测试边界见[共用服务配置](docs/development-shared-services.md)。
 - 当前联调拓扑：API、OSS、数据库在 deed 阿里云环境；数据库复用 deed 连接配置并分库为 `timenook`，网页/小程序在本地运行，见 [ADR 0012](docs/adr/0012-cloud-integration-database.md)。这是受控联调部署，微信登录/支付和正式上线验收仍未执行；实际结果单独见[云端验证记录](docs/delivery/2026-10-25/cloud-integration.md)。
 - 业务语言：[GLOSSARY.md](GLOSSARY.md)。
 - 交互原型：[原型说明](design/figma-prototype/README.md)。

@@ -1,6 +1,6 @@
 # 共用服务配置与云端联调
 
-当前按用户确认的拓扑运行：API、OSS、数据库使用 deed 所在阿里云环境，小程序与网页在本地。数据库复用 deed 连接配置，新库名为 `timenook`。决策见 [ADR 0011](adr/0011-shared-oss-and-deepseek.md)、[ADR 0012](adr/0012-cloud-integration-database.md)；[云端验证记录](delivery/2026-10-25/cloud-integration.md)与此前的[纯本地测试](delivery/2026-10-25/local-stage.md)分别保留。
+当前按用户确认的拓扑运行：API、OSS、数据库使用 deed 所在阿里云环境，小程序与网页在本地。OSS 使用独立私有 Bucket `timenook`，AccessKey 继续沿用 deed；数据库复用 deed 连接配置，新库名为 `timenook`。决策见 [ADR 0011](adr/0011-shared-oss-and-deepseek.md)、[ADR 0012](adr/0012-cloud-integration-database.md)、[ADR 0013](adr/0013-dedicated-oss-bucket.md)；最新 [Bucket 切换记录](delivery/2026-10-25/oss-bucket.md)、此前的[云端验证记录](delivery/2026-10-25/cloud-integration.md)与[纯本地测试](delivery/2026-10-25/local-stage.md)分别保留。
 
 ## 运行位置
 
@@ -14,7 +14,7 @@
 | 服务端凭据 | `/data/server/timenook/shared/.env`，root:timenook、mode 640                |
 | 数据库     | deed 同一 RDS 连接主机、账号、密码；数据库 `timenook`，独立业务表和迁移历史 |
 | Redis      | 复用 deed 的云端连接；应用键前缀 `timenook-cloud`                           |
-| OSS        | deed 的同一 Bucket/region/AccessKey，探针对象前缀 `timenook/probe/`         |
+| OSS        | 独立私有 Bucket `timenook`，上海 `cn-shanghai`，沿用 deed AccessKey；探针前缀 `timenook/probe/` |
 | 网页       | 本地 `http://127.0.0.1:5173/`，Vite 代理到上述公网 API                      |
 | 小程序     | 本地开发者工具加载 `dist/miniprogram/`，API 基址为上述公网 HTTPS 地址       |
 
@@ -55,8 +55,8 @@ pnpm check:native
 AUDIO_PROBE_ENABLED=oss
 TIMENOOK_PROBE_OSS_CREDENTIAL_MODE=static
 TIMENOOK_PROBE_OSS_KEY_PREFIX=timenook/probe
-TIMENOOK_PROBE_OSS_BUCKET=
-TIMENOOK_PROBE_OSS_REGION=
+TIMENOOK_PROBE_OSS_BUCKET=timenook
+TIMENOOK_PROBE_OSS_REGION=cn-shanghai
 TIMENOOK_PROBE_OSS_ACCESS_KEY_ID=
 TIMENOOK_PROBE_OSS_ACCESS_KEY_SECRET=
 TIMENOOK_PROBE_DOUBAO_API_KEY=
@@ -64,7 +64,7 @@ TIMENOOK_PROBE_DOUBAO_RESOURCE_ID=volc.seedasr.auc
 TIMENOOK_PROBE_DOUBAO_FETCH_WINDOW_SECONDS=600
 ```
 
-Bucket/region/AccessKey 已从 deed 服务器环境映射，豆包 key/资源已从用户填写的本机 `.env.probe-local` 安全同步；上面不列出值。600 秒仅为本次合成样本的候选取源窗口，不是服务时延承诺。后续更新本机文件不会自动同步服务器，须单独更新服务端私有配置并重启本项目服务。
+Bucket 已独立为 `timenook`，地域为上海；AccessKey 继续从 deed 服务器环境映射，豆包 key/资源已从用户填写的本机 `.env.probe-local` 安全同步，密钥不在上面列出。本机 `.env.shared-local` 的 `ALI_OSS_BUCKET` 和 `.env.probe-local` 的 `TIMENOOK_PROBE_OSS_BUCKET` 均为 `timenook`；不能重新从 deed 覆盖 Bucket 名。600 秒仅为本次合成样本的候选取源窗口，不是服务时延承诺。后续更新本机文件不会自动同步服务器，须单独更新服务端私有配置并重启本项目服务。
 
 静态模式强制 `timenook` 或其子路径作为前缀，禁止混入 `SECURITY_TOKEN`、`EXPIRES_AT`。长期 AK 只在服务端签名；客户端只获得精确暂存 key 的限时表单，最终 key 不开放上传。上传签名最多 120 秒，ASR 取源 URL 另按配置限时；静态凭据没有虚构的 STS 过期时间。可选 STS 模式继续支持原到期校验。
 

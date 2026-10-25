@@ -5,6 +5,8 @@ date: 2026-10-25
 
 # 与 deed 共用 OSS 配置和 DeepSeek API key
 
+同日后续 [ADR 0013](0013-dedicated-oss-bucket.md) 已覆盖本文的共用 Bucket 决定：当前使用独立私有 Bucket `timenook`；OSS AccessKey 和 DeepSeek 配置继续沿用。下文保留首次配置及联调的历史边界。
+
 用户确认真实环境继续使用 deed（legal-agent）所在 ECS，OSS 使用同一套配置，DeepSeek 使用同一个 API key。此决定补充 ADR 0009，并覆盖 ADR 0007、0009 及早期规格对 OSS 资源/凭据、DeepSeek 账号/凭据必须独立的要求；TimeNook 的进程、数据库、队列、微信身份和授权记录继续独立。
 
 共用 OSS Bucket 时，TimeNook 对象使用专属前缀，清理只作用于本项目对象；共用配置不允许修改 deed 的对象或生命周期规则。现有云端探针仍要求短期 STS，不能把长期 AccessKey 当作 STS 或伪造过期时间。前缀适配、STS 获取及权限验证仍需工程和真实环境证据，不能由本决策追认完成。
