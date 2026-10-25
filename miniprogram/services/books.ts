@@ -6,6 +6,13 @@ import type {
 import { sessionClient } from "./session";
 import { paymentKey } from "./payments";
 const uuid = (value: string) => /^[a-f0-9-]{36}$/.test(value);
+function access(value: { allowed: boolean; expiresAt: string | null }) {
+  return (
+    value &&
+    typeof value.allowed === "boolean" &&
+    (value.expiresAt === null || Number.isFinite(Date.parse(value.expiresAt)))
+  );
+}
 function validProject(id: string) {
   if (!uuid(id)) throw new Error("项目编号无效");
 }
@@ -23,6 +30,7 @@ function version(value: BookVersionView, projectId: string): BookVersionView {
     typeof value.snapshot.cover?.title !== "string" ||
     !Array.isArray(value.snapshot.chapters) ||
     !value.task ||
+    !access(value.draftAccess) ||
     !value.coverPhotoAccess ||
     typeof value.coverPhotoAccess.allowed !== "boolean" ||
     (value.coverPhotoAccess.expiresAt !== null &&
@@ -45,7 +53,10 @@ function context(value: BookContext, projectId: string): BookContext {
   if (
     !value ||
     value.projectId !== projectId ||
-    !/^[a-f0-9]{64}$/.test(value.inputHash) ||
+    !access(value.draftAccess) ||
+    (value.draftAccess.allowed
+      ? !value.inputHash || !/^[a-f0-9]{64}$/.test(value.inputHash)
+      : value.inputHash !== null) ||
     !Array.isArray(value.directory?.chapters) ||
     !Number.isSafeInteger(value.directory.version) ||
     !Array.isArray(value.eligibleStories) ||

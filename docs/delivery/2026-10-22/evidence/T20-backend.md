@@ -94,3 +94,16 @@ root 已逐页查看先前相同版式的13页，并对最终变化的第4/5页�
 真实 HTTP 回归使用一份合成套餐，`derivedPhotos` 1天，`bookPdf`/`confirmedStories` 400天。先完成真实照片/本人版本确认、封面选择及固定 PDF；注入一个受控交付事实，验证原图片200与较早的预览到期时间。只推进 JavaScript Date 越过照片期限后，原图片403，而 Book/确定版本/PDF 均继续200、ready；快照、inputHash 和下载文件 SHA256 全部保持。新字段此时变为 false/null，页面可以只清理自身封面缩略图，不误清除仍可读取的书稿/PDF。未知 Media403 仍须前端重新读取当前 Book 区分全局授权变化，不豁免实际身份或共享撤回。
 
 `review-derived-cover-red.log` 记录真实原图片403/PDF200已经成立，但字段缺失；`review-derived-cover-green.log` 新用例 **1/1**通过。最后 API typecheck/build/test-compile 通过；此前相关 Book **18/18**与印刷 **13/13**按未改渲染/快照范围复用，没有冒称19项是同次全量。没有重跑无关 API 套件，没有修改 SQL、生产政策或最终样书；当前238e…PDF及其视觉检查继续适用。前端对应的原图清理/到期/撤回验证及最终整仓 CI 由 root 记录。
+
+### 7f421fb 正式审查后的确认稿与 PDF 独立期限
+
+最终 Spec 审查发现第二处具体 D03 耦合：读取或下载已冻结 PDF 仍要求原确认稿未到期，并将两类期限合并。既有接受的固定政策允许 `confirmedStories` 1天、`bookPdf` 400天，没有要求来源资料必须比 PDF 保留更久。`review-source-retention-red.log` 以真实录音/照片/本人确认及固定渲染生成 ready PDF，只推进受控交付事实对应的 JavaScript Date 越过确认稿期限，复现下载403（预期200）。
+
+- 冻结书稿读取和两次文件交付鉴权按 `bookPdf` 自身期限及当前操作身份/共享许可执行；`accessExpiresAt` 只合并这些期限。内部当前输入比较不受来源类别到期阻断，内容、入书决定、身份 epoch、封面/目录及渲染配置变化仍使旧稿失效。
+- 生成、封面与目录修改、重试（包括幂等重放）以及 Worker 领取/发布保留明确的 `confirmedStories` 检查；涉及照片的渲染继续要求有效 `derivedPhotos`。未放宽任何商业期限或生产许可。
+- Context 与 Version 新增实时 `draftAccess={allowed,expiresAt}`，有效期为操作身份/PDF与确认稿的最早期限；来源缺少规则或已到期时为 false/null。该字段不进入任何不可变快照、输入 hash、PDF hash 或渲染配置。封面原图仍由独立的 `coverPhotoAccess` 描述。
+- 来源不可用时 Context 的 `inputHash=null`，`eligibleStories` 与 `coverPhotoOptions` 为空；目录和封面仅回退到已授权的当前冻结快照，没有书稿时返回空默认值，不返回无关实时来源。Version 仍表示同一授权冻结快照，排队稿也可查看，但不能继续制作或重试。
+
+`review-source-retention-green.log` 为对应公开 HTTP **1/1 RED→GREEN**：原确认稿到期后 PDF200，下载字节 SHA256、inputHash、snapshotHash及整个冻结内容保持；PDF期限仍为第400天，草稿能力按第1天关闭，所有来源操作403。另验证配置变化仍拒绝PDF、真实书名修改使旧版 obsolete、发起人共享撤回后 Context/Version/PDF 均403，未把到期分离当作全局授权豁免。
+
+完整 Book 文件最终 **21/21**（`review-source-book-final.log`），包括排队任务在来源到期后拒绝 Worker 发布、保持原快照且不产生 PDF、重试403，以及前述原图期限、长说明/附记、封面、队列恢复等回归。API typecheck/build/test-compile 全部通过，`git diff --check` 通过。SQL和渲染器没有改动，未重跑无关 API 或印刷核心；当前样书 SHA256 仍为 `238e77324c523ef697c3389d094d16bfb6acdeb18c44e1b94a3ae369b773460b`，已有逐页视觉及25→26迁移证据继续按未受影响范围使用。前端实时期限清理/权限重查和最终整仓、固定提交审查及替代CI由 root 记录。

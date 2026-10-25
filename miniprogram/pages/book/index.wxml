@@ -3,7 +3,8 @@
     <view class="title">我的人生书</view>
     <view wx:if="{{status}}" class="section note">{{status}}</view>
     <block wx:if="{{context}}">
-      <view class="section">{{context.eligibleStories.length}} 篇故事已确认并允许入书</view>
+      <view wx:if="{{draftAvailable}}" class="section">{{context.eligibleStories.length}} 篇故事已确认并允许入书</view>
+      <view wx:if="{{sourceStatus}}" class="section note draft-access-status">{{sourceStatus}}</view>
       <view class="section book-status">{{stateLabel}}</view>
       <block wx:if="{{version}}">
         <view class="live-cover section">
@@ -24,12 +25,12 @@
         <view wx:for="{{excerpts}}" wx:key="id" class="excerpt-card">
           <view class="section-title">{{item.title}}</view><text class="excerpt-body">{{item.text}}</text>
         </view>
-        <button wx:if="{{version.state === 'failed'}}" class="btn section" bindtap="retry" disabled="{{busy}}">重试生成本版</button>
+        <button wx:if="{{version.state === 'failed'}}" class="btn section" bindtap="retry" disabled="{{busy || !draftAvailable}}">重试生成本版</button>
         <view class="note section">当前为合成测试规格，尚未开放正式生产。</view>
       </block>
-      <button class="btn section" bindtap="generate" disabled="{{busy || dirty || coverDirty || !context.eligibleStories.length || (version && (version.state === 'queued' || version.state === 'rendering'))}}">生成完整书稿</button>
-      <button class="btn secondary section" bindtap="editCover" disabled="{{busy}}">{{coverEditing ? '收起书封编辑' : '调整书封'}}</button>
-      <view wx:if="{{coverEditing && coverDraft}}" class="cover-editor section">
+      <button class="btn section" bindtap="generate" disabled="{{busy || !draftAvailable || dirty || coverDirty || !context.eligibleStories.length || (version && (version.state === 'queued' || version.state === 'rendering'))}}">生成完整书稿</button>
+      <button class="btn secondary section" bindtap="editCover" disabled="{{busy || !draftAvailable}}">{{coverEditing ? '收起书封编辑' : '调整书封'}}</button>
+      <view wx:if="{{draftAvailable && coverEditing && coverDraft}}" class="cover-editor section">
         <label>称呼<input class="cover-salutation" data-field="cover-salutation" value="{{coverDraft.salutation}}" bindinput="salutation" maxlength="120" placeholder="可留空，例如：写给一路同行的你" /></label>
         <view class="section">封面照片（可选）</view>
         <view class="note section">从本人已确认并允许入书的照片中选用。</view>
@@ -38,8 +39,8 @@
         <button class="btn section" bindtap="saveCover" disabled="{{busy || !coverDirty}}">保存书封</button>
         <view class="note section">保存后请重新生成，当前书稿保留原书封。</view>
       </view>
-      <button class="btn secondary section" bindtap="editDirectory" disabled="{{busy}}">{{editing ? '收起目录编辑' : '调整入书目录'}}</button>
-      <block wx:if="{{editing}}">
+      <button class="btn secondary section" bindtap="editDirectory" disabled="{{busy || !draftAvailable}}">{{editing ? '收起目录编辑' : '调整入书目录'}}</button>
+      <block wx:if="{{draftAvailable && editing}}">
         <view class="section note">只安排已确认且允许入书的故事。空章节不会印入书稿。</view>
         <view wx:for="{{draftRows}}" wx:for-item="chapter" wx:for-index="chapterIndex" wx:key="key" class="directory-card">
           <label>第 {{chapterIndex + 1}} 章名称<input class="directory-title" data-field="directory-title-{{chapter.key}}" value="{{chapter.title}}" data-chapter="{{chapterIndex}}" bindinput="chapterTitle" maxlength="80" /></label>

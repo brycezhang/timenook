@@ -26,7 +26,9 @@
 
 所有 POST 均须 `Idempotency-Key`。冲突或未知网络结果按原 key 查询/重放，不把超时当作已失败并另造一次书稿。小程序成书页的封面、节选、目录和页数均读取该版本；完整文稿页另提供完整 PDF。离页、换号及失权清除私有视图和下载临时文件。
 
-`BookVersionView.coverPhotoAccess` 单独返回当前封面原图的许可与期限，不写入冻结快照或 hash。原图 `derivedPhotos` 到期只清理该预览；仍在 `bookPdf`/`confirmedStories` 期限内的完整 PDF 保持可读。图片出现意外 403 时重新查询该书稿的权限，书稿拒绝访问或无法重新核验时清除私有状态。
+`BookVersionView.coverPhotoAccess` 单独返回当前封面原图的许可与期限，不写入冻结快照或 hash。原图 `derivedPhotos` 到期只清理该预览；仍在 `bookPdf` 期限内且获当前授权的完整 PDF 保持可读。图片出现意外 403 时重新查询该书稿的权限，书稿拒绝访问或无法重新核验时清除私有状态。
+
+冻结书稿的 `accessExpiresAt` 使用 `bookPdf` 与当前身份/共享权限的期限。`draftAccess` 另描述确认故事来源的编辑、生成和重试权限；`confirmedStories` 到期后，现有 PDF 仍按自身期限读取，但禁止新稿操作及继续渲染。此时总览 `inputHash` 为 null，可入书故事及封面素材选项为空，目录/书封只返回当前冻结快照或空默认值；当前内容、许可或配置变化仍会使旧稿失效。
 
 ## 本地验证
 

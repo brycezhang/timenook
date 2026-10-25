@@ -195,6 +195,7 @@ function version(state = "ready"): any {
     toc: state === "ready" ? [{ title: "故乡", page: 4 }] : null,
     renderer: null,
     accessExpiresAt: null,
+    draftAccess: { allowed: true, expiresAt: null },
     coverPhotoAccess: { allowed: true, expiresAt: null },
   };
 }
@@ -216,9 +217,134 @@ function context(current: any = version()): any {
     ],
     current,
     accessExpiresAt: null,
+    draftAccess: { allowed: true, expiresAt: null },
   };
 }
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+test("source-story retention expiry leaves a ready frozen book reachable and refuses new source edits or generation", async () => {
+  const h = harness(),
+    retained = context();
+  retained.inputHash = null;
+  retained.draftAccess = { allowed: false, expiresAt: null };
+  retained.current.draftAccess = { allowed: false, expiresAt: null };
+  retained.eligibleStories = [];
+  retained.coverPhotoOptions = [];
+  h.page.onLoad({ projectId });
+  const show = h.page.onShow();
+  h.respond(0, retained);
+  await show;
+  assert.equal(h.page.data.version?.id, versionId);
+  assert.equal(h.page.data.draftAvailable, false);
+  h.page.editDirectory();
+  h.page.addChapter();
+  h.page.editCover();
+  h.page.salutation({ detail: { value: "已到期来源的未授权修改" } });
+  await h.page.generate();
+  assert.equal(h.page.data.editing, false);
+  assert.equal(h.page.data.coverEditing, false);
+  assert.equal(h.page.data.draft, null);
+  assert.equal(h.page.data.coverDraft, null);
+  assert.equal(h.requests.length, 1);
+  h.page.manuscript();
+  assert.equal(
+    h.routes[0],
+    `/pages/manuscript/index?projectId=${projectId}&versionId=${versionId}`,
+  );
+  h.page.onUnload();
+});
+
+test("source mutations and failed-book retry stop at their known deadline before the page timer runs", async () => {
+  const h = harness(),
+    live = context(version("failed"));
+  live.draftAccess = {
+    allowed: true,
+    expiresAt: new Date(h.clock.now + 1000).toISOString(),
+  };
+  live.current.draftAccess = live.draftAccess;
+  h.page.onLoad({ projectId });
+  const show = h.page.onShow();
+  h.respond(0, live);
+  await show;
+  h.page.editDirectory();
+  h.page.addChapter();
+  h.page.editCover();
+  h.page.salutation({ detail: { value: "待保存称呼" } });
+  h.clock.now += 1000;
+  await h.page.saveDirectory();
+  await h.page.saveCover();
+  await h.page.generate();
+  await h.page.retry();
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.page.data.version.id, versionId);
+  assert.equal(h.page.data.version.state, "failed");
+  assert.equal(h.page.data.draft, null);
+  assert.equal(h.page.data.coverDraft, null);
+  h.page.onUnload();
+});
+
+test("a manuscript download crossing the source deadline still opens, then book-PDF expiry removes all private content and bytes", async () => {
+  const h = harness("manuscript"),
+    frozen = version();
+  frozen.draftAccess = {
+    allowed: true,
+    expiresAt: new Date(h.clock.now + 1000).toISOString(),
+  };
+  frozen.accessExpiresAt = new Date(h.clock.now + 60000).toISOString();
+  h.page.onLoad({ projectId, versionId });
+  const show = h.page.onShow();
+  h.respond(0, frozen);
+  await show;
+  const opening = h.page.openPdf();
+  h.clock.now += 1000;
+  h.timers[h.timers.length - 1].callback();
+  h.downloads[0].success({
+    statusCode: 200,
+    tempFilePath: "wxfile://retained-after-source.pdf",
+  });
+  await opening;
+  assert.equal(h.opened.length, 1);
+  assert.equal(h.page.data.version.id, versionId);
+  assert.ok(!h.removed.includes("wxfile://retained-after-source.pdf"));
+  h.clock.now += 59000;
+  h.timers[h.timers.length - 1].callback();
+  assert.equal(h.page.data.version, null);
+  assert.ok(h.removed.includes("wxfile://retained-after-source.pdf"));
+});
+
+test("an edit attempted at book-PDF expiry clears the whole private Book before its timer runs", async () => {
+  const h = harness(),
+    live = context();
+  live.accessExpiresAt = new Date(h.clock.now + 1000).toISOString();
+  live.current.accessExpiresAt = live.accessExpiresAt;
+  live.draftAccess.expiresAt = live.accessExpiresAt;
+  live.current.draftAccess.expiresAt = live.accessExpiresAt;
+  h.page.onLoad({ projectId });
+  const show = h.page.onShow();
+  h.respond(0, live);
+  await show;
+  h.clock.now += 1000;
+  h.page.editCover();
+  assert.equal(h.page.data.version, null);
+  assert.equal(h.page.data.context, null);
+  assert.equal(h.requests.length, 1);
+});
+
+test("an expired Book cannot navigate into its former private manuscript before its timer runs", async () => {
+  const h = harness(),
+    live = context();
+  live.accessExpiresAt = new Date(h.clock.now + 1000).toISOString();
+  live.current.accessExpiresAt = live.accessExpiresAt;
+  h.page.onLoad({ projectId });
+  const show = h.page.onShow();
+  h.respond(0, live);
+  await show;
+  h.clock.now += 1000;
+  h.page.manuscript();
+  assert.equal(h.routes.length, 0);
+  assert.equal(h.page.data.context, null);
+  assert.equal(h.page.data.version, null);
+});
 
 test("book overview freezes generation input and shows cover, table of contents, excerpt and real pages from the returned version", async () => {
   const h = harness();
@@ -350,7 +476,7 @@ test("full manuscript reads one pinned version and opens only its authenticated,
   assert.ok(h.removed.includes("wxfile://book.pdf"));
 });
 
-test("a current directory permission denial clears the private draft while preserving the login and original recordings", async () => {
+test("a current directory permission denial followed by a denied Book recheck clears the private draft while preserving login and original recordings", async () => {
   const h = harness();
   const originalKey = "private-originals";
   h.storage.set(originalKey, ["wxfile://original.mp3"]);
@@ -365,6 +491,8 @@ test("a current directory permission denial clears the private draft while prese
   });
   const save = h.page.saveDirectory();
   h.respond(1, undefined, 403);
+  await tick();
+  h.respond(2, undefined, 403);
   await save;
   assert.equal(h.page.data.context, null);
   assert.equal(h.page.data.draft, null);
@@ -372,6 +500,35 @@ test("a current directory permission denial clears the private draft while prese
   assert.deepEqual(h.storage.get(`timenook.session.v1:${base}`), login);
   assert.deepEqual(h.storage.get(originalKey), ["wxfile://original.mp3"]);
   assert.equal(h.removed.length, 0);
+  h.page.onUnload();
+});
+
+test("a denied source change rechecks Book authorization and retains a valid frozen manuscript when only source retention has expired", async () => {
+  const h = harness();
+  h.page.onLoad({ projectId });
+  const show = h.page.onShow();
+  h.respond(0, context());
+  await show;
+  h.page.editCover();
+  h.page.salutation({ detail: { value: "未保存称呼" } });
+  const save = h.page.saveCover();
+  h.respond(1, undefined, 403);
+  await tick();
+  assert.equal(h.requests[2]?.url, `${base}/projects/${projectId}/book`);
+  const retained = context();
+  retained.inputHash = null;
+  retained.draftAccess = { allowed: false, expiresAt: null };
+  retained.current.draftAccess = { allowed: false, expiresAt: null };
+  retained.eligibleStories = [];
+  h.respond(2, retained);
+  await save;
+  assert.equal(h.page.data.version.id, versionId);
+  assert.equal(h.page.data.context.inputHash, null);
+  assert.equal(h.page.data.coverDraft, null);
+  assert.equal(h.page.data.draftAvailable, false);
+  assert.equal(h.page.data.busy, false);
+  h.page.manuscript();
+  assert.equal(h.routes.length, 1);
   h.page.onUnload();
 });
 
@@ -515,6 +672,57 @@ const coverPhoto = {
   width: 600,
   height: 800,
 };
+test("an open book removes source choices and unsaved drafts at their own deadline while retaining the frozen book and PDF route", async () => {
+  const h = harness(),
+    live = context();
+  live.accessExpiresAt = new Date(h.clock.now + 60000).toISOString();
+  live.current.accessExpiresAt = live.accessExpiresAt;
+  live.draftAccess = {
+    allowed: true,
+    expiresAt: new Date(h.clock.now + 400).toISOString(),
+  };
+  live.current.draftAccess = live.draftAccess;
+  live.coverPhotoOptions = [coverPhoto];
+  live.directory = {
+    ...live.directory,
+    chapters: [
+      { key: "unprinted", title: "尚未入书的私人章名", storyRefs: [] },
+    ],
+  };
+  h.page.onLoad({ projectId });
+  const show = h.page.onShow();
+  h.respond(0, live);
+  await show;
+  h.page.editDirectory();
+  h.page.chapterTitle({
+    currentTarget: { dataset: { chapter: "0" } },
+    detail: { value: "尚未保存的私人章名" },
+  });
+  h.page.editCover();
+  h.page.salutation({ detail: { value: "尚未保存的私人称呼" } });
+  assert.ok(h.timers[h.timers.length - 1].delay <= 400);
+  h.clock.now += 400;
+  h.timers[h.timers.length - 1].callback();
+  assert.equal(h.page.data.version.id, versionId);
+  assert.equal(h.page.data.version.snapshot.cover.title, "小路与岁月");
+  assert.equal(h.page.data.context.eligibleStories.length, 0);
+  assert.equal(h.page.data.context.coverPhotoOptions.length, 0);
+  assert.equal(h.page.data.context.inputHash, null);
+  assert.equal(h.page.data.context.directory.chapters[0].title, "故乡");
+  assert.equal(h.page.data.context.cover.salutation, "");
+  assert.equal(h.page.data.draftAvailable, false);
+  assert.equal(h.page.data.draft, null);
+  assert.equal(h.page.data.coverDraft, null);
+  assert.equal(h.page.data.editing, false);
+  assert.equal(h.page.data.coverEditing, false);
+  await h.page.saveDirectory();
+  await h.page.saveCover();
+  await h.page.generate();
+  assert.equal(h.requests.length, 1);
+  h.page.manuscript();
+  assert.equal(h.routes.length, 1);
+  h.page.onUnload();
+});
 test("cover edits save a salutation and one permitted photo with a pinned version, preserve conflict drafts, then obsolete the prior book", async () => {
   const h = harness(),
     input = context();

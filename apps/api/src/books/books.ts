@@ -164,12 +164,36 @@ export class Books implements OnModuleDestroy {
         "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
     };
   }
-  private async materialTerms(tx: Prisma.TransactionClient, projectId: string) {
+  private async bookTerms(tx: Prisma.TransactionClient, projectId: string) {
     const terms = await this.terms.read(projectId, undefined, tx);
-    for (const name of ["confirmedStories", "bookPdf"])
-      if (!terms.retention?.[name] || terms.retention[name].state === "expired")
-        throw new ForbiddenException();
+    if (
+      !terms.retention?.bookPdf ||
+      terms.retention.bookPdf.state === "expired"
+    )
+      throw new ForbiddenException();
     return terms;
+  }
+  private async sourceTerms(tx: Prisma.TransactionClient, projectId: string) {
+    const terms = await this.bookTerms(tx, projectId);
+    if (
+      !terms.retention?.confirmedStories ||
+      terms.retention.confirmedStories.state === "expired"
+    )
+      throw new ForbiddenException();
+    return terms;
+  }
+  private draftAccess(
+    terms: Awaited<ReturnType<ProjectServiceTerms["read"]>>,
+    accessExpiresAt: string | null,
+  ) {
+    const rule = terms.retention?.confirmedStories,
+      expiresAt = this.expiry(accessExpiresAt, rule?.expiresAt ?? null),
+      allowed = !!(
+        rule &&
+        rule.state !== "expired" &&
+        (!expiresAt || Date.parse(expiresAt) > Date.now())
+      );
+    return { allowed, expiresAt: allowed ? expiresAt : null };
   }
   private async renderMaterialTerms(
     tx: Prisma.TransactionClient,
@@ -197,8 +221,10 @@ export class Books implements OnModuleDestroy {
       ? new Date(Math.min(...dates.map(Date.parse))).toISOString()
       : null;
   }
-  private async draftIn(tx: Prisma.TransactionClient, projectId: string) {
-    const terms = await this.materialTerms(tx, projectId);
+  // Current inputs still invalidate frozen books after source retention expires.
+  // Callers require sourceTerms separately before exposing live inputs or changing them.
+  private async inputIn(tx: Prisma.TransactionClient, projectId: string) {
+    const terms = await this.bookTerms(tx, projectId);
     const project = await tx.project.findUniqueOrThrow({
         where: { id: projectId },
       }),
@@ -372,9 +398,6 @@ export class Books implements OnModuleDestroy {
       provenance: snapshot.provenance,
       configuration: this.configuration(),
     });
-    const expiries = ["confirmedStories", "bookPdf"]
-      .map((name) => terms.retention![name].expiresAt)
-      .filter((v): v is string => !!v);
     return {
       snapshot,
       eligible,
@@ -384,9 +407,8 @@ export class Books implements OnModuleDestroy {
       invalid,
       project,
       subject,
-      retentionExpiresAt: expiries.length
-        ? new Date(Math.min(...expiries.map(Date.parse))).toISOString()
-        : null,
+      terms,
+      retentionExpiresAt: terms.retention!.bookPdf.expiresAt,
     };
   }
   private async viewIn(
@@ -421,10 +443,14 @@ export class Books implements OnModuleDestroy {
             : task.state === "queued"
               ? "queued"
               : "failed";
+    const terms = await this.bookTerms(tx, row.projectId);
+    accessExpiresAt = this.expiry(
+      accessExpiresAt,
+      terms.retention!.bookPdf.expiresAt,
+    );
     const snapshot = row.snapshot as unknown as BookSnapshot,
       coverRule = snapshot.cover.photo
-        ? (await this.terms.read(row.projectId, undefined, tx)).retention
-            ?.derivedPhotos
+        ? terms.retention?.derivedPhotos
         : undefined,
       coverExpiresAt = this.expiry(
         accessExpiresAt,
@@ -450,6 +476,7 @@ export class Books implements OnModuleDestroy {
       toc: output ? (output.manifest as any).toc.entries : null,
       renderer: output ? (output.manifest as any).renderer : null,
       accessExpiresAt,
+      draftAccess: this.draftAccess(terms, accessExpiresAt),
       coverPhotoAccess: {
         allowed: canPreviewCover,
         expiresAt: canPreviewCover ? coverExpiresAt : null,
@@ -461,27 +488,44 @@ export class Books implements OnModuleDestroy {
     projectId: string,
     accessExpiresAt: string | null,
   ): Promise<BookContext> {
-    const draft = await this.draftIn(tx, projectId),
+    const draft = await this.inputIn(tx, projectId),
       row = await tx.bookVersion.findFirst({
         where: { projectId },
         orderBy: { version: "desc" },
       });
     accessExpiresAt = this.expiry(accessExpiresAt, draft.retentionExpiresAt);
+    const draftAccess = this.draftAccess(draft.terms, accessExpiresAt),
+      frozen = row?.snapshot as unknown as BookSnapshot | undefined;
     return {
       projectId,
-      inputHash: draft.inputHash,
-      directory: draft.snapshot.directory,
-      cover: draft.cover,
-      coverPhotoOptions: draft.coverPhotoOptions,
-      eligibleStories: draft.eligible.map(
-        ({ id, revisionId, version, contentHash, title }) => ({
-          id,
-          revisionId,
-          version,
-          contentHash,
-          title,
-        }),
-      ),
+      inputHash: draftAccess.allowed ? draft.inputHash : null,
+      draftAccess,
+      directory: draftAccess.allowed
+        ? draft.snapshot.directory
+        : (frozen?.directory ?? {
+            version: 1,
+            contentHash: digest([]),
+            chapters: [],
+          }),
+      cover: draftAccess.allowed
+        ? draft.cover
+        : {
+            version: frozen?.cover.version ?? 0,
+            salutation: frozen?.cover.salutation ?? "",
+            photoAssetId: frozen?.cover.photo?.assetId ?? null,
+          },
+      coverPhotoOptions: draftAccess.allowed ? draft.coverPhotoOptions : [],
+      eligibleStories: draftAccess.allowed
+        ? draft.eligible.map(
+            ({ id, revisionId, version, contentHash, title }) => ({
+              id,
+              revisionId,
+              version,
+              contentHash,
+              title,
+            }),
+          )
+        : [],
       current: row
         ? await this.viewIn(tx, row, draft.inputHash, accessExpiresAt)
         : null,
@@ -508,6 +552,7 @@ export class Books implements OnModuleDestroy {
       authorization,
       undefined,
       async (tx, actor) => {
+        await this.sourceTerms(tx, projectId);
         const where = {
             projectId,
             actorId: actor.userId,
@@ -522,7 +567,7 @@ export class Books implements OnModuleDestroy {
           if (prior.requestHash !== requestHash) throw new ConflictException();
           return this.contextIn(tx, projectId, actor.accessExpiresAt);
         }
-        const draft = await this.draftIn(tx, projectId);
+        const draft = await this.inputIn(tx, projectId);
         if (draft.cover.version !== body.expectedVersion)
           throw new ConflictException();
         if (
@@ -574,6 +619,7 @@ export class Books implements OnModuleDestroy {
       authorization,
       undefined,
       async (tx, actor) => {
+        await this.sourceTerms(tx, projectId);
         const where = {
             projectId,
             actorId: actor.userId,
@@ -584,7 +630,7 @@ export class Books implements OnModuleDestroy {
           command = await tx.bookCommand.findUnique({
             where: { projectId_actorId_action_key: where },
           }),
-          draft = await this.draftIn(tx, projectId);
+          draft = await this.inputIn(tx, projectId);
         if (command) {
           if (command.requestHash !== requestHash)
             throw new ConflictException();
@@ -729,6 +775,7 @@ export class Books implements OnModuleDestroy {
       authorization,
       undefined,
       async (tx, actor) => {
+        await this.sourceTerms(tx, projectId);
         const where = {
             projectId,
             actorId: actor.userId,
@@ -799,7 +846,7 @@ export class Books implements OnModuleDestroy {
           where: { projectId, id },
         });
         if (!row) throw new NotFoundException();
-        const draft = await this.draftIn(tx, projectId);
+        const draft = await this.inputIn(tx, projectId);
         return this.viewIn(
           tx,
           row,
@@ -820,7 +867,7 @@ export class Books implements OnModuleDestroy {
             where: { projectId, id },
           });
           if (!row) throw new NotFoundException();
-          const draft = await this.draftIn(tx, projectId),
+          const draft = await this.inputIn(tx, projectId),
             view = await this.viewIn(
               tx,
               row,
@@ -856,11 +903,12 @@ export class Books implements OnModuleDestroy {
     key = this.key(key);
     const row = await tx.bookVersion.findUnique({ where: { taskId: task.id } });
     if (!row) throw new NotFoundException();
+    await this.sourceTerms(tx, row.projectId);
     const grant = await this.participation.bookGrantIn(tx, {
         ...row,
         processingGrant: task.processingGrant ?? undefined,
       }),
-      draft = await this.draftIn(tx, row.projectId);
+      draft = await this.inputIn(tx, row.projectId);
     if (!grant || draft.inputHash !== row.inputHash)
       throw new ConflictException();
     await tx.$queryRaw`SELECT id FROM production_tasks WHERE id=${task.id}::uuid FOR UPDATE`;
@@ -921,7 +969,7 @@ export class Books implements OnModuleDestroy {
           "product",
           key,
         );
-        const draft = await this.draftIn(tx, projectId);
+        const draft = await this.inputIn(tx, projectId);
         return this.viewIn(
           tx,
           row,
@@ -949,7 +997,8 @@ export class Books implements OnModuleDestroy {
     )
       return false;
     try {
-      const draft = await this.draftIn(tx, row.projectId);
+      await this.sourceTerms(tx, row.projectId);
+      const draft = await this.inputIn(tx, row.projectId);
       await this.renderMaterialTerms(tx, row.projectId, draft.snapshot);
       return draft.inputHash === row.inputHash;
     } catch (error) {

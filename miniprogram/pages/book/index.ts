@@ -27,6 +27,8 @@ Page({
     version: null as BookVersionView | null,
     excerpts: [] as { id: string; title: string; text: string }[],
     stateLabel: "",
+    draftAvailable: false,
+    sourceStatus: "",
     draft: null as PlanDirectory["chapters"] | null,
     draftVersion: 0,
     draftRows: [] as {
@@ -82,6 +84,8 @@ Page({
         context: null,
         version: null,
         excerpts: [],
+        draftAvailable: false,
+        sourceStatus: "",
         draft: null,
         draftVersion: 0,
         draftRows: [],
@@ -116,6 +120,79 @@ Page({
       this.data.context?.accessExpiresAt,
       this.data.version?.accessExpiresAt,
     ].some((value) => !!value && Date.parse(value) <= Date.now());
+  },
+  draftExpired() {
+    const access = this.data.context?.draftAccess;
+    return (
+      [access, this.data.version?.draftAccess].some(
+        (value) =>
+          value &&
+          (!value.allowed ||
+            (!!value.expiresAt && Date.parse(value.expiresAt) <= Date.now())),
+      ) || !access
+    );
+  },
+  discardDrafts() {
+    const value = this.data.context;
+    if (!value) return;
+    const current = this.data.version
+        ? {
+            ...this.data.version,
+            draftAccess: { allowed: false, expiresAt: null },
+          }
+        : null,
+      cover = current?.snapshot.cover;
+    this.generateRequest = null;
+    this.retryRequest = null;
+    this.coverRequest = null;
+    this.setData({
+      version: current,
+      context: {
+        ...value,
+        current,
+        inputHash: null,
+        draftAccess: { allowed: false, expiresAt: null },
+        directory: this.data.version?.snapshot.directory || {
+          version: 0,
+          contentHash: "",
+          chapters: [],
+        },
+        cover: cover
+          ? {
+              version: cover.version,
+              salutation: cover.salutation,
+              photoAssetId: cover.photo?.assetId || null,
+            }
+          : { version: 0, salutation: "", photoAssetId: null },
+        eligibleStories: [],
+        coverPhotoOptions: [],
+      },
+      draftAvailable: false,
+      sourceStatus: "来源故事当前不可用于编辑或生成，请重新取得本人许可。",
+      draft: null,
+      draftVersion: 0,
+      draftRows: [],
+      dirty: false,
+      editing: false,
+      coverEditing: false,
+      coverDirty: false,
+      coverDraft: null,
+      coverDraftVersion: 0,
+      coverOptions: [],
+    });
+  },
+  canDraft() {
+    if (this.accessExpired()) {
+      this.onHide();
+      this.setData({ status: "资料访问已到期，请重新查询" });
+      return false;
+    }
+    if (!this.data.context) return false;
+    if (this.draftExpired()) {
+      this.discardDrafts();
+      return false;
+    }
+    return true;
   },
   clearCover() {
     const path = this.coverFile;
@@ -209,6 +286,8 @@ Page({
     this.setData({
       context: value,
       version,
+      draftAvailable: true,
+      sourceStatus: "",
       excerpts:
         version?.snapshot.chapters.flatMap((c) =>
           c.stories.map((s) => ({
@@ -244,6 +323,10 @@ Page({
           }
         : {}),
     });
+    if (this.draftExpired()) {
+      this.discardDrafts();
+      return;
+    }
     this.updateDraftRows();
     this.updateCoverOptions();
   },
@@ -259,18 +342,18 @@ Page({
     });
   },
   editCover() {
-    if (!this.data.busy && this.data.context)
+    if (this.canDraft() && !this.data.busy)
       this.setData({ coverEditing: !this.data.coverEditing });
   },
   salutation(e: E) {
-    if (!this.data.coverDraft || this.data.busy) return;
+    if (!this.canDraft() || !this.data.coverDraft || this.data.busy) return;
     this.setData({
       coverDraft: { ...this.data.coverDraft, salutation: e.detail.value },
       coverDirty: true,
     });
   },
   chooseCoverPhoto(e: E) {
-    if (!this.data.coverDraft || this.data.busy) return;
+    if (!this.canDraft() || !this.data.coverDraft || this.data.busy) return;
     const assetId = e.currentTarget.dataset.assetId || null;
     if (
       assetId &&
@@ -284,7 +367,7 @@ Page({
     this.updateCoverOptions();
   },
   async saveCover() {
-    if (!this.data.context || !this.data.coverDraft || !this.data.coverDirty)
+    if (!this.canDraft() || !this.data.coverDraft || !this.data.coverDirty)
       return;
     const expectedVersion = this.data.coverDraftVersion,
       input = { ...this.data.coverDraft },
@@ -327,11 +410,11 @@ Page({
     });
   },
   editDirectory() {
-    if (!this.data.busy && this.data.context)
+    if (this.canDraft() && !this.data.busy)
       this.setData({ editing: !this.data.editing });
   },
   edit(work: (draft: PlanDirectory["chapters"]) => void) {
-    if (!this.data.draft || this.data.busy) return;
+    if (!this.canDraft() || !this.data.draft || this.data.busy) return;
     const draft = JSON.parse(
       JSON.stringify(this.data.draft),
     ) as PlanDirectory["chapters"];
@@ -390,7 +473,7 @@ Page({
     });
   },
   async saveDirectory() {
-    if (!this.data.context || !this.data.draft || !this.data.dirty) return;
+    if (!this.canDraft() || !this.data.draft || !this.data.dirty) return;
     const expectedVersion = this.data.draftVersion,
       chapters = JSON.parse(
         JSON.stringify(this.data.draft),
@@ -415,13 +498,13 @@ Page({
         if (
           dataMode() !== "live" ||
           context !== sessionClient.context() ||
-          (this.data.context?.accessExpiresAt &&
-            Date.parse(this.data.context.accessExpiresAt) <= Date.now())
+          this.accessExpired()
         ) {
           this.onHide();
           this.setData({ status: "授权已到期或账号已变化，请重新查询" });
           return;
         }
+        if (this.draftExpired()) this.discardDrafts();
         if (this.data.version?.snapshot.cover.photo && this.coverExpired()) {
           this.clearCover();
           this.setData({
@@ -450,6 +533,8 @@ Page({
             this.data.context?.accessExpiresAt,
             this.data.version?.accessExpiresAt,
             this.data.version?.coverPhotoAccess.expiresAt,
+            this.data.context?.draftAccess.expiresAt,
+            this.data.version?.draftAccess.expiresAt,
           ]
             .filter((value): value is string => !!value)
             .map((value) => Date.parse(value) - Date.now())
@@ -460,7 +545,7 @@ Page({
   },
   async perform(
     work: (generation: number, context: string) => Promise<void>,
-    preserveDraft = false,
+    sourceCommand = false,
   ) {
     if (this.data.busy) return;
     if (this.accessExpired()) {
@@ -483,6 +568,31 @@ Page({
     } catch (error) {
       if (generation !== this.generation) return;
       if (
+        sourceCommand &&
+        context === sessionClient.context() &&
+        error instanceof ApiFailure &&
+        error.status === 403
+      ) {
+        try {
+          const value = await bookClient.read(this.projectId);
+          if (!this.current(generation, context)) return;
+          this.accept(value);
+          this.watch(context);
+          await this.loadCover(generation, context);
+          if (this.current(generation, context))
+            this.setData({
+              status: "操作权限已变化，已重新查询有效书稿。",
+            });
+          return;
+        } catch (failure) {
+          error =
+            failure instanceof ApiFailure && [401, 403].includes(failure.status)
+              ? failure
+              : new ApiFailure("AUTHORIZATION_RECHECK_FAILED", 403);
+        }
+        if (generation !== this.generation) return;
+      }
+      if (
         context !== sessionClient.context() ||
         (error instanceof ApiFailure && [401, 403].includes(error.status))
       ) {
@@ -502,7 +612,7 @@ Page({
               : error instanceof Error
                 ? error.message
                 : "操作未确认，请重新查询",
-          ...(preserveDraft ? {} : { version: null, excerpts: [] }),
+          ...(sourceCommand ? {} : { version: null, excerpts: [] }),
         });
     } finally {
       if (generation === this.generation && this.accessExpired()) {
@@ -514,7 +624,9 @@ Page({
   },
   async generate() {
     if (
+      !this.canDraft() ||
       !this.data.context ||
+      !this.data.context.inputHash ||
       this.data.dirty ||
       this.data.coverDirty ||
       this.data.busy
@@ -535,7 +647,12 @@ Page({
     }, true);
   },
   async retry() {
-    if (!this.data.version || this.data.version.state !== "failed") return;
+    if (
+      !this.canDraft() ||
+      !this.data.version ||
+      this.data.version.state !== "failed"
+    )
+      return;
     const id = this.data.version.id;
     if (this.retryRequest?.id !== id)
       this.retryRequest = { id, key: paymentKey() };
@@ -597,6 +714,11 @@ Page({
   },
   manuscript() {
     if (this.data.live) {
+      if (this.accessExpired()) {
+        this.onHide();
+        this.setData({ status: "资料访问已到期，请重新查询" });
+        return;
+      }
       if (this.data.version?.state === "ready")
         go(
           "manuscript",

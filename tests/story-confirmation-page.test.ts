@@ -755,6 +755,7 @@ test("renamed live project title is fresh in account while book waits for a gene
     eligibleStories: [],
     current: null,
     accessExpiresAt: null,
+    draftAccess: { allowed: true, expiresAt: null },
   });
   await bookShowing;
   assert.equal(book.page.data.version, null);

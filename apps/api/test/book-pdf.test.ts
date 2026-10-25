@@ -1250,3 +1250,288 @@ test("a ready PDF remains readable when its raw derived cover expires and report
     t.mock.timers.reset();
   }
 });
+
+test("a frozen PDF outlives source stories while draft commands expire and current content and consent remain enforced", async (t) => {
+  const template = await db.packageVersion.findFirstOrThrow({
+      where: { realm: "local", purpose: "local_preview" },
+    }),
+    snapshot = structuredClone(template.snapshot) as any;
+  snapshot.admission.d03.retention.confirmedStories.duration.value = 1;
+  const draftId = randomUUID(),
+    versionId = randomUUID();
+  await db.packageDraft.create({
+    data: { id: draftId, realm: "local", ...snapshot },
+  });
+  await db.packageVersion.create({
+    data: {
+      id: versionId,
+      realm: "local",
+      purpose: "local_preview",
+      draftId,
+      draftRevision: 1,
+      snapshot,
+      publicOffer: {
+        title: "合成独立确认稿期限套餐",
+        price: { value: 99900, unit: "fen", currency: "CNY" },
+      },
+    },
+  });
+  const p = await confirmedStory(await bound(versionId), true),
+    unrelated = await confirmedStory(p),
+    base = `/v1/projects/${p.projectId}/book`,
+    initial = data(await request("GET", base, p.narrator.token), 200),
+    context = data(
+      await request("POST", base + "/directory", p.narrator.token, {
+        expectedVersion: initial.directory.version,
+        chapters: [
+          { key: "included", title: "入书往事", storyRefs: [p.story.id] },
+        ],
+      }),
+    ),
+    generateKey = randomUUID(),
+    command = { expectedInputHash: context.inputHash },
+    book = data(
+      await request(
+        "POST",
+        base + "/versions",
+        p.narrator.token,
+        command,
+        generateKey,
+      ),
+      202,
+    );
+  assert.equal(context.eligibleStories.length, 2);
+  assert.ok(context.coverPhotoOptions.length);
+  assert.equal(book.snapshot.chapters[0].stories.length, 1);
+  assert.notEqual(book.snapshot.chapters[0].stories[0].id, unrelated.story.id);
+  await app.get(ProductionTasks).run(book.task.id);
+  const expiresAt = new Date(Date.now() + 60000),
+    occurredAt = new Date(expiresAt.getTime() - 86400000),
+    pdfExpiresAt = new Date(
+      occurredAt.getTime() + 400 * 86400000,
+    ).toISOString();
+  // Independent accepted categories: confirmedStories 1 day, bookPdf 400 days.
+  await db.projectServiceEvent.create({
+    data: {
+      projectId: p.projectId,
+      eventId: `synthetic-delivery:${randomUUID()}`,
+      kind: "delivery_completed",
+      occurredAt,
+    },
+  });
+  const before = data(
+    await request("GET", base + `/versions/${book.id}`, p.narrator.token),
+    200,
+  );
+  t.mock.timers.enable({ apis: ["Date"], now: expiresAt.getTime() + 1 });
+  try {
+    const pdf = await request(
+      "GET",
+      base + `/versions/${book.id}/pdf`,
+      p.narrator.token,
+    );
+    assert.equal(pdf.statusCode, 200, pdf.body);
+    const after = data(
+        await request("GET", base + `/versions/${book.id}`, p.narrator.token),
+        200,
+      ),
+      current = data(await request("GET", base, p.narrator.token), 200);
+    assert.equal(after.state, "ready");
+    assert.equal(after.snapshotHash, before.snapshotHash);
+    assert.equal(after.inputHash, before.inputHash);
+    assert.deepEqual(after.snapshot, before.snapshot);
+    assert.equal(
+      createHash("sha256").update(pdf.rawPayload).digest("hex"),
+      before.pdf.sha256,
+    );
+    assert.equal(before.accessExpiresAt, pdfExpiresAt);
+    assert.equal(after.accessExpiresAt, pdfExpiresAt);
+    assert.deepEqual(before.draftAccess, {
+      allowed: true,
+      expiresAt: expiresAt.toISOString(),
+    });
+    assert.deepEqual(after.draftAccess, { allowed: false, expiresAt: null });
+    assert.deepEqual(current.draftAccess, after.draftAccess);
+    assert.equal(current.inputHash, null);
+    assert.deepEqual(current.eligibleStories, []);
+    assert.deepEqual(current.coverPhotoOptions, []);
+    assert.deepEqual(current.directory, before.snapshot.directory);
+    assert.deepEqual(current.cover, {
+      version: before.snapshot.cover.version,
+      salutation: before.snapshot.cover.salutation,
+      photoAssetId: before.snapshot.cover.photo?.assetId ?? null,
+    });
+    assert.equal(current.current.snapshotHash, before.snapshotHash);
+    for (const [path, body, key] of [
+      ["/versions", command, randomUUID()],
+      ["/versions", command, generateKey],
+      [
+        "/directory",
+        { expectedVersion: context.directory.version, chapters: [] },
+        randomUUID(),
+      ],
+      [
+        "/cover",
+        {
+          expectedVersion: context.cover.version,
+          salutation: "已过期的新称呼",
+          photoAssetId: null,
+        },
+        randomUUID(),
+      ],
+      [`/versions/${book.id}/retry`, {}, randomUUID()],
+    ] as const) {
+      assert.equal(
+        (await request("POST", base + path, p.narrator.token, body, key))
+          .statusCode,
+        403,
+        path,
+      );
+    }
+    const previousEntry = config.books!.entryBaseUrl;
+    config.books!.entryBaseUrl =
+      "https://changed-after-source-expiry.invalid/audio/";
+    try {
+      assert.equal(
+        (
+          await request(
+            "GET",
+            base + `/versions/${book.id}/pdf`,
+            p.narrator.token,
+          )
+        ).statusCode,
+        409,
+      );
+    } finally {
+      config.books!.entryBaseUrl = previousEntry;
+    }
+    assert.equal(
+      (await request("GET", base + `/versions/${book.id}/pdf`, p.buyer.token))
+        .statusCode,
+      200,
+    );
+    data(
+      await request(
+        "POST",
+        `/v1/projects/${p.projectId}/metadata`,
+        p.narrator.token,
+        {
+          expectedVersion: 0,
+          bookTitle: "来源到期后的新书名仍须使旧稿失效",
+        },
+      ),
+    );
+    const changed = data(
+      await request("GET", base + `/versions/${book.id}`, p.narrator.token),
+      200,
+    );
+    assert.equal(changed.state, "obsolete");
+    assert.deepEqual(changed.snapshot, before.snapshot);
+    assert.equal(
+      (
+        await request(
+          "GET",
+          base + `/versions/${book.id}/pdf`,
+          p.narrator.token,
+        )
+      ).statusCode,
+      409,
+    );
+    data((await choose(p, p.narrator.token, "sharing", false)).response);
+    for (const path of ["", `/versions/${book.id}`, `/versions/${book.id}/pdf`])
+      assert.equal(
+        (await request("GET", base + path, p.buyer.token)).statusCode,
+        403,
+      );
+  } finally {
+    t.mock.timers.reset();
+  }
+});
+
+test("a queued book remains inspectable but cannot publish or retry after source-story retention expires", async (t) => {
+  const template = await db.packageVersion.findFirstOrThrow({
+      where: { realm: "local", purpose: "local_preview" },
+    }),
+    snapshot = structuredClone(template.snapshot) as any;
+  snapshot.admission.d03.retention.confirmedStories.duration.value = 1;
+  const draftId = randomUUID(),
+    versionId = randomUUID();
+  await db.packageDraft.create({
+    data: { id: draftId, realm: "local", ...snapshot },
+  });
+  await db.packageVersion.create({
+    data: {
+      id: versionId,
+      realm: "local",
+      purpose: "local_preview",
+      draftId,
+      draftRevision: 1,
+      snapshot,
+      publicOffer: {
+        title: "合成排队任务独立确认稿期限套餐",
+        price: { value: 99900, unit: "fen", currency: "CNY" },
+      },
+    },
+  });
+  const p = await confirmedStory(await bound(versionId)),
+    base = `/v1/projects/${p.projectId}/book`,
+    context = data(await request("GET", base, p.narrator.token), 200),
+    book = data(
+      await request("POST", base + "/versions", p.narrator.token, {
+        expectedInputHash: context.inputHash,
+      }),
+      202,
+    ),
+    expiresAt = new Date(Date.now() + 60000);
+  assert.equal(book.state, "queued");
+  await db.projectServiceEvent.create({
+    data: {
+      projectId: p.projectId,
+      eventId: `synthetic-delivery:${randomUUID()}`,
+      kind: "delivery_completed",
+      occurredAt: new Date(expiresAt.getTime() - 86400000),
+    },
+  });
+  t.mock.timers.enable({ apis: ["Date"], now: expiresAt.getTime() + 1 });
+  try {
+    const queued = data(
+      await request("GET", base + `/versions/${book.id}`, p.narrator.token),
+      200,
+    );
+    assert.equal(queued.state, "queued");
+    assert.deepEqual(queued.draftAccess, { allowed: false, expiresAt: null });
+    await app.get(ProductionTasks).run(book.task.id);
+    const refused = data(
+      await request("GET", base + `/versions/${book.id}`, p.narrator.token),
+      200,
+    );
+    assert.equal(refused.state, "obsolete");
+    assert.equal(refused.task.errorCode, "BOOK_INPUT_OR_AUTHORIZATION_CHANGED");
+    assert.equal(refused.snapshotHash, book.snapshotHash);
+    assert.deepEqual(refused.snapshot, book.snapshot);
+    assert.equal(refused.pdf, null);
+    assert.equal(
+      (
+        await request(
+          "GET",
+          base + `/versions/${book.id}/pdf`,
+          p.narrator.token,
+        )
+      ).statusCode,
+      409,
+    );
+    assert.equal(
+      (
+        await request(
+          "POST",
+          base + `/versions/${book.id}/retry`,
+          p.narrator.token,
+          {},
+        )
+      ).statusCode,
+      403,
+    );
+  } finally {
+    t.mock.timers.reset();
+  }
+});

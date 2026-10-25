@@ -69,13 +69,17 @@ export interface BookVersionView {
   pdf: { sha256: string; bytes: number } | null;
   toc: { title: string; page: number }[] | null;
   renderer: object | null;
+  /** Frozen book access follows bookPdf; source editing/generation expires separately. */
   accessExpiresAt: string | null;
+  draftAccess: { allowed: boolean; expiresAt: string | null };
   /** Live access to the separate raw thumbnail; never part of the book snapshot. */
   coverPhotoAccess: { allowed: boolean; expiresAt: string | null };
 }
 export interface BookContext {
   projectId: string;
-  inputHash: string;
+  inputHash: string | null;
+  draftAccess: { allowed: boolean; expiresAt: string | null };
+  /** Frozen current values (or empty defaults) when draftAccess is unavailable. */
   directory: PlanDirectory;
   cover: BookCoverSettings;
   coverPhotoOptions: BookPhoto[];
