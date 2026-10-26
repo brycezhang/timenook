@@ -612,6 +612,7 @@ export class Stories {
     if (
       !(await this.participation.processingGrant(tx, {
         ...task,
+        taskId: task.id,
         processingGrant: undefined,
       }))
     )
@@ -663,6 +664,7 @@ export class Stories {
         return null;
       const grant = await this.participation.processingGrant(tx, {
         ...task,
+        taskId: task.id,
         processingGrant: undefined,
         sourceAssistedSessionId: clip.assistedSessionId,
       });

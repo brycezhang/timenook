@@ -1,7 +1,11 @@
+import type { WithdrawalStatus } from "../../../packages/contracts/src";
 import { go } from "../../services/store";
 import { dataMode, setDataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
-import { participationClient } from "../../services/participation";
+import {
+  participationClient,
+  withdrawalDisposition,
+} from "../../services/participation";
 import { paymentKey } from "../../services/payments";
 import {
   CONSENT_PURPOSES,
@@ -20,6 +24,8 @@ function localTime(value: string) {
 }
 Page({
   data: {
+    withdrawal: null as WithdrawalStatus | null,
+    productionDisposition: "",
     participation: null as ParticipationState | null,
     sessions: [] as (AssistedSessionView & { expiresAtLabel: string })[],
     careRequests: [] as ProjectCareRequestView[],
@@ -58,6 +64,7 @@ Page({
     setDataMode("live");
   },
   onHide() {
+    this.setData({ withdrawal: null, productionDisposition: "" });
     ++this.generation;
     this.ownerContext = "";
     this.stopSessionWatch?.();
@@ -146,6 +153,29 @@ Page({
         `projectId=${this.projectId}&storyId=${this.storyId}${this.interviewId ? `&interviewId=${this.interviewId}` : ""}&assistedSessionId=${session.id}`,
       );
     });
+  },
+  async showWithdrawal() {
+    if (this.data.busy || !this.projectId) return;
+    const generation = this.generation,
+      owner = sessionClient.context();
+    this.setData({ busy: true, withdrawal: null, productionDisposition: "" });
+    try {
+      const withdrawal = await participationClient.withdrawalStatus(
+        this.projectId,
+      );
+      if (generation !== this.generation || owner !== sessionClient.context())
+        return;
+      const productionDisposition = withdrawalDisposition(withdrawal);
+      this.setData({ withdrawal, productionDisposition });
+    } catch (error) {
+      if (generation === this.generation && owner === sessionClient.context())
+        this.setData({
+          status: error instanceof Error ? error.message : "查询未完成，请重试",
+        });
+    } finally {
+      if (generation === this.generation && owner === sessionClient.context())
+        this.setData({ busy: false });
+    }
   },
   onUnload() {
     this.onHide();

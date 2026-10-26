@@ -93,15 +93,20 @@ export class AdminCareController {
           request,
           ADMIN_PERMISSIONS.writeCare,
         );
-        return this.access.command(request, ADMIN_PERMISSIONS.writeCare, (tx) =>
-          this.participation.verifyCare(
-            tx,
-            id,
-            body,
-            idempotencyKey(request),
-            actor.adminId!,
-          ),
+        const result = await this.access.command(
+          request,
+          ADMIN_PERMISSIONS.writeCare,
+          (tx) =>
+            this.participation.verifyCare(
+              tx,
+              id,
+              body,
+              idempotencyKey(request),
+              actor.adminId!,
+            ),
         );
+        await this.participation.reconcileRevocations();
+        return result;
       }),
       meta: { requestId: request.id },
     };
@@ -120,16 +125,21 @@ export class AdminCareController {
           request,
           ADMIN_PERMISSIONS.writeCare,
         );
-        return this.access.command(request, ADMIN_PERMISSIONS.writeCare, (tx) =>
-          this.participation.rebind(
-            tx,
-            id,
-            body,
-            idempotencyKey(request),
-            operator.adminId!,
-            request.id,
-          ),
+        const result = await this.access.command(
+          request,
+          ADMIN_PERMISSIONS.writeCare,
+          (tx) =>
+            this.participation.rebind(
+              tx,
+              id,
+              body,
+              idempotencyKey(request),
+              operator.adminId!,
+              request.id,
+            ),
         );
+        await this.participation.reconcileRevocations();
+        return result;
       }),
       meta: { requestId: request.id },
     };

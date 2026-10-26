@@ -830,3 +830,73 @@ test("assisted production authorization returns to the current production attemp
   );
   page.onUnload();
 });
+
+test("a narrator can inspect withdrawal disposition after collection access ends and leaving clears it", async () => {
+  const { page, requests } = harness("welcome");
+  page.onLoad({ projectId });
+  const shown = page.onShow();
+  await completeProjectState(requests, current);
+  await shown;
+  const checking = page.showWithdrawal();
+  const query = requests.shift()!;
+  assert.equal(query.url, `${base}/projects/${projectId}/withdrawal-status`);
+  respond(query, {
+    projectId,
+    accessEpoch: 2,
+    changes: [
+      {
+        id: "66666666-6666-4666-8666-666666666666",
+        purpose: "collection",
+        applied: true,
+      },
+    ],
+    production: {
+      state: "cancellation_pending",
+      ownerAdminId: "客服编号",
+      caseId: "工单编号",
+      dueAt: "2099-01-01T00:00:00Z",
+    },
+    boundary: "已导出文件和纸书不能远程收回",
+  });
+  await checking;
+  assert.match(page.data.productionDisposition, /人工核实/);
+  assert.equal(page.data.participation.canRead, false);
+  page.onHide();
+  assert.equal(page.data.withdrawal, null);
+});
+
+for (const route of ["welcome", "assisted"])
+  test(`${route} keeps participation and tracked refund cases after the shared care list gains a refund`, async () => {
+    const { page, requests } = harness(route);
+    page.onLoad({ projectId });
+    const showing = page.onShow();
+    respond(
+      requests.shift()!,
+      route === "assisted"
+        ? { ...current, role: "initiator", bindingVersion: 0 }
+        : current,
+    );
+    await tick();
+    if (route === "assisted") {
+      respond(requests.shift()!, { sessions: [] });
+      await tick();
+    }
+    respond(requests.shift()!, {
+      requests: [
+        {
+          id: "55555555-5555-4555-8555-555555555555",
+          kind: "refund",
+          state: "open",
+          createdAt: "2026-10-26T00:00:00Z",
+        },
+      ],
+    });
+    await showing;
+    assert.ok(
+      page.data.participation,
+      "a refund case must not erase the current participation view",
+    );
+    assert.equal(page.data.careRequests[0]?.kind, "refund");
+    assert.equal(page.data.careRequests[0].state, "open");
+    page.onHide();
+  });

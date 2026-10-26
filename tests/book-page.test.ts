@@ -749,7 +749,19 @@ test("an open book removes source choices and unsaved drafts at their own deadli
   await h.page.saveDirectory();
   await h.page.saveCover();
   await h.page.generate();
-  assert.equal(h.requests.length, 1);
+  assert.equal(h.requests.length, 2);
+  h.respond(1, {
+    projectId,
+    role: "narrator",
+    bindingVersion: 1,
+    accessEpoch: 1,
+    choices: ["collection", "ai", "sharing"].map((purpose) => ({
+      purpose,
+      granted: true,
+    })),
+    canRead: true,
+  });
+  await tick();
   h.page.manuscript();
   assert.equal(h.routes.length, 1);
   h.page.onUnload();
@@ -822,15 +834,27 @@ test("book polling never rebases unsaved cover or directory edits onto another p
   };
   h.respond(1, newer);
   await tick();
+  h.respond(2, {
+    projectId,
+    role: "narrator",
+    bindingVersion: 1,
+    accessEpoch: 1,
+    choices: ["collection", "ai", "sharing"].map((purpose) => ({
+      purpose,
+      granted: true,
+    })),
+    canRead: true,
+  });
+  await tick();
   assert.equal(h.page.data.coverDraft.salutation, "我正在编辑的称呼");
   assert.equal(h.page.data.draft[0].title, "我正在编辑的目录");
   const saveDirectory = h.page.saveDirectory();
-  assert.equal(h.requests[2].data.expectedVersion, 4);
-  h.respond(2, undefined, 409);
+  assert.equal(h.requests[3].data.expectedVersion, 4);
+  h.respond(3, undefined, 409);
   await saveDirectory;
   const saveCover = h.page.saveCover();
-  assert.equal(h.requests[3].data.expectedVersion, 2);
-  h.respond(3, undefined, 409);
+  assert.equal(h.requests[4].data.expectedVersion, 2);
+  h.respond(4, undefined, 409);
   await saveCover;
   assert.equal(h.page.data.coverDirty, true);
   assert.equal(h.page.data.dirty, true);

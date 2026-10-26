@@ -49,6 +49,7 @@ import {
   Participation,
   ParticipationController,
 } from "./identity/participation";
+import { ProjectStreams } from "./media/project-streams";
 import { AdminCareController } from "./identity/admin-care-controller";
 import { validateWechatPayConfig } from "./payments/wechat-pay";
 import {
@@ -505,6 +506,7 @@ export async function createApplication(
         : []),
       { provide: WECHAT_FETCH, useValue: options.wechatFetch ?? fetch },
       IdentityAccess,
+      ProjectStreams,
       Participation,
       PersonalPlans,
       Interviews,

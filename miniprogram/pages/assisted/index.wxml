@@ -32,9 +32,19 @@
       <button class="btn secondary section" bindtap="requestRight" data-kind="withdraw" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">记录本人撤回申请</button>
       <button class="btn secondary section" bindtap="requestRight" data-kind="export" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">记录本人完整资料导出申请</button>
       <button class="btn secondary section" bindtap="requestRight" data-kind="delete" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">记录本人删除申请</button>
-      <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="note">工单 record:{{item.id}}</view><view>{{item.kind === 'withdraw' ? '撤回' : item.kind === 'export' ? '资料导出' : item.kind === 'delete' ? '删除' : item.kind === 'correction' ? '故事限时校对' : '本人账号绑定'}}：{{item.state === 'open' ? '待客服核验' : item.kind === 'rebind' ? '账号绑定已完成' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : '已核验，后续交付或执行待完成'}}</view></view>
+      <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="note">工单 record:{{item.id}}</view><view>{{item.kind === 'withdraw' ? '撤回' : item.kind === 'export' ? '资料导出' : item.kind === 'delete' ? '删除' : item.kind === 'correction' ? '故事限时校对' : item.kind === 'production_handoff' ? '生产交接' : item.kind === 'first_copy_expiry' ? '制作期限审核' : item.kind === 'refund' ? '退款' : '本人账号绑定'}}：{{item.state === 'open' ? '待客服核验' : item.kind === 'rebind' ? '账号绑定已完成' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : '已核验，后续交付或执行待完成'}}</view></view>
     </view>
   </block>
   <button wx:if="{{participation}}" class="btn secondary section" bindtap="plan" disabled="{{busy}}">编辑个人大纲与问题</button>
   <button class="btn secondary section" bindtap="back">返回本人参与页</button>
+</view>
+
+<view wx:if="{{participation}}" class="page withdrawal-status">
+  <button class="btn secondary section" bindtap="showWithdrawal" disabled="{{busy}}">查看撤回处置进度</button>
+  <view wx:if="{{withdrawal}}" class="paper section">
+    <view class="section-title">撤回与账号变更处置</view>
+    <view class="note section">{{productionDisposition}}</view>
+    <view class="note">{{withdrawal.boundary}}</view>
+    <view wx:if="{{withdrawal.production}}" class="note section">处理工单：{{withdrawal.production.caseId}}。处理人：{{withdrawal.production.ownerAdminId}}。处理期限：{{withdrawal.production.dueAt}}</view>
+  </view>
 </view>

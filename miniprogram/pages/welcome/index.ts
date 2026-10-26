@@ -1,8 +1,12 @@
+import type { WithdrawalStatus } from "../../../packages/contracts/src";
 import { type Project } from "../../domain/model";
 import { go, home, read, required, save } from "../../services/store";
 import { dataMode, setDataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
-import { participationClient } from "../../services/participation";
+import {
+  participationClient,
+  withdrawalDisposition,
+} from "../../services/participation";
 import { paymentKey } from "../../services/payments";
 import {
   CONSENT_PURPOSES,
@@ -17,6 +21,8 @@ type E = {
 };
 Page({
   data: {
+    withdrawal: null as WithdrawalStatus | null,
+    productionDisposition: "",
     p: null as Project | null,
     agreed: false,
     missing: false,
@@ -61,6 +67,7 @@ Page({
     this.setData({ p, agreed: p.consent });
   },
   onHide() {
+    this.setData({ withdrawal: null, productionDisposition: "" });
     ++this.generation;
     this.setData({
       participation: null,
@@ -69,6 +76,29 @@ Page({
       careRequests: [],
       busy: false,
     });
+  },
+  async showWithdrawal() {
+    if (this.data.busy || !this.projectId) return;
+    const generation = this.generation,
+      owner = sessionClient.context();
+    this.setData({ busy: true, withdrawal: null, productionDisposition: "" });
+    try {
+      const withdrawal = await participationClient.withdrawalStatus(
+        this.projectId,
+      );
+      if (generation !== this.generation || owner !== sessionClient.context())
+        return;
+      const productionDisposition = withdrawalDisposition(withdrawal);
+      this.setData({ withdrawal, productionDisposition });
+    } catch (error) {
+      if (generation === this.generation && owner === sessionClient.context())
+        this.setData({
+          status: error instanceof Error ? error.message : "查询未完成，请重试",
+        });
+    } finally {
+      if (generation === this.generation && owner === sessionClient.context())
+        this.setData({ busy: false });
+    }
   },
   onUnload() {
     this.onHide();
