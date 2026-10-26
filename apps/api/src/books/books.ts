@@ -946,6 +946,7 @@ export class Books implements OnModuleDestroy {
   async retryAllowed(tx: Prisma.TransactionClient, task: ProductionTask) {
     return (
       task.state === "failed" &&
+      !(await this.participation.taskRevokedIn(tx, task.projectId, task.id)) &&
       task.configurationHash === digest(this.configuration()) &&
       !!task.deadline &&
       task.deadline.getTime() > Date.now() &&

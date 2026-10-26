@@ -1221,6 +1221,24 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     });
   }
 
+  /** Captured task identities stay denied across leases and later reauthorization.
+   * Authorization callers serialize this check with the project lock. */
+  async taskRevokedIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    taskId: string,
+  ) {
+    return (
+      (await tx.projectAccessRevocation.count({
+        where: {
+          projectId,
+          captureVersion: 1,
+          taskFences: { array_contains: [{ id: taskId }] },
+        },
+      })) > 0
+    );
+  }
+
   // Background processing has no user session to inherit. Its first current
   // purpose grant is frozen by the task owner; later claims and result writes
   // must still match those actual assisted sessions, including their expiry.
@@ -1232,6 +1250,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       bindingVersion: number;
       accessEpoch: number;
       sourceAssistedSessionId?: string | null;
+      taskId?: string;
       processingGrant?: Prisma.JsonValue;
     },
   ): Promise<Prisma.JsonObject | null> {
@@ -1241,7 +1260,9 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     if (
       subject.id !== input.subjectId ||
       subject.bindingVersion !== input.bindingVersion ||
-      p.accessEpoch !== input.accessEpoch
+      p.accessEpoch !== input.accessEpoch ||
+      (input.taskId &&
+        (await this.taskRevokedIn(tx, input.projectId, input.taskId)))
     )
       return null;
     const terms = await this.terms.read(p.id, undefined, tx);
@@ -1308,6 +1329,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       bindingVersion: number;
       accessEpoch: number;
       operatorId: string;
+      taskId?: string;
       processingGrant?: Prisma.JsonValue;
     },
   ): Promise<Prisma.JsonObject | null> {
@@ -1318,6 +1340,8 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       subject.id !== input.subjectId ||
       subject.bindingVersion !== input.bindingVersion ||
       project.accessEpoch !== input.accessEpoch ||
+      (input.taskId &&
+        (await this.taskRevokedIn(tx, input.projectId, input.taskId))) ||
       !(await this.status(tx, project, subject, input.operatorId)).canRead
     )
       return null;
@@ -1752,8 +1776,10 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
           if (!task || task.projectId !== change.projectId) continue;
           const invalidated = await tx.productionTask.updateMany({
             where: {
+              // A captured task is permanently denied. A worker lease may
+              // have advanced its fence since capture; it is still that task.
               id: target.id,
-              fence: target.fence,
+              fence: task.fence,
               state: {
                 notIn: ["succeeded", "no_speech", "invalidated", "obsolete"],
               },

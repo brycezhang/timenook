@@ -25,7 +25,14 @@ export function interceptBookObjectRead(gate?: (key: string) => Promise<void>) {
   objectReadGate = gate;
 }
 const packageId = randomUUID();
+let providerGate:
+  ((input: string, init?: RequestInit) => Promise<void>) | undefined;
+/** Pause only the external AI transport, preserving real task/DB execution. */
+export function interceptBookProvider(gate?: typeof providerGate) {
+  providerGate = gate;
+}
 const providerTransport: typeof fetch = async (input, init) => {
+  await providerGate?.(String(input), init);
   if (String(input).includes("deepseek.com")) {
     const payload = JSON.parse(String(init?.body));
     const source = JSON.parse(payload.messages[1].content);

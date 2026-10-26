@@ -15,6 +15,9 @@ import {
   readyStory,
   db,
   restartBookApplication,
+  interceptBookProvider,
+  interceptBookObjectRead,
+  storyPhoto,
 } from "./book-fixture";
 before(startBookFixture);
 after(stopBookFixture);
@@ -691,3 +694,380 @@ test("delayed assisted revocation recovery preserves a renewed session's new tas
     }
   }
 });
+
+async function failTaskRevocationCleanup() {
+  await db.$executeRawUnsafe(
+    "CREATE FUNCTION reject_t24_task_cleanup() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic task cleanup fault'; END $$",
+  );
+  await db.$executeRawUnsafe(
+    "CREATE TRIGGER reject_t24_task_cleanup BEFORE UPDATE ON project_access_revocations FOR EACH ROW EXECUTE FUNCTION reject_t24_task_cleanup()",
+  );
+  return async () => {
+    await db.$executeRawUnsafe(
+      "DROP TRIGGER reject_t24_task_cleanup ON project_access_revocations",
+    );
+    await db.$executeRawUnsafe("DROP FUNCTION reject_t24_task_cleanup()");
+  };
+}
+async function taskView(
+  p: { projectId: string; narrator: { token: string } },
+  id: string,
+) {
+  return data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/tasks/${id}`,
+      p.narrator.token,
+    ),
+    200,
+  );
+}
+test("revocation recovery invalidates the captured old task even after a later worker lease", async () => {
+  const p = await bound(),
+    i = await interview(p);
+  await sealedClip(p, i.id);
+  const old = data(
+    await request("GET", `/v1/projects/${p.projectId}/tasks`, p.narrator.token),
+    200,
+  )[0];
+  assert.equal(old.state, "queued");
+  const epoch = (await state(p, p.narrator.token)).accessEpoch;
+  const restore = await failTaskRevocationCleanup();
+  try {
+    assert.equal((await assistedChoice(p, "ai", false)).statusCode, 500);
+    data(await assistedChoice(p, "ai", true));
+    assert.equal((await state(p, p.narrator.token)).accessEpoch, epoch);
+    // The real worker can advance a lease while the separately recoverable
+    // follow-up is broken. That lease cannot escape the captured task identity.
+    await app.get(ProductionTasks).run(old.id);
+  } finally {
+    await restore();
+  }
+  data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/withdrawal-status`,
+      p.narrator.token,
+    ),
+    200,
+  );
+  const recovered = await taskView(p, old.id);
+  assert.equal(recovered.state, "invalidated");
+  await app.get(ProductionTasks).run(old.id);
+  assert.equal((await taskView(p, old.id)).originalTranscript, null);
+});
+
+test("a captured task cannot submit or complete under renewed AI while cleanup is still broken", async () => {
+  const p = await bound(),
+    i = await interview(p);
+  await sealedClip(p, i.id);
+  const old = data(
+    await request("GET", `/v1/projects/${p.projectId}/tasks`, p.narrator.token),
+    200,
+  )[0];
+  const restore = await failTaskRevocationCleanup();
+  try {
+    assert.equal((await assistedChoice(p, "ai", false)).statusCode, 500);
+    data(await assistedChoice(p, "ai", true));
+    await app.get(ProductionTasks).run(old.id);
+    await app.get(ProductionTasks).run(old.id);
+    const after = await taskView(p, old.id);
+    assert.equal(
+      after.originalTranscript,
+      null,
+      "renewed authorization must not resurrect a captured old task before cleanup",
+    );
+    assert.equal(after.state, "invalidated");
+    assert.equal(
+      after.attempts.length,
+      0,
+      "denied work must not enter the external transport",
+    );
+    assert.equal(after.retryable, false);
+    assert.equal(
+      (
+        await request(
+          "POST",
+          `/v1/projects/${p.projectId}/tasks/${old.id}/retry`,
+          p.narrator.token,
+          {},
+        )
+      ).statusCode,
+      409,
+    );
+    await sealedClip(p, i.id);
+    const fresh = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/tasks`,
+        p.narrator.token,
+      ),
+      200,
+    ).find((task: { id: string }) => task.id !== old.id);
+    await app.get(ProductionTasks).run(fresh.id);
+    await app.get(ProductionTasks).run(fresh.id);
+    const completed = await taskView(p, fresh.id);
+    assert.equal(
+      completed.state,
+      "succeeded",
+      "a different task created after renewed AI remains usable",
+    );
+    assert.ok(completed.originalTranscript?.text);
+  } finally {
+    await restore();
+  }
+});
+
+test("a late successful ASR result remains unusable after same-epoch refusal and regrant with cleanup broken", async () => {
+  const p = await bound(),
+    i = await interview(p);
+  await sealedClip(p, i.id);
+  const old = data(
+    await request("GET", `/v1/projects/${p.projectId}/tasks`, p.narrator.token),
+    200,
+  )[0];
+  await app.get(ProductionTasks).run(old.id);
+  assert.equal((await taskView(p, old.id)).state, "waiting_provider");
+  let reached!: () => void, release!: () => void;
+  const transportStarted = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const transportResume = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  interceptBookProvider(async (url, init) => {
+    if (
+      url.endsWith("/query") &&
+      new Headers(init?.headers).get("X-Api-Request-Id") ===
+        old.providerRequestId
+    ) {
+      reached();
+      await transportResume;
+    }
+  });
+  const running = app.get(ProductionTasks).run(old.id);
+  await transportStarted;
+  const restore = await failTaskRevocationCleanup();
+  try {
+    assert.equal((await assistedChoice(p, "ai", false)).statusCode, 500);
+    data(await assistedChoice(p, "ai", true));
+    release();
+    await running;
+    const after = await taskView(p, old.id);
+    assert.equal(
+      after.originalTranscript,
+      null,
+      "the response arrived after denial and cannot become a formal transcript",
+    );
+    assert.equal(after.state, "invalidated");
+    assert.equal(
+      after.attempts.length,
+      1,
+      "already transported work remains accountable",
+    );
+    assert.equal(after.attempts[0].observations.at(-1).superseded, true);
+    assert.equal(after.retryable, false);
+  } finally {
+    release();
+    await running;
+    interceptBookProvider();
+    await restore();
+  }
+});
+
+async function queuedTextWork(kind: "ask_followup" | "compose_story") {
+  const p = await bound(),
+    i = await interview(p);
+  await sealedClip(p, i.id);
+  const sources = data(
+    await request("GET", `/v1/projects/${p.projectId}/tasks`, p.narrator.token),
+    200,
+  );
+  for (const source of sources) {
+    await app.get(ProductionTasks).run(source.id);
+    await app.get(ProductionTasks).run(source.id);
+  }
+  const url =
+    kind === "ask_followup"
+      ? `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`
+      : `/v1/projects/${p.projectId}/stories/organize`;
+  const created = data(
+    await request(
+      "POST",
+      url,
+      p.narrator.token,
+      kind === "ask_followup"
+        ? {
+            clientRequestId: randomUUID(),
+            actualQuestionId: i.actualQuestion.id,
+            expectedQuestionVersion: 1,
+          }
+        : { interviewId: i.id, baseVersion: 0 },
+    ),
+    202,
+  );
+  assert.equal(
+    created.task.state,
+    kind === "ask_followup" ? "queued" : "waiting_inputs",
+  );
+  return {
+    ...p,
+    task: created.task,
+    resultUrl:
+      kind === "ask_followup"
+        ? url + "/status"
+        : `/v1/projects/${p.projectId}/stories/${created.id}`,
+  };
+}
+for (const kind of ["ask_followup", "compose_story"] as const)
+  for (const stage of ["queued", "in_flight"] as const)
+    test(`${kind} ${stage} cannot use renewed AI to escape a captured denial while cleanup is broken`, async () => {
+      const p = await queuedTextWork(kind);
+      let reached!: () => void, release!: () => void;
+      const started = new Promise<void>((resolve) => {
+        reached = resolve;
+      });
+      const resume = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let running: Promise<void> | undefined;
+      if (stage === "in_flight") {
+        interceptBookProvider(async (url) => {
+          if (url.includes("deepseek.com")) {
+            reached();
+            await resume;
+          }
+        });
+        running = app.get(ProductionTasks).run(p.task.id);
+        await started;
+      }
+      const restore = await failTaskRevocationCleanup();
+      try {
+        assert.equal((await assistedChoice(p, "ai", false)).statusCode, 500);
+        data(await assistedChoice(p, "ai", true));
+        release();
+        await (running ?? app.get(ProductionTasks).run(p.task.id));
+        const after = await taskView(p, p.task.id);
+        assert.equal(after.state, "obsolete");
+        assert.equal(after.retryable, false);
+        assert.equal(after.attempts.length, stage === "queued" ? 0 : 1);
+        if (stage === "in_flight")
+          assert.equal(after.attempts[0].observations.at(-1).superseded, true);
+        const output = data(
+          await request(
+            kind === "ask_followup" ? "POST" : "GET",
+            p.resultUrl,
+            p.narrator.token,
+            kind === "ask_followup" ? {} : undefined,
+          ),
+          kind === "ask_followup" ? 201 : 200,
+        );
+        if (kind === "ask_followup") assert.equal(output.result, null);
+        else assert.equal(output.version, 0);
+      } finally {
+        release();
+        await running;
+        interceptBookProvider();
+        await restore();
+      }
+    });
+
+async function queuedBookWork() {
+  const p = await readyStory();
+  const photo = await storyPhoto(p, "合成照片：旧任务撤回测试");
+  const story = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/stories/${p.story.id}/revisions`,
+      p.narrator.token,
+      {
+        baseRevisionId: p.story.revision.id,
+        expectedVersion: p.story.version,
+        title: p.story.revision.title,
+        theme: p.story.revision.theme,
+        paragraphs: p.story.revision.paragraphs,
+        photoSnapshotId: photo.id,
+        reviewResolutions: p.story.revision.reviewItems.map((item: string) => ({
+          item,
+          reason: "本人核对",
+        })),
+        notes: [],
+      },
+    ),
+  );
+  data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/stories/${story.id}/decisions`,
+      p.narrator.token,
+      {
+        revisionId: story.revision.id,
+        expectedVersion: story.version,
+        contentHash: story.revision.contentHash,
+        confirmed: true,
+        allowInBook: true,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: `synthetic:task-denial-book-${randomUUID()}`,
+      },
+    ),
+  );
+  const base = `/v1/projects/${p.projectId}/book`;
+  const context = data(await request("GET", base, p.narrator.token), 200);
+  const book = data(
+    await request("POST", base + "/versions", p.narrator.token, {
+      expectedInputHash: context.inputHash,
+    }),
+    202,
+  );
+  return { ...p, book, base };
+}
+for (const stage of ["queued", "rendering"] as const)
+  test(`render_book ${stage} cannot use renewed collection to escape a captured denial while cleanup is broken`, async () => {
+    const p = await queuedBookWork();
+    let reached!: () => void, release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const resume = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let running: Promise<void> | undefined;
+    if (stage === "rendering") {
+      interceptBookObjectRead(async () => {
+        reached();
+        await resume;
+      });
+      running = app.get(ProductionTasks).run(p.book.task.id);
+      await started;
+    }
+    const restore = await failTaskRevocationCleanup();
+    try {
+      assert.equal(
+        (await assistedChoice(p, "collection", false)).statusCode,
+        500,
+      );
+      // A bound narrator grants directly; the frozen book grant and global
+      // epoch therefore match again, but the denied task identity stays denied.
+      data((await choose(p, p.narrator.token, "collection", true)).response);
+      release();
+      await (running ?? app.get(ProductionTasks).run(p.book.task.id));
+      const after = await taskView(p, p.book.task.id);
+      assert.equal(after.state, "obsolete");
+      assert.equal(after.retryable, false);
+      assert.equal(
+        (
+          await request(
+            "GET",
+            `${p.base}/versions/${p.book.id}/pdf`,
+            p.narrator.token,
+          )
+        ).statusCode,
+        409,
+      );
+    } finally {
+      release();
+      await running;
+      interceptBookObjectRead();
+      await restore();
+    }
+  });
