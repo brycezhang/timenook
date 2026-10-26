@@ -1071,3 +1071,84 @@ for (const stage of ["queued", "rendering"] as const)
       await restore();
     }
   });
+
+import { supplierRefunds } from "./payment-fixture";
+test("withdrawal and renewed authorization preserve refund freezes and the late supplier cancellation consequence", async () => {
+  const p = await production();
+  data(
+    await admin(p.attemptBase + "/handoff", p.headers, {
+      evidenceRef: "synthetic:combined-handoff",
+    }),
+  );
+  data(
+    await admin(p.attemptBase + "/receipt", p.headers, {
+      outcome: "accepted",
+      evidenceRef: "synthetic:combined-accepted",
+    }),
+  );
+  const refund = data(
+    await request("POST", `/v1/orders/${p.orderId}/refunds`, p.buyer.token, {
+      reason: "inProduction",
+      evidenceRef: "synthetic:combined-refund-request",
+    }),
+  );
+  const refundBase = `/v1/admin/refunds/${refund.id}`;
+  data(
+    await admin(refundBase + "/approve", p.headers, {
+      amountFen: 20000,
+      evidenceRef: "synthetic:combined-refund-approval",
+    }),
+  );
+  data((await choose(p, p.narrator.token, "ai", false)).response);
+  data((await choose(p, p.narrator.token, "ai", true)).response);
+  const frozen = () =>
+    request("GET", `/v1/orders/${p.orderId}/refunds`, p.buyer.token);
+  const reserved = data(await frozen(), 200);
+  assert.equal(reserved.productionFrozen, true);
+  assert.equal(reserved.reservedAmountFen, 20000);
+  data(
+    await admin(refundBase + "/production-review", p.headers, {
+      attemptId: p.attempt.id,
+      evidenceRef: "synthetic:combined-production-verified",
+    }),
+  );
+  data(await admin(refundBase + "/submit", p.headers, {}));
+  Object.assign(supplierRefunds.get(refund.outRefundNo)!, {
+    status: "SUCCESS",
+    success_time: new Date().toISOString(),
+  });
+  data(await admin(refundBase + "/reconcile", p.headers, {}));
+  const refunded = data(await frozen(), 200);
+  assert.equal(refunded.creationState, "terminated");
+  assert.equal(refunded.productionFrozen, true);
+  data((await choose(p, p.narrator.token, "collection", false)).response);
+  const stopped = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/withdrawal-status`,
+      p.narrator.token,
+    ),
+    200,
+  );
+  assert.equal(stopped.production.state, "cancellation_pending");
+  data((await choose(p, p.narrator.token, "collection", true)).response);
+  data(
+    await admin(p.attemptBase + "/receipt", p.headers, {
+      outcome: "cancelled",
+      evidenceRef: "synthetic:combined-cancelled-after-refund",
+    }),
+  );
+  const order = data(
+    await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token),
+    200,
+  );
+  assert.equal(
+    order.project.entitlement.state,
+    "revoked",
+    "a supplier cancellation after refunded termination cannot recreate a reserved first copy",
+  );
+  const after = data(await frozen(), 200);
+  assert.equal(after.productionFrozen, true);
+  assert.equal(after.creationState, "terminated");
+  assert.equal(after.refundedAmountFen, 20000);
+});

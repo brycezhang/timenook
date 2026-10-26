@@ -126,7 +126,16 @@ test.beforeAll(async () => {
     },
   );
   adminVite = start(
-    ["node_modules/vite/bin/vite.js", "--host", "localhost", "--port", "3473"],
+    // Workspace CommonJS contracts may have gained exports since the last
+    // local run; rebuild the optimized dependency from this exact checkout.
+    [
+      "node_modules/vite/bin/vite.js",
+      "--force",
+      "--host",
+      "localhost",
+      "--port",
+      "3473",
+    ],
     {
       cwd: resolve("apps/admin"),
       env: {
@@ -188,7 +197,11 @@ async function openMini(browser, account, target = project, route = "refunds") {
     },
     { origin, account },
   );
-  await page.goto(`${origin}/#/${route}?orderId=${target.orderId}`);
+  const query =
+    route === "refunds"
+      ? `orderId=${target.orderId}`
+      : `projectId=${target.projectId}`;
+  await page.goto(`${origin}/#/${route}?${query}`);
   await expect(page).toHaveTitle("时光里 · 岁月成书");
   return page;
 }
@@ -254,10 +267,48 @@ test("buyer requests a refund and the shared support case approves, executes and
   await expect(
     buyer.getByText("尚未参与 · 待客服核验", { exact: true }),
   ).toBeVisible();
+  // T24/T27 combination: the same project care list must accept the refund
+  // kind, keep both rights pages active, and retain the withdrawal proxy.
+  for (const route of ["welcome", "assisted"]) {
+    const rights = await openMini(browser, buyerSession, project, route);
+    const label =
+      route === "welcome"
+        ? `退款工单：record:${refund.caseId}`
+        : "退款：待客服核验";
+    await expect(rights.getByText(label, { exact: true })).toBeVisible();
+    const progress = rights.waitForResponse((r) =>
+      r.url().endsWith("/withdrawal-status"),
+    );
+    await rights
+      .getByRole("button", { name: "查看撤回处置进度", exact: true })
+      .click();
+    expect((await progress).status()).toBe(200);
+    await expect(rights.getByText(/已停止相关在线访问与新处理/)).toBeVisible();
+    for (const width of [390, 1280]) {
+      await rights.setViewportSize({ width, height: 900 });
+      expect(
+        await rights.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      await rights.screenshot({
+        path: `/tmp/timenook-t24-main-refund-care-${route}-${width}.png`,
+      });
+    }
+  }
   const admin = await openAdmin(browser);
+  const caseDetails = admin.waitForResponse((r) =>
+    r.url().endsWith(`/refunds/cases/${refund.caseId}`),
+  );
   await admin
     .getByRole("button", { name: "查看 " + refund.caseId, exact: true })
     .click();
+  const detailResponse = await caseDetails;
+  expect(detailResponse.status(), await detailResponse.text()).toBe(200);
+  expect((await detailResponse.json()).data.id).toBe(refund.id);
+  await expect(admin.getByLabel("退款核验证据", { exact: true })).toBeVisible({
+    timeout: 5000,
+  });
   await admin
     .getByLabel("退款核验证据", { exact: true })
     .fill("synthetic:policy-and-buyer-verified");

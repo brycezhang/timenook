@@ -864,3 +864,39 @@ test("a narrator can inspect withdrawal disposition after collection access ends
   page.onHide();
   assert.equal(page.data.withdrawal, null);
 });
+
+for (const route of ["welcome", "assisted"])
+  test(`${route} keeps participation and tracked refund cases after the shared care list gains a refund`, async () => {
+    const { page, requests } = harness(route);
+    page.onLoad({ projectId });
+    const showing = page.onShow();
+    respond(
+      requests.shift()!,
+      route === "assisted"
+        ? { ...current, role: "initiator", bindingVersion: 0 }
+        : current,
+    );
+    await tick();
+    if (route === "assisted") {
+      respond(requests.shift()!, { sessions: [] });
+      await tick();
+    }
+    respond(requests.shift()!, {
+      requests: [
+        {
+          id: "55555555-5555-4555-8555-555555555555",
+          kind: "refund",
+          state: "open",
+          createdAt: "2026-10-26T00:00:00Z",
+        },
+      ],
+    });
+    await showing;
+    assert.ok(
+      page.data.participation,
+      "a refund case must not erase the current participation view",
+    );
+    assert.equal(page.data.careRequests[0]?.kind, "refund");
+    assert.equal(page.data.careRequests[0].state, "open");
+    page.onHide();
+  });

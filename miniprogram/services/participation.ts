@@ -244,6 +244,7 @@ export const participationClient = {
             "correction",
             "first_copy_expiry",
             "production_handoff",
+            "refund",
           ].includes(item.kind) &&
           ["open", "verified", "completed"].includes(item.state) &&
           Number.isFinite(Date.parse(item.createdAt)),
