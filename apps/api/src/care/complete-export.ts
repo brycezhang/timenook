@@ -117,6 +117,11 @@ type ExportBatch = {
   sources: ExportSource[];
   counts: Record<string, number>;
 };
+class SourceRetentionExpired extends ForbiddenException {
+  constructor() {
+    super("EXPORT_SOURCE_RETENTION_EXPIRED");
+  }
+}
 @Injectable()
 export class CompleteExports implements OnModuleDestroy {
   private readonly database: PrismaClient;
@@ -290,7 +295,7 @@ export class CompleteExports implements OnModuleDestroy {
                 (row.manifest as { files?: unknown }).files,
               );
             } catch (error) {
-              if (!(error instanceof ForbiddenException)) throw error;
+              if (!(error instanceof SourceRetentionExpired)) throw error;
               value.canDownload = false;
               value.missingReason = "EXPORT_SOURCE_RETENTION_EXPIRED";
             }
@@ -370,9 +375,11 @@ export class CompleteExports implements OnModuleDestroy {
         );
       else throw new ForbiddenException();
     }
-    for (const kind of kinds)
-      if (!terms.retention?.[kind] || terms.retention[kind].state === "expired")
-        throw new ForbiddenException();
+    for (const kind of kinds) {
+      if (!terms.retention?.[kind]) throw new ForbiddenException();
+      if (terms.retention[kind].state === "expired")
+        throw new SourceRetentionExpired();
+    }
   }
   private async sourceRetentionIn(
     tx: Prisma.TransactionClient,
@@ -698,10 +705,12 @@ export class CompleteExports implements OnModuleDestroy {
         sources.reduce((n, f) => n + f.bytes, 0) > 134217728
       )
         throw new ConflictException("EXPORT_LIMIT_REQUIRES_CARE");
+      await this.sourceRetentionIn(tx, row.projectId, sources);
     } catch (error) {
       if (
-        error instanceof ConflictException &&
-        /^EXPORT_[A-Z_]+$/.test(error.message)
+        error instanceof SourceRetentionExpired ||
+        (error instanceof ConflictException &&
+          /^EXPORT_[A-Z_]+$/.test(error.message))
       )
         return this.view(
           await tx.careExport.update({
@@ -715,7 +724,6 @@ export class CompleteExports implements OnModuleDestroy {
         );
       throw error;
     }
-    await this.sourceRetentionIn(tx, row.projectId, sources);
     row = await tx.careExport.update({
       where: { id },
       data: {
@@ -1197,7 +1205,9 @@ export class AdminCompleteExportsController {
       } catch (error) {
         await this.exports.fail(
           batch,
-          "EXPORT_SOURCE_MISSING_OR_PERMISSION_CHANGED",
+          error instanceof SourceRetentionExpired
+            ? error.message
+            : "EXPORT_SOURCE_MISSING_OR_PERMISSION_CHANGED",
         );
         if (error instanceof ForbiddenException) throw error;
         throw new ConflictException();

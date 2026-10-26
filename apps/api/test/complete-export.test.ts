@@ -277,6 +277,10 @@ test("export completion rejects withdrawal during storage read and retry cannot 
   );
   assert.equal(status.requests[0].canDownload, false);
   assert.equal(status.requests[0].state, "revoked");
+  assert.notEqual(
+    status.requests[0].missingReason,
+    "EXPORT_SOURCE_RETENTION_EXPIRED",
+  );
   assert.equal(
     (
       await request(
@@ -635,7 +639,10 @@ test("missing source bytes never publish an incomplete package and orphan cleanu
   );
   const failed = data(await adminRequest("GET", p.exportBase, p.admin), 200);
   assert.equal(failed.state, "failed");
-  assert.ok(failed.missingReason);
+  assert.equal(
+    failed.missingReason,
+    "EXPORT_SOURCE_MISSING_OR_PERMISSION_CHANGED",
+  );
   assert.equal(failed.sha256, null);
   await writeFile(path, original);
   const packed = data(
@@ -794,6 +801,64 @@ async function photoDeadline(p: Awaited<ReturnType<typeof acceptedBook>>) {
   });
   return end;
 }
+test("a first pack at or after source retention expiry records a stable failure visible to the recipient and operator", async (t) => {
+  const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 });
+  await storyPhoto(p, "首次打包前已到期的衍生图");
+  const after = await anotherAcceptedExport(p),
+    end = await photoDeadline(p);
+  const before = data(await adminRequest("GET", p.exportBase, p.admin), 200);
+  assert.equal(before.state, "accepted");
+  assert.equal(before.missingReason, null);
+  t.mock.timers.enable({ apis: ["Date"], now: end });
+  try {
+    for (const [id, base, now] of [
+      [p.exp.id, p.exportBase, end],
+      [after.id, after.base, end + 1],
+    ] as const) {
+      t.mock.timers.setTime(now);
+      const accepted = data(await adminRequest("GET", base, p.admin), 200);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const failed = data(
+          await adminRequest("POST", base + "/pack", p.admin, {}),
+        );
+        assert.equal(failed.state, "failed");
+        assert.equal(failed.missingReason, "EXPORT_SOURCE_RETENTION_EXPIRED");
+        const recipient = data(
+          await request(
+            "GET",
+            `/v1/projects/${p.projectId}/exports`,
+            p.narrator.token,
+          ),
+          200,
+        ).requests.find((r: { id: string }) => r.id === id);
+        const operator = data(await adminRequest("GET", base, p.admin), 200);
+        for (const view of [failed, recipient, operator]) {
+          assert.equal(view.state, "failed");
+          assert.equal(view.missingReason, "EXPORT_SOURCE_RETENTION_EXPIRED");
+          assert.equal(view.acceptedAt, accepted.acceptedAt);
+          assert.equal(view.dueAt, accepted.dueAt);
+          assert.equal(view.readyAt, null);
+          assert.equal(view.expiresAt, null);
+          assert.equal(view.sha256, null);
+          assert.equal(view.bytes, null);
+          assert.equal(view.canDownload, false);
+        }
+        assert.equal(
+          (
+            await request(
+              "GET",
+              `/v1/projects/${p.projectId}/exports/${id}/download`,
+              p.narrator.token,
+            )
+          ).statusCode,
+          403,
+        );
+      }
+    }
+  } finally {
+    t.mock.timers.reset();
+  }
+});
 test("derived-photo retention stops new complete packs and existing ZIP downloads exactly at its own deadline", async (t) => {
   const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 });
   await storyPhoto(p, "本次期限不同的原图与衍生照片");
@@ -822,8 +887,8 @@ test("derived-photo retention stops new complete packs and existing ZIP download
     );
     t.mock.timers.setTime(end);
     assert.equal(
-      (await adminRequest("POST", at.base + "/pack", p.admin, {})).statusCode,
-      403,
+      data(await adminRequest("POST", at.base + "/pack", p.admin, {})).state,
+      "failed",
       "expired derived photos cannot enter a newly packed archive",
     );
     assert.equal(
@@ -851,9 +916,8 @@ test("derived-photo retention stops new complete packs and existing ZIP download
     );
     t.mock.timers.setTime(end + 1);
     assert.equal(
-      (await adminRequest("POST", after.base + "/pack", p.admin, {}))
-        .statusCode,
-      403,
+      data(await adminRequest("POST", after.base + "/pack", p.admin, {})).state,
+      "failed",
     );
     assert.equal(
       (
@@ -910,7 +974,14 @@ test("a derived-photo deadline crossed during packing prevents the late ZIP from
     assert.equal(row.canDownload, false);
     assert.equal(row.sha256, null);
     assert.equal(row.readyAt, null);
-    assert.notEqual(row.state, "ready");
+    assert.equal(row.state, "failed");
+    assert.equal(row.missingReason, "EXPORT_SOURCE_RETENTION_EXPIRED");
+    const operator = data(
+      await adminRequest("GET", p.exportBase, p.admin),
+      200,
+    );
+    assert.equal(operator.state, "failed");
+    assert.equal(operator.missingReason, "EXPORT_SOURCE_RETENTION_EXPIRED");
     for (const asset of await db.photoAsset.findMany({
       where: { projectId: p.projectId },
     }))
