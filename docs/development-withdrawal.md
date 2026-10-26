@@ -6,13 +6,13 @@
 
 ## 访问与恢复
 
-`POST /v1/projects/:id/consents[/revoke]`、当次协助拒绝、客服核验和换绑复用 T11/T12。本人/客服撤回及换绑先在同一数据库事务提交用途拒绝、epoch 和最少 `project_access_revocations` 记录，再执行可补扫联动。后续执行失败不撤回已提交的拒绝。记录以 UUID 为主键；用途、原因、project/epoch 和创建时间不能改写，执行结果一经记录不能覆盖。
+`POST /v1/projects/:id/consents[/revoke]`、当次协助拒绝、客服核验和换绑复用 T11/T12。本人/客服撤回及换绑先在同一数据库事务提交用途拒绝、epoch 和最少 `project_access_revocations` 记录，再执行可补扫联动。后续执行失败不撤回已提交的拒绝。记录以 UUID 为主键，并保存单调序号、旧 Session、精确 task id/fence 和当时生产尝试编号；这些目标及用途、原因、project/epoch、创建时间不能改写，执行结果一经记录不能覆盖。恢复不按当前同 epoch 队列或创建时间重新圈定目标。
 
-T12 的同机用途互相独立：拒绝一个用途新增该用途 Session fence，不改变其他用途或全局 epoch；相关旧任务仍失效。全局撤回和账号换绑保留既有 epoch 语义。`Participation.reconcileRevocations(projectId?)` 处理未执行记录；受控服务每秒补扫，状态查询亦可恢复未执行记录。新确认/任务/首本/交接仍由其原用例在当前授权及项目锁下重验，不能凭旧结果重新放行。
+T12 的同机用途互相独立：拒绝一个用途新增该用途 Session fence，不改变其他用途或全局 epoch；相关旧任务仍失效。全局撤回和账号换绑保留既有 epoch 语义。`Participation.reconcileRevocations(projectId?)` 处理未执行记录；受控服务每秒补扫，状态查询亦可恢复未执行记录。新确认/任务/首本/交接仍由其原用例在当前授权及项目锁下重验，不能凭旧结果重新放行。旧候选遗留的未执行记录缺少精确目标时保持待人工，迁移不拿后来的同 epoch 工作替它补填目标。
 
-私有原声、书中原声、照片、用户 PDF 和运营交接 PDF 采用同一 `ProjectStreams.guard(projectId, epoch, bytes, check, authorization?)` 边界。每块最多 64 KiB，发送前核对当前 epoch、会话及调用者的版本/用途/期限检查；同进程在已提交撤权后关闭活动流，其他进程和背压空闲流每 100 ms 查 PostgreSQL 补验。该机制不依赖 Redis 才能拒绝访问，也不声称能取回传给设备/网络的字节。Range 仍按实际范围及完整长度返回，禁止 OSS 跳转。
+私有原声、书中原声、照片、用户 PDF 和运营交接 PDF 采用同一 `ProjectStreams.guard(projectId, epoch, bytes, check, authorization?, capturedSequence?)` 边界。入口在文件 I/O 前用 `userFence`/`fence` 固定 epoch 与单调撤回序号；旧补扫只关闭该序号之前的相关流，新授权后的同 epoch 流不受旧记录影响。每块最多 64 KiB，发送前核对当前 epoch、会话及调用者的版本/用途/期限检查；同进程在已提交撤权后关闭活动流，其他进程和背压空闲流每 100 ms 查 PostgreSQL 补验。该机制不依赖 Redis 才能拒绝访问，也不声称能取回传给设备/网络的字节。Range 仍按实际范围及完整长度返回，禁止 OSS 跳转。
 
-受控原声页每秒重新解析固定书中版本；故事、校对、照片、项目、书稿、确认和生产页定期重验当前授权，失效时清除显示、私人草稿及临时回听/预览。离页与切号继续清理。用户本机原录音、主动另存的 PDF/导出和实物无法远程回收；缓存清理不能代替资料删除。
+受控原声页每秒重新解析固定书中版本；故事、校对、照片、项目、书稿、确认和生产页定期重验当前授权，失效时清除显示、私人草稿及临时回听/预览。照片采集页沿本次 collection-check（含 assistedSessionId）复验，不用是否授权共享来判断采集许可。离页与切号继续清理。用户本机原录音、主动另存的 PDF/导出和实物无法远程回收；缓存清理不能代替资料删除。
 
 ## 任务与生产
 

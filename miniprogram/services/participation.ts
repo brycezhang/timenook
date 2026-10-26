@@ -32,6 +32,18 @@ function state(value: ParticipationState) {
     throw new Error("参与状态无效，请重新查询");
   return value;
 }
+export function withdrawalDisposition(withdrawal: WithdrawalStatus): string {
+  const state = withdrawal.production?.state;
+  return state === "cancellation_pending"
+    ? "已请求停止生产，印厂接单或取消结果待人工核实"
+    : state === "cancelled"
+      ? "本次生产已停止；之后须重新核对授权和版本"
+      : state === "delivered"
+        ? "纸书已交付，实物及已导出文件不能远程收回"
+        : withdrawal.changes.length
+          ? "相关访问已停止，处置进度以本页实际记录为准"
+          : "暂无撤回或账号变更记录";
+}
 export const participationClient = {
   async withdrawalStatus(id: string) {
     if (!uuid(id)) throw new Error("项目编号无效");

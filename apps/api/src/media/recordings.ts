@@ -675,7 +675,7 @@ export class RecordingsController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
-    const epoch = await this.streams.userEpoch(id, req.headers.authorization);
+    const fence = await this.streams.userFence(id, req.headers.authorization);
     return sendAudio(
       await this.recordings.content(
         id,
@@ -689,7 +689,7 @@ export class RecordingsController {
       (bytes) =>
         this.streams.guard(
           id,
-          epoch,
+          fence.epoch,
           bytes,
           () =>
             this.recordings.authorizeContent(
@@ -699,6 +699,7 @@ export class RecordingsController {
               req.headers.authorization,
             ),
           req.headers.authorization,
+          fence.sequence,
         ),
     );
   }

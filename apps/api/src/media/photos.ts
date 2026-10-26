@@ -1124,7 +1124,7 @@ export class PhotosController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
-    const epoch = await this.streams.userEpoch(id, req.headers.authorization);
+    const fence = await this.streams.userFence(id, req.headers.authorization);
     const result = await this.photos.content(
       id,
       interview,
@@ -1141,7 +1141,7 @@ export class PhotosController {
       .send(
         await this.streams.guard(
           id,
-          epoch,
+          fence.epoch,
           result.bytes,
           () =>
             this.photos.authorizeContent(
@@ -1153,6 +1153,7 @@ export class PhotosController {
               asset,
             ),
           req.headers.authorization,
+          fence.sequence,
         ),
       );
   }
@@ -1271,7 +1272,7 @@ export class PhotosController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
-    const epoch = await this.streams.userEpoch(id, req.headers.authorization);
+    const fence = await this.streams.userFence(id, req.headers.authorization);
     const result = await this.photos.content(
       id,
       interview,
@@ -1287,7 +1288,7 @@ export class PhotosController {
       .send(
         await this.streams.guard(
           id,
-          epoch,
+          fence.epoch,
           result.bytes,
           () =>
             this.photos.authorizeContent(
@@ -1298,6 +1299,7 @@ export class PhotosController {
               req.headers.authorization,
             ),
           req.headers.authorization,
+          fence.sequence,
         ),
       );
   }

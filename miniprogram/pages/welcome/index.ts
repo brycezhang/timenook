@@ -3,7 +3,10 @@ import { type Project } from "../../domain/model";
 import { go, home, read, required, save } from "../../services/store";
 import { dataMode, setDataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
-import { participationClient } from "../../services/participation";
+import {
+  participationClient,
+  withdrawalDisposition,
+} from "../../services/participation";
 import { paymentKey } from "../../services/payments";
 import {
   CONSENT_PURPOSES,
@@ -85,17 +88,7 @@ Page({
       );
       if (generation !== this.generation || owner !== sessionClient.context())
         return;
-      const state = withdrawal.production?.state;
-      const productionDisposition =
-        state === "cancellation_pending"
-          ? "已请求停止生产，印厂接单或取消结果待人工核实"
-          : state === "cancelled"
-            ? "本次生产已停止；之后须重新核对授权和版本"
-            : state === "delivered"
-              ? "纸书已交付，实物及已导出文件不能远程收回"
-              : withdrawal.changes.length
-                ? "相关访问已停止，处置进度以本页实际记录为准"
-                : "暂无撤回或账号变更记录";
+      const productionDisposition = withdrawalDisposition(withdrawal);
       this.setData({ withdrawal, productionDisposition });
     } catch (error) {
       if (generation === this.generation && owner === sessionClient.context())

@@ -1156,7 +1156,7 @@ export class AdminFulfillmentController {
     const scope = await this.run(req, "fulfillment.pdf", (tx, actor) =>
         this.fulfillment.pdfIn(tx, id, attemptId, actor),
       ),
-      epoch = await this.streams.epoch(scope.projectId),
+      fence = await this.streams.fence(scope.projectId),
       bytes = await this.fulfillment.readPdf(scope.path, scope.pdf);
     await this.run(req, "fulfillment.pdf", (tx, actor) =>
       this.fulfillment.pdfIn(tx, id, attemptId, actor),
@@ -1170,10 +1170,16 @@ export class AdminFulfillmentController {
       )
       .header("Content-Length", bytes.length)
       .send(
-        await this.streams.guard(scope.projectId, epoch, bytes, () =>
-          this.run(req, "fulfillment.pdf", (tx, actor) =>
-            this.fulfillment.pdfIn(tx, id, attemptId, actor),
-          ),
+        await this.streams.guard(
+          scope.projectId,
+          fence.epoch,
+          bytes,
+          () =>
+            this.run(req, "fulfillment.pdf", (tx, actor) =>
+              this.fulfillment.pdfIn(tx, id, attemptId, actor),
+            ),
+          undefined,
+          fence.sequence,
         ),
       );
   }

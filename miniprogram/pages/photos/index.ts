@@ -1,4 +1,4 @@
-import { watchProjectAccess } from "../../services/project-access";
+import { watchPermission } from "../../services/project-access";
 import { paymentKey } from "../../services/payments";
 import {
   PhotoFiles,
@@ -108,9 +108,16 @@ Page({
         status: "每张照片分别保存和上传；原文件会保留",
       });
       this.stopProjectWatch?.();
-      this.stopProjectWatch = watchProjectAccess(
-        this.projectId,
+      this.stopProjectWatch = watchPermission(
         () => this.current(g, context),
+        async () =>
+          (
+            await interviewRecordingClient.authorizeCollection(
+              this.projectId,
+              this.interviewId,
+              this.assistedSessionId || undefined,
+            )
+          ).allowed === true,
         () => {
           this.onHide();
           this.setData({

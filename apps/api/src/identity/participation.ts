@@ -1618,6 +1618,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
           p.accessEpoch,
           body.purpose,
           "assisted",
+          latest?.id,
         );
       }
       const row = await tx.assistedSession.create({
@@ -1672,22 +1673,68 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     accessEpoch: number,
     purpose: string,
     reason: string,
+    sourceSessionId?: string,
   ) {
+    // The caller holds the project lock. Capture the actual old work now,
+    // rather than reconstructing its intended scope after a later regrant.
+    const kinds =
+      reason === "assisted" && purpose === "sharing"
+        ? []
+        : reason === "assisted" && purpose === "ai"
+          ? ["transcribe_audio", "ask_followup", "compose_story"]
+          : [
+              "transcribe_audio",
+              "ask_followup",
+              "compose_story",
+              "render_book",
+            ];
+    const taskFences = await tx.productionTask.findMany({
+      where: {
+        projectId,
+        accessEpoch:
+          reason === "assisted" ? { lte: accessEpoch } : { lt: accessEpoch },
+        kind: { in: kinds },
+        state: { notIn: ["succeeded", "no_speech", "invalidated", "obsolete"] },
+      },
+      select: { id: true, fence: true },
+    });
+    const attempt = ["collection", "sharing", "all"].includes(purpose)
+      ? await tx.fulfillmentAttempt.findFirst({
+          where: { projectId },
+          orderBy: { sequence: "desc" },
+          select: { id: true },
+        })
+      : null;
     await tx.projectAccessRevocation.create({
-      data: { id: randomUUID(), projectId, accessEpoch, purpose, reason },
+      data: {
+        id: randomUUID(),
+        projectId,
+        accessEpoch,
+        purpose,
+        reason,
+        taskFences,
+        sourceSessionId: sourceSessionId ?? null,
+        targetAttemptId: attempt?.id ?? null,
+      },
     });
   }
-  /** Recoverable follow-up. The denied purpose and epoch have already committed. */
+  /** Recoverable follow-up. The denied purpose and exact work targets have already committed. */
   async reconcileRevocations(projectId?: string) {
     const changes = await this.db.projectAccessRevocation.findMany({
-      where: { ...(projectId ? { projectId } : {}), appliedAt: null },
-      orderBy: { createdAt: "asc" },
+      where: {
+        ...(projectId ? { projectId } : {}),
+        appliedAt: null,
+        captureVersion: 1,
+      },
+      orderBy: { sequence: "asc" },
       take: 100,
     });
     for (const change of changes) {
       closeProjectStreams(
         change.projectId,
-        change.reason === "assisted" ? undefined : change.accessEpoch,
+        change.sequence,
+        change.purpose,
+        change.reason === "assisted",
       );
       await this.db.$transaction(async (tx) => {
         await this.project(tx, change.projectId, true);
@@ -1695,63 +1742,42 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
           where: { id: change.id },
         });
         if (current.appliedAt) return;
-        for (const kind of [
-          "transcribe_audio",
-          "ask_followup",
-          "compose_story",
-          "render_book",
-        ]) {
-          if (
-            change.reason === "assisted" &&
-            (change.purpose === "sharing" ||
-              (change.purpose === "ai" && kind === "render_book"))
-          )
-            continue;
-          await tx.productionTask.updateMany({
+        for (const target of current.taskFences as {
+          id: string;
+          fence: number;
+        }[]) {
+          const task = await tx.productionTask.findUnique({
+            where: { id: target.id },
+          });
+          if (!task || task.projectId !== change.projectId) continue;
+          const invalidated = await tx.productionTask.updateMany({
             where: {
-              projectId: change.projectId,
-              accessEpoch:
-                change.reason === "assisted"
-                  ? { lte: change.accessEpoch }
-                  : { lt: change.accessEpoch },
-              kind,
+              id: target.id,
+              fence: target.fence,
               state: {
                 notIn: ["succeeded", "no_speech", "invalidated", "obsolete"],
               },
             },
             data: {
-              state: kind === "transcribe_audio" ? "invalidated" : "obsolete",
+              state:
+                task.kind === "transcribe_audio" ? "invalidated" : "obsolete",
               errorCode: "AUTHORIZATION_CHANGED",
               leaseUntil: null,
               fence: { increment: 1 },
             },
           });
-          const invalidated = await tx.productionTask.findMany({
-            where: {
-              projectId: change.projectId,
-              kind,
-              errorCode: "AUTHORIZATION_CHANGED",
-              state: { in: ["invalidated", "obsolete"] },
-            },
-            select: { id: true },
-          });
-          await tx.taskAttempt.deleteMany({
-            where: {
-              taskId: { in: invalidated.map((task) => task.id) },
-              state: "preparing",
-            },
-          });
+          if (invalidated.count)
+            await tx.taskAttempt.deleteMany({
+              where: { taskId: target.id, state: "preparing" },
+            });
         }
-        // A purpose withdrawal never releases consumed/reserved money or first-copy rights.
         let productionAction = "not_required";
         if (["collection", "sharing", "all"].includes(change.purpose)) {
-          const attempt = await tx.fulfillmentAttempt.findFirst({
-            where: {
-              projectId: change.projectId,
-              createdAt: { lte: change.createdAt },
-            },
-            orderBy: { sequence: "desc" },
-          });
+          const attempt = current.targetAttemptId
+            ? await tx.fulfillmentAttempt.findUnique({
+                where: { id: current.targetAttemptId },
+              })
+            : null;
           productionAction = !attempt
             ? "not_started"
             : attempt.state === "delivered"
@@ -1792,7 +1818,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     });
     const rows = await tx.projectAccessRevocation.findMany({
       where: { projectId },
-      orderBy: { accessEpoch: "desc" },
+      orderBy: { sequence: "desc" },
       take: 50,
     });
     const attempt = await tx.fulfillmentAttempt.findFirst({

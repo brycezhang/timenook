@@ -177,6 +177,7 @@ async function openMini(
   account,
   target = project,
   route = "production",
+  query = "",
 ) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -194,7 +195,9 @@ async function openMini(
     },
     { origin, account },
   );
-  await page.goto(`${origin}/#/${route}?projectId=${target.projectId}`);
+  await page.goto(
+    `${origin}/#/${route}?projectId=${target.projectId}${query ? `&${query}` : ""}`,
+  );
   await expect(page).toHaveTitle("时光里 · 岁月成书");
   return page;
 }
@@ -663,6 +666,123 @@ test("shared Care intake verifies the chosen withdrawal purpose and shows the ac
     .scrollIntoViewIfNeeded();
   await page.screenshot({
     path: "/tmp/timenook-t24-admin-disposition-1280.png",
+  });
+  expect(errors).toEqual([]);
+  await page.context().close();
+});
+
+test("assisted collection-only photos stay usable through periodic authorization, upload and a later refusal", async ({
+  browser,
+}) => {
+  const p = await fixture.project();
+  const account = fixture.data(
+    await fixture.app.inject({
+      method: "POST",
+      url: "/v1/sessions/wechat",
+      payload: { code: `${p.buyer.who}:${randomUUID()}` },
+    }),
+  );
+  const state = await fixture.state(p, p.buyer.token);
+  const session = fixture.data(
+    await fixture.request(
+      "POST",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+      {
+        purpose: "collection",
+        granted: true,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: `synthetic:photos-collection-${randomUUID()}`,
+        expectedBindingVersion: state.bindingVersion,
+        expectedAccessEpoch: state.accessEpoch,
+      },
+    ),
+  );
+  expect((await fixture.state(p, p.buyer.token)).canRead).toBe(false);
+  const interview = fixture.data(
+    await fixture.request(
+      "POST",
+      `/v1/projects/${p.projectId}/interviews`,
+      p.buyer.token,
+      {
+        clientInterviewId: randomUUID(),
+        expectedPlanRevision: 1,
+        starterKind: "free-narration",
+        assistedSessionId: session.id,
+      },
+    ),
+  );
+  const page = await openMini(
+    browser,
+    account,
+    p,
+    "photos",
+    `interviewId=${interview.id}&assistedSessionId=${session.id}`,
+  );
+  await expect(
+    page.getByText("每张照片分别保存和上传；原文件会保留", { exact: true }),
+  ).toBeVisible();
+  const check = await page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/collection-check") &&
+      response.request().method() === "POST",
+  );
+  expect(check.status()).toBe(201);
+  await expect(
+    page.getByRole("button", { name: "选择原照片", exact: true }),
+  ).toBeEnabled();
+  const picker = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "选择原照片", exact: true }).click();
+  const sharp = apiRequire("sharp");
+  const buffer = await sharp({
+    create: { width: 80, height: 60, channels: 3, background: "white" },
+  })
+    .png()
+    .toBuffer();
+  await (
+    await picker
+  ).setFiles({
+    name: "synthetic-assistance.png",
+    mimeType: "image/png",
+    buffer,
+  });
+  await expect(
+    page.getByText("本机原文件和清单已保存，尚未封存", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "单独上传或重试", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "查询封存结果", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "/tmp/timenook-t24-review-assisted-photo.png",
+  });
+  const current = await fixture.state(p, p.buyer.token);
+  fixture.data(
+    await fixture.request(
+      "POST",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+      {
+        purpose: "collection",
+        granted: false,
+        expectedSessionId: session.id,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: `synthetic:photos-refused-${randomUUID()}`,
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+      },
+    ),
+  );
+  await expect(
+    page.getByText(/资料用途或账号授权已变化/).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "查询封存结果", exact: true }),
+  ).toHaveCount(0);
+  await page.screenshot({
+    path: "/tmp/timenook-t24-review-assisted-photo-revoked.png",
   });
   expect(errors).toEqual([]);
   await page.context().close();

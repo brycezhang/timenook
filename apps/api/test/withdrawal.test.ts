@@ -472,3 +472,222 @@ test("a committed denial survives a follow-up fault and pending work is reconcil
   assert.equal(status.changes[0].applied, true);
   assert.equal((await state(p, p.narrator.token)).canRead, false);
 });
+
+import { project as unboundProject } from "./book-fixture";
+async function assistedChoice(
+  p: { projectId: string; buyer: { token: string } },
+  purpose: string,
+  granted: boolean,
+) {
+  const current = await state(p, p.buyer.token);
+  const sessions = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+    ),
+    200,
+  ).sessions;
+  const latest = sessions.find((row: any) => row.purpose === purpose);
+  return request(
+    "POST",
+    `/v1/projects/${p.projectId}/assisted-sessions`,
+    p.buyer.token,
+    {
+      purpose,
+      granted,
+      noticeVersion: "synthetic-d08-v1",
+      evidenceRef: `synthetic:recovery-${randomUUID()}`,
+      expectedBindingVersion: current.bindingVersion,
+      expectedAccessEpoch: current.accessEpoch,
+      ...(latest ? { expectedSessionId: latest.id } : {}),
+    },
+  );
+}
+async function assistedSealed(
+  p: { projectId: string; buyer: { token: string } },
+  collection: string,
+  audio = syntheticAudio(),
+) {
+  const interview = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/interviews`,
+      p.buyer.token,
+      {
+        clientInterviewId: randomUUID(),
+        expectedPlanRevision: 1,
+        starterKind: "free-narration",
+        assistedSessionId: collection,
+      },
+    ),
+  );
+  const base = `/v1/projects/${p.projectId}/interviews/${interview.id}/clips`;
+  const clip = data(
+    await request("POST", base, p.buyer.token, {
+      clientClipId: randomUUID(),
+      bytes: audio.length,
+      sha256: createHash("sha256").update(audio).digest("hex"),
+      assistedSessionId: collection,
+    }),
+  );
+  const form = data(
+    await request("POST", `${base}/${clip.id}/upload`, p.buyer.token, {
+      assistedSessionId: collection,
+    }),
+  );
+  assert.equal(
+    (await formUpload(app, form, audio, {}, p.buyer.token)).statusCode,
+    204,
+  );
+  data(
+    await request("POST", `${base}/${clip.id}/seal`, p.buyer.token, {
+      assistedSessionId: collection,
+    }),
+  );
+  const tasks = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/tasks/status`,
+      p.buyer.token,
+      { interviewId: interview.id, assistedSessionId: collection },
+    ),
+  );
+  return { base, clip, task: tasks[0] };
+}
+test("delayed assisted revocation recovery preserves a renewed session's new task and active stream in the same epoch", async () => {
+  const p = await unboundProject(),
+    collection = data(await assistedChoice(p, "collection", true));
+  data(await assistedChoice(p, "ai", true));
+  data(await assistedChoice(p, "sharing", true));
+  await db.$executeRawUnsafe(
+    "CREATE FUNCTION same_t24_scope_time() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.created_at := '2026-10-26T00:00:00Z'::timestamptz; RETURN NEW; END $$",
+  );
+  await db.$executeRawUnsafe(
+    "CREATE TRIGGER same_t24_task_time BEFORE INSERT ON production_tasks FOR EACH ROW EXECUTE FUNCTION same_t24_scope_time()",
+  );
+  await db.$executeRawUnsafe(
+    "CREATE TRIGGER same_t24_revoke_time BEFORE INSERT ON project_access_revocations FOR EACH ROW EXECUTE FUNCTION same_t24_scope_time()",
+  );
+  const original = await assistedSealed(p, collection.id),
+    epoch = (await state(p, p.buyer.token)).accessEpoch;
+  await db.$executeRawUnsafe(
+    "CREATE FUNCTION reject_t24_scoped_followup() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic scoped followup fault'; END $$",
+  );
+  await db.$executeRawUnsafe(
+    "CREATE TRIGGER reject_t24_scoped_followup BEFORE UPDATE ON project_access_revocations FOR EACH ROW EXECUTE FUNCTION reject_t24_scoped_followup()",
+  );
+  let response: http.IncomingMessage | undefined;
+  let fault = true;
+  try {
+    assert.equal(
+      (await assistedChoice(p, "collection", false)).statusCode,
+      500,
+    );
+    const renewed = data(await assistedChoice(p, "collection", true));
+    const paddingBytes = 1800000,
+      header = Buffer.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0]);
+    for (let index = 0; index < 4; index++)
+      header[6 + index] = (paddingBytes >> (7 * (3 - index))) & 0x7f;
+    const audio = Buffer.concat([
+      header,
+      Buffer.alloc(paddingBytes),
+      syntheticAudio(),
+    ]);
+    const fresh = await assistedSealed(p, renewed.id, audio);
+    assert.equal(fresh.task.state, "queued");
+    assert.equal((await state(p, p.buyer.token)).accessEpoch, epoch);
+    if (!app.getHttpServer().listening) await app.listen(0, "127.0.0.1");
+    const server = await app.getUrl();
+    response = await new Promise<http.IncomingMessage>((resolve, reject) =>
+      http
+        .get(
+          `${server}${fresh.base}/${fresh.clip.id}/content`,
+          { headers: { authorization: `Bearer ${p.buyer.token}` } },
+          resolve,
+        )
+        .on("error", reject),
+    );
+    assert.equal(response.statusCode, 200);
+    const chunks: Buffer[] = [];
+    await new Promise<void>((resolve, reject) =>
+      response!
+        .once("data", (chunk) => {
+          chunks.push(chunk);
+          response!.pause();
+          resolve();
+        })
+        .once("error", reject),
+    );
+    const completed = new Promise<boolean>((resolve) => {
+      response!.once("aborted", () => resolve(false));
+      response!.once("end", () => resolve(true));
+      response!.on("error", () => {});
+    });
+    await db.$executeRawUnsafe(
+      "DROP TRIGGER reject_t24_scoped_followup ON project_access_revocations",
+    );
+    await db.$executeRawUnsafe("DROP FUNCTION reject_t24_scoped_followup()");
+    fault = false;
+    const disposition = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/withdrawal-status`,
+        p.buyer.token,
+      ),
+      200,
+    );
+    assert.equal(disposition.changes[0].createdAt, original.task.queuedAt);
+    assert.equal(
+      fresh.task.queuedAt,
+      original.task.queuedAt,
+      "a timestamp cannot distinguish the old and renewed work",
+    );
+    const after = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/tasks/${fresh.task.id}`,
+        p.buyer.token,
+      ),
+      200,
+    );
+    response.on("data", (chunk) => chunks.push(chunk));
+    response.resume();
+    const finished = await completed;
+    assert.equal(
+      after.state,
+      "queued",
+      "the old refusal cannot invalidate work created under renewed collection",
+    );
+    assert.equal(
+      finished,
+      true,
+      "the old refusal cannot abort a stream started under renewed collection",
+    );
+    assert.deepEqual(Buffer.concat(chunks), audio);
+    const old = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/tasks/${original.task.id}`,
+        p.buyer.token,
+      ),
+      200,
+    );
+    assert.equal(old.state, "invalidated");
+  } finally {
+    response?.destroy();
+    await db.$executeRawUnsafe(
+      "DROP TRIGGER same_t24_task_time ON production_tasks",
+    );
+    await db.$executeRawUnsafe(
+      "DROP TRIGGER same_t24_revoke_time ON project_access_revocations",
+    );
+    await db.$executeRawUnsafe("DROP FUNCTION same_t24_scope_time()");
+    if (fault) {
+      await db.$executeRawUnsafe(
+        "DROP TRIGGER reject_t24_scoped_followup ON project_access_revocations",
+      );
+      await db.$executeRawUnsafe("DROP FUNCTION reject_t24_scoped_followup()");
+    }
+  }
+});

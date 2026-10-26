@@ -277,6 +277,10 @@ export class BookAudioController {
     @Res() reply: FastifyReply,
   ) {
     const entry = await this.audio.read(id, req.headers.authorization);
+    const fence = await this.streams.userFence(
+      entry.projectId,
+      req.headers.authorization,
+    );
     return sendAudio(
       await this.audio.content(id, clipId, epoch, req.headers.authorization),
       clipId,
@@ -289,6 +293,7 @@ export class BookAudioController {
           bytes,
           () => this.audio.read(id, req.headers.authorization),
           req.headers.authorization,
+          fence.sequence,
         ),
     );
   }

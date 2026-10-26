@@ -1259,6 +1259,11 @@ model FulfillmentRecord {
 // Durable access withdrawal outbox; no private content is retained here.
 model ProjectAccessRevocation {
  id String @id @db.Uuid
+ sequence Int @unique @default(autoincrement())
+ captureVersion Int @default(1) @map("capture_version")
+ taskFences Json @default("[]") @map("task_fences")
+ sourceSessionId String? @map("source_session_id") @db.Uuid
+ targetAttemptId String? @map("target_attempt_id") @db.Uuid
  projectId String @map("project_id") @db.Uuid
  accessEpoch Int @map("access_epoch")
  purpose String
@@ -1267,5 +1272,6 @@ model ProjectAccessRevocation {
  productionAction String? @map("production_action")
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@index([projectId,accessEpoch])
+ @@index([projectId,sequence], map: "project_access_revocations_project_sequence")
  @@map("project_access_revocations")
 }
