@@ -6,7 +6,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "pnpm run build:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api build && pnpm --filter @timenook/admin build",
     "typecheck": "pnpm run typecheck:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api typecheck && pnpm --filter @timenook/admin typecheck",
-    "test": "pnpm run test:frontend && pnpm --filter @timenook/api test && pnpm run test:print",
+    "test": "pnpm run test:frontend && pnpm --filter @timenook/api test && pnpm run test:print && pnpm run test:release",
     "check": "pnpm run typecheck && pnpm test && pnpm run build",
     "check:native": "node scripts/check-native.mjs",
     "build:frontend": "node scripts/build.mjs && vite build --outDir dist/preview",
@@ -24,6 +24,8 @@
     "probe:identity": "pnpm --filter @timenook/api probe:identity",
     "probe:api": "pnpm --filter @timenook/api probe:api",
     "test:print": "node --test tests/print-probe/*.test.mjs",
+    "test:release": "node --test tests/release/*.test.mjs",
+    "release:candidate": "node scripts/release/package.mjs create",
     "probe:print": "node --env-file-if-exists=.env scripts/print-probe/cli.mjs",
     "setup:print-font": "node scripts/setup-print-font.mjs",
     "check:commerce": "pnpm -r --filter @timenook/api... build && node apps/api/dist/commerce/admission-cli.js"

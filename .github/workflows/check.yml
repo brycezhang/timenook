@@ -89,6 +89,19 @@ jobs:
       - run: pnpm check
       - run: pnpm api:openapi
       - run: pnpm test:admin-browser
+      - name: Inspect Linux Prisma runtime and package candidate release
+        run: |
+          pnpm --filter @timenook/api exec prisma -v
+          pnpm release:candidate --platform linux --output "$RUNNER_TEMP/timenook-release"
+          node scripts/release/package.mjs verify --root "$RUNNER_TEMP/timenook-release" --platform linux
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: timenook-candidate-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/timenook-release.tgz
+            ${{ runner.temp }}/timenook-release.tgz.sha256
+          if-no-files-found: error
+          retention-days: 7
   check:
     needs: [changes, docs, full]
     if: ${{ always() }}
