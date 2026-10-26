@@ -25,6 +25,16 @@ export const paymentConfig = {
     "https://synthetic.invalid/timenook/v1/webhooks/wechat-pay/payments",
 };
 export const supplierOrders = new Map<string, Record<string, unknown>>();
+export const supplierRefunds = new Map<string, Record<string, unknown>>();
+export let nextRefundFault: "" | "timeout" | "timeout-before" | "signature" =
+  "";
+let refundQueryGate: ((outRefundNo: string) => Promise<void>) | undefined;
+export function interceptRefundQuery(gate?: typeof refundQueryGate) {
+  refundQueryGate = gate;
+}
+export function refundFault(value: typeof nextRefundFault) {
+  nextRefundFault = value;
+}
 export const paymentRequests: {
   method: string;
   path: string;
@@ -83,6 +93,41 @@ export const paymentFetch: typeof fetch = async (input, init) => {
     path: url.pathname + url.search,
     body: payload,
   });
+  if (url.pathname.startsWith("/v3/refund/domestic/refunds")) {
+    if (method === "POST") {
+      if (nextRefundFault === "timeout-before") {
+        nextRefundFault = "";
+        throw new Error("synthetic connection lost before provider acceptance");
+      }
+      const order = supplierOrders.get(payload.out_trade_no);
+      assert.ok(order, "original synthetic payment exists");
+      const row = {
+        out_trade_no: payload.out_trade_no,
+        out_refund_no: payload.out_refund_no,
+        transaction_id: order.transaction_id,
+        refund_id: `synthetic-refund-${payload.out_refund_no}`,
+        status: "PROCESSING",
+        amount: payload.amount,
+      };
+      supplierRefunds.set(payload.out_refund_no, row);
+      if (nextRefundFault === "timeout") {
+        nextRefundFault = "";
+        throw new Error("synthetic refund result unknown");
+      }
+      const result = signed(JSON.stringify(row));
+      if (nextRefundFault === "signature") {
+        nextRefundFault = "";
+        result.headers.set("Wechatpay-Signature", "invalid");
+      }
+      return result;
+    }
+    const no = decodeURIComponent(url.pathname.split("/").at(-1)!);
+    const row = supplierRefunds.get(no);
+    await refundQueryGate?.(no);
+    return row
+      ? signed(JSON.stringify(row))
+      : signed(JSON.stringify({ code: "RESOURCE_NOT_EXISTS" }), 404);
+  }
   const no = decodeURIComponent(url.pathname.split("/")[5] ?? "");
   if (method === "POST" && url.pathname === "/v3/pay/transactions/jsapi") {
     supplierOrders.set(payload.out_trade_no, {
@@ -162,6 +207,8 @@ export function paid(
 export async function callback(
   transaction: Record<string, unknown>,
   id = "synthetic-event-" + String(transaction.out_trade_no),
+  originalType = "transaction",
+  eventType = "TRANSACTION.SUCCESS",
 ) {
   const nonce = "abcdefghijkl";
   const cipher = createCipheriv(
@@ -169,7 +216,7 @@ export async function callback(
     Buffer.from(paymentConfig.apiV3Key),
     nonce,
   );
-  cipher.setAAD(Buffer.from("transaction"));
+  cipher.setAAD(Buffer.from(originalType));
   const ciphertext = Buffer.concat([
     cipher.update(JSON.stringify(transaction)),
     cipher.final(),
@@ -177,13 +224,13 @@ export async function callback(
   ]).toString("base64");
   const body = JSON.stringify({
     id,
-    event_type: "TRANSACTION.SUCCESS",
+    event_type: eventType,
     resource_type: "encrypt-resource",
     resource: {
       algorithm: "AEAD_AES_256_GCM",
-      original_type: "transaction",
+      original_type: originalType,
       nonce,
-      associated_data: "transaction",
+      associated_data: originalType,
       ciphertext,
     },
   });

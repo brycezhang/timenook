@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from "vue";
 import { Alert, Button, Form, FormItem, Input } from "antdv-next";
 import type { CareCase, StoryView } from "@timenook/contracts";
 import { careApi } from "../api/admin";
+import RefundCase from "./refund-case.vue";
 const correction = ref<StoryView | null>(null),
   correctionTitle = ref(""),
   correctionParagraphs = ref<{ text: string; sourceRefs: string[] }[]>([]),
@@ -34,19 +35,21 @@ const intakeProject = ref(""),
   intakePurpose = ref<"all" | "collection" | "ai" | "sharing">("all"),
   notice = ref("");
 const kindLabel = (kind: string) =>
-  kind === "production_handoff"
-    ? "生产交接核验"
-    : kind === "first_copy_expiry"
-      ? "制作期限人工审核"
-      : kind === "correction"
-        ? "故事限时校对"
-        : kind === "rebind"
-          ? "账号换绑"
-          : kind === "withdraw"
-            ? "本人撤回申请"
-            : kind === "export"
-              ? "本人资料导出申请"
-              : "本人删除申请";
+  kind === "refund"
+    ? "退款申请"
+    : kind === "production_handoff"
+      ? "生产交接核验"
+      : kind === "first_copy_expiry"
+        ? "制作期限人工审核"
+        : kind === "correction"
+          ? "故事限时校对"
+          : kind === "rebind"
+            ? "账号换绑"
+            : kind === "withdraw"
+              ? "本人撤回申请"
+              : kind === "export"
+                ? "本人资料导出申请"
+                : "本人删除申请";
 function currentCorrection(
   care: CareCase,
   generation: number,
@@ -333,7 +336,12 @@ onMounted(refresh);
       <p>目标账号：{{ selected.targetUserId }}</p>
       <p>来源绑定版本：{{ selected.sourceBindingVersion }}</p>
       <Alert
-        v-if="selected.state === 'completed'"
+        v-if="selected.kind === 'refund'"
+        type="info"
+        message="退款状态以本工单的微信核验与原单对账结果为准。"
+      />
+      <Alert
+        v-else-if="selected.state === 'completed'"
         type="success"
         :message="
           selected.kind === 'production_handoff'
@@ -398,6 +406,14 @@ onMounted(refresh);
           }}</Button
         ></Form
       >
+      <RefundCase
+        v-if="selected.kind === 'refund'"
+        :key="selected.id"
+        :case-id="selected.id"
+        :csrf="props.csrf"
+        @expired="emit('expired')"
+        @changed="refresh"
+      />
       <section
         v-if="selected.kind === 'correction' && selected.correctionGrant"
         class="section"

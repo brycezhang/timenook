@@ -51,6 +51,31 @@ export const adminApi = {
     await client.post("/logout", {}, { headers: { "X-CSRF-Token": csrf } });
   },
 };
+import type { RefundView } from "@timenook/contracts";
+export const refundApi = {
+  async forCase(id: string) {
+    return (
+      await client.get<ApiResponse<RefundView>>(
+        `/refunds/cases/${encodeURIComponent(id)}`,
+      )
+    ).data;
+  },
+  async command(
+    id: string,
+    action: "approve" | "reject" | "submit" | "reconcile" | "production-review",
+    body: object,
+    key: string,
+    csrf: string,
+  ) {
+    return (
+      await client.post<ApiResponse<RefundView>>(
+        `/refunds/${encodeURIComponent(id)}/${action}`,
+        body,
+        { headers: { "Idempotency-Key": key, "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
+};
 
 import type {
   ManagedRecipientType,

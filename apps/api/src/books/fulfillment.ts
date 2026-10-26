@@ -785,7 +785,15 @@ export class Fulfillment implements OnModuleDestroy {
       });
       await tx.firstCopyEntitlement.updateMany({
         where: { id: order.entitlementId, state: "consumed" },
-        data: { state: "reserved" },
+        data: {
+          state: (
+            await tx.paymentOrder.findUniqueOrThrow({
+              where: { id: order.paymentOrderId },
+            })
+          ).firstCopyCancellationRequired
+            ? "revoked"
+            : "reserved",
+        },
       });
       await tx.careRequest.update({
         where: { id: attempt.caseId },
