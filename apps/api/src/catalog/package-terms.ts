@@ -160,18 +160,22 @@ export function publicTerms(
       text: "一个项目、一位成年讲述者、一位发起人、首本实体书一本。付款及赠礼称呼不替代讲述者本人授权。",
     },
     {
+      key: "print_specification",
       label: "印刷规格",
       text: `${at(d01, "widthMm")} × ${at(d01, "heightMm")} mm；${at(d01, "paper")}；${at(d01, "binding")}；${at(d01, "color")}；${at(d01, "minPages")}–${at(d01, "maxPages")} 页。`,
     },
     {
+      key: "creation_window",
       label: "制作期限",
       text: `自${start("d02.startsAt")}起 ${value("d02.duration.value")} 个自然日。未开始参与的最长等待为付款后 ${value("d02.notStarted.maxWait.value")} 个自然日，之后${read("d02.notStarted.resolution") === "expire_creation" ? "制作权益到期" : "联系并提供退款处理"}。`,
     },
     {
+      key: "creation_expiration",
       label: "暂停与到期",
       text: `暂停时${read("d02.pause.clock") === "stops" ? "停止" : "继续"}计时，累计最多 ${value("d02.pause.maxTotal.value")} 天，达到上限后${read("d02.pause.atLimit") === "resume_clock" ? "恢复计时" : "人工核验"}。到期后停止新录音，首本制作${read("d02.expiration.firstCopy") === "blocked" ? "停止受理" : "需人工核验"}；资料按各自保留期限处理。`,
     },
     {
+      key: "shipping",
       label: "配送范围",
       text: `约定运费已包含。支持地区：${(read("d05.includedRegionCodes") as string[]).map((code) => at(shippingRegionLabels, code)).join("、")}；不支持地区：${(read("d05.excludedRegionCodes") as string[]).map((code) => at(shippingRegionLabels, code)).join("、")}。未列地区不开放付款，付款前核验收货地址。`,
     },
@@ -237,6 +241,7 @@ export function publicTerms(
     ["afterSales", "售后处理", "核验售后请求"],
   ])
     terms.push({
+      key: `service.${key}`,
       label,
       text: `${trigger}后 ${value(`d06.${key}.within.value`)} 个工作日内处理。`,
     });

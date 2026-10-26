@@ -33,8 +33,16 @@
 
 ## 回归结果
 
-最终 T22 **14/14**，日志 `/tmp/timenook-t22-backend-first-copy-final.log`。覆盖 context/地区/隐私、确定 PDF 与地址失效、8 路唯一预留、到期边界/并发工单、管理员权限/当前版本/最少响应、地址循环、通用核验拒绝、缺确认/超规格、故事许可/删除冻结、暂停恢复、当次协助、缺付款证明及权益 suspended/revoked。
+首轮固定候选 T22 **14/14**，日志 `/tmp/timenook-t22-backend-first-copy-final.log`。覆盖 context/地区/隐私、确定 PDF 与地址失效、8 路唯一预留、到期边界/并发工单、管理员权限/当前版本/最少响应、地址循环、通用核验拒绝、缺确认/超规格、故事许可/删除冻结、暂停恢复、当次协助、缺付款证明及权益 suspended/revoked。
 
 相关 T10 付款、Book PDF、Participation 和 Admin **73/73** 通过；同次组合含初版 T22 13 项，整体 85/86 的唯一失败是上文删除申请夹具载荷，日志 `/tmp/timenook-t22-backend-related-final.log`。仅修夹具后另跑最终 T22 14/14；不把两轮虚写成一次 87 项全量。API 类型检查已成功（root 最终全工作区类型/构建/OpenAPI 与浏览器结果见汇总），固定提交审查和 PR/main CI 由 GitHub 交付评论补齐。每次 `startBookFixture` 在真实 PostgreSQL 独立 schema 执行全部迁移及重放；本票新增唯一约束、状态/归属检查和不可变确认/生产绑定，不修改既有业务数据。
 
 复现命令与公开字段见[首本开发说明](../../../development-first-copy.md)。T22 本票真实参数、微信双端双方确认/同机协助和纸书交付仍未验收；T23 生产交接、T27 真实退款、T29 正式环境继续另票。本票工程完成只用 Refs #23，不能据合成结果关闭 issue。
+
+## 独立审查后的手机号修复
+
+固定候选 `5ee11b6` 的 Spec 审查指出：原手机号表达式允许空格及纯连字符，保存时 trim 成空串仍可返回 201。新增公开 HTTP 回归先复现两个实际 RED：六空格手机号保存错误 201（预期 400）；存量坏地址保留原确认绑定时，首本提交错误 201（预期 409）。日志 `/tmp/timenook-t22-backend-red-phone-review.log`。
+
+DTO 与事务内地址核验现在共同使用页面既有的 `/^1\d{10}$/` 规则。新输入的空格、纯连字符、错误长度、非数字或不以 1 开头均返回 400；有效手机号保存和同键重放保留原地址版本。事务读取已有地址时同时检查 phone 为字符串且符合该规则，坏记录产生 `ADDRESS_REQUIRED`，禁止预留和管理审核。恢复损坏夹具验证提交及管理审核均返回 409，已预留单保持 reserved；未修改生产规格、商业规则或数据库结构。
+
+新增定向 **2/2** GREEN，日志 `/tmp/timenook-t22-backend-green-phone-review.log`；修复后的完整 T22 **16/16**，日志 `/tmp/timenook-t22-backend-phone-review-final.log`。API typecheck、build 与差异空白检查通过，构建日志 `/tmp/timenook-t22-backend-phone-review-build.log`。其他业务代码未变，相关 73 项回归按原适用范围复用；最终固定提交的复审与 CI 另由 GitHub 交付记录确定。

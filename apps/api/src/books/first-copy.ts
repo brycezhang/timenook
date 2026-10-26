@@ -58,6 +58,7 @@ const digest = (v: unknown) =>
   createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const json = (v: unknown): Prisma.InputJsonValue =>
   JSON.parse(JSON.stringify(v));
+const MAINLAND_MOBILE = /^1\d{10}$/;
 type SalesSnapshot = {
   d01: {
     minPages: number;
@@ -84,7 +85,7 @@ class FirstCopyAddressDto implements FirstCopyAddress {
   @MaxLength(80)
   @Matches(/\S/)
   recipientName!: string;
-  @ApiProperty() @IsString() @Matches(/^\+?[0-9 -]{6,24}$/) phone!: string;
+  @ApiProperty() @IsString() @Matches(MAINLAND_MOBILE) phone!: string;
   @ApiProperty() @IsString() @MaxLength(40) regionCode!: string;
   @ApiProperty() @IsString() @MaxLength(300) @Matches(/\S/) detail!: string;
 }
@@ -195,11 +196,13 @@ export class FirstCopies implements OnModuleDestroy {
     });
     const blockers: FirstCopyBlocker[] = [];
     if (book?.state !== "ready" || !book.pdf) blockers.push("BOOK_NOT_READY");
+    const currentAddress = address?.value as unknown as
+      FirstCopyAddress | undefined;
     if (
-      !address ||
-      !regionCodes.includes(
-        (address.value as unknown as FirstCopyAddress).regionCode,
-      )
+      !currentAddress ||
+      typeof currentAddress.phone !== "string" ||
+      !MAINLAND_MOBILE.test(currentAddress.phone) ||
+      !regionCodes.includes(currentAddress.regionCode)
     )
       blockers.push("ADDRESS_REQUIRED");
     if (!confirmations.narrator)
@@ -281,13 +284,13 @@ export class FirstCopies implements OnModuleDestroy {
           snapshot.shippingRegionLabels,
         ).filter((term) =>
           [
-            "配送范围",
-            "生产",
-            "物流",
-            "印刷规格",
-            "制作期限",
-            "暂停与到期",
-          ].includes(term.label),
+            "shipping",
+            "service.production",
+            "service.logistics",
+            "print_specification",
+            "creation_window",
+            "creation_expiration",
+          ].includes(term.key ?? ""),
         ),
       },
       creation: {

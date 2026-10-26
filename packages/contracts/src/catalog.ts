@@ -17,6 +17,8 @@ export interface RecipientCatalog {
   scope: "one_adult_subject_one_initiator";
 }
 export interface PackageTerm {
+  /** Stable category for selecting a promise independently of its display label. */
+  key?: string;
   label: string;
   text: string;
 }

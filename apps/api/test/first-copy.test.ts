@@ -38,6 +38,17 @@ test("first-copy context uses the paid project and requires current private-cont
   });
   assert.equal(c.canSubmit, false);
   assert.ok(c.blockers.includes("BOOK_NOT_READY"));
+  assert.deepEqual(
+    c.shipping.terms.map((term: { key: string }) => term.key),
+    [
+      "print_specification",
+      "creation_window",
+      "creation_expiration",
+      "shipping",
+      "service.production",
+      "service.logistics",
+    ],
+  );
 });
 test("only the initiator can version an address inside the purchased shipping range", async () => {
   const p = await bound();
@@ -747,4 +758,82 @@ test("a persisted Commerce freeze blocks initial reservation and administrator a
     ).statusCode,
     409,
   );
+});
+
+test("first-copy addresses reject invalid mainland mobile numbers and replay a valid number", async () => {
+  const p = await bound();
+  data((await choose(p, p.narrator.token, "collection", true)).response);
+  data((await choose(p, p.narrator.token, "sharing", true)).response);
+  const base = `/v1/projects/${p.projectId}/first-copy`;
+  for (const phone of [
+    "      ",
+    "------",
+    "1380000000",
+    "138000000000",
+    "1380000000a",
+    "23800000000",
+  ]) {
+    const response = await request("POST", base + "/address", p.buyer.token, {
+      ...addressBody,
+      phone,
+    });
+    assert.equal(
+      response.statusCode,
+      400,
+      `invalid phone ${JSON.stringify(phone)}: ${response.body}`,
+    );
+  }
+  const key = randomUUID();
+  const saved = data(
+    await request("POST", base + "/address", p.buyer.token, addressBody, key),
+  );
+  assert.equal(saved.address.value.phone, "13800000000");
+  assert.equal(
+    data(
+      await request("POST", base + "/address", p.buyer.token, addressBody, key),
+    ).address.hash,
+    saved.address.hash,
+  );
+  assert.equal(
+    data(await request("GET", base, p.buyer.token), 200).address.version,
+    1,
+  );
+});
+
+test("a stored invalid phone blocks first-copy submission and administrative approval", async () => {
+  const p = await confirmedFirstCopy();
+  // Disposable restore-damage fixtures keep the old binding while invalidating its stored address value.
+  await db.firstCopyAddress.update({
+    where: { projectId: p.projectId },
+    data: { value: { ...addressBody, phone: "" } },
+  });
+  assert.equal(
+    (await request("POST", p.base + "/submit", p.buyer.token, p.body))
+      .statusCode,
+    409,
+  );
+  assert.ok(
+    data(await request("GET", p.base, p.buyer.token), 200).blockers.includes(
+      "ADDRESS_REQUIRED",
+    ),
+  );
+  const q = await confirmedFirstCopy();
+  const reserved = data(
+    await request("POST", q.base + "/submit", q.buyer.token, q.body),
+  ).production;
+  await db.firstCopyAddress.update({
+    where: { projectId: q.projectId },
+    data: { value: { ...addressBody, phone: "------" } },
+  });
+  const headers = await paymentAdmin(config, app, ["fulfillment:write"]);
+  const response = await app.inject({
+    method: "POST",
+    url: `/v1/admin/first-copy/${reserved.id}/approve`,
+    headers: { ...headers, "idempotency-key": randomUUID() },
+    payload: q.body,
+  });
+  assert.equal(response.statusCode, 409);
+  const current = data(await request("GET", q.base, q.buyer.token), 200);
+  assert.equal(current.production.state, "reserved");
+  assert.ok(current.blockers.includes("ADDRESS_REQUIRED"));
 });
