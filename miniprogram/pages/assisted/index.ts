@@ -39,6 +39,7 @@ Page({
   projectId: "",
   storyId: "",
   bookVersionId: "",
+  productionReturn: false,
   interviewId: "",
   generation: 0,
   ownerContext: "",
@@ -48,6 +49,7 @@ Page({
     this.projectId = q.projectId ?? "";
     this.storyId = q.storyId ?? "";
     this.bookVersionId = q.bookVersionId ?? "";
+    this.productionReturn = q.returnTo === "production";
     this.interviewId = q.interviewId ?? "";
     this.setData({
       storyPurpose: q.purpose === "story_confirmation" && !!this.storyId,
@@ -125,6 +127,13 @@ Page({
         !/^[0-9a-f-]{36}$/.test(session.id)
       )
         throw new Error("当次内容确认协助尚未生效，请重新查询");
+      if (this.data.bookPurpose && this.productionReturn) {
+        go(
+          "production",
+          `projectId=${this.projectId}&assistedSessionId=${session.id}`,
+        );
+        return;
+      }
       if (this.data.bookPurpose) {
         go(
           "print",

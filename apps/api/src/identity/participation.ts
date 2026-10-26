@@ -781,8 +781,9 @@ export class Participation implements OnModuleDestroy {
     const subject = await this.subject(tx, p.id);
     await tx.$queryRaw`SELECT id FROM care_requests WHERE id=${id}::uuid FOR UPDATE`;
     const care = (await tx.careRequest.findUnique({ where: { id } }))!;
-    // Creation-expiry cases are operational reviews, not D08 subject-right requests.
-    if (care.kind === "first_copy_expiry") throw new ConflictException();
+    // Operational review and production cases are not D08 subject-right requests.
+    if (["first_copy_expiry", "production_handoff"].includes(care.kind))
+      throw new ConflictException();
     const hash = digest(JSON.stringify(body));
     const result = () => ({
       id,
@@ -1356,7 +1357,10 @@ export class Participation implements OnModuleDestroy {
       content: { kind: "story" | "book"; versionId: string; hash: string };
       // Content owners distinguish their actions even for the same version.
       // Omitted only by the existing evidence-only caller contract.
-      action?: "story_decision" | "story_care_access";
+      action?:
+        | "story_decision"
+        | "story_care_access"
+        | "production_handoff_access";
       noticeVersion: string;
       evidenceRef: string;
       idempotencyKey: string;

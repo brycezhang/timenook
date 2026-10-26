@@ -279,3 +279,55 @@ th {
     flex-direction: column;
   }
 }
+
+.catalog-navigation {
+  flex-wrap: wrap;
+}
+.production-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #edf0f3;
+  padding: 18px 0;
+}
+.fulfillment-page p,
+.production-materials {
+  overflow-wrap: anywhere;
+}
+.production-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #edf0f3;
+}
+.production-form label {
+  display: grid;
+  gap: 8px;
+}
+.production-form input,
+.production-form select {
+  box-sizing: border-box;
+  padding: 10px 12px;
+  min-height: 44px;
+  max-width: 100%;
+  border: 1px solid #cbd2dc;
+  border-radius: 4px;
+  background: white;
+  font: inherit;
+}
+.production-form .catalog-actions {
+  margin: 0;
+}
+.production-materials {
+  padding: 18px;
+  background: #f5f7fa;
+  border-radius: 6px;
+}
+.fulfillment-page .catalog-actions button {
+  white-space: normal;
+  height: auto;
+  min-height: 40px;
+}

@@ -73,7 +73,8 @@ export interface CareCase {
     | "export"
     | "delete"
     | "correction"
-    | "first_copy_expiry";
+    | "first_copy_expiry"
+    | "production_handoff";
   createdAt: string;
   supportCaseRef?: string;
   changes?: CareBindingChangeView[];
@@ -94,7 +95,8 @@ export interface ProjectCareRequestView {
     | "export"
     | "delete"
     | "correction"
-    | "first_copy_expiry";
+    | "first_copy_expiry"
+    | "production_handoff";
   state: "open" | "verified" | "completed";
   createdAt: string;
 }

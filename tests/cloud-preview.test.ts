@@ -46,6 +46,8 @@ test("local preview forwards cloud health and probe requests with exactly one pu
       "/timenook/v1/users/me",
       "/timenook/v1/book-audio/abcdefghijklmnopqrstuv",
       "/timenook/v1/book-audio/abcdefghijklmnopqrstuv/clips/44444444-4444-4444-8444-444444444444/content?epoch=3",
+      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/fulfillment",
+      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/fulfillment/grants",
       "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/first-copy",
       "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/first-copy/address",
       "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/first-copy/confirmations",

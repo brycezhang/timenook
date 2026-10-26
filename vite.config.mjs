@@ -15,6 +15,11 @@ export default defineConfig({
     fs: { deny: privateArtifactsDeny },
     proxy: process.env.TIMENOOK_PREVIEW_API_TARGET
       ? {
+          "^/timenook/v1/projects/[a-f0-9-]{36}/fulfillment(?:/grants)?$": {
+            target: process.env.TIMENOOK_PREVIEW_API_TARGET,
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/timenook/, ""),
+          },
           "^/timenook/v1/projects/[a-f0-9-]{36}/first-copy(?:/(?:address|confirmations|submit|expiry-review))?$":
             {
               target: process.env.TIMENOOK_PREVIEW_API_TARGET,

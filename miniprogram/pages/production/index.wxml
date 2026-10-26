@@ -1,0 +1,41 @@
+<view class="page production-page">
+  <view class="title">生产与物流</view>
+  <view wx:if="{{status}}" class="soft section" role="alert">{{status}}</view>
+  <view wx:if="{{busy}}" class="note section" role="status">正在查询生产记录…</view>
+  <view wx:if="{{view}}" class="paper section">
+    <view class="section-title">{{stageLabel}}</view>
+    <view wx:if="{{view.current}}" class="section">
+      <view class="note">本次生产：第 {{view.current.sequence}} 次尝试</view>
+      <view class="note section">交接编号：{{view.current.handoffId}}</view>
+      <view wx:if="{{cancellationNotice}}" class="soft section">{{cancellationNotice}}</view>
+      <view wx:if="{{view.current.tracking}}" class="section">
+        <view>物流：{{view.current.tracking.carrier}}</view>
+        <view class="section">单号：{{view.current.tracking.number}}</view>
+        <view class="note section">发货记录：{{view.current.tracking.shippedAt}}</view>
+      </view>
+      <view wx:if="{{view.current.deliveredAt}}" class="section">交付记录：{{view.current.deliveredAt}}</view>
+    </view>
+    <view wx:else="" class="note section">双方确认并提交首本后，服务人员按约定审核和安排制作；此处只显示已记录的阶段。</view>
+  </view>
+  <view wx:if="{{view && view.current && canGrant}}" class="paper section">
+    <view class="section-title">本次生产资料交接</view>
+    <view class="note section">仅本次确定 PDF 和配送地址，限时授权给当前工单负责人用于本次印制与寄送。授权到期会停止在线获取；已发送给印厂的文件和实体制作须另行人工核实。</view>
+    <view class="note section">工单：{{view.current.caseId}}</view>
+    <view class="field"><text class="label">授权分钟数（最多 {{view.grantMaxMinutes}} 分钟）</text><input type="number" value="{{grantMinutes}}" data-field="grantMinutes" bindinput="grantInput" disabled="{{busy}}" /></view>
+    <button class="check-row section" bindtap="chooseGrant" disabled="{{busy}}"><view class="check-box {{grantChecked ? 'on' : ''}}"><image class="icon" src="/assets/icons/check-light.svg" /></view><text>我同意本次确定 PDF 和配送地址的限时交接</text></button>
+    <textarea value="{{grantEvidence}}" class="grant-evidence section" data-field="grantEvidence" bindinput="grantInput" maxlength="160" auto-height="{{true}}" placeholder="记录本人对本次限时交接的独立授权说明" disabled="{{busy}}" />
+    <button class="btn section" bindtap="grant" disabled="{{busy || !grantChecked || !grantEvidence}}">授权本次生产资料限时交接</button>
+  </view>
+  <button wx:if="{{view && view.current && view.canGrant && !canGrant}}" class="btn secondary section" bindtap="assist" disabled="{{busy}}">本人在场，协助本次生产资料授权</button>
+  <view wx:if="{{view && view.current && view.current.grantExpiresAt}}" class="note section">本次在线资料授权截止：{{view.current.grantExpiresAt}}</view>
+  <view wx:if="{{view && view.serviceTerms.playback}}" class="paper section">
+    <view class="section-title">原声回听期限</view>
+    <view class="note section">{{view.serviceTerms.playback.startsAt ? '约定起算：' + view.serviceTerms.playback.startsAt : '尚未发生约定起算事件'}}</view>
+    <view wx:if="{{view.serviceTerms.playback.expiresAt}}" class="note section">约定截止：{{view.serviceTerms.playback.expiresAt}}</view>
+    <view class="note section">以购买时约定及当前授权为准；重复物流和交付记录不会延长期限。</view>
+  </view>
+  <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">重新查询生产与物流</button>
+  <view wx:if="{{view && view.current && view.current.state === 'cancelled'}}" class="soft section">上次生产已确认取消，原尝试的版本与地址记录不会被本次更正覆盖。可返回当前书稿与首本确认页，按服务端允许范围更正、重新确认和提交；不会再次付款。</view>
+  <button wx:if="{{view && view.current && view.current.state === 'cancelled'}}" class="btn section" bindtap="reviseProduction" disabled="{{busy}}">返回当前书稿与首本确认</button>
+  <button class="btn secondary section" bindtap="book" disabled="{{busy}}">返回成书总览</button>
+</view>

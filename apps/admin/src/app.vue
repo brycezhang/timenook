@@ -15,6 +15,7 @@ import Catalog from "./views/catalog.vue";
 import ServiceTerms from "./views/service-terms.vue";
 import Care from "./views/care.vue";
 import Tasks from "./views/tasks.vue";
+import Fulfillment from "./views/fulfillment.vue";
 const view = ref("runtime");
 const state = ref<AdminState | null>(null),
   secret = ref(""),
@@ -22,6 +23,12 @@ const state = ref<AdminState | null>(null),
   error = ref(""),
   status = ref<AdminRuntime["status"] | "">("");
 const audits = ref<AdminAuditEntry[] | null>(null);
+const canManageFulfillment = computed(
+  () =>
+    state.value?.operator?.permissions.includes(
+      ADMIN_PERMISSIONS.writeFulfillment,
+    ) ?? false,
+);
 const canManageTerms = computed(
   () =>
     state.value?.operator?.permissions.includes(
@@ -133,7 +140,13 @@ onMounted(() => {
       role="alert"
     />
     <nav
-      v-if="canReadCatalog || canManageTerms || canManageCare || canReadRuntime"
+      v-if="
+        canReadCatalog ||
+        canManageTerms ||
+        canManageCare ||
+        canReadRuntime ||
+        canManageFulfillment
+      "
       class="catalog-navigation"
     >
       <Button
@@ -164,6 +177,12 @@ onMounted(() => {
         @click="view = 'care'"
         >客服工单</Button
       >
+      <Button
+        v-if="canManageFulfillment"
+        :type="view === 'fulfillment' ? 'primary' : 'default'"
+        @click="view = 'fulfillment'"
+        >生产与物流</Button
+      >
     </nav>
     <Catalog
       v-if="view === 'catalog' && canReadCatalog"
@@ -186,6 +205,15 @@ onMounted(() => {
     />
     <Care
       v-else-if="view === 'care' && canManageCare"
+      :csrf="state.csrfToken"
+      @expired="
+        perform(async () => {
+          throw { error: { code: 'UNAUTHENTICATED' } };
+        })
+      "
+    />
+    <Fulfillment
+      v-else-if="view === 'fulfillment' && canManageFulfillment"
       :csrf="state.csrfToken"
       @expired="
         perform(async () => {
