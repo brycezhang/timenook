@@ -236,6 +236,23 @@ test("narrator requests a complete export, operator verifies and packs it, recip
   browser,
 }) => {
   const mini = await openMini(browser, narratorSession);
+  // Keep actual API results, while each request/download crosses a real 1s
+  // account watcher tick. A slow transport must not look like account switching.
+  await mini.route(
+    /\/exports(?:\/[a-f0-9-]{36}\/download)?$/,
+    async (route) => {
+      if (
+        route.request().method() !== "POST" &&
+        !route.request().url().endsWith("/download")
+      ) {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      await new Promise((resolve) => setTimeout(resolve, 1250));
+      await route.fulfill({ response });
+    },
+  );
   await expect(
     mini.locator("#page").getByText("完整资料导出", { exact: true }),
   ).toBeVisible();

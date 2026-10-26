@@ -84,8 +84,12 @@ async function adminRequest(
     ...(payload ? { payload } : {}),
   });
 }
-async function requestedBook() {
-  const p = await readyFirstCopyBook();
+async function requestedBook(
+  photoRetention: Partial<
+    Record<"originalPhotos" | "derivedPhotos", number>
+  > = {},
+) {
+  const p = await readyFirstCopyBook({}, photoRetention);
   const exp = data(
     await request(
       "POST",
@@ -227,8 +231,12 @@ import {
 import { ProjectServiceTerms } from "../src/projects/service-terms";
 import { join } from "node:path";
 import { access, rm, readFile, writeFile } from "node:fs/promises";
-async function acceptedBook() {
-  const p = await requestedBook();
+async function acceptedBook(
+  photoRetention: Partial<
+    Record<"originalPhotos" | "derivedPhotos", number>
+  > = {},
+) {
+  const p = await requestedBook(photoRetention);
   data(
     await adminRequest("POST", p.exportBase + "/accept", p.admin, {
       dueAt: new Date(Date.now() + 86400000).toISOString(),
@@ -719,4 +727,220 @@ test("incomplete original transcript is reported in the shared case instead of o
   );
   assert.equal(view.requests[0].missingReason, "EXPORT_TRANSCRIPT_PENDING");
   assert.equal(view.requests[0].canDownload, false);
+});
+
+async function anotherAcceptedExport(
+  p: Awaited<ReturnType<typeof acceptedBook>>,
+) {
+  const exp = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/exports`,
+      p.narrator.token,
+      {
+        recipient: "self",
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: `synthetic:独立本次完整资料-${randomUUID()}`,
+      },
+    ),
+  );
+  const current = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/participation`,
+        p.narrator.token,
+      ),
+      200,
+    ),
+    base = `/v1/admin/care-requests/${exp.id}/export`;
+  data(
+    await adminRequest(
+      "POST",
+      `/v1/admin/care-requests/${exp.id}/verify`,
+      p.admin,
+      {
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:核验本次本人和完整范围",
+      },
+    ),
+  );
+  data(
+    await adminRequest("POST", base + "/accept", p.admin, {
+      dueAt: new Date(Date.now() + 86400000).toISOString(),
+      evidenceRef: "synthetic:本次范围处理期限核算",
+    }),
+  );
+  return { id: exp.id, base };
+}
+async function photoDeadline(p: Awaited<ReturnType<typeof acceptedBook>>) {
+  const terms = new ProjectServiceTerms(config.databaseUrl),
+    deliveredAt = new Date();
+  await terms.recordFact({
+    projectId: p.projectId,
+    eventId: `photo-delivery:${randomUUID()}`,
+    kind: "delivery_completed",
+    occurredAt: deliveredAt,
+  });
+  await terms.close();
+  const end = deliveredAt.getTime() + 86400000;
+  await db.session.updateMany({
+    where: { userId: p.narrator.id },
+    data: { expiresAt: new Date(end + 86400000) },
+  });
+  await db.adminSession.updateMany({
+    data: { expiresAt: new Date(end + 86400000) },
+  });
+  return end;
+}
+test("derived-photo retention stops new complete packs and existing ZIP downloads exactly at its own deadline", async (t) => {
+  const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 });
+  await storyPhoto(p, "本次期限不同的原图与衍生照片");
+  const at = await anotherAcceptedExport(p),
+    after = await anotherAcceptedExport(p),
+    end = await photoDeadline(p);
+  const assets = await db.photoAsset.findMany({
+    where: { projectId: p.projectId },
+  });
+  assert.ok(assets.some((a) => a.kind !== "original"));
+  t.mock.timers.enable({ apis: ["Date"], now: end - 1 });
+  try {
+    const packed = data(
+      await adminRequest("POST", p.exportBase + "/pack", p.admin, {}),
+    );
+    assert.equal(packed.state, "ready");
+    assert.equal(
+      (
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
+          p.narrator.token,
+        )
+      ).statusCode,
+      200,
+    );
+    t.mock.timers.setTime(end);
+    assert.equal(
+      (await adminRequest("POST", at.base + "/pack", p.admin, {})).statusCode,
+      403,
+      "expired derived photos cannot enter a newly packed archive",
+    );
+    assert.equal(
+      (
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
+          p.narrator.token,
+        )
+      ).statusCode,
+      403,
+      "existing package cannot bypass the source-category deadline",
+    );
+    const view = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/exports`,
+        p.narrator.token,
+      ),
+      200,
+    );
+    assert.equal(
+      view.requests.find((r: { id: string }) => r.id === p.exp.id).canDownload,
+      false,
+    );
+    t.mock.timers.setTime(end + 1);
+    assert.equal(
+      (await adminRequest("POST", after.base + "/pack", p.admin, {}))
+        .statusCode,
+      403,
+    );
+    assert.equal(
+      (
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
+          p.narrator.token,
+        )
+      ).statusCode,
+      403,
+    );
+    for (const asset of assets)
+      await access(join(root, "objects", asset.objectKey));
+    assert.ok(
+      Date.parse(packed.expiresAt) > end,
+      "the package's own download window remains unexpired",
+    );
+  } finally {
+    t.mock.timers.reset();
+  }
+});
+
+test("a derived-photo deadline crossed during packing prevents the late ZIP from becoming ready", async (t) => {
+  const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 });
+  await storyPhoto(p, "慢打包期间到期的衍生图");
+  const end = await photoDeadline(p);
+  let release!: () => void, entered!: () => void;
+  const gate = new Promise<void>((r) => {
+      release = r;
+    }),
+    started = new Promise<void>((r) => {
+      entered = r;
+    });
+  t.mock.timers.enable({ apis: ["Date"], now: end - 1 });
+  interceptBookObjectRead(async () => {
+    entered();
+    await gate;
+  });
+  try {
+    const packing = adminRequest("POST", p.exportBase + "/pack", p.admin, {});
+    await started;
+    t.mock.timers.setTime(end);
+    release();
+    assert.equal((await packing).statusCode, 403);
+    const view = data(
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/exports`,
+          p.narrator.token,
+        ),
+        200,
+      ),
+      row = view.requests.find((r: { id: string }) => r.id === p.exp.id);
+    assert.equal(row.canDownload, false);
+    assert.equal(row.sha256, null);
+    assert.equal(row.readyAt, null);
+    assert.notEqual(row.state, "ready");
+    for (const asset of await db.photoAsset.findMany({
+      where: { projectId: p.projectId },
+    }))
+      await access(join(root, "objects", asset.objectKey));
+  } finally {
+    release();
+    interceptBookObjectRead();
+    t.mock.timers.reset();
+  }
+});
+test("an unused derived-photo retention category does not block an otherwise complete archive", async (t) => {
+  const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 }),
+    end = await photoDeadline(p);
+  t.mock.timers.enable({ apis: ["Date"], now: end });
+  try {
+    const packed = data(
+      await adminRequest("POST", p.exportBase + "/pack", p.admin, {}),
+    );
+    assert.equal(packed.state, "ready");
+    assert.equal(
+      (
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
+          p.narrator.token,
+        )
+      ).statusCode,
+      200,
+    );
+  } finally {
+    t.mock.timers.reset();
+  }
 });

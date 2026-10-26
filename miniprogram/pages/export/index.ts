@@ -77,7 +77,13 @@ Page({
   accept(value: CompleteExportContext) {
     this.setData({
       context: value,
-      rows: value.requests.map((row) => ({ ...row, label: labels[row.state] })),
+      rows: value.requests.map((row) => ({
+        ...row,
+        label:
+          row.missingReason === "EXPORT_SOURCE_RETENTION_EXPIRED"
+            ? "资料保留期限已到，不能领取"
+            : labels[row.state],
+      })),
     });
   },
   watch() {
@@ -85,6 +91,7 @@ Page({
     const generation = this.generation,
       owner = this.owner;
     this.expiry = setTimeout(() => {
+      if (generation !== this.generation || !this.active) return;
       if (!this.current(generation, owner)) {
         this.onHide();
         this.setData({ status: "账号已变化，请重新查询" });
@@ -113,6 +120,7 @@ Page({
     try {
       if (dataMode() !== "live" || !owner)
         throw Error("请在真实服务模式登录后查询资料导出");
+      this.watch();
       const value = await completeExportClient.read(this.projectId);
       if (!this.current(generation, owner)) return;
       this.accept(value);
@@ -163,10 +171,15 @@ Page({
     const generation = ++this.generation,
       owner = this.owner,
       input = JSON.stringify({ recipient, evidence });
-    if (!this.current(generation, owner)) return;
+    if (!this.current(generation, owner)) {
+      this.onHide();
+      this.setData({ status: "账号已变化，请重新查询" });
+      return;
+    }
     if (this.intent?.input !== input)
       this.intent = { input, key: paymentKey() };
     this.setData({ busy: true, status: "" });
+    this.watch();
     try {
       const row = await completeExportClient.request(
         this.projectId,
@@ -211,6 +224,7 @@ Page({
       owner = this.owner;
     let filePath = "";
     this.setData({ busy: true, status: "" });
+    this.watch();
     try {
       const result = await sessionClient.downloadExport(this.projectId, row.id);
       filePath = result.tempFilePath;
@@ -219,14 +233,12 @@ Page({
       const info =
         await new Promise<WechatMiniprogram.GetFileInfoSuccessCallbackResult>(
           (resolve, reject) =>
-            wx
-              .getFileSystemManager()
-              .getFileInfo({
-                filePath,
-                digestAlgorithm: "sha256",
-                success: resolve,
-                fail: reject,
-              }),
+            wx.getFileSystemManager().getFileInfo({
+              filePath,
+              digestAlgorithm: "sha256",
+              success: resolve,
+              fail: reject,
+            }),
         );
       if (info.size !== row.bytes || info.digest !== row.sha256)
         throw Error("资料包完整性核对未通过，请重新领取");
@@ -272,13 +284,11 @@ Page({
     } finally {
       if (filePath)
         await new Promise<void>((resolve) =>
-          wx
-            .getFileSystemManager()
-            .unlink({
-              filePath,
-              success: () => resolve(),
-              fail: () => resolve(),
-            }),
+          wx.getFileSystemManager().unlink({
+            filePath,
+            success: () => resolve(),
+            fail: () => resolve(),
+          }),
         );
       if (generation === this.generation) {
         this.setData({ busy: false });

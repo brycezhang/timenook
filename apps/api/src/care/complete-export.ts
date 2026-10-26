@@ -275,15 +275,28 @@ export class CompleteExports implements OnModuleDestroy {
           calendarRef: snapshot.admission.d06.businessCalendarRef,
         },
         accessEpoch: p.project.accessEpoch,
-        requests: rows.map((row) =>
-          this.view(
+        requests: rows.map((row) => {
+          const value = this.view(
             row.accessEpoch === p.project.accessEpoch &&
               row.bindingVersion === p.subject.bindingVersion
               ? row
               : { ...row, state: "revoked" },
             userId,
-          ),
-        ),
+          );
+          if (row.manifest) {
+            try {
+              this.assertSourceRetention(
+                terms,
+                (row.manifest as { files?: unknown }).files,
+              );
+            } catch (error) {
+              if (!(error instanceof ForbiddenException)) throw error;
+              value.canDownload = false;
+              value.missingReason = "EXPORT_SOURCE_RETENTION_EXPIRED";
+            }
+          }
+          return value;
+        }),
       };
     });
   }
@@ -311,16 +324,6 @@ export class CompleteExports implements OnModuleDestroy {
       care.createdAt.getTime() >= Date.parse(terms.exportRequests!.expiresAt)
     )
       throw new ForbiddenException();
-    for (const kind of [
-      "originalAudio",
-      "originalPhotos",
-      "transcripts",
-      "confirmedStories",
-      "bookPdf",
-    ]) {
-      if (!terms.retention?.[kind] || terms.retention[kind].state === "expired")
-        throw new ForbiddenException();
-    }
     const row = await tx.careExport.findUnique({ where: { id } });
     if (
       row &&
@@ -330,13 +333,56 @@ export class CompleteExports implements OnModuleDestroy {
         ["revoked", "expired"].includes(row.state))
     )
       throw new ForbiddenException();
-    if (row?.manifest)
+    if (row?.manifest) {
       await this.versionScopeIn(
         tx,
         row.projectId,
         (row.manifest as { files?: unknown }).files,
       );
+      await this.sourceRetentionIn(
+        tx,
+        row.projectId,
+        (row.manifest as { files?: unknown }).files,
+      );
+    }
     return { ...p, care, row, terms };
+  }
+  private assertSourceRetention(
+    terms: Awaited<ReturnType<ProjectServiceTerms["read"]>>,
+    files: unknown,
+  ) {
+    if (!Array.isArray(files)) throw new ForbiddenException();
+    const kinds = new Set<string>();
+    for (const file of files) {
+      const path = file?.path;
+      if (path === "README.txt") continue;
+      if (typeof path !== "string") throw new ForbiddenException();
+      if (path.startsWith("audio/")) kinds.add("originalAudio");
+      else if (path.startsWith("transcripts/")) kinds.add("transcripts");
+      else if (path.startsWith("stories/")) kinds.add("confirmedStories");
+      else if (path.startsWith("books/")) kinds.add("bookPdf");
+      else if (
+        path.startsWith("photos/") &&
+        typeof file.source?.kind === "string"
+      )
+        kinds.add(
+          file.source.kind === "original" ? "originalPhotos" : "derivedPhotos",
+        );
+      else throw new ForbiddenException();
+    }
+    for (const kind of kinds)
+      if (!terms.retention?.[kind] || terms.retention[kind].state === "expired")
+        throw new ForbiddenException();
+  }
+  private async sourceRetentionIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    files: unknown,
+  ) {
+    this.assertSourceRetention(
+      await this.terms.read(projectId, undefined, tx),
+      files,
+    );
   }
   private async versionScopeIn(
     tx: Prisma.TransactionClient,
@@ -669,6 +715,7 @@ export class CompleteExports implements OnModuleDestroy {
         );
       throw error;
     }
+    await this.sourceRetentionIn(tx, row.projectId, sources);
     row = await tx.careExport.update({
       where: { id },
       data: {
@@ -741,6 +788,11 @@ export class CompleteExports implements OnModuleDestroy {
     const p = await this.scopeIn(tx, batch.row.id, adminId),
       row = p.row;
     await this.versionScopeIn(tx, batch.row.projectId, archive.manifest.files);
+    await this.sourceRetentionIn(
+      tx,
+      batch.row.projectId,
+      archive.manifest.files,
+    );
     if (
       !row ||
       row.state !== "packing" ||
@@ -809,11 +861,8 @@ export class CompleteExports implements OnModuleDestroy {
       });
     await this.cleanupExpired();
     const before = await check(),
-      path = this.path(before.objectKey!);
-    if ((await stat(path)).size !== before.bytes) throw new ConflictException();
-    const bytes = await readFile(path);
-    if (hashBytes(bytes) !== before.sha256) throw new ConflictException();
-    const after = await check();
+      bytes = await this.readPackage(before),
+      after = await check();
     if (after.objectKey !== before.objectKey || after.sha256 !== before.sha256)
       throw new ForbiddenException();
     return { bytes, row: after, check };
