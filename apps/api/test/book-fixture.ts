@@ -20,6 +20,14 @@ export let app: Awaited<ReturnType<typeof createApplication>>;
 export let db: PrismaClient;
 let fixtureOptions: Parameters<typeof createApplication>[1];
 let objectReadGate: ((key: string) => Promise<void>) | undefined;
+let refundExecutionGate: ((id: string) => Promise<void>) | undefined;
+let refundInstant: Date | undefined;
+export function interceptRefundExecution(gate?: typeof refundExecutionGate) {
+  refundExecutionGate = gate;
+}
+export function setRefundInstant(value?: Date) {
+  refundInstant = value;
+}
 /** External object-storage pause for authenticated-read race tests only. */
 export function interceptBookObjectRead(gate?: (key: string) => Promise<void>) {
   objectReadGate = gate;
@@ -210,10 +218,18 @@ export async function startBookFixture() {
     paymentFetch,
     aiFetch,
     recordingObjects: new Objects(root),
+    refundRuntime: {
+      now: () => (refundInstant ? new Date(refundInstant) : new Date()),
+      beforeExecution: async (id: string) => {
+        await refundExecutionGate?.(id);
+      },
+    },
   };
   app = await createApplication(config, fixtureOptions);
 }
 export async function stopBookFixture() {
+  refundExecutionGate = undefined;
+  refundInstant = undefined;
   await app?.close();
   if (root) await rm(root, { recursive: true, force: true });
   if (db) {

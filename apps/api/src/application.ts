@@ -1,4 +1,8 @@
-import { Fulfillment, FulfillmentController, AdminFulfillmentController } from "./books/fulfillment";
+import {
+  Fulfillment,
+  FulfillmentController,
+  AdminFulfillmentController,
+} from "./books/fulfillment";
 import {
   FirstCopies,
   FirstCopyController,
@@ -53,6 +57,14 @@ import {
   PaymentWebhookController,
   PAYMENT_FETCH,
 } from "./payments/orders";
+import {
+  Refunds,
+  RefundsController,
+  AdminRefundsController,
+  RefundWebhookController,
+  REFUND_RUNTIME,
+  type RefundRuntime,
+} from "./payments/refunds";
 import { AI_FETCH } from "./probe/ai-providers";
 import { AiProbe } from "./probe/ai-probe";
 import { AiProbeController } from "./probe/ai-probe-controller";
@@ -142,6 +154,9 @@ class HealthController {
 
 @Module({
   controllers: [
+    RefundsController,
+    AdminRefundsController,
+    RefundWebhookController,
     OrdersController,
     AdminTermsController,
     PaymentWebhookController,
@@ -164,8 +179,13 @@ export async function createApplication(
     aiFetch?: typeof fetch;
     paymentFetch?: typeof fetch;
     recordingObjects?: ProbeObjects;
+    refundRuntime?: Partial<RefundRuntime>;
   } = {},
 ): Promise<NestFastifyApplication> {
+  if (options.refundRuntime && config.environment !== "test")
+    throw new ConfigurationError(
+      "Refund scheduling and clock overrides require isolated tests",
+    );
   if (config.books) {
     let url: URL;
     try {
@@ -491,6 +511,15 @@ export async function createApplication(
       AdminAccess,
       Catalog,
       Orders,
+      Refunds,
+      {
+        provide: REFUND_RUNTIME,
+        useValue: {
+          now: options.refundRuntime?.now ?? (() => new Date()),
+          beforeExecution:
+            options.refundRuntime?.beforeExecution ?? (async () => {}),
+        },
+      },
       { provide: PAYMENT_FETCH, useValue: options.paymentFetch ?? fetch },
     ],
   };

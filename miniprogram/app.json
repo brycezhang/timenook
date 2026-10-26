@@ -16,6 +16,7 @@
     "pages/print/index",
     "pages/production/index",
     "pages/order/index",
+    "pages/refunds/index",
     "pages/account/index",
     "pages/settings/index",
     "pages/service/index",

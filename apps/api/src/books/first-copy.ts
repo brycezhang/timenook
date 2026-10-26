@@ -237,6 +237,8 @@ export class FirstCopies implements OnModuleDestroy {
       blockers.push("POLICY_PENDING");
     else if (terms.creation.state === "paused")
       blockers.push("CREATION_PAUSED");
+    else if (["terminated", "suspended"].includes(terms.creation.state))
+      blockers.push("PROJECT_FROZEN");
     else if (terms.creation.state !== "active")
       blockers.push("CREATION_EXPIRED");
     if (book?.state === "ready") {
@@ -263,6 +265,8 @@ export class FirstCopies implements OnModuleDestroy {
         },
       })
     )
+      blockers.push("PROJECT_FROZEN");
+    if (order.productionFrozen && !blockers.includes("PROJECT_FROZEN"))
       blockers.push("PROJECT_FROZEN");
     if (production && !canReviseProduction) blockers.push("ALREADY_SUBMITTED");
     return {

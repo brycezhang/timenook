@@ -1,0 +1,25 @@
+<view class="page refund-page">
+ <view class="title">退款申请与进展</view>
+ <view class="note">客服按购买时的政策核验金额、生产状态和权益。申请不代表已退款，到账结果以核验记录为准。退款不会删除讲述资料。</view>
+ <view wx:if="{{status}}" class="section note">{{status}}</view>
+ <button class="btn secondary" bindtap="refresh" disabled="{{busy}}">重新查询退款</button>
+ <view wx:if="{{view}}">
+  <view class="section">实付 ¥{{view.paidAmountFen / 100}} · 已退 ¥{{view.refundedAmountFen / 100}}</view>
+  <view>处理中预留 ¥{{view.reservedAmountFen / 100}}</view>
+  <view wx:if="{{view.productionFrozen}}" class="note">当前暂停新的生产交接。已交接事项由客服核对印厂实际状态。</view>
+  <view wx:for="{{rows}}" wx:key="id" class="refund-row">
+   <view>{{item.reasonLabel}} · {{item.stateLabel}}</view><view>退款金额：{{item.amountLabel}}</view>
+   <view wx:if="{{item.dueLabel}}" class="muted">处理期限：{{item.dueLabel}}</view>
+   <view wx:if="{{item.approvedBy}}" class="muted">客服已核验本次申请</view>
+   <view wx:if="{{item.completedLabel}}" class="muted">结果时间：{{item.completedLabel}}</view>
+   <view wx:if="{{item.productionReviewRequired}}" class="note">原生产交接仍待核实，客服核对后再执行退款。</view>
+   <view wx:if="{{item.processingState === 'overdue'}}" class="note">已超过约定处理期限，客服仍需核实实际退款结果。</view>
+  </view>
+  <view wx:if="{{view.availableAmountFen > 0}}">
+  <view class="section">申请原因</view>
+  <button wx:for="{{options}}" wx:key="reason" class="btn secondary" data-reason="{{item.reason}}" bindtap="chooseReason" disabled="{{busy}}">{{reason === item.reason ? '已选：' : ''}}{{item.label}}</button>
+  <view class="section"><textarea placeholder="简述申请原因（3到150字）" value="{{description}}" bindinput="descriptionInput" maxlength="150" disabled="{{busy}}" /></view>
+  <button class="btn" bindtap="apply" disabled="{{busy || !description}}">提交退款申请</button>
+  </view>
+ </view>
+</view>
