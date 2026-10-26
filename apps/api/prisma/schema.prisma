@@ -16,6 +16,39 @@ model ServiceSchema {
   @@map("service_schema")
 }
 
+model CareExport {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ recipient String
+ recipientUserId String? @map("recipient_user_id") @db.Uuid
+ recipientRef String? @map("recipient_ref")
+ evidenceRef String @map("evidence_ref")
+ state String @default("requested")
+ ownerId String? @map("owner_id") @db.Uuid
+ requestedAt DateTime @default(now()) @map("requested_at") @db.Timestamptz(3)
+ acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(3)
+ dueAt DateTime? @map("due_at") @db.Timestamptz(3)
+ readyAt DateTime? @map("ready_at") @db.Timestamptz(3)
+ expiresAt DateTime? @map("expires_at") @db.Timestamptz(3)
+ deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(3)
+ deliveryEvidence String? @map("delivery_evidence")
+ objectKey String? @map("object_key")
+ sha256 String? @db.Char(64)
+ bytes Int?
+ manifest Json?
+ missingReason String? @map("missing_reason")
+ fence Int @default(0)
+ leaseUntil DateTime? @map("lease_until") @db.Timestamptz(3)
+ reviewHash String? @map("review_hash") @db.Char(64)
+ @@unique([projectId,id])
+ @@index([projectId,state])
+ @@index([expiresAt])
+ @@map("care_exports")
+}
+
 model OutlineTemplateVersion {
   templateId   String    @map("template_id")
   version      Int

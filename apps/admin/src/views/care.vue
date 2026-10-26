@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from "vue";
 import { Alert, Button, Form, FormItem, Input } from "antdv-next";
 import type { CareCase, StoryView } from "@timenook/contracts";
 import { careApi } from "../api/admin";
+import CompleteExport from "./complete-export.vue";
 const correction = ref<StoryView | null>(null),
   correctionTitle = ref(""),
   correctionParagraphs = ref<{ text: string; sourceRefs: string[] }[]>([]),
@@ -302,6 +303,12 @@ onMounted(refresh);
       </div>
     </div>
     <section v-if="selected" class="audit-section">
+      <CompleteExport
+        v-if="selected.kind === 'export'"
+        :care="selected"
+        :csrf="props.csrf"
+        @expired="emit('expired')"
+      />
       <h2>
         {{
           selected.kind === "rebind" ? "本人账号换绑" : kindLabel(selected.kind)
@@ -321,7 +328,9 @@ onMounted(refresh);
         :message="
           selected.kind === 'production_handoff'
             ? '本次生产交接工单已完成，交付或取消结果以生产与物流的具体回执记录为准。'
-            : '工单已完成，原账号权限已撤销，新账号须重新授权。'
+            : selected.kind === 'export'
+              ? '本次完整资料交付回执已记录。包下载期限和原始资料保留期限仍分别执行。'
+              : '工单已完成，原账号权限已撤销，新账号须重新授权。'
         "
       />
       <Alert

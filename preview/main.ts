@@ -142,6 +142,14 @@ const wx: any = {
           url.pathname,
         ));
     const supported =
+      ((!options.method ||
+        options.method === "GET" ||
+        options.method === "POST") &&
+        /\/v1\/projects\/[a-f0-9-]{36}\/exports$/.test(url.pathname)) ||
+      (options.method === "POST" &&
+        /\/v1\/projects\/[a-f0-9-]{36}\/exports\/[a-f0-9-]{36}\/receipt$/.test(
+          url.pathname,
+        )) ||
       ((!options.method || options.method === "GET") &&
         /\/v1\/projects\/[a-f0-9-]{36}\/fulfillment$/.test(url.pathname)) ||
       (options.method === "POST" &&
@@ -334,6 +342,9 @@ const wx: any = {
           url.pathname,
         ) ||
         /\/v1\/projects\/[a-f0-9-]{36}\/book\/versions\/[a-f0-9-]{36}\/pdf$/.test(
+          url.pathname,
+        ) ||
+        /\/v1\/projects\/[a-f0-9-]{36}\/exports\/[a-f0-9-]{36}\/download$/.test(
           url.pathname,
         ) ||
         (/\/v1\/book-audio\/[A-Za-z0-9_-]{22}\/clips\/[a-f0-9-]{36}\/content$/.test(

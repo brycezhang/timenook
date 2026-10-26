@@ -1,4 +1,13 @@
-import { Fulfillment, FulfillmentController, AdminFulfillmentController } from "./books/fulfillment";
+import {
+  Fulfillment,
+  FulfillmentController,
+  AdminFulfillmentController,
+} from "./books/fulfillment";
+import {
+  CompleteExports,
+  CompleteExportsController,
+  AdminCompleteExportsController,
+} from "./care/complete-export";
 import {
   FirstCopies,
   FirstCopyController,
@@ -381,6 +390,8 @@ export async function createApplication(
             ...(config.books
               ? [
                   BooksController,
+                  CompleteExportsController,
+                  AdminCompleteExportsController,
                   BookAudioController,
                   FirstCopyController,
                   FulfillmentController,
@@ -428,6 +439,7 @@ export async function createApplication(
               ? [
                   Books,
                   FirstCopies,
+                  CompleteExports,
                   Fulfillment,
                   BookAudio,
                   {

@@ -733,6 +733,27 @@ export class Participation implements OnModuleDestroy {
       subject.boundUserId === operatorUserId ? operatorUserId : null,
     );
   }
+  async openExportCaseIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    operatorUserId: string,
+    key: string,
+  ) {
+    this.policy();
+    const p = await this.project(tx, projectId, true),
+      subject = await this.subject(tx, projectId);
+    if (subject.boundUserId !== operatorUserId) throw new ForbiddenException();
+    return this.createCare(
+      tx,
+      p,
+      subject,
+      { kind: "export", expectedBindingVersion: subject.bindingVersion },
+      key,
+      operatorUserId,
+      "product",
+      operatorUserId,
+    );
+  }
   async authorizeCorrectionCareIn(
     tx: Prisma.TransactionClient,
     caseId: string,

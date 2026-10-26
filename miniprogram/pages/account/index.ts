@@ -19,6 +19,9 @@ Page({
     overview: null as ProjectOverview | null,
     memberships: [] as { projectId: string; state: string }[],
   },
+  exports() {
+    if (this.projectId) go("export", `projectId=${this.projectId}`);
+  },
   projectId: "",
   generation: 0,
   stopSessionWatch: undefined as (() => void) | undefined,
