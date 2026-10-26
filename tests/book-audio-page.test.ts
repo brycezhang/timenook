@@ -468,3 +468,51 @@ test("a device session-removal failure stops playback and reports that logout is
   assert.equal(h.page.data.loggedIn, true);
   h.page.onHide();
 });
+
+for (const oldResult of [200, 403]) {
+  test(`a late post-download resolver ${oldResult} cannot stop a newer page playback`, async () => {
+    const h = harness();
+    await shown(h);
+    const first = h.page.play({ currentTarget: { dataset: { id: clipId } } });
+    await tick();
+    h.respond(1, view());
+    await tick();
+    h.downloads[0].success({
+      statusCode: 200,
+      tempFilePath: "wxfile://first-owner.mp3",
+    });
+    await tick();
+    assert.equal(
+      h.requests.length,
+      3,
+      "first playback awaits its second authorization read",
+    );
+    h.page.onHide();
+    const show = h.page.onShow();
+    await tick();
+    h.respond(3, view());
+    await show;
+    const second = h.page.play({ currentTarget: { dataset: { id: clipId } } });
+    await tick();
+    h.respond(4, view());
+    await tick();
+    h.downloads[1].success({
+      statusCode: 200,
+      tempFilePath: "wxfile://second-owner.mp3",
+    });
+    await tick();
+    h.respond(5, view());
+    await second;
+    const currentPlayer = h.players[0];
+    assert.equal(currentPlayer.src, "wxfile://second-owner.mp3");
+    assert.equal(currentPlayer.played, true);
+    h.respond(2, oldResult === 200 ? view() : null, oldResult);
+    await first;
+    assert.equal(currentPlayer.destroyed, false);
+    assert.equal(h.page.data.playingClipId, clipId);
+    assert.equal(h.page.data.entry?.story.title, "纸书上的那条小路");
+    assert.equal(h.removed.includes("wxfile://second-owner.mp3"), false);
+    assert.equal(h.removed.includes("wxfile://first-owner.mp3"), true);
+    h.page.onHide();
+  });
+}

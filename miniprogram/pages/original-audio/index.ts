@@ -88,6 +88,17 @@ Page({
     });
     void this.clearPlayback().catch(() => {});
   },
+  denyFor(error: unknown) {
+    this.deny(
+      error instanceof ApiFailure && error.status === 401
+        ? "登录已失效，请重新登录"
+        : error instanceof ApiFailure && [403, 404].includes(error.status)
+          ? undefined
+          : error instanceof Error
+            ? error.message
+            : "原声暂不可用，请重新查询",
+    );
+  },
   watch(generation: number, owner: string) {
     if (this.expiry) clearTimeout(this.expiry);
     this.expiry = setTimeout(
@@ -148,15 +159,7 @@ Page({
       this.watch(generation, owner);
     } catch (error) {
       if (generation !== this.generation) return;
-      this.deny(
-        error instanceof ApiFailure && error.status === 401
-          ? "登录已失效，请重新登录"
-          : error instanceof ApiFailure && [403, 404].includes(error.status)
-            ? undefined
-            : error instanceof Error
-              ? error.message
-              : "原声暂不可用，请重新查询",
-      );
+      this.denyFor(error);
     } finally {
       if (generation === this.generation) this.setData({ busy: false });
     }
@@ -249,7 +252,9 @@ Page({
       this.audioFile = path;
       const checked = await bookAudioClient.resolve(this.entryId);
       if (!this.current(generation, owner)) {
-        await this.clearPlayback();
+        // This response owns only its download, never a newer page's player/file.
+        if (this.audioFile === path) this.audioFile = "";
+        await clearStoryAudio([path]);
         return;
       }
       const confirmed = checked.clips.find((c) => c.clipId === clipId);
@@ -289,15 +294,7 @@ Page({
       player.play();
     } catch (error) {
       if (generation !== this.generation) return;
-      this.deny(
-        error instanceof ApiFailure && error.status === 401
-          ? "登录已失效，请重新登录"
-          : error instanceof ApiFailure && [403, 404].includes(error.status)
-            ? undefined
-            : error instanceof Error
-              ? error.message
-              : "原声暂不可用，请重新查询",
-      );
+      this.denyFor(error);
     } finally {
       if (generation === this.generation) this.setData({ busy: false });
     }
