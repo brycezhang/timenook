@@ -39,3 +39,14 @@
 正式 D01/D02/D03/D05/D06/D08、实际日历和负责人、印厂条款/接收/取消凭证、物流交付、微信发货管理结果及真机同步仍待责任票验收。首次真实交接仍须明确授权。合成通过仅证明本地工程，不能关闭 #24 或开放生产/售卖。
 
 相关上游回归 `first-copy.test.js`、`book-pdf.test.js`、`participation.test.js`、`admin.test.js`、`payments.test.js` **89/89**（`/tmp/timenook-t23-backend-regression.log`）。这与 T23 11 项不是同一次全量运行；未改动的媒体/队列广泛回归继续由精确提交 CI 执行。
+
+## 独立 Spec 审查修复
+
+固定候选 `356b630` 的独立 Spec 审查发现两项 P2，均在原公开 HTTP 边界补复现和修复：
+
+1. 已请求取消但印厂拒绝取消时，原状态会永久停留在 `cancellation_pending`，实际发货与交付被挡住。新增明确回执 `cancellation_rejected`，须人工证据；按已持久化的接单/承运事实回到 `in_production` 或 `shipped`，未核实接单的交接仍回到 `handoff_pending`。不释放权益、不建新尝试、不把取消失败当作新接单事实。原追踪号、原尝试/交接号及已消费权益保留，之后实际交付可幂等起算 D03。RED `/tmp/timenook-t23-backend-red-cancellation-rejected.log`（2/2 失败），GREEN `/tmp/timenook-t23-backend-green-cancellation-rejected.log`（2/2）。
+2. 确定取消后，原首本单曾永久锁住地址/确认，不能更正内容后重新尝试。新增迁移 `20261026110000_cancelled_fulfillment_revisions`，为旧尝试回填并冻结具体书稿/PDF/地址/双方确认与预留修订号；原已应用迁移不修改。`canReviseProduction` 仅在最新尝试已确定取消且对应当前预留修订时为真。地址变更仅重做发起人确认，内容变更重做双方确认；有效新提交继续使用原唯一业务单及原预留权益，增加修订并重新锁定。即使管理员先审核，仍不重新开放编辑。旧提交键重放只返回当前原单，不增加修订；旧尝试内容不随新单指针改变。RED `/tmp/timenook-t23-backend-red-corrected-retry.log`；修复后地址/内容及前项取消恢复共 **4/4** GREEN，日志 `/tmp/timenook-t23-backend-review-fixes-green.log`。
+
+修订迁移继续以复合外键和数据库触发器保护历史尝试，不将同一业务单的后续受控修订误当作可重写旧生产文件。确认取消但没有改动原书稿/地址时，仍可按原有效确认重试；只要地址或内容改变，T22 门禁会阻止运营以旧预留绕过用户重新确认及提交。未知交接、待取消、已交付或 Commerce 冻结均不因此获准新尝试。
+
+修复后的最终相关运行：T23 **15/15** 与 T22 **16/16**，同次 **31/31**（`/tmp/timenook-t23-backend-review-final.log`），包含新迁移 fresh/replay、两项独立审查修复、旧键重放、审核后重锁及旧尝试固定版本。API 类型检查和构建通过（`/tmp/timenook-t23-backend-review-{typecheck,build}.log`）；其余未受影响的相关 89 项记录保留原适用范围，精确最终提交的整仓验证由 PR/main CI 负责。

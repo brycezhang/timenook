@@ -285,6 +285,16 @@ Page({
         `projectId=${this.projectId}&bookVersionId=${attempt.bookVersionId}&purpose=book_confirmation&returnTo=production`,
       );
   },
+  reviseProduction() {
+    if (this.data.busy || this.data.view?.current?.state !== "cancelled")
+      return;
+    if (!this.current(this.generation, this.owner)) {
+      this.onHide();
+      this.setData({ status: "授权已到期或账号已变化，请重新查询" });
+      return;
+    }
+    go("print", `projectId=${this.projectId}`);
+  },
   book() {
     go("book", `projectId=${this.projectId}`);
   },

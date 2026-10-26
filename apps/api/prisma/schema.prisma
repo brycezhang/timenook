@@ -1140,6 +1140,7 @@ model BookConfirmation {
 }
 model FirstCopyOrder {
  id String @id @db.Uuid
+ reservationRevision Int @default(1) @map("reservation_revision")
  projectId String @unique @map("project_id") @db.Uuid
  entitlementId String @unique @map("entitlement_id") @db.Uuid
  paymentOrderId String @unique @map("payment_order_id") @db.Uuid
@@ -1183,6 +1184,14 @@ model FulfillmentOutbox {
 
 model FulfillmentAttempt {
  id String @id @db.Uuid
+ reservationRevision Int @map("reservation_revision")
+ bookId String @map("book_id") @db.Uuid
+ snapshotHash String @map("snapshot_hash") @db.Char(64)
+ pdfHash String @map("pdf_hash") @db.Char(64)
+ addressHash String @map("address_hash") @db.Char(64)
+ address Json
+ narratorConfirmationId String @map("narrator_confirmation_id") @db.Uuid
+ initiatorConfirmationId String @map("initiator_confirmation_id") @db.Uuid
  orderId String @map("order_id") @db.Uuid
  projectId String @map("project_id") @db.Uuid
  sequence Int

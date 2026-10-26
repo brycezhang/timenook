@@ -163,6 +163,16 @@ export class FirstCopies implements OnModuleDestroy {
         where: { orderId: order.id },
       }),
       production = await tx.firstCopyOrder.findUnique({ where: { projectId } });
+    const latestAttempt = production
+      ? await tx.fulfillmentAttempt.findFirst({
+          where: { orderId: production.id },
+          orderBy: { sequence: "desc" },
+        })
+      : null;
+    const canReviseProduction =
+      !!production &&
+      latestAttempt?.state === "cancelled" &&
+      latestAttempt.reservationRevision === production.reservationRevision;
     const role = order.buyerId === actor.userId ? "initiator" : "narrator";
     const book = context.current;
     const confirmations = { narrator: false, initiator: false };
@@ -254,7 +264,7 @@ export class FirstCopies implements OnModuleDestroy {
       })
     )
       blockers.push("PROJECT_FROZEN");
-    if (production) blockers.push("ALREADY_SUBMITTED");
+    if (production && !canReviseProduction) blockers.push("ALREADY_SUBMITTED");
     return {
       projectId,
       role,
@@ -306,6 +316,7 @@ export class FirstCopies implements OnModuleDestroy {
       },
       blockers,
       canSubmit: role === "initiator" && blockers.length === 0,
+      canReviseProduction,
       production: production ? this.orderView(production) : null,
       accessExpiresAt: context.accessExpiresAt,
     };
@@ -353,7 +364,8 @@ export class FirstCopies implements OnModuleDestroy {
       async (tx, actor) => {
         const current = await this.contextIn(tx, projectId, actor);
         if (current.role !== "initiator") throw new ForbiddenException();
-        if (current.production) throw new ConflictException();
+        if (current.production && !current.canReviseProduction)
+          throw new ConflictException();
         if (
           !(await this.command(
             tx,
@@ -413,7 +425,8 @@ export class FirstCopies implements OnModuleDestroy {
       undefined,
       async (tx, actor) => {
         const current = await this.contextIn(tx, projectId, actor);
-        if (current.production) throw new ConflictException();
+        if (current.production && !current.canReviseProduction)
+          throw new ConflictException();
         if (body.role === "initiator" && current.role !== "initiator")
           throw new ForbiddenException();
         if (
@@ -495,9 +508,16 @@ export class FirstCopies implements OnModuleDestroy {
     orderId: string,
     kind: "reserved" | "approved",
     actorId: string,
+    reservationRevision = 1,
   ) {
     const event = await tx.fulfillmentEvent.create({
-      data: { id: randomUUID(), orderId, kind, actorId },
+      data: {
+        id: randomUUID(),
+        orderId,
+        kind:
+          reservationRevision === 1 ? kind : `${kind}:${reservationRevision}`,
+        actorId,
+      },
     });
     await tx.fulfillmentOutbox.create({ data: { eventId: event.id } });
   }
@@ -514,8 +534,16 @@ export class FirstCopies implements OnModuleDestroy {
       async (tx, actor) => {
         const current = await this.contextIn(tx, projectId, actor);
         if (current.role !== "initiator") throw new ForbiddenException();
-        await this.command(tx, projectId, actor.userId, "submit", key, body);
-        if (current.production) {
+        const fresh = await this.command(
+          tx,
+          projectId,
+          actor.userId,
+          "submit",
+          key,
+          body,
+        );
+        if (!fresh) return current;
+        if (current.production && !current.canReviseProduction) {
           const prior = current.production;
           if (
             prior.bookVersionId !== body.bookVersionId ||
@@ -555,27 +583,47 @@ export class FirstCopies implements OnModuleDestroy {
             id: entitlement.id,
             projectId,
             orderId: project.orderId!,
-            state: "available",
+            state: current.production ? "reserved" : "available",
           },
           data: { state: "reserved" },
         });
         if (reserved.count !== 1) throw new ConflictException();
-        const row = await tx.firstCopyOrder.create({
-          data: {
-            id: randomUUID(),
-            projectId,
-            entitlementId: entitlement.id,
-            paymentOrderId: project.orderId!,
-            bookId: body.bookVersionId,
-            snapshotHash: body.snapshotHash,
-            pdfHash: body.pdfHash,
-            addressHash: body.addressHash,
-            address: json(address.value),
-            narratorConfirmationId: narrator.id,
-            initiatorConfirmationId: initiator.id,
-          },
-        });
-        await this.eventIn(tx, row.id, "reserved", actor.userId);
+        const binding = {
+          bookId: body.bookVersionId,
+          snapshotHash: body.snapshotHash,
+          pdfHash: body.pdfHash,
+          addressHash: body.addressHash,
+          address: json(address.value),
+          narratorConfirmationId: narrator.id,
+          initiatorConfirmationId: initiator.id,
+        };
+        const row = current.production
+          ? await tx.firstCopyOrder.update({
+              where: { id: current.production.id },
+              data: {
+                ...binding,
+                reservationRevision: { increment: 1 },
+                state: "reserved",
+                approvedBy: null,
+                approvedAt: null,
+              },
+            })
+          : await tx.firstCopyOrder.create({
+              data: {
+                id: randomUUID(),
+                projectId,
+                entitlementId: entitlement.id,
+                paymentOrderId: project.orderId!,
+                ...binding,
+              },
+            });
+        await this.eventIn(
+          tx,
+          row.id,
+          "reserved",
+          actor.userId,
+          row.reservationRevision,
+        );
         return this.contextIn(tx, projectId, actor);
       },
     );
@@ -742,7 +790,13 @@ export class FirstCopies implements OnModuleDestroy {
           approvedAt: new Date(),
         },
       });
-      await this.eventIn(tx, orderId, "approved", operatorId);
+      await this.eventIn(
+        tx,
+        orderId,
+        "approved",
+        operatorId,
+        order.reservationRevision,
+      );
     }
     return this.approvalView(await this.contextIn(tx, projectId, actor));
   }

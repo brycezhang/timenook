@@ -321,7 +321,7 @@ Page({
       !value ||
       value.role !== "initiator" ||
       !this.data.addressDirty ||
-      value.production
+      (value.production && !value.canReviseProduction)
     )
       return;
     const address = {
@@ -388,7 +388,7 @@ Page({
       book.state !== "ready" ||
       this.data.versionMismatch ||
       this.data.busy ||
-      value.production ||
+      (value.production && !value.canReviseProduction) ||
       (role === "narrator"
         ? !this.data.canConfirmNarrator
         : value.role !== "initiator" ||
@@ -511,7 +511,7 @@ Page({
         this.data.addressDirty ||
         this.data.versionMismatch ||
         !value.address.hash ||
-        value.production
+        (value.production && !value.canReviseProduction)
       )
         return;
       const binding = {

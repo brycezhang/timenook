@@ -234,3 +234,16 @@ test("malformed production binding cannot enable a private handoff grant", async
   assert.equal(h.page.data.canGrant, false);
   h.page.onUnload();
 });
+
+test("a confirmed cancellation routes correction to the current first-copy context without pinning the cancelled PDF", async () => {
+  const h = await harness();
+  h.page.onLoad({ projectId });
+  const loading = h.page.onShow(),
+    value = summary();
+  value.current.state = "cancelled";
+  h.respond(0, value);
+  await loading;
+  h.page.reviseProduction();
+  assert.equal(h.routes[0], `/pages/print/index?projectId=${projectId}`);
+  h.page.onUnload();
+});

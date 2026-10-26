@@ -88,9 +88,11 @@ class EvidenceDto {
   @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
 }
 class ReceiptDto extends EvidenceDto {
-  @ApiProperty({ enum: ["accepted", "unknown", "cancelled"] })
-  @IsIn(["accepted", "unknown", "cancelled"])
-  outcome!: "accepted" | "unknown" | "cancelled";
+  @ApiProperty({
+    enum: ["accepted", "unknown", "cancelled", "cancellation_rejected"],
+  })
+  @IsIn(["accepted", "unknown", "cancelled", "cancellation_rejected"])
+  outcome!: "accepted" | "unknown" | "cancelled" | "cancellation_rejected";
 }
 class WechatDto implements FulfillmentWechat {
   @ApiProperty()
@@ -158,7 +160,12 @@ export class Fulfillment implements OnModuleDestroy {
       ? supplier.providerRef
       : null;
   }
-  private binding(order: FirstCopyOrder): FirstCopyBinding {
+  private binding(
+    order: Pick<
+      FirstCopyOrder,
+      "bookId" | "snapshotHash" | "pdfHash" | "addressHash"
+    >,
+  ): FirstCopyBinding {
     return {
       bookVersionId: order.bookId,
       snapshotHash: order.snapshotHash,
@@ -251,7 +258,7 @@ export class Fulfillment implements OnModuleDestroy {
         dueAt: row.dueAt.toISOString(),
         supplierRef: row.supplierRef,
         receiptRef: row.receiptRef,
-        ...this.binding(order!),
+        ...this.binding(row),
         tracking: row.tracking as unknown as FulfillmentAttemptView["tracking"],
         wechat: row.wechat as unknown as FulfillmentWechat | null,
         deliveredAt: row.deliveredAt?.toISOString() ?? null,
@@ -398,6 +405,14 @@ export class Fulfillment implements OnModuleDestroy {
     await tx.fulfillmentAttempt.create({
       data: {
         id: attemptId,
+        reservationRevision: order.reservationRevision,
+        bookId: order.bookId,
+        snapshotHash: order.snapshotHash,
+        pdfHash: order.pdfHash,
+        addressHash: order.addressHash,
+        address: json(order.address),
+        narratorConfirmationId: order.narratorConfirmationId,
+        initiatorConfirmationId: order.initiatorConfirmationId,
         orderId: id,
         projectId: order.projectId,
         sequence: (current?.sequence ?? 0) + 1,
@@ -512,6 +527,11 @@ export class Fulfillment implements OnModuleDestroy {
     const { order, attempt } = await this.attemptIn(tx, id, attemptId);
     if (attempt.ownerAdminId !== operatorId || attempt.state !== "approved")
       throw new ForbiddenException();
+    if (attempt.reservationRevision !== order.reservationRevision)
+      throw new ConflictException(
+        "Only the active frozen reservation may disclose materials",
+      );
+    this.matches(order, this.binding(attempt));
     const grant = await tx.fulfillmentGrant.findFirst({
         where: { attemptId },
         orderBy: { sequence: "desc" },
@@ -544,7 +564,7 @@ export class Fulfillment implements OnModuleDestroy {
     });
     if (output.sha256 !== order.pdfHash) throw new ConflictException();
     return {
-      address: order.address as unknown as FirstCopyAddress,
+      address: attempt.address as unknown as FirstCopyAddress,
       pdf: { sha256: output.sha256, bytes: output.bytes },
       grantExpiresAt: grant.expiresAt.toISOString(),
       handoffId: attempt.handoffId,
@@ -727,6 +747,25 @@ export class Fulfillment implements OnModuleDestroy {
               : "in_production",
           receiptRef: body.evidenceRef,
         },
+      });
+    } else if (body.outcome === "cancellation_rejected") {
+      if (attempt.state !== "cancellation_pending")
+        throw new ConflictException(
+          "A pending cancellation must be verified first",
+        );
+      const accepted = await tx.fulfillmentRecord.findFirst({
+        where: { attemptId, kind: "receipt_accepted" },
+      });
+      // Restore only known physical facts. Refusing cancellation is not itself
+      // evidence that an unknown handoff was accepted or shipped.
+      const state = attempt.tracking
+        ? "shipped"
+        : accepted
+          ? "in_production"
+          : "handoff_pending";
+      await tx.fulfillmentAttempt.update({
+        where: { id: attemptId },
+        data: { state },
       });
     } else {
       if (attempt.state === "cancelled") {

@@ -171,7 +171,12 @@ function observe(page) {
       errors.push(message.text());
   });
 }
-async function openMini(browser, account) {
+async function openMini(
+  browser,
+  account,
+  target = project,
+  route = "production",
+) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
   });
@@ -188,7 +193,7 @@ async function openMini(browser, account) {
     },
     { origin, account },
   );
-  await page.goto(`${origin}/#/production?projectId=${project.projectId}`);
+  await page.goto(`${origin}/#/${route}?projectId=${target.projectId}`);
   await expect(page).toHaveTitle("时光里 · 岁月成书");
   return page;
 }
@@ -328,6 +333,20 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
     .getByLabel("回执或处理证据", { exact: true })
     .fill("synthetic:印厂明确接单回执");
   await command(admin, "记录印厂确认接单", "/receipt");
+  await admin
+    .getByLabel("回执或处理证据", { exact: true })
+    .fill("synthetic:请求取消已接单生产");
+  await command(admin, "请求取消本次生产", "/cancel");
+  await admin
+    .getByLabel("回执或处理证据", { exact: true })
+    .fill("synthetic:印厂核实已无法取消并继续生产");
+  const continuing = await command(
+    admin,
+    "核实取消未成功，继续实际履约",
+    "/receipt",
+  );
+  expect(continuing.current.state).toBe("in_production");
+  expect(continuing.entitlementState).toBe("consumed");
   await admin.getByLabel("物流公司", { exact: true }).fill("合成快递");
   await admin
     .getByLabel("物流单号", { exact: true })
@@ -345,6 +364,20 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
     .fill("synthetic:隔离发货管理结果");
   await admin.getByLabel(/微信发货处理结果/).selectOption("recorded");
   await command(admin, "保存物流与微信发货记录", "/shipping");
+  await admin
+    .getByLabel("回执或处理证据", { exact: true })
+    .fill("synthetic:已发货后请求取消");
+  await command(admin, "请求取消本次生产", "/cancel");
+  await admin
+    .getByLabel("回执或处理证据", { exact: true })
+    .fill("synthetic:物流已交运无法取消");
+  const stillShipped = await command(
+    admin,
+    "核实取消未成功，继续实际履约",
+    "/receipt",
+  );
+  expect(stillShipped.current.state).toBe("shipped");
+  expect(stillShipped.current.tracking.number).toBe("SYNTHETIC-T23-0001");
   const buyer = await openMini(browser, buyerSession);
   await expect(buyer.getByText("已发货", { exact: true })).toBeVisible();
   await expect(
@@ -409,6 +442,15 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
   await expect(
     admin.getByRole("heading", { name: "生产与物流", exact: true }),
   ).toBeVisible();
+  const mobileRefresh = admin.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      response.url().endsWith("/v1/admin/fulfillment"),
+  );
+  await admin
+    .getByRole("button", { name: "重新查询生产单", exact: true })
+    .click();
+  expect((await mobileRefresh).status()).toBe(200);
   await expect(
     admin.locator(".production-row").getByText(/已交付/),
   ).toBeVisible();
@@ -427,6 +469,116 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
     narrator.context().close(),
     buyer.context().close(),
   ]);
+});
+
+test("verified cancellation permits corrected address confirmation and a new attempt on the same first-copy order", async ({
+  browser,
+}) => {
+  const previous = process.cwd();
+  let retry;
+  try {
+    process.chdir(resolve("apps/api"));
+    retry = await apiRequire(
+      "./dist-test/test/first-copy-fixture.js",
+    ).readyReservedFirstCopy();
+  } finally {
+    process.chdir(previous);
+  }
+  const base = `/v1/admin/fulfillment/${retry.order.id}`;
+  const adminCommand = async (suffix, payload) =>
+    fixture.data(
+      await fixture.app.inject({
+        method: "POST",
+        url: base + suffix,
+        headers: { ...adminHeaders, "idempotency-key": randomUUID() },
+        payload,
+      }),
+    );
+  const created = await adminCommand("/attempts", {
+    ...retry.binding,
+    supplierRef: "record:synthetic-provider",
+    dueAt: new Date(Date.now() + 86400000).toISOString(),
+  });
+  const attemptBase = `/attempts/${created.current.id}`;
+  fixture.data(
+    await fixture.request(
+      "POST",
+      `/v1/projects/${retry.projectId}/fulfillment/grants`,
+      retry.narrator.token,
+      {
+        ...retry.binding,
+        attemptId: created.current.id,
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:本次测试取消前的本人限时授权",
+      },
+    ),
+  );
+  await adminCommand(attemptBase + "/handoff", {});
+  await adminCommand(attemptBase + "/cancel", {
+    evidenceRef: "synthetic:人工请求取消待核实交接",
+  });
+  await adminCommand(attemptBase + "/receipt", {
+    outcome: "cancelled",
+    evidenceRef: "synthetic:印厂明确确认取消原尝试",
+  });
+  const account = fixture.data(
+    await fixture.app.inject({
+      method: "POST",
+      url: "/v1/sessions/wechat",
+      payload: { code: `${retry.buyer.who}:${randomUUID()}` },
+    }),
+  );
+  const buyer = await openMini(browser, account, retry, "print");
+  const detail = buyer.getByPlaceholder("省、市、区、街道及门牌号", {
+    exact: true,
+  });
+  await expect(detail).toBeVisible();
+  await detail.fill("合成地址二号：确认取消后的更正");
+  const changed = await command(buyer, "保存收货地址", "/first-copy/address");
+  expect(changed.confirmations).toEqual({ narrator: true, initiator: false });
+  expect(changed.canReviseProduction).toBe(true);
+  await buyer
+    .getByRole("button", {
+      name: "我已逐页核对本版完整 PDF 和当前收货地址",
+      exact: true,
+    })
+    .click();
+  await buyer
+    .getByPlaceholder("记录发起人核对本版与地址的独立说明", { exact: true })
+    .fill("合成测试：重新核对相同完整 PDF 与更正后的地址。");
+  await command(buyer, "保存排版与地址确认", "/first-copy/confirmations");
+  const resubmitted = await command(
+    buyer,
+    "使用首本权益提交制作",
+    "/first-copy/submit",
+  );
+  expect(resubmitted.production.id).toBe(retry.order.id);
+  expect(resubmitted.production.addressHash).toBe(changed.address.hash);
+  expect(resubmitted.canReviseProduction).toBe(false);
+  await expect(detail).toHaveCount(0);
+  await buyer.screenshot({
+    path: "/tmp/timenook-t23-corrected-reservation-390.png",
+  });
+  const admin = await openAdmin(browser);
+  await admin
+    .locator(".production-row")
+    .filter({ hasText: retry.order.id })
+    .getByRole("button", { name: "查看此生产单", exact: true })
+    .click();
+  await fillDate(admin, "本次处理期限", new Date(Date.now() + 86400000));
+  const next = await command(admin, "建立生产尝试", "/attempts");
+  expect(next.orderId).toBe(retry.order.id);
+  expect(next.current.sequence).toBe(2);
+  expect(next.current.addressHash).toBe(changed.address.hash);
+  const historic = next.attempts.find(
+    (attempt) => attempt.id === created.current.id,
+  );
+  expect(historic.state).toBe("cancelled");
+  expect(historic.addressHash).toBe(retry.binding.addressHash);
+  expect(historic.pdfHash).toBe(retry.binding.pdfHash);
+  expect(errors).toEqual([]);
+  await Promise.all([buyer.context().close(), admin.context().close()]);
 });
 
 test("withdrawing sharing clears the initiator production and tracking details", async ({

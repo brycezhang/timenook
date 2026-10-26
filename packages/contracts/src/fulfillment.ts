@@ -61,7 +61,7 @@ export interface FulfillmentAttemptCommand extends FirstCopyBinding {
   dueAt: string;
 }
 export interface FulfillmentReceiptCommand {
-  outcome: "accepted" | "unknown" | "cancelled";
+  outcome: "accepted" | "unknown" | "cancelled" | "cancellation_rejected";
   evidenceRef: string;
 }
 export interface FulfillmentShippingCommand {

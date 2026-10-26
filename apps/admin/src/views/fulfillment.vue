@@ -325,12 +325,16 @@ async function command(
 function handoff() {
   return command("handoff", {});
 }
-function receipt(outcome: "accepted" | "unknown" | "cancelled") {
+function receipt(outcome: FulfillmentReceiptCommand["outcome"]) {
   if (!evidence.value.trim()) {
     error.value = "请填写回执或处理证据。";
     return;
   }
   return command("receipt", { outcome, evidenceRef: evidence.value.trim() });
+}
+function continueProduction() {
+  if (selected.value?.current?.state !== "cancellation_pending") return;
+  return receipt("cancellation_rejected");
 }
 function cancel() {
   if (!evidence.value.trim()) {
@@ -514,6 +518,7 @@ onUnmounted(() => {
               'handoff_pending',
               'cancellation_pending',
               'in_production',
+              'shipped',
             ].includes(selected.current.state)
           "
           class="production-form"
@@ -557,9 +562,16 @@ onUnmounted(() => {
               @click="receipt('cancelled')"
               >记录印厂确认取消</Button
             >
+            <Button
+              v-if="selected.current.state === 'cancellation_pending'"
+              :disabled="busy"
+              @click="continueProduction"
+              >核实取消未成功，继续实际履约</Button
+            >
           </div>
           <p>
             交接中的取消必须等待人工核验印厂回执，不承诺自动撤销文件副本或实物制作。
+            核实取消未成功后，沿同次生产和原物流继续，不释放首本权益或新建交接。
           </p>
         </div>
         <div

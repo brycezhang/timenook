@@ -9,7 +9,7 @@ async function harness() {
     .split("</script>")[0]
     .replace(/^import[\s\S]*?;\n/gm, "");
   const { code } = await transform(
-    `${script}\nexport { rows, selected, busy, error, supplierRef, dueAt, materials, createAttempt, open, loadMaterials, evidence, receipt, carrier, trackingNumber, shippedAt, shippingEvidence, wechatEvidence, wechatResult, saveShipping };`,
+    `${script}\nexport { rows, selected, busy, error, supplierRef, dueAt, materials, createAttempt, open, loadMaterials, evidence, receipt, carrier, trackingNumber, shippedAt, shippingEvidence, wechatEvidence, wechatResult, saveShipping, continueProduction };`,
     { loader: "ts", format: "cjs" },
   );
   const calls: {
@@ -207,5 +207,75 @@ test("a later WeChat result uses the original immutable tracking including secon
   h.calls[1].resolve(view);
   await saving;
   assert.equal(h.page.selected.value.current.state, "delivered");
+  h.unmount();
+});
+
+test("verified unsuccessful cancellation keeps one consumed attempt and retries the same continuation intent", async () => {
+  const h = await harness(),
+    view: any = initial();
+  view.entitlementState = "consumed";
+  view.current = {
+    id: "attempt",
+    state: "cancellation_pending",
+    tracking: null,
+  };
+  h.page.selected.value = view;
+  h.page.rows.value = [view];
+  await h.page.continueProduction();
+  assert.equal(
+    h.calls.length,
+    0,
+    "continuation requires an independently verified receipt",
+  );
+  h.page.evidence.value = "synthetic:verified-cancellation-unsuccessful";
+  const continuing = h.page.continueProduction();
+  assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0].args.slice(0, 4))), [
+    "order",
+    "attempt",
+    "receipt",
+    {
+      outcome: "cancellation_rejected",
+      evidenceRef: "synthetic:verified-cancellation-unsuccessful",
+    },
+  ]);
+  h.calls[0].reject(new Error("synthetic uncertain receipt"));
+  await continuing;
+  const retry = h.page.continueProduction();
+  assert.equal(h.calls[1].args[4], h.calls[0].args[4]);
+  h.calls[1].resolve({
+    ...view,
+    current: { ...view.current, state: "in_production" },
+  });
+  await retry;
+  assert.equal(h.page.selected.value.current.id, "attempt");
+  assert.equal(h.page.selected.value.entitlementState, "consumed");
+  assert.equal(h.page.rows.value[0].current.state, "in_production");
+  h.unmount();
+});
+
+test("unsuccessful cancellation after shipment returns the same immutable tracking to shipping and delivery handling", async () => {
+  const h = await harness(),
+    view: any = initial();
+  const tracking = {
+    carrier: "合成物流",
+    number: "SYNTHETIC-001",
+    shippedAt: "2026-10-25T04:30:45.123Z",
+  };
+  view.entitlementState = "consumed";
+  view.current = { id: "attempt", state: "cancellation_pending", tracking };
+  h.page.selected.value = view;
+  h.page.rows.value = [view];
+  h.page.evidence.value = "synthetic:shipped-cancellation-unsuccessful";
+  const continuing = h.page.continueProduction();
+  assert.equal((h.calls[0].args[3] as any).outcome, "cancellation_rejected");
+  h.calls[0].resolve({
+    ...view,
+    current: { ...view.current, state: "shipped" },
+  });
+  await continuing;
+  assert.equal(h.page.selected.value.current.id, "attempt");
+  assert.deepEqual(h.page.selected.value.current.tracking, tracking);
+  assert.equal(h.page.rows.value[0].current.state, "shipped");
+  assert.equal(h.page.selected.value.entitlementState, "consumed");
   h.unmount();
 });

@@ -27,6 +27,7 @@ function context(value: FirstCopyContext, projectId: string): FirstCopyContext {
     !Array.isArray(value.shipping.regionCodes) ||
     !Array.isArray(value.blockers) ||
     typeof value.canSubmit !== "boolean" ||
+    typeof value.canReviseProduction !== "boolean" ||
     !value.creation ||
     (value.accessExpiresAt !== null &&
       !Number.isFinite(Date.parse(value.accessExpiresAt))) ||

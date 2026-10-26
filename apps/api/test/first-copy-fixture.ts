@@ -124,8 +124,15 @@ export async function readyReservedFirstCopy() {
       ),
     );
   }
+  const originalSubmitKey = randomUUID();
   const reserved = data(
-    await request("POST", p.base + "/submit", p.buyer.token, binding),
+    await request(
+      "POST",
+      p.base + "/submit",
+      p.buyer.token,
+      binding,
+      originalSubmitKey,
+    ),
   );
-  return { ...p, binding, order: reserved.production };
+  return { ...p, binding, originalSubmitKey, order: reserved.production };
 }

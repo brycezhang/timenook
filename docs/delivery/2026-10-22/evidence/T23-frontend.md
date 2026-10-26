@@ -44,3 +44,19 @@ Browser plugin not available。主 Agent 使用仓库 Playwright 连接实际 AP
 整合 T22 与 T23 浏览器流程时，既有公开 T22 用例发现新“查看生产与物流”按钮位于 `context` 的父级保护外；私人数据清空后访问 `context.production` 导致预览渲染失败。RED 记录为 `/tmp/timenook-t23-browser-final.log`，拒绝页调试记录 `/tmp/timenook-t22-browser-debug.txt`。已改为 `context && context.production`，并检查所有新增生产页的 nullable `view/current` 引用：授权区及协助入口明确检查当前尝试，限时截止展示已检查 `view && view.current`。交付时间输入增设毫秒精度，与已有物流时间保持一致，不改变政策。
 
 修复后 Mac `wcc/wcsc` **21 页**再次通过，日志 `/tmp/timenook-t23-frontend-null-guard-native.log`；首本/生产 Page 及运营点击处理器相关 **20/20** 通过，日志 `/tmp/timenook-t23-frontend-null-guard-related.log`。原 82 项回归的未变范围按适用范围复用，最终浏览器复跑结果由主 Agent 在汇总中记录，不据处理器通过追认渲染成功。
+
+## 独立规格审查：取消未成功的实际履约恢复
+
+独立 Spec 审查发现：印厂已确认接单或已发货后请求取消，若取消未成功，原先界面与状态机会一直停留在待核实，不能继续记录物流或交付。运营端现提供独立按钮“核实取消未成功，继续实际履约”，仅在 `cancellation_pending` 且有本次核验证据时发送 `receipt.outcome=cancellation_rejected`。由后端根据已持久化的接单、物流事实恢复实际阶段；客户端继续同一尝试与原物流，保持已消费权益，不开放新交接。已发货阶段也可进入受控取消流程。
+
+公开 SFC 处理器的两条回归先 RED 后 GREEN：制作阶段恢复及未知结果同键重试、已发货恢复并保留原物流。日志 `/tmp/timenook-t23-frontend-cancel-rejected-{red,green}.log`，新增后运营处理器 **6/6**；结合生产 Page 与共享工单处理器的相关范围 **23/23**，日志 `/tmp/timenook-t23-frontend-cancel-rejected-related.log`。Vue 类型检查通过（`/tmp/timenook-t23-frontend-cancel-rejected-typecheck-final.log`），运营构建通过（`/tmp/timenook-t23-frontend-cancel-rejected-build.log`，仍有既有 chunk 提示）。此次只改运营组件，不改变小程序原生模板；实际浏览器与最终固定提交复审另由主 Agent 汇总。
+
+## 独立规格审查：确认取消后的更正与重新提交
+
+第二项 Spec 审查指出，原首本页只要已有生产单就隐藏并拒绝更正，导致印厂已确认取消后仍不能修正地址或书稿。页面现严格消费后端 `FirstCopyContext.canReviseProduction`：仅其为 `true` 时恢复当前地址、本人/发起人确认和首本提交入口；缺失或 `false` 不从旧状态推断开放。页内明确保留原生产单和历史尝试，改地址只要求发起人重新确认，改 PDF 则按当前版本重新确认。成功重新提交仍使用同一生产单、首本权益和零付款，并按服务端返回重新锁定。
+
+生产进度页在确认取消状态提供“返回当前书稿与首本确认”，只传当前项目，不把已取消的旧 PDF 版本固定到新确认页。旧尝试的版本和地址记录不被此次更正覆盖；管理端仍不能改写其快照。
+
+两条新增公开行为先 RED 后 GREEN：首本页更正地址→独立重新确认→同单重提（`/tmp/timenook-t23-frontend-revise-reservation-{red,green}.log`），生产页返回当前确认入口（`/tmp/timenook-t23-frontend-revise-entry-{red,green}.log`）。另补更正 PDF 使用当前 hash 且发起人仍待确认，以及未获明确修订能力时不能保存、确认或重提的回归。最终首本 Page、生产 Page 和运营处理器相关 **26/26**，日志 `/tmp/timenook-t23-frontend-revision-related-final.log`；其他未变范围复用前述适用回归。
+
+前端类型、预览/小程序构建和 Mac 官方 `wcc/wcsc` **21 页**成功：`/tmp/timenook-t23-frontend-revision-typecheck-final.log`、`/tmp/timenook-t23-frontend-revision-build.log`、`/tmp/timenook-t23-frontend-revision-native.log`。真实浏览器的更正交接、取消未成功恢复流程与最终固定提交独立复审由主 Agent 汇总。

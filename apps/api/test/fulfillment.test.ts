@@ -604,3 +604,347 @@ test("operational commands retain MFA permission CSRF and payload idempotency ch
     ),
   );
 });
+
+test("verified cancellation rejection resumes the existing physical stage before and after shipment, then delivery starts D03 once", async () => {
+  const p = await attemptFixture();
+  data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/fulfillment/grants`,
+      p.narrator.token,
+      grantBody(p),
+    ),
+  );
+  data(await admin("POST", p.attemptBase + "/handoff", p.headers, {}));
+  data(
+    await admin("POST", p.attemptBase + "/receipt", p.headers, {
+      outcome: "accepted",
+      evidenceRef: "synthetic:印厂已确定接单",
+    }),
+  );
+  const cancelled = data(
+    await admin("POST", p.attemptBase + "/cancel", p.headers, {
+      evidenceRef: "synthetic:生产中申请取消",
+    }),
+  );
+  assert.equal(cancelled.current.state, "cancellation_pending");
+  const rejected = {
+    outcome: "cancellation_rejected",
+    evidenceRef: "synthetic:印厂确认已生产不能取消",
+  };
+  const key = randomUUID();
+  const continuing = data(
+    await admin("POST", p.attemptBase + "/receipt", p.headers, rejected, key),
+  );
+  assert.equal(continuing.current.state, "in_production");
+  assert.equal(continuing.current.id, p.attempt.id);
+  assert.equal(continuing.current.handoffId, p.attempt.handoffId);
+  assert.equal(continuing.entitlementState, "consumed");
+  assert.equal(continuing.attempts.length, 1);
+  assert.equal(
+    data(
+      await admin("POST", p.attemptBase + "/receipt", p.headers, rejected, key),
+    ).current.state,
+    "in_production",
+  );
+  assert.equal(
+    (
+      await admin(
+        "POST",
+        p.attemptBase + "/receipt",
+        p.headers,
+        { ...rejected, evidenceRef: "synthetic:同键不同核验结果" },
+        key,
+      )
+    ).statusCode,
+    409,
+  );
+  assert.equal(
+    (await admin("POST", p.base + "/attempts", p.headers, p.attemptBody))
+      .statusCode,
+    409,
+  );
+  const shipping = {
+    carrier: "合成物流",
+    number: "CONTINUE123",
+    shippedAt: new Date().toISOString(),
+    evidenceRef: "synthetic:实际承运接收",
+    wechat: {
+      handling: "implemented_and_verified",
+      evidenceRef: "synthetic:微信发货管理结果",
+      result: "recorded",
+    },
+  };
+  const shipped = data(
+    await admin("POST", p.attemptBase + "/shipping", p.headers, shipping),
+  );
+  assert.equal(shipped.current.state, "shipped");
+  data(
+    await admin("POST", p.attemptBase + "/cancel", p.headers, {
+      evidenceRef: "synthetic:发货后申请取消",
+    }),
+  );
+  const stillShipped = data(
+    await admin("POST", p.attemptBase + "/receipt", p.headers, {
+      outcome: "cancellation_rejected",
+      evidenceRef: "synthetic:已发货无法召回",
+    }),
+  );
+  assert.equal(stillShipped.current.state, "shipped");
+  assert.deepEqual(stillShipped.current.tracking, shipped.current.tracking);
+  assert.equal(stillShipped.entitlementState, "consumed");
+  assert.equal(stillShipped.attempts.length, 1);
+  const delivery = {
+    deliveredAt: new Date().toISOString(),
+    evidenceRef: "synthetic:实际交付签收凭证",
+  };
+  const delivered = data(
+    await admin("POST", p.attemptBase + "/delivery", p.headers, delivery),
+  );
+  assert.equal(delivered.current.state, "delivered");
+  assert.equal(delivered.serviceTerms.playback.startsAt, delivery.deliveredAt);
+  assert.equal(
+    data(await admin("POST", p.attemptBase + "/delivery", p.headers, delivery))
+      .serviceTerms.playback.expiresAt,
+    delivered.serviceTerms.playback.expiresAt,
+  );
+});
+
+test("a rejected cancellation with no accepted-production fact preserves the unknown handoff and reservation", async () => {
+  const p = await attemptFixture();
+  data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/fulfillment/grants`,
+      p.narrator.token,
+      grantBody(p),
+    ),
+  );
+  data(await admin("POST", p.attemptBase + "/handoff", p.headers, {}));
+  data(
+    await admin("POST", p.attemptBase + "/cancel", p.headers, {
+      evidenceRef: "synthetic:待核实交接申请取消",
+    }),
+  );
+  const continuing = data(
+    await admin("POST", p.attemptBase + "/receipt", p.headers, {
+      outcome: "cancellation_rejected",
+      evidenceRef: "synthetic:印厂未能取消仍待核实",
+    }),
+  );
+  assert.equal(continuing.current.state, "handoff_pending");
+  assert.equal(continuing.entitlementState, "reserved");
+  assert.equal(
+    (await admin("POST", p.attemptBase + "/handoff", p.headers, {})).statusCode,
+    409,
+  );
+  assert.equal(
+    (
+      await admin("POST", p.attemptBase + "/shipping", p.headers, {
+        carrier: "合成物流",
+        number: "UNKNOWN123",
+        shippedAt: new Date().toISOString(),
+        evidenceRef: "synthetic:未经核实发货",
+        wechat: {
+          handling: "implemented_and_verified",
+          evidenceRef: "synthetic:微信待核验",
+          result: "pending",
+        },
+      })
+    ).statusCode,
+    409,
+  );
+});
+
+test("a cancelled attempt permits corrected address reconfirmation on the same first-copy order, then relocks the next reservation", async () => {
+  const p = await attemptFixture();
+  data(
+    await admin("POST", p.attemptBase + "/cancel", p.headers, {
+      evidenceRef: "synthetic:已确定取消原尝试",
+    }),
+  );
+  const firstCopy = `/v1/projects/${p.projectId}/first-copy`;
+  const before = data(await request("GET", firstCopy, p.buyer.token), 200);
+  assert.equal(before.canReviseProduction, true);
+  const originalReplay = data(
+    await request(
+      "POST",
+      firstCopy + "/submit",
+      p.buyer.token,
+      p.binding,
+      p.originalSubmitKey,
+    ),
+  );
+  assert.equal(originalReplay.production.id, p.order.id);
+  assert.equal(originalReplay.canReviseProduction, true);
+
+  const corrected = data(
+    await request("POST", firstCopy + "/address", p.buyer.token, {
+      ...before.address.value,
+      expectedVersion: before.address.version,
+      detail: "合成更正后的新地址",
+    }),
+  );
+  assert.equal(corrected.confirmations.narrator, true);
+  assert.equal(corrected.confirmations.initiator, false);
+  const binding = { ...p.binding, addressHash: corrected.address.hash };
+  assert.equal(
+    (await request("POST", firstCopy + "/submit", p.buyer.token, binding))
+      .statusCode,
+    409,
+  );
+  data(
+    await request("POST", firstCopy + "/confirmations", p.buyer.token, {
+      role: "initiator",
+      ...binding,
+      noticeVersion: "synthetic-d08-v1",
+      evidenceRef: `synthetic:更正地址确认-${randomUUID()}`,
+    }),
+  );
+  const key = randomUUID();
+  const submitted = data(
+    await request("POST", firstCopy + "/submit", p.buyer.token, binding, key),
+  );
+  assert.equal(submitted.production.id, p.order.id);
+  assert.equal(submitted.production.addressHash, binding.addressHash);
+  assert.equal(submitted.canReviseProduction, false);
+  data(
+    await admin(
+      "POST",
+      `/v1/admin/first-copy/${p.order.id}/approve`,
+      p.headers,
+      binding,
+    ),
+  );
+  assert.equal(
+    data(await request("GET", firstCopy, p.buyer.token), 200)
+      .canReviseProduction,
+    false,
+  );
+
+  assert.equal(
+    (
+      await request("POST", firstCopy + "/address", p.buyer.token, {
+        ...before.address.value,
+        expectedVersion: corrected.address.version,
+      })
+    ).statusCode,
+    409,
+  );
+  assert.equal(
+    data(
+      await request("POST", firstCopy + "/submit", p.buyer.token, binding, key),
+    ).production.id,
+    p.order.id,
+  );
+  const retried = data(
+    await admin("POST", p.base + "/attempts", p.headers, {
+      ...p.attemptBody,
+      ...binding,
+    }),
+  );
+  assert.equal(retried.current.sequence, 2);
+  assert.equal(retried.current.addressHash, binding.addressHash);
+  assert.equal(retried.attempts[1].addressHash, p.binding.addressHash);
+  assert.equal(retried.attempts[1].state, "cancelled");
+  assert.equal(retried.entitlementState, "reserved");
+  assert.equal(
+    data(await request("GET", firstCopy, p.buyer.token), 200)
+      .canReviseProduction,
+    false,
+  );
+});
+
+import { ProductionTasks } from "../src/tasks/tasks";
+test("a corrected manuscript after definitive cancellation requires both new confirmations and preserves the previous attempt PDF", async () => {
+  const p = await attemptFixture();
+  data(
+    await admin("POST", p.attemptBase + "/cancel", p.headers, {
+      evidenceRef: "synthetic:原版确认取消",
+    }),
+  );
+  const firstCopy = `/v1/projects/${p.projectId}/first-copy`,
+    bookBase = `/v1/projects/${p.projectId}/book`;
+  data(
+    await request("POST", bookBase + "/cover", p.buyer.token, {
+      expectedVersion: 0,
+      salutation: "本人要求更正的新版封面",
+      photoAssetId: null,
+    }),
+  );
+  const context = data(await request("GET", bookBase, p.buyer.token), 200);
+  const queued = data(
+    await request("POST", bookBase + "/versions", p.buyer.token, {
+      expectedInputHash: context.inputHash,
+    }),
+    202,
+  );
+  await app.get(ProductionTasks).run(queued.task.id);
+  const current = data(await request("GET", firstCopy, p.buyer.token), 200);
+  assert.equal(current.book.state, "ready");
+  assert.deepEqual(current.confirmations, {
+    narrator: false,
+    initiator: false,
+  });
+  const binding = {
+    bookVersionId: current.book.id,
+    snapshotHash: current.book.snapshotHash,
+    pdfHash: current.book.pdf.sha256,
+    addressHash: current.address.hash,
+  };
+  assert.notEqual(binding.bookVersionId, p.binding.bookVersionId);
+  assert.notEqual(binding.pdfHash, p.binding.pdfHash);
+  assert.equal(
+    (await request("POST", firstCopy + "/submit", p.buyer.token, binding))
+      .statusCode,
+    409,
+  );
+  const notice = {
+    noticeVersion: "synthetic-d08-v1",
+    evidenceRef: `synthetic:本人确认新书稿-${randomUUID()}`,
+  };
+  data(
+    await request("POST", firstCopy + "/confirmations", p.narrator.token, {
+      role: "narrator",
+      bookVersionId: binding.bookVersionId,
+      snapshotHash: binding.snapshotHash,
+      pdfHash: binding.pdfHash,
+      ...notice,
+    }),
+  );
+  assert.equal(
+    (await request("POST", firstCopy + "/submit", p.buyer.token, binding))
+      .statusCode,
+    409,
+  );
+  data(
+    await request("POST", firstCopy + "/confirmations", p.buyer.token, {
+      role: "initiator",
+      ...binding,
+      ...notice,
+      evidenceRef: `synthetic:发起人确认新书稿-${randomUUID()}`,
+    }),
+  );
+  const reserved = data(
+    await request("POST", firstCopy + "/submit", p.buyer.token, binding),
+  );
+  assert.equal(reserved.production.id, p.order.id);
+  assert.equal(reserved.canReviseProduction, false);
+  const retried = data(
+    await admin("POST", p.base + "/attempts", p.headers, {
+      ...p.attemptBody,
+      ...binding,
+    }),
+  );
+  assert.equal(retried.orderId, p.order.id);
+  assert.equal(retried.current.bookVersionId, binding.bookVersionId);
+  assert.equal(retried.current.pdfHash, binding.pdfHash);
+  assert.equal(retried.attempts[1].bookVersionId, p.binding.bookVersionId);
+  assert.equal(retried.attempts[1].snapshotHash, p.binding.snapshotHash);
+  assert.equal(retried.attempts[1].pdfHash, p.binding.pdfHash);
+  assert.equal(retried.attempts[1].state, "cancelled");
+  assert.equal(
+    (await admin("GET", p.attemptBase + "/pdf", p.headers)).statusCode,
+    403,
+  );
+});

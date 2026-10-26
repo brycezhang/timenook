@@ -125,6 +125,7 @@ function context(): any {
       "INITIATOR_CONFIRMATION_REQUIRED",
     ],
     canSubmit: false,
+    canReviseProduction: false,
     production: null,
     accessExpiresAt: null,
   };
@@ -478,5 +479,167 @@ test("a ready first-copy response with a missing PDF hash cannot enable confirma
   await show;
   assert.equal(h.page.data.context, null);
   assert.equal(h.page.data.canSubmit, false);
+  h.page.onUnload();
+});
+
+test("a definitively cancelled attempt allows address correction, fresh initiator confirmation and same-order resubmission", async () => {
+  const h = harness();
+  h.page.onLoad({ projectId });
+  const loading = h.page.onShow(),
+    initial = context();
+  initial.canReviseProduction = true;
+  initial.canSubmit = true;
+  initial.address = {
+    version: 1,
+    hash: "c".repeat(64),
+    value: {
+      recipientName: "合成收件人",
+      phone: "13800000000",
+      regionCode: "CN-SH",
+      detail: "原合成地址",
+    },
+  };
+  initial.confirmations = { narrator: true, initiator: true };
+  initial.blockers = [];
+  initial.production = {
+    id: "55555555-5555-4555-8555-555555555555",
+    state: "approved",
+    bookVersionId: versionId,
+    snapshotHash: "b".repeat(64),
+    pdfHash: "f".repeat(64),
+    addressHash: "c".repeat(64),
+    copies: 1,
+    amountDueFen: 0,
+  };
+  h.respond(0, initial);
+  await loading;
+  h.page.input({
+    currentTarget: { dataset: { field: "detail" } },
+    detail: { value: "更正后的合成地址" },
+  });
+  const saving = h.page.saveAddress();
+  assert.ok(
+    h.requests[1],
+    "definitively cancelled production can save a corrected address",
+  );
+  assert.equal(h.requests[1].data.expectedVersion, 1);
+  const corrected = structuredClone(initial);
+  corrected.canSubmit = false;
+  corrected.address = {
+    ...initial.address,
+    version: 2,
+    hash: "d".repeat(64),
+    value: { ...initial.address.value, detail: "更正后的合成地址" },
+  };
+  corrected.confirmations.initiator = false;
+  corrected.blockers = ["INITIATOR_CONFIRMATION_REQUIRED"];
+  h.respond(1, corrected);
+  await saving;
+  assert.equal(h.page.data.context.confirmations.narrator, true);
+  assert.equal(h.page.data.context.confirmations.initiator, false);
+  await h.page.submit();
+  assert.equal(h.requests.length, 2);
+  h.page.chooseConfirmation({
+    currentTarget: { dataset: { role: "initiator" } },
+  });
+  h.page.evidenceInput({
+    currentTarget: { dataset: { role: "initiator" } },
+    detail: { value: "本人重新核对当前书稿与更正地址" },
+  });
+  const confirming = h.page.confirmInitiator();
+  assert.equal(h.requests[2].data.addressHash, "d".repeat(64));
+  const confirmed = structuredClone(corrected);
+  confirmed.confirmations.initiator = true;
+  confirmed.canSubmit = true;
+  confirmed.blockers = [];
+  h.respond(2, confirmed);
+  await confirming;
+  const submitting = h.page.submit();
+  assert.equal(h.requests[3].data.addressHash, "d".repeat(64));
+  const resubmitted = structuredClone(confirmed);
+  resubmitted.canReviseProduction = false;
+  resubmitted.canSubmit = false;
+  resubmitted.production.addressHash = "d".repeat(64);
+  resubmitted.production.state = "reserved";
+  resubmitted.blockers = ["ALREADY_SUBMITTED"];
+  h.respond(3, resubmitted);
+  await submitting;
+  assert.equal(h.page.data.context.production.id, initial.production.id);
+  assert.equal(h.page.data.context.canReviseProduction, false);
+  assert.equal(h.page.data.canSubmit, false);
+  h.page.onUnload();
+});
+
+test("a revised PDF after definitive cancellation needs the current narrator confirmation and leaves initiator confirmation pending", async () => {
+  const h = harness();
+  h.page.onLoad({ projectId });
+  const loading = h.page.onShow(),
+    revised = context();
+  revised.role = "narrator";
+  revised.canConfirmNarrator = true;
+  revised.canReviseProduction = true;
+  revised.book.id = "77777777-7777-4777-8777-777777777777";
+  revised.book.snapshotHash = "d".repeat(64);
+  revised.book.pdf.sha256 = "e".repeat(64);
+  revised.production = {
+    id: "55555555-5555-4555-8555-555555555555",
+    state: "approved",
+    bookVersionId: versionId,
+    snapshotHash: "b".repeat(64),
+    pdfHash: "f".repeat(64),
+    addressHash: "c".repeat(64),
+    copies: 1,
+    amountDueFen: 0,
+  };
+  h.respond(0, revised);
+  await loading;
+  h.page.chooseConfirmation({
+    currentTarget: { dataset: { role: "narrator" } },
+  });
+  h.page.evidenceInput({
+    currentTarget: { dataset: { role: "narrator" } },
+    detail: { value: "本人重新逐页核对更正后的完整书稿" },
+  });
+  const confirming = h.page.confirmNarrator();
+  assert.equal(h.requests[1].data.bookVersionId, revised.book.id);
+  assert.equal(h.requests[1].data.snapshotHash, "d".repeat(64));
+  assert.equal(h.requests[1].data.pdfHash, "e".repeat(64));
+  const confirmed = structuredClone(revised);
+  confirmed.confirmations.narrator = true;
+  h.respond(1, confirmed);
+  await confirming;
+  assert.equal(h.page.data.context.confirmations.initiator, false);
+  assert.equal(h.page.data.canSubmit, false);
+  h.page.onUnload();
+});
+
+test("existing production without the definitive revision capability cannot save, reconfirm or resubmit", async () => {
+  const h = harness();
+  h.page.onLoad({ projectId });
+  const loading = h.page.onShow(),
+    locked = context();
+  locked.canReviseProduction = false;
+  locked.canSubmit = true;
+  locked.address.hash = "c".repeat(64);
+  locked.production = {
+    id: "55555555-5555-4555-8555-555555555555",
+    state: "approved",
+    bookVersionId: versionId,
+    snapshotHash: "b".repeat(64),
+    pdfHash: "f".repeat(64),
+    addressHash: "c".repeat(64),
+    copies: 1,
+    amountDueFen: 0,
+  };
+  h.respond(0, locked);
+  await loading;
+  h.page.input({
+    currentTarget: { dataset: { field: "detail" } },
+    detail: { value: "不允许的地址更正" },
+  });
+  await h.page.saveAddress();
+  await h.page.confirmInitiator();
+  await h.page.submit();
+  assert.equal(h.requests.length, 1);
   h.page.onUnload();
 });

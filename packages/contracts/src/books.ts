@@ -168,6 +168,7 @@ export interface FirstCopyContext {
   expiryReview: { available: boolean; caseId: string | null };
   blockers: FirstCopyBlocker[];
   canSubmit: boolean;
+  canReviseProduction: boolean;
   production: FirstCopyOrderView | null;
   accessExpiresAt: string | null;
 }
