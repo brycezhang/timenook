@@ -18,7 +18,8 @@
     "pages/account/index",
     "pages/settings/index",
     "pages/service/index",
-    "pages/audio-probe/index"
+    "pages/audio-probe/index",
+    "pages/original-audio/index"
   ],
   "window": {
     "navigationBarTitleText": "时光里 · 岁月成书",
@@ -27,7 +28,9 @@
     "backgroundColor": "#F8F4ED"
   },
   "permission": {
-    "scope.record": { "desc": "用于录下您讲述的往事，保留真实声音" }
+    "scope.record": {
+      "desc": "用于录下您讲述的往事，保留真实声音"
+    }
   },
   "sitemapLocation": "sitemap.json",
   "lazyCodeLoading": "requiredComponents"

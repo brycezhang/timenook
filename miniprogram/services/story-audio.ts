@@ -69,11 +69,26 @@ export async function privateStoryAudio(
     clip.asset.bytes < 1
   )
     throw Error("原声来源不匹配，请重新查询");
-  const result = await sessionClient.downloadRecording(
-    projectId,
-    source.interviewId,
-    source.intentId,
+  return privateAudioFile(
+    { bytes: clip.asset.bytes, sha256: source.inputHash },
+    () =>
+      sessionClient.downloadRecording(
+        projectId,
+        source.interviewId,
+        source.intentId,
+      ),
+    () => context === sessionClient.context() && current(),
   );
+}
+/** Shared verified temporary playback file for story and printed-version audio. */
+export async function privateAudioFile(
+  expected: { bytes: number; sha256: string },
+  download: () => Promise<WechatMiniprogram.DownloadFileSuccessCallbackResult>,
+  current: () => boolean,
+) {
+  const context = sessionClient.context();
+  if (!context || !current()) throw Error("回听已取消");
+  const result = await download();
   if (result.tempFilePath) {
     unregistered.add(result.tempFilePath);
   }
@@ -107,8 +122,8 @@ export async function privateStoryAudio(
           }),
       );
     if (
-      info.size !== clip.asset.bytes ||
-      info.digest !== source.inputHash ||
+      info.size !== expected.bytes ||
+      info.digest !== expected.sha256 ||
       context !== sessionClient.context() ||
       !current()
     )

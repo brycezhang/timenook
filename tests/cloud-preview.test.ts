@@ -44,6 +44,8 @@ test("local preview forwards cloud health and probe requests with exactly one pu
       "/timenook/v1/probes/audio/clips",
       "/timenook/v1/probes/ai/metrics",
       "/timenook/v1/users/me",
+      "/timenook/v1/book-audio/abcdefghijklmnopqrstuv",
+      "/timenook/v1/book-audio/abcdefghijklmnopqrstuv/clips/44444444-4444-4444-8444-444444444444/content?epoch=3",
     ]) {
       const response: Response = await fetch(
         `http://127.0.0.1:${local.port}${path}`,

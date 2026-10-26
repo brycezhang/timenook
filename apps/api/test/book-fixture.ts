@@ -19,6 +19,11 @@ export let root: string;
 export let app: Awaited<ReturnType<typeof createApplication>>;
 export let db: PrismaClient;
 let fixtureOptions: Parameters<typeof createApplication>[1];
+let objectReadGate: ((key: string) => Promise<void>) | undefined;
+/** External object-storage pause for authenticated-read race tests only. */
+export function interceptBookObjectRead(gate?: (key: string) => Promise<void>) {
+  objectReadGate = gate;
+}
 const packageId = randomUUID();
 const providerTransport: typeof fetch = async (input, init) => {
   if (String(input).includes("deepseek.com")) {
@@ -187,6 +192,10 @@ export async function startBookFixture() {
     },
   });
   class Objects extends LocalProbeObjects {
+    async read(key: string) {
+      await objectReadGate?.(key);
+      return super.read(key);
+    }
     async asrSource(key: string, _seconds: number) {
       return {
         url: `https://synthetic.oss-cn-shanghai.aliyuncs.com/${key}?signature=private`,
@@ -235,6 +244,7 @@ export async function login(who = randomUUID(), target = app) {
   assert.equal(r.statusCode, 201, r.body);
   return {
     token: r.json().data.session.token as string,
+    sessionId: r.json().data.session.id as string,
     id: r.json().data.user.id as string,
     who,
   };

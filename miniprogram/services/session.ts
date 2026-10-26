@@ -185,6 +185,18 @@ export class SessionClient {
       `/projects/${projectId}/book/versions/${versionId}/pdf`,
     );
   }
+  async downloadBookAudio(entryId: string, clipId: string, epoch: number) {
+    if (
+      !/^[A-Za-z0-9_-]{22}$/.test(entryId) ||
+      !/^[a-f0-9-]{36}$/.test(clipId) ||
+      !Number.isSafeInteger(epoch) ||
+      epoch < 0
+    )
+      throw new ApiFailure("INVALID_REQUEST");
+    return this.downloadContent(
+      `/book-audio/${entryId}/clips/${clipId}/content?epoch=${epoch}`,
+    );
+  }
   private async downloadContent(path: string) {
     const generation = this.generation,
       stored = this.stored();
@@ -374,7 +386,9 @@ export class SessionClient {
         data,
         timeout: 10000,
         header: {
-          "content-type": "application/json",
+          // wx.request defaults to JSON even without a body; the API rejects empty JSON.
+          "content-type":
+            data === undefined ? "text/plain" : "application/json",
           ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },

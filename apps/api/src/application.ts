@@ -1,3 +1,4 @@
+import { BookAudio, BookAudioController } from "./books/book-audio";
 import { Books, BooksController, BOOK_OBJECTS } from "./books/books";
 import { Followups, FollowupsController } from "./followups/followups";
 import {
@@ -371,7 +372,7 @@ export async function createApplication(
         ? [
             RecordingsController,
             StoriesController,
-            ...(config.books ? [BooksController] : []),
+            ...(config.books ? [BooksController, BookAudioController] : []),
             FollowupsController,
             StoryCareController,
             AdminStoryCareController,
@@ -411,6 +412,7 @@ export async function createApplication(
             ...(config.books
               ? [
                   Books,
+                  BookAudio,
                   {
                     provide: BOOK_OBJECTS,
                     useValue:

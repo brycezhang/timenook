@@ -1,0 +1,26 @@
+<view class="original-audio-page">
+  <view class="eyebrow">岁月成书 · 纸书原声</view>
+  <view class="audio-title">书中原声</view>
+  <view class="audio-intro">每一段，都是本人留下的真实讲述。</view>
+  <view wx:if="{{entry}}" class="audio-card">
+    <view class="story-title">{{entry.story.title}}</view>
+    <view class="version-note">对应纸书故事第 {{entry.story.version}} 版 · {{entry.clips.length}} 段原声</view>
+    <view wx:for="{{entry.clips}}" wx:key="clipId" class="clip-row">
+      <view class="clip-label">第 {{index + 1}} 段原声</view>
+      <button wx:if="{{playingClipId === item.clipId}}" class="audio-button secondary" bindtap="stop">停止播放</button>
+      <button wx:else="" class="audio-button" data-id="{{item.clipId}}" bindtap="play" disabled="{{busy}}">播放第 {{index + 1}} 段</button>
+    </view>
+    <view wx:if="{{entry.accessExpiresAt}}" class="access-note">在线回听有效至 {{entry.accessExpiresAt}}</view>
+  </view>
+  <view wx:else="" class="audio-card empty-card">
+    <view class="locked-title">原声仅向获授权的账号开放</view>
+    <view>请使用讲述者或经本人授权的发起人账号登录。</view>
+    <button wx:if="{{!loggedIn}}" class="audio-button" bindtap="login" disabled="{{busy}}">微信登录后回听</button>
+  </view>
+  <view wx:if="{{status}}" class="audio-status" role="status">{{status}}</view>
+  <view wx:if="{{busy}}" class="waiting">正在核对，请稍候…</view>
+  <button wx:if="{{loggedIn}}" class="audio-button secondary" bindtap="refresh" disabled="{{busy}}">重新查询</button>
+  <button wx:if="{{loggedIn}}" class="audio-button text-button" bindtap="logout" disabled="{{busy}}">退出登录</button>
+  <view class="boundary-note">二维码固定对应纸书中的故事版本。在线改稿不会替换这段原声；访问仍受本人授权和服务期限约束。</view>
+  <view class="boundary-note">无法回听不表示资料已删除。已交付纸书和已导出的文件不会因在线改稿或撤权而自动收回。</view>
+</view>
