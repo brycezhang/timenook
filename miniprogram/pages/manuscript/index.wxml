@@ -19,6 +19,7 @@
       </view>
       <view class="note section">{{version.snapshot.provenance.notice}}</view>
       <view class="note section">合成测试规格 {{version.snapshot.specification.widthMm}} × {{version.snapshot.specification.heightMm}} mm，尚未开放正式生产。</view>
+      <button class="btn section" bindtap="print" disabled="{{busy || version.state !== 'ready'}}">核对本版确认与首本制作</button>
     </block>
     <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">重新核对本版状态</button>
     <button class="btn secondary section" bindtap="book">返回成书总览</button>

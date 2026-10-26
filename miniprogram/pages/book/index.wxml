@@ -18,6 +18,7 @@
           <view wx:if="{{version.pageCount}}">{{version.pageCount}} 页 · {{excerpts.length}} 篇故事</view>
         </view>
         <button wx:if="{{version.state === 'ready'}}" class="btn section" bindtap="manuscript">查看完整书稿</button>
+        <button wx:if="{{version.state === 'ready'}}" class="btn secondary section" bindtap="print" disabled="{{busy}}">双方确认与首本制作</button>
         <view class="section-title section">本版目录</view>
         <view wx:for="{{version.toc}}" wx:key="index" class="toc-row"><text>{{item.title}}</text><text>第 {{item.page}} 页</text></view>
         <view wx:if="{{!version.toc}}" class="section">实际页数将在书稿生成后显示。</view>

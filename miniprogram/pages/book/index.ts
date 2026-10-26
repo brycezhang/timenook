@@ -739,7 +739,19 @@ Page({
     go("story", "id=" + e.currentTarget.dataset.id);
   },
   print() {
-    if (this.data.live) return;
+    if (this.data.live) {
+      if (this.accessExpired()) {
+        this.onHide();
+        this.setData({ status: "资料访问已到期，请重新查询" });
+        return;
+      }
+      if (this.data.version?.state === "ready")
+        go(
+          "print",
+          `projectId=${this.projectId}&versionId=${this.data.version.id}`,
+        );
+      return;
+    }
     go("print");
   },
   settings() {

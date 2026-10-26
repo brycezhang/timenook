@@ -1,3 +1,8 @@
+import {
+  FirstCopies,
+  FirstCopyController,
+  AdminFirstCopyController,
+} from "./books/first-copy";
 import { BookAudio, BookAudioController } from "./books/book-audio";
 import { Books, BooksController, BOOK_OBJECTS } from "./books/books";
 import { Followups, FollowupsController } from "./followups/followups";
@@ -372,7 +377,14 @@ export async function createApplication(
         ? [
             RecordingsController,
             StoriesController,
-            ...(config.books ? [BooksController, BookAudioController] : []),
+            ...(config.books
+              ? [
+                  BooksController,
+                  BookAudioController,
+                  FirstCopyController,
+                  AdminFirstCopyController,
+                ]
+              : []),
             FollowupsController,
             StoryCareController,
             AdminStoryCareController,
@@ -412,6 +424,7 @@ export async function createApplication(
             ...(config.books
               ? [
                   Books,
+                  FirstCopies,
                   BookAudio,
                   {
                     provide: BOOK_OBJECTS,

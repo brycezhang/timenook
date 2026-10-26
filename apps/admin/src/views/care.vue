@@ -33,15 +33,17 @@ const intakeProject = ref(""),
   intakeVersion = ref(0),
   notice = ref("");
 const kindLabel = (kind: string) =>
-  kind === "correction"
-    ? "故事限时校对"
-    : kind === "rebind"
-      ? "账号换绑"
-      : kind === "withdraw"
-        ? "本人撤回申请"
-        : kind === "export"
-          ? "本人资料导出申请"
-          : "本人删除申请";
+  kind === "first_copy_expiry"
+    ? "制作期限人工审核"
+    : kind === "correction"
+      ? "故事限时校对"
+      : kind === "rebind"
+        ? "账号换绑"
+        : kind === "withdraw"
+          ? "本人撤回申请"
+          : kind === "export"
+            ? "本人资料导出申请"
+            : "本人删除申请";
 function currentCorrection(
   care: CareCase,
   generation: number,
@@ -324,6 +326,11 @@ onMounted(refresh);
             ? '本次限时故事校对已核验；新版本仍须本人重新确认。'
             : '本人申请已核验，导出交付、删除执行与后续联动仍待对应流程处理。'
         "
+      />
+      <Alert
+        v-else-if="selected.kind === 'first_copy_expiry'"
+        type="info"
+        message="请核对原订单制作期限和冻结政策，再按服务期限流程跟进。记录本工单不会放行制作、预留首本或删除资料；后续提交与生产审核仍须通过全部核验。"
       />
       <Form v-else layout="vertical" class="section"
         ><FormItem label="D08 核验证据引用"
