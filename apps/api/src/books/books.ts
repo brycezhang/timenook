@@ -1,3 +1,4 @@
+import { ProjectStreams } from "../media/project-streams";
 import {
   Controller,
   Get,
@@ -1218,7 +1219,10 @@ export class Books implements OnModuleDestroy {
 @ApiTags("Book")
 @ApiBearerAuth()
 export class BooksController {
-  constructor(private readonly books: Books) {}
+  constructor(
+    private readonly streams: ProjectStreams,
+    private readonly books: Books,
+  ) {}
   @Get()
   @Header("Cache-Control", "no-store")
   async context(
@@ -1328,6 +1332,7 @@ export class BooksController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
+    const epoch = await this.streams.userEpoch(id, req.headers.authorization);
     const bytes = await this.books.download(
       id,
       versionId,
@@ -1341,6 +1346,15 @@ export class BooksController {
         `attachment; filename="book-${versionId}.pdf"`,
       )
       .type("application/pdf")
-      .send(bytes);
+      .header("Content-Length", bytes.length)
+      .send(
+        await this.streams.guard(
+          id,
+          epoch,
+          bytes,
+          () => this.books.read(id, versionId, req.headers.authorization),
+          req.headers.authorization,
+        ),
+      );
   }
 }

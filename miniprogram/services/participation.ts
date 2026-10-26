@@ -7,6 +7,7 @@ import {
   type ProjectCareRequestView,
   type AssistedSessionView,
   type AssistedPurpose,
+  type WithdrawalStatus,
 } from "../../packages/contracts/src";
 import { sessionClient } from "./session";
 import { paymentKey } from "./payments";
@@ -32,6 +33,21 @@ function state(value: ParticipationState) {
   return value;
 }
 export const participationClient = {
+  async withdrawalStatus(id: string) {
+    if (!uuid(id)) throw new Error("项目编号无效");
+    const value = await sessionClient.request<WithdrawalStatus>(
+      `/projects/${id}/withdrawal-status`,
+    );
+    if (
+      !value ||
+      value.projectId !== id ||
+      !Number.isSafeInteger(value.accessEpoch) ||
+      !Array.isArray(value.changes) ||
+      typeof value.boundary !== "string"
+    )
+      throw Error("撤回处置状态无效，请重新查询");
+    return value;
+  },
   async preview(value: string) {
     if (!token(value)) throw new Error("邀请无效");
     const result = await sessionClient.publicRequest<InvitationView>(
@@ -208,9 +224,15 @@ export const participationClient = {
       !result.requests.every(
         (item) =>
           uuid(item.id) &&
-          ["rebind", "withdraw", "export", "delete", "correction"].includes(
-            item.kind,
-          ) &&
+          [
+            "rebind",
+            "withdraw",
+            "export",
+            "delete",
+            "correction",
+            "first_copy_expiry",
+            "production_handoff",
+          ].includes(item.kind) &&
           ["open", "verified", "completed"].includes(item.state) &&
           Number.isFinite(Date.parse(item.createdAt)),
       )

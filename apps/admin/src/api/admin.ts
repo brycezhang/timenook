@@ -206,11 +206,12 @@ export const careApi = {
     expectedBindingVersion: number,
     key: string,
     csrf: string,
+    purpose?: "collection" | "ai" | "sharing",
   ) {
     return (
       await client.post<ApiResponse<CareCase>>(
         `/projects/${projectId}/care-requests`,
-        { kind, expectedBindingVersion },
+        { kind, expectedBindingVersion, ...(purpose ? { purpose } : {}) },
         { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
       )
     ).data;

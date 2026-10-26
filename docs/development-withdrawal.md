@@ -1,0 +1,37 @@
+# 撤回、活动访问与生产暂停（T24）
+
+本票 [#25](https://github.com/brycezhang/timenook/issues/25) 在 T23 固定生产尝试基础上贯通撤回。仅沿用隔离合成入口；D06/D08、供应商处理与双端设备仍须实际验收。
+
+本人在参与页分别拒绝或撤回采集、AI 处理和共享。无个人微信的讲述者可同机表达当次选择，或由客服代录并按冻结 D08 核验；付款身份不能直接调用本人的用途命令。客服撤回工单可指定单项用途，省略时沿用三项全部撤回的既有契约。
+
+## 访问与恢复
+
+`POST /v1/projects/:id/consents[/revoke]`、当次协助拒绝、客服核验和换绑复用 T11/T12。本人/客服撤回及换绑先在同一数据库事务提交用途拒绝、epoch 和最少 `project_access_revocations` 记录，再执行可补扫联动。后续执行失败不撤回已提交的拒绝。记录以 UUID 为主键；用途、原因、project/epoch 和创建时间不能改写，执行结果一经记录不能覆盖。
+
+T12 的同机用途互相独立：拒绝一个用途新增该用途 Session fence，不改变其他用途或全局 epoch；相关旧任务仍失效。全局撤回和账号换绑保留既有 epoch 语义。`Participation.reconcileRevocations(projectId?)` 处理未执行记录；受控服务每秒补扫，状态查询亦可恢复未执行记录。新确认/任务/首本/交接仍由其原用例在当前授权及项目锁下重验，不能凭旧结果重新放行。
+
+私有原声、书中原声、照片、用户 PDF 和运营交接 PDF 采用同一 `ProjectStreams.guard(projectId, epoch, bytes, check, authorization?)` 边界。每块最多 64 KiB，发送前核对当前 epoch、会话及调用者的版本/用途/期限检查；同进程在已提交撤权后关闭活动流，其他进程和背压空闲流每 100 ms 查 PostgreSQL 补验。该机制不依赖 Redis 才能拒绝访问，也不声称能取回传给设备/网络的字节。Range 仍按实际范围及完整长度返回，禁止 OSS 跳转。
+
+受控原声页每秒重新解析固定书中版本；故事、校对、照片、项目、书稿、确认和生产页定期重验当前授权，失效时清除显示、私人草稿及临时回听/预览。离页与切号继续清理。用户本机原录音、主动另存的 PDF/导出和实物无法远程回收；缓存清理不能代替资料删除。
+
+## 任务与生产
+
+旧任务按原 kind 进入 `invalidated`/`obsolete` 并增加 fence，迟到结果不能生效。仅尚未进入外部传输的 `preparing` 费用预留释放；已经进入供应商传输或结果未知的尝试保留核实依据。
+
+采集、共享或全部撤回使交接前的尝试停止；已经交接、接单或发货进入取消待核实，运营继续沿 T23 的印厂回执处理。已交付的纸书保留交付事实。AI 单项撤回不自行取消实物。预留/已消费的首本权益和 PaymentOrder 商业冻结不由撤回来释放或清除。换绑保留 subject 和历史确认，不作为全项目删除。
+
+`GET /v1/projects/:id/withdrawal-status` 允许当前发起人/讲述者在内容访问停止后查询最少处置状态，不返回姓名、故事、PDF 或地址。原账号换绑后不能查询。本人参与页/同机页提供“查看撤回处置进度”，共享运营工单详情展示范围、系统联动和实际生产阶段、负责人及期限。
+
+## 本地复现
+
+使用回环 PostgreSQL/Redis；不要把云端数据库配置传入测试。安装锁定依赖、生成 Prisma Client 后，先按开发说明准备固定字体与 Chromium。下面的环境值只用于本机容器：
+
+```sh
+DATABASE_URL=postgresql://timenook:local-development-only@127.0.0.1:54329/timenook_t24 REDIS_URL=redis://127.0.0.1:63791 pnpm --filter @timenook/api exec sh -c 'tsc -p tsconfig.test.json && node --test dist-test/test/withdrawal.test.js'
+pnpm exec tsx --test tests/book-audio-page.test.ts tests/production-page.test.ts tests/participation-page.test.ts
+pnpm check:native
+```
+
+数据库 `timenook_t24` 为本地测试容器内独立数据库，测试继续使用随机 schema 和 Redis 前缀。实际浏览器回归使用既有 `production-shipping.spec.mjs`，只用合成私人内容与协议替身。运行时避开其他测试占用的 5190/3440/3443 端口。
+
+真实 D08 本人核验、D06 人工渠道/期限、印厂取消回执及微信双端清理尚未取得；T24 保持 OPEN，不据本地结果开售。

@@ -421,6 +421,7 @@ model ConsentRecord {
 }
 
 model CareRequest {
+  withdrawalPurpose String? @map("withdrawal_purpose")
   id                   String   @id @db.Uuid
   projectId            String   @map("project_id") @db.Uuid
   requesterId          String?   @map("requester_id") @db.Uuid
@@ -1253,4 +1254,18 @@ model FulfillmentRecord {
  operatorAdminId String @map("operator_admin_id") @db.Uuid
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@map("fulfillment_records")
+}
+
+// Durable access withdrawal outbox; no private content is retained here.
+model ProjectAccessRevocation {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ accessEpoch Int @map("access_epoch")
+ purpose String
+ reason String
+ appliedAt DateTime? @map("applied_at") @db.Timestamptz(3)
+ productionAction String? @map("production_action")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@index([projectId,accessEpoch])
+ @@map("project_access_revocations")
 }

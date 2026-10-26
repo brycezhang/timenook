@@ -1,3 +1,4 @@
+import { ProjectStreams } from "../media/project-streams";
 import {
   Controller,
   Get,
@@ -255,7 +256,10 @@ export class BookAudio implements OnModuleDestroy {
 @ApiBearerAuth()
 @Controller("v1/book-audio")
 export class BookAudioController {
-  constructor(private readonly audio: BookAudio) {}
+  constructor(
+    private readonly audio: BookAudio,
+    private readonly streams: ProjectStreams,
+  ) {}
   @Get(":entryId/clips/:clipId/content")
   @Header("Cache-Control", "private, no-store")
   @Header("Pragma", "no-cache")
@@ -272,11 +276,20 @@ export class BookAudioController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
+    const entry = await this.audio.read(id, req.headers.authorization);
     return sendAudio(
       await this.audio.content(id, clipId, epoch, req.headers.authorization),
       clipId,
       req.headers.range,
       reply,
+      (bytes) =>
+        this.streams.guard(
+          entry.projectId,
+          epoch,
+          bytes,
+          () => this.audio.read(id, req.headers.authorization),
+          req.headers.authorization,
+        ),
     );
   }
   @Get(":entryId")

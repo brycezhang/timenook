@@ -830,3 +830,37 @@ test("assisted production authorization returns to the current production attemp
   );
   page.onUnload();
 });
+
+test("a narrator can inspect withdrawal disposition after collection access ends and leaving clears it", async () => {
+  const { page, requests } = harness("welcome");
+  page.onLoad({ projectId });
+  const shown = page.onShow();
+  await completeProjectState(requests, current);
+  await shown;
+  const checking = page.showWithdrawal();
+  const query = requests.shift()!;
+  assert.equal(query.url, `${base}/projects/${projectId}/withdrawal-status`);
+  respond(query, {
+    projectId,
+    accessEpoch: 2,
+    changes: [
+      {
+        id: "66666666-6666-4666-8666-666666666666",
+        purpose: "collection",
+        applied: true,
+      },
+    ],
+    production: {
+      state: "cancellation_pending",
+      ownerAdminId: "客服编号",
+      caseId: "工单编号",
+      dueAt: "2099-01-01T00:00:00Z",
+    },
+    boundary: "已导出文件和纸书不能远程收回",
+  });
+  await checking;
+  assert.match(page.data.productionDisposition, /人工核实/);
+  assert.equal(page.data.participation.canRead, false);
+  page.onHide();
+  assert.equal(page.data.withdrawal, null);
+});

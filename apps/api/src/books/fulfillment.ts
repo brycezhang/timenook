@@ -1,3 +1,4 @@
+import { ProjectStreams } from "../media/project-streams";
 import {
   Injectable,
   Controller,
@@ -578,6 +579,7 @@ export class Fulfillment implements OnModuleDestroy {
       });
     return {
       ...materials,
+      projectId: order.projectId,
       path: join(this.config.books!.storageRoot, output.objectKey),
     };
   }
@@ -974,6 +976,7 @@ export class AdminFulfillmentController {
   constructor(
     private readonly fulfillment: Fulfillment,
     private readonly access: AdminAccess,
+    private readonly streams: ProjectStreams,
   ) {}
   private async run<T>(
     req: FastifyRequest,
@@ -1153,6 +1156,7 @@ export class AdminFulfillmentController {
     const scope = await this.run(req, "fulfillment.pdf", (tx, actor) =>
         this.fulfillment.pdfIn(tx, id, attemptId, actor),
       ),
+      epoch = await this.streams.epoch(scope.projectId),
       bytes = await this.fulfillment.readPdf(scope.path, scope.pdf);
     await this.run(req, "fulfillment.pdf", (tx, actor) =>
       this.fulfillment.pdfIn(tx, id, attemptId, actor),
@@ -1164,7 +1168,14 @@ export class AdminFulfillmentController {
         "Content-Disposition",
         `attachment; filename="production-${attemptId}.pdf"`,
       )
-      .send(bytes);
+      .header("Content-Length", bytes.length)
+      .send(
+        await this.streams.guard(scope.projectId, epoch, bytes, () =>
+          this.run(req, "fulfillment.pdf", (tx, actor) =>
+            this.fulfillment.pdfIn(tx, id, attemptId, actor),
+          ),
+        ),
+      );
   }
   @Get(":id/attempts/:attemptId/materials")
   @Header("Cache-Control", "no-store")

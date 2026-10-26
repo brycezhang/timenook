@@ -1,3 +1,4 @@
+import { watchProjectAccess } from "../../services/project-access";
 import { dataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
 import { participationClient } from "../../services/participation";
@@ -65,6 +66,7 @@ Page({
   projectId: "",
   assistedSessionId: "",
   generation: 0,
+  stopProjectWatch: undefined as (() => void) | undefined,
   stopSessionWatch: undefined as (() => void) | undefined,
   expiry: undefined as ReturnType<typeof setTimeout> | undefined,
   onLoad(q) {
@@ -74,6 +76,8 @@ Page({
     this.assistedSessionId = q.assistedSessionId || "";
   },
   onHide() {
+    this.stopProjectWatch?.();
+    this.stopProjectWatch = undefined;
     if (dataMode() === "live") {
       ++this.generation;
       this.stopSessionWatch?.();
@@ -205,6 +209,23 @@ Page({
     if (dataMode() === "live") {
       this.setData({ mode: "live", p: null });
       await this.refresh();
+      const generation = this.generation,
+        owner = sessionClient.context();
+      if (this.data.overview) {
+        this.stopProjectWatch?.();
+        this.stopProjectWatch = watchProjectAccess(
+          this.projectId,
+          () =>
+            generation === this.generation && owner === sessionClient.context(),
+          () => {
+            this.onHide();
+            this.setData({
+              status: "资料用途或账号授权已变化，私人内容已清理，请重新查询",
+            });
+          },
+          this.data.participation?.accessEpoch,
+        );
+      }
       return;
     }
 

@@ -69,6 +69,7 @@ test.beforeAll(async () => {
     adminHeaders = await paymentAdmin(fixture.config, fixture.app, [
       "ops:read",
       "fulfillment:write",
+      "care:write",
       "audit:read",
     ]);
     const session = async (who) =>
@@ -584,16 +585,85 @@ test("verified cancellation permits corrected address confirmation and a new att
 test("withdrawing sharing clears the initiator production and tracking details", async ({
   browser,
 }) => {
+  const buyer = await openMini(browser, buyerSession);
+  await expect(
+    buyer.getByText("SYNTHETIC-T23-0001", { exact: false }).first(),
+  ).toBeVisible();
   fixture.data(
     (await fixture.choose(project, project.narrator.token, "sharing", false))
       .response,
   );
-  const buyer = await openMini(browser, buyerSession);
-  await expect(buyer.getByText(/无权查询|授权已失效/).first()).toBeVisible();
+  await expect(
+    buyer.getByText(/无权查询|授权已失效|用途授权已变化/).first(),
+  ).toBeVisible();
   const body = await buyer.locator("#page").innerText();
   expect(body).not.toContain("SYNTHETIC-T23-0001");
   expect(body).not.toContain("合成快递");
-  await buyer.screenshot({ path: "/tmp/timenook-t23-denied-390.png" });
+  await buyer.screenshot({ path: "/tmp/timenook-t24-denied-390.png" });
+  const narrator = await openMini(browser, narratorSession, project, "welcome");
+  await narrator
+    .getByRole("button", { name: "查看撤回处置进度", exact: true })
+    .click();
+  await expect(
+    narrator.getByText("纸书已交付，实物及已导出文件不能远程收回", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    narrator.getByText(/已停止相关在线访问与新处理/).first(),
+  ).toBeVisible();
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 1280, height: 900 },
+  ]) {
+    await narrator.setViewportSize(viewport);
+    await narrator
+      .getByText("撤回与账号变更处置", { exact: true })
+      .scrollIntoViewIfNeeded();
+    expect(
+      await narrator.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await narrator.screenshot({
+      path: `/tmp/timenook-t24-withdrawal-${viewport.width}.png`,
+      fullPage: false,
+    });
+  }
   expect(errors).toEqual([]);
-  await buyer.context().close();
+  await Promise.all([buyer.context().close(), narrator.context().close()]);
+});
+
+test("shared Care intake verifies the chosen withdrawal purpose and shows the actual disposition", async ({
+  browser,
+}) => {
+  const page = await openAdmin(browser);
+  await page.getByRole("button", { name: "客服工单", exact: true }).click();
+  const current = await fixture.state(project, project.narrator.token);
+  await page.getByLabel("代录项目编号").fill(project.projectId);
+  await page.getByLabel("代录申请类型").selectOption("withdraw");
+  await page.getByLabel("本人申请撤回范围").selectOption("ai");
+  await page
+    .getByLabel("代录来源绑定版本")
+    .fill(String(current.bindingVersion));
+  await command(page, "代录本人申请", "/care-requests");
+  await expect(
+    page.getByText("本人申请撤回范围：AI 处理", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("D08 核验证据引用")
+    .fill("synthetic:browser-ai-withdrawal");
+  await command(page, "核验本人申请", "/verify");
+  await expect(
+    page.getByRole("heading", { name: "撤回与账号变更处置", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/系统联动已执行/).first()).toBeVisible();
+  await page
+    .getByRole("heading", { name: "撤回与账号变更处置", exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: "/tmp/timenook-t24-admin-disposition-1280.png",
+  });
+  expect(errors).toEqual([]);
+  await page.context().close();
 });

@@ -55,6 +55,8 @@ export interface BindingApplication {
   state: string;
 }
 export interface CareCase {
+  withdrawal?: WithdrawalStatus;
+  withdrawalPurpose?: ConsentPurpose | null;
   correctionGrant?: { storyId: string; expiresAt: string } | null;
   id: string;
   projectId: string;
@@ -121,4 +123,31 @@ export interface AssistedSessionView {
   createdAt: string;
   expiresAt: string;
   state: "active" | "expired" | "revoked" | "rejected";
+}
+
+export interface WithdrawalStatus {
+  projectId: string;
+  accessEpoch: number;
+  changes: {
+    id: string;
+    accessEpoch: number;
+    purpose: ConsentPurpose | "all" | "binding";
+    reason: "self_wechat" | "assisted" | "care_verified" | "rebind";
+    applied: boolean;
+    productionAction:
+      | "not_required"
+      | "not_started"
+      | "stopped_before_handoff"
+      | "supplier_pending"
+      | "already_delivered"
+      | null;
+    createdAt: string;
+  }[];
+  production: {
+    state: string;
+    ownerAdminId: string;
+    dueAt: string;
+    caseId: string;
+  } | null;
+  boundary: string;
 }

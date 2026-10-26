@@ -1,3 +1,4 @@
+import { watchProjectAccess } from "../../services/project-access";
 import { paymentKey } from "../../services/payments";
 import {
   PhotoFiles,
@@ -33,6 +34,7 @@ Page({
   ownerContext: "",
   editingRevision: null as number | null,
   owner: null as PhotoFiles | null,
+  stopProjectWatch: undefined as (() => void) | undefined,
   stopSessionWatch: undefined as (() => void) | undefined,
   onLoad(q: Record<string, string>) {
     this.projectId = q.projectId ?? "";
@@ -105,6 +107,18 @@ Page({
         snapshot: result.snapshot,
         status: "每张照片分别保存和上传；原文件会保留",
       });
+      this.stopProjectWatch?.();
+      this.stopProjectWatch = watchProjectAccess(
+        this.projectId,
+        () => this.current(g, context),
+        () => {
+          this.onHide();
+          this.setData({
+            status:
+              "资料用途或账号授权已变化，照片预览已清理；本机原文件仍保留",
+          });
+        },
+      );
     } catch (error) {
       if (this.relevant(g, context))
         this.setData({
@@ -118,6 +132,8 @@ Page({
     }
   },
   onHide() {
+    this.stopProjectWatch?.();
+    this.stopProjectWatch = undefined;
     this.stopSessionWatch?.();
     this.stopSessionWatch = undefined;
     this.editingRevision = null;

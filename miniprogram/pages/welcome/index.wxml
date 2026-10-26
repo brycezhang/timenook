@@ -32,7 +32,7 @@
       <input class="input section" placeholder="目标账号编号" value="{{targetUserId}}" bindinput="targetInput" disabled="{{busy}}"/>
       <button class="btn secondary section" bindtap="requestRebind" disabled="{{busy || !targetUserId || participation.policyStatus !== 'synthetic-only'}}">{{participation.bindingVersion === 0 ? '提交客服本人账号绑定申请' : '提交客服换绑申请'}}</button>
       <view wx:if="{{supportCaseRef}}" class="note section">工单：{{supportCaseRef}}</view>
-      <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="small muted">{{item.kind === 'rebind' ? '换绑工单' : item.kind === 'withdraw' ? '撤回工单' : item.kind === 'export' ? '资料导出工单' : item.kind === 'correction' ? '故事限时校对工单' : '删除工单'}}：record:{{item.id}}</view><view class="note">处理状态：{{item.state === 'open' ? '待客服核验' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : item.state === 'verified' ? '已核验，后续交付或执行待完成' : '已完成'}}</view></view>
+      <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="small muted">{{item.kind === 'rebind' ? '换绑工单' : item.kind === 'withdraw' ? '撤回工单' : item.kind === 'export' ? '资料导出工单' : item.kind === 'correction' ? '故事限时校对工单' : item.kind === 'production_handoff' ? '生产交接工单' : item.kind === 'first_copy_expiry' ? '制作期限审核工单' : '删除工单'}}：record:{{item.id}}</view><view class="note">处理状态：{{item.state === 'open' ? '待客服核验' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : item.state === 'verified' ? '已核验，后续交付或执行待完成' : '已完成'}}</view></view>
     </view>
   </view>
   <button class="link" bindtap="back">返回首页</button>
@@ -87,3 +87,13 @@
   ><button class="link" bindtap="back">暂时不参加</button></view
 >
 </block>
+
+<view wx:if="{{participation}}" class="page withdrawal-status">
+  <button class="btn secondary section" bindtap="showWithdrawal" disabled="{{busy}}">查看撤回处置进度</button>
+  <view wx:if="{{withdrawal}}" class="paper section">
+    <view class="section-title">撤回与账号变更处置</view>
+    <view class="note section">{{productionDisposition}}</view>
+    <view class="note">{{withdrawal.boundary}}</view>
+    <view wx:if="{{withdrawal.production}}" class="note section">处理工单：{{withdrawal.production.caseId}}。处理人：{{withdrawal.production.ownerAdminId}}。处理期限：{{withdrawal.production.dueAt}}</view>
+  </view>
+</view>

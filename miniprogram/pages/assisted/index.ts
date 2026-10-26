@@ -1,3 +1,4 @@
+import type { WithdrawalStatus } from "../../../packages/contracts/src";
 import { go } from "../../services/store";
 import { dataMode, setDataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
@@ -20,6 +21,8 @@ function localTime(value: string) {
 }
 Page({
   data: {
+    withdrawal: null as WithdrawalStatus | null,
+    productionDisposition: "",
     participation: null as ParticipationState | null,
     sessions: [] as (AssistedSessionView & { expiresAtLabel: string })[],
     careRequests: [] as ProjectCareRequestView[],
@@ -58,6 +61,7 @@ Page({
     setDataMode("live");
   },
   onHide() {
+    this.setData({ withdrawal: null, productionDisposition: "" });
     ++this.generation;
     this.ownerContext = "";
     this.stopSessionWatch?.();
@@ -146,6 +150,39 @@ Page({
         `projectId=${this.projectId}&storyId=${this.storyId}${this.interviewId ? `&interviewId=${this.interviewId}` : ""}&assistedSessionId=${session.id}`,
       );
     });
+  },
+  async showWithdrawal() {
+    if (this.data.busy || !this.projectId) return;
+    const generation = this.generation,
+      owner = sessionClient.context();
+    this.setData({ busy: true, withdrawal: null, productionDisposition: "" });
+    try {
+      const withdrawal = await participationClient.withdrawalStatus(
+        this.projectId,
+      );
+      if (generation !== this.generation || owner !== sessionClient.context())
+        return;
+      const state = withdrawal.production?.state;
+      const productionDisposition =
+        state === "cancellation_pending"
+          ? "已请求停止生产，印厂接单或取消结果待人工核实"
+          : state === "cancelled"
+            ? "本次生产已停止；之后须重新核对授权和版本"
+            : state === "delivered"
+              ? "纸书已交付，实物及已导出文件不能远程收回"
+              : withdrawal.changes.length
+                ? "相关访问已停止，处置进度以本页实际记录为准"
+                : "暂无撤回或账号变更记录";
+      this.setData({ withdrawal, productionDisposition });
+    } catch (error) {
+      if (generation === this.generation && owner === sessionClient.context())
+        this.setData({
+          status: error instanceof Error ? error.message : "查询未完成，请重试",
+        });
+    } finally {
+      if (generation === this.generation && owner === sessionClient.context())
+        this.setData({ busy: false });
+    }
   },
   onUnload() {
     this.onHide();

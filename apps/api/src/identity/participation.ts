@@ -12,6 +12,7 @@ import {
   Inject,
   Injectable,
   OnModuleDestroy,
+  OnModuleInit,
   ForbiddenException,
   BadRequestException,
   NotFoundException,
@@ -41,6 +42,7 @@ import { Prisma, PrismaClient, type AssistedSession } from "@prisma/client";
 import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
 import { IdentityAccess } from "./identity-access";
+import { closeProjectStreams } from "../media/project-streams";
 import { ProjectServiceTerms } from "../projects/service-terms";
 import { idempotencyKey } from "../payments/orders";
 import { CONSENT_PURPOSES, ASSISTED_PURPOSES } from "@timenook/contracts";
@@ -65,6 +67,7 @@ const CARE_SELECT = {
   sourceBindingVersion: true,
   sourceAccessEpoch: true,
   kind: true,
+  withdrawalPurpose: true,
   state: true,
   completedBy: true,
   createdAt: true,
@@ -83,6 +86,7 @@ function careView(
     sourceBindingVersion: row.sourceBindingVersion,
     sourceAccessEpoch: row.sourceAccessEpoch,
     kind: row.kind as CareCase["kind"],
+    withdrawalPurpose: row.withdrawalPurpose as ConsentPurpose | null,
     state: row.state as CareCase["state"],
     completedBy: row.completedBy,
     createdAt: row.createdAt.toISOString(),
@@ -140,6 +144,10 @@ export class CareRequestDto {
   })
   @IsIn(["rebind", "withdraw", "export", "delete", "correction"])
   kind!: "rebind" | "withdraw" | "export" | "delete" | "correction";
+  @ApiProperty({ enum: CONSENT_PURPOSES, required: false })
+  @IsOptional()
+  @IsIn(CONSENT_PURPOSES)
+  purpose?: ConsentPurpose;
   @ApiProperty({ format: "uuid", required: false })
   @ValidateIf((o) => o.kind === "rebind")
   @IsUUID()
@@ -158,7 +166,9 @@ export class RebindDto extends ParticipationNoticeDto {
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
 }
 @Injectable()
-export class Participation implements OnModuleDestroy {
+export class Participation implements OnModuleDestroy, OnModuleInit {
+  private revocationSweep: ReturnType<typeof setInterval> | undefined;
+  private sweeping = false;
   private readonly db: PrismaClient;
   private readonly terms: ProjectServiceTerms;
   constructor(
@@ -167,6 +177,19 @@ export class Participation implements OnModuleDestroy {
   ) {
     this.db = new PrismaClient({ datasourceUrl: config.databaseUrl });
     this.terms = new ProjectServiceTerms(config.databaseUrl);
+  }
+  onModuleInit() {
+    if (this.config.participation?.mode !== "synthetic-d08") return;
+    this.revocationSweep = setInterval(() => {
+      if (this.sweeping) return;
+      this.sweeping = true;
+      void this.reconcileRevocations()
+        .catch(() => {})
+        .finally(() => {
+          this.sweeping = false;
+        });
+    }, 1000);
+    this.revocationSweep.unref();
   }
   private policy() {
     if (
@@ -532,7 +555,7 @@ export class Participation implements OnModuleDestroy {
   ) {
     const user = await this.identity.current(authorization);
     this.policy();
-    return this.db.$transaction(async (tx) => {
+    const result = await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       const subject = await this.subject(tx, id);
       if (
@@ -578,6 +601,14 @@ export class Participation implements OnModuleDestroy {
           method: "self_wechat",
         },
       });
+      if (!body.granted)
+        await this.recordRevocationIn(
+          tx,
+          id,
+          updated.accessEpoch,
+          body.purpose,
+          "self_wechat",
+        );
       await tx.participationCommand.create({
         data: {
           projectId: id,
@@ -596,6 +627,8 @@ export class Participation implements OnModuleDestroy {
         user.id,
       );
     });
+    if (!body.granted) await this.reconcileRevocations(id);
+    return result;
   }
   async care(
     id: string,
@@ -641,6 +674,8 @@ export class Participation implements OnModuleDestroy {
     operatorRealm: "product" | "admin",
     requesterId: string | null,
   ) {
+    if (body.purpose && body.kind !== "withdraw")
+      throw new BadRequestException();
     const hash = digest(JSON.stringify(body));
     const prior = await tx.careRequest.findUnique({
       where: {
@@ -684,6 +719,7 @@ export class Participation implements OnModuleDestroy {
         sourceBindingVersion: subject.bindingVersion,
         sourceAccessEpoch: p.accessEpoch,
         kind: body.kind,
+        withdrawalPurpose: body.purpose ?? null,
         idempotencyKey: key,
         requestHash: hash,
       },
@@ -817,7 +853,9 @@ export class Participation implements OnModuleDestroy {
           data: { accessEpoch: { increment: 1 } },
         })
       ).accessEpoch;
-      for (const purpose of CONSENT_PURPOSES)
+      for (const purpose of care.withdrawalPurpose
+        ? [care.withdrawalPurpose]
+        : CONSENT_PURPOSES)
         await tx.consentRecord.create({
           data: {
             id: randomUUID(),
@@ -834,6 +872,14 @@ export class Participation implements OnModuleDestroy {
           },
         });
     }
+    if (epoch !== null)
+      await this.recordRevocationIn(
+        tx,
+        p.id,
+        epoch,
+        care.withdrawalPurpose ?? "all",
+        "care_verified",
+      );
     await tx.careRequest.update({
       where: { id },
       data: {
@@ -911,6 +957,9 @@ export class Participation implements OnModuleDestroy {
           }
         : null,
       changes,
+      withdrawal: await this.db.$transaction((tx) =>
+        this.withdrawalStatusIn(tx, row.projectId),
+      ),
     };
   }
   async rebind(
@@ -973,6 +1022,13 @@ export class Participation implements OnModuleDestroy {
       where: { id },
       data: { accessEpoch: { increment: 1 } },
     });
+    await this.recordRevocationIn(
+      tx,
+      id,
+      updated.accessEpoch,
+      "binding",
+      "rebind",
+    );
     await tx.invitation.updateMany({
       where: { projectId: id, consumedAt: null },
       data: { consumedAt: new Date() },
@@ -1358,9 +1414,7 @@ export class Participation implements OnModuleDestroy {
       // Content owners distinguish their actions even for the same version.
       // Omitted only by the existing evidence-only caller contract.
       action?:
-        | "story_decision"
-        | "story_care_access"
-        | "production_handoff_access";
+        "story_decision" | "story_care_access" | "production_handoff_access";
       noticeVersion: string;
       evidenceRef: string;
       idempotencyKey: string;
@@ -1496,7 +1550,7 @@ export class Participation implements OnModuleDestroy {
   ) {
     const user = await this.identity.current(authorization);
     this.policy();
-    return this.db.$transaction(async (tx) => {
+    const result = await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       if (p.order.buyerId !== user.id) throw new ForbiddenException();
       const subject = await this.subject(tx, id);
@@ -1554,6 +1608,18 @@ export class Participation implements OnModuleDestroy {
         (latest?.id ?? null) !== (body.expectedSessionId ?? null)
       )
         throw new ConflictException();
+      if (
+        !body.granted &&
+        CONSENT_PURPOSES.includes(body.purpose as ConsentPurpose)
+      ) {
+        await this.recordRevocationIn(
+          tx,
+          id,
+          p.accessEpoch,
+          body.purpose,
+          "assisted",
+        );
+      }
       const row = await tx.assistedSession.create({
         data: {
           id: randomUUID(),
@@ -1597,8 +1663,179 @@ export class Participation implements OnModuleDestroy {
         row.id,
       );
     });
+    if (body && !body.granted) await this.reconcileRevocations(id);
+    return result;
+  }
+  private async recordRevocationIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    accessEpoch: number,
+    purpose: string,
+    reason: string,
+  ) {
+    await tx.projectAccessRevocation.create({
+      data: { id: randomUUID(), projectId, accessEpoch, purpose, reason },
+    });
+  }
+  /** Recoverable follow-up. The denied purpose and epoch have already committed. */
+  async reconcileRevocations(projectId?: string) {
+    const changes = await this.db.projectAccessRevocation.findMany({
+      where: { ...(projectId ? { projectId } : {}), appliedAt: null },
+      orderBy: { createdAt: "asc" },
+      take: 100,
+    });
+    for (const change of changes) {
+      closeProjectStreams(
+        change.projectId,
+        change.reason === "assisted" ? undefined : change.accessEpoch,
+      );
+      await this.db.$transaction(async (tx) => {
+        await this.project(tx, change.projectId, true);
+        const current = await tx.projectAccessRevocation.findUniqueOrThrow({
+          where: { id: change.id },
+        });
+        if (current.appliedAt) return;
+        for (const kind of [
+          "transcribe_audio",
+          "ask_followup",
+          "compose_story",
+          "render_book",
+        ]) {
+          if (
+            change.reason === "assisted" &&
+            (change.purpose === "sharing" ||
+              (change.purpose === "ai" && kind === "render_book"))
+          )
+            continue;
+          await tx.productionTask.updateMany({
+            where: {
+              projectId: change.projectId,
+              accessEpoch:
+                change.reason === "assisted"
+                  ? { lte: change.accessEpoch }
+                  : { lt: change.accessEpoch },
+              kind,
+              state: {
+                notIn: ["succeeded", "no_speech", "invalidated", "obsolete"],
+              },
+            },
+            data: {
+              state: kind === "transcribe_audio" ? "invalidated" : "obsolete",
+              errorCode: "AUTHORIZATION_CHANGED",
+              leaseUntil: null,
+              fence: { increment: 1 },
+            },
+          });
+          const invalidated = await tx.productionTask.findMany({
+            where: {
+              projectId: change.projectId,
+              kind,
+              errorCode: "AUTHORIZATION_CHANGED",
+              state: { in: ["invalidated", "obsolete"] },
+            },
+            select: { id: true },
+          });
+          await tx.taskAttempt.deleteMany({
+            where: {
+              taskId: { in: invalidated.map((task) => task.id) },
+              state: "preparing",
+            },
+          });
+        }
+        // A purpose withdrawal never releases consumed/reserved money or first-copy rights.
+        let productionAction = "not_required";
+        if (["collection", "sharing", "all"].includes(change.purpose)) {
+          const attempt = await tx.fulfillmentAttempt.findFirst({
+            where: {
+              projectId: change.projectId,
+              createdAt: { lte: change.createdAt },
+            },
+            orderBy: { sequence: "desc" },
+          });
+          productionAction = !attempt
+            ? "not_started"
+            : attempt.state === "delivered"
+              ? "already_delivered"
+              : ["approved", "cancelled"].includes(attempt.state)
+                ? "stopped_before_handoff"
+                : "supplier_pending";
+          if (attempt && !["cancelled", "delivered"].includes(attempt.state)) {
+            await tx.fulfillmentAttempt.update({
+              where: { id: attempt.id },
+              data: {
+                state:
+                  attempt.state === "approved"
+                    ? "cancelled"
+                    : "cancellation_pending",
+              },
+            });
+            if (attempt.state === "approved")
+              await tx.careRequest.update({
+                where: { id: attempt.caseId },
+                data: { state: "completed" },
+              });
+          }
+        }
+        await tx.projectAccessRevocation.update({
+          where: { id: change.id },
+          data: { appliedAt: new Date(), productionAction },
+        });
+      });
+    }
+  }
+  private async withdrawalStatusIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ) {
+    const project = await tx.project.findUniqueOrThrow({
+      where: { id: projectId },
+    });
+    const rows = await tx.projectAccessRevocation.findMany({
+      where: { projectId },
+      orderBy: { accessEpoch: "desc" },
+      take: 50,
+    });
+    const attempt = await tx.fulfillmentAttempt.findFirst({
+      where: { projectId },
+      orderBy: { sequence: "desc" },
+    });
+    return {
+      projectId,
+      accessEpoch: project.accessEpoch,
+      changes: rows.map((row) => ({
+        id: row.id,
+        accessEpoch: row.accessEpoch,
+        purpose: row.purpose,
+        reason: row.reason,
+        applied: !!row.appliedAt,
+        productionAction: row.productionAction,
+        createdAt: row.createdAt.toISOString(),
+      })),
+      production: attempt
+        ? {
+            state: attempt.state,
+            ownerAdminId: attempt.ownerAdminId,
+            dueAt: attempt.dueAt.toISOString(),
+            caseId: attempt.caseId,
+          }
+        : null,
+      boundary:
+        "已停止相关在线访问与新处理。印厂已收到的文件须人工核实取消；已导出文件、设备已接收字节和纸书不能远程收回。撤回不等于资料删除。",
+    };
+  }
+  async withdrawalStatus(projectId: string, authorization?: string) {
+    const user = await this.identity.current(authorization);
+    await this.db.$transaction(async (tx) => {
+      const p = await this.project(tx, projectId, true),
+        subject = await this.subject(tx, projectId);
+      if (user.id !== p.order.buyerId && user.id !== subject.boundUserId)
+        throw new ForbiddenException();
+    });
+    await this.reconcileRevocations(projectId);
+    return this.db.$transaction((tx) => this.withdrawalStatusIn(tx, projectId));
   }
   async onModuleDestroy() {
+    if (this.revocationSweep) clearInterval(this.revocationSweep);
     await this.db.$disconnect();
     await this.terms.close();
   }
@@ -1608,6 +1845,20 @@ export class Participation implements OnModuleDestroy {
 @ApiBearerAuth()
 export class ParticipationController {
   constructor(private readonly participation: Participation) {}
+  @Get("projects/:id/withdrawal-status")
+  @Header("Cache-Control", "no-store")
+  async withdrawalStatus(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.participation.withdrawalStatus(
+        id,
+        req.headers.authorization,
+      ),
+      meta: { requestId: req.id },
+    };
+  }
   @Get("participations")
   @Header("Cache-Control", "no-store")
   async memberships(@Req() req: FastifyRequest) {
