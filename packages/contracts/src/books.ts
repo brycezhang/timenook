@@ -93,3 +93,21 @@ export interface BookContext {
   current: BookVersionView | null;
   accessExpiresAt: string | null;
 }
+
+/** A stable printed locator reveals private metadata only after current authorization. */
+export interface BookAudioEntryView {
+  id: string;
+  projectId: string;
+  story: { id: string; revisionId: string; version: number; title: string };
+  clips: {
+    clipId: string;
+    /** Zero-based position in the frozen book item, independent of recording counters. */
+    sequence: number;
+    assetId: string;
+    sha256: string;
+    bytes: number;
+    durationMs: number;
+  }[];
+  accessEpoch: number;
+  accessExpiresAt: string | null;
+}

@@ -29,6 +29,8 @@ Docker Compose 项目名为 timenook-dev，PostgreSQL 监听 127.0.0.1:54329，R
 
 T20 的确定书稿、实际目录、共享渲染任务与完整 PDF 验证见[书稿开发说明](development-books.md)，当前只接受隔离合成规格，不启用正式生产。
 
+T21 的稳定随机入口、固定版本原声与扫码登录恢复见[书中原声入口](development-book-audio.md)；正式小程序码、真机与实物验收分别记录。
+
 ```bash
 pnpm dev             # 现有小程序页面源码的浏览器预览，127.0.0.1:5173
 pnpm dev:api         # 构建并启动 API，127.0.0.1:3417；修改后重新运行

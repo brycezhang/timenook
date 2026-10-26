@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
+import { createRequire } from "node:module";
+import { resolve } from "node:path";
 import { SessionClient } from "../miniprogram/services/session";
 import { list, start } from "../miniprogram/services/store";
 
@@ -574,3 +576,44 @@ for (const outcome of [
     assert.equal(client.sessionCleanupPending(), failSessionRemoval);
   });
 }
+
+test("bodyless logout revokes the session through a real HTTP JSON parser", async () => {
+  const apiRequire = createRequire(resolve("apps/api/package.json"));
+  const server = apiRequire("fastify")();
+  server.delete(
+    `/timenook/v1/sessions/${identity.session.id}`,
+    async (_request: unknown, response: any) => response.code(204).send(),
+  );
+  await server.ready();
+  try {
+    const client = new SessionClient(api);
+    await client.login();
+    reply = (request) => {
+      void server
+        .inject({
+          method: request.method,
+          url: new URL(request.url).pathname,
+          // Native wx.request supplies application/json when no type was set.
+          headers: { "content-type": "application/json", ...request.header },
+          payload: request.data,
+        })
+        .then((response: { statusCode: number; body: string }) => {
+          success(
+            request,
+            response.statusCode,
+            response.body ? JSON.parse(response.body) : undefined,
+          );
+        });
+    };
+    await client.logout();
+    const revocation = requests[requests.length - 1];
+    assert.equal(
+      revocation.header?.authorization,
+      `Bearer ${identity.session.token}`,
+    );
+    assert.equal(revocation.data, undefined);
+    assert.equal(await client.restore(), null);
+  } finally {
+    await server.close();
+  }
+});

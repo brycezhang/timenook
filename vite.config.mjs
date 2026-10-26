@@ -15,6 +15,12 @@ export default defineConfig({
     fs: { deny: privateArtifactsDeny },
     proxy: process.env.TIMENOOK_PREVIEW_API_TARGET
       ? {
+          "^/timenook/v1/book-audio/[A-Za-z0-9_-]{22}(?:/clips/[a-f0-9-]{36}/content\\?epoch=[0-9]+)?$":
+            {
+              target: process.env.TIMENOOK_PREVIEW_API_TARGET,
+              changeOrigin: true,
+              rewrite: (path) => path.replace(/^\/timenook/, ""),
+            },
           "^/timenook/v1/projects/[a-f0-9-]{36}/book(?:/(?:cover|directory|versions(?:/[a-f0-9-]{36}(?:/(?:pdf|retry))?)?))?$":
             {
               target: process.env.TIMENOOK_PREVIEW_API_TARGET,
