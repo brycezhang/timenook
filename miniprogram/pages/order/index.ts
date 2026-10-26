@@ -148,6 +148,10 @@ Page({
         this.setData({ loading: false });
     }
   },
+  production() {
+    const project = this.data.activeOrder?.project;
+    if (project) go("production", `projectId=${project.id}`);
+  },
   catalog() {
     go("purchase");
   },

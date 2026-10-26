@@ -573,6 +573,14 @@ Page({
       },
     });
   },
+  production() {
+    if (
+      this.data.context?.production &&
+      !this.data.busy &&
+      !this.accessExpired()
+    )
+      go("production", `projectId=${this.projectId}`);
+  },
   order() {
     go("order");
   },

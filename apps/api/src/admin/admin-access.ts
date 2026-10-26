@@ -31,6 +31,16 @@ import { decryptSecret, hashPassword, verifyPassword } from "./secrets";
 const COOKIE = "__Secure-timenook_admin";
 const PATH = "/timenook/v1/admin";
 const ROUTE_ACTIONS: Record<string, string> = {
+  "GET /v1/admin/fulfillment": "fulfillment.list",
+  "GET /v1/admin/fulfillment/:id": "fulfillment.read",
+  "POST /v1/admin/fulfillment/:id/attempts": "fulfillment.attempt",
+  "GET /v1/admin/fulfillment/:id/attempts/:attemptId/materials": "fulfillment.materials",
+  "GET /v1/admin/fulfillment/:id/attempts/:attemptId/pdf": "fulfillment.pdf",
+  "POST /v1/admin/fulfillment/:id/attempts/:attemptId/handoff": "fulfillment.handoff",
+  "POST /v1/admin/fulfillment/:id/attempts/:attemptId/receipt": "fulfillment.receipt",
+  "POST /v1/admin/fulfillment/:id/attempts/:attemptId/cancel": "fulfillment.cancel",
+  "POST /v1/admin/fulfillment/:id/attempts/:attemptId/shipping": "fulfillment.shipping",
+  "POST /v1/admin/fulfillment/:id/attempts/:attemptId/delivery": "fulfillment.delivery",
   "POST /v1/admin/first-copy/:id/approve": "fulfillment.approve",
   "GET /v1/admin/tasks": "tasks.list",
   "POST /v1/admin/projects/:id/tasks/:taskId/retry": "tasks.retry",

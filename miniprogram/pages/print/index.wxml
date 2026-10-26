@@ -50,6 +50,7 @@
       <view wx:if="{{context.expiryReview.caseId}}" class="soft section">制作期限人工审核工单已记录，等待核验。工单不能替代书稿确认，也不会自动放行制作或删除资料。</view>
       <view wx:if="{{context.production}}" class="paper section"><view class="section-title">首本制作已预留</view><view class="section">{{context.production.state === 'approved' ? '已审核' : '等待审核'}} · 制作 {{context.production.copies}} 本 · 本次无需支付</view><view class="note">生产单：{{context.production.id}}</view><view class="note section">审核后按约定安排制作与寄送。</view></view>
     </block>
+    <button wx:if="{{context && context.production}}" class="btn section" bindtap="production" disabled="{{busy}}">查看生产与物流</button>
     <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">重新查询确认与制作状态</button>
     <button class="btn secondary section" bindtap="book" disabled="{{busy}}">返回成书总览</button>
   </view>

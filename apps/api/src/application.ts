@@ -1,3 +1,4 @@
+import { Fulfillment, FulfillmentController, AdminFulfillmentController } from "./books/fulfillment";
 import {
   FirstCopies,
   FirstCopyController,
@@ -382,6 +383,8 @@ export async function createApplication(
                   BooksController,
                   BookAudioController,
                   FirstCopyController,
+                  FulfillmentController,
+                  AdminFulfillmentController,
                   AdminFirstCopyController,
                 ]
               : []),
@@ -425,6 +428,7 @@ export async function createApplication(
               ? [
                   Books,
                   FirstCopies,
+                  Fulfillment,
                   BookAudio,
                   {
                     provide: BOOK_OBJECTS,

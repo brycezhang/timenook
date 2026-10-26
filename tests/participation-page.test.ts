@@ -797,3 +797,36 @@ test("assisted renewal sends the latest observed purpose session as its compare-
   await choosing;
   assert.equal(page.data.busy, false);
 });
+
+test("assisted production authorization returns to the current production attempt instead of re-confirming a book", async () => {
+  const { page, requests, routes } = harness("assisted"),
+    bookVersionId = "66666666-6666-4666-8666-666666666666";
+  page.onLoad({
+    projectId,
+    bookVersionId,
+    purpose: "book_confirmation",
+    returnTo: "production",
+  });
+  const showing = page.onShow();
+  respond(requests.shift()!, { ...current, role: "initiator" });
+  await tick();
+  respond(requests.shift()!, { sessions: [] });
+  await tick();
+  respond(requests.shift()!, { requests: [] });
+  await showing;
+  page.storyEvidence({ detail: { value: "本人同意本次生产资料授权协助" } });
+  const choosing = page.startStoryConfirmation({
+    currentTarget: { dataset: { granted: "true" } },
+  });
+  respond(requests.shift()!, {
+    id: "55555555-5555-4555-8555-555555555555",
+    purpose: "book_confirmation",
+    state: "active",
+  });
+  await choosing;
+  assert.equal(
+    routes[0],
+    `/pages/production/index?projectId=${projectId}&assistedSessionId=55555555-5555-4555-8555-555555555555`,
+  );
+  page.onUnload();
+});

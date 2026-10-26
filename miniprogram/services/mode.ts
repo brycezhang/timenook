@@ -24,6 +24,7 @@ export function livePageAllowed(page: string): boolean {
     "book",
     "manuscript",
     "print",
+    "production",
     "original-audio",
     "account",
   ].includes(page);

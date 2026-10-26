@@ -33,17 +33,19 @@ const intakeProject = ref(""),
   intakeVersion = ref(0),
   notice = ref("");
 const kindLabel = (kind: string) =>
-  kind === "first_copy_expiry"
-    ? "制作期限人工审核"
-    : kind === "correction"
-      ? "故事限时校对"
-      : kind === "rebind"
-        ? "账号换绑"
-        : kind === "withdraw"
-          ? "本人撤回申请"
-          : kind === "export"
-            ? "本人资料导出申请"
-            : "本人删除申请";
+  kind === "production_handoff"
+    ? "生产交接核验"
+    : kind === "first_copy_expiry"
+      ? "制作期限人工审核"
+      : kind === "correction"
+        ? "故事限时校对"
+        : kind === "rebind"
+          ? "账号换绑"
+          : kind === "withdraw"
+            ? "本人撤回申请"
+            : kind === "export"
+              ? "本人资料导出申请"
+              : "本人删除申请";
 function currentCorrection(
   care: CareCase,
   generation: number,
@@ -316,7 +318,11 @@ onMounted(refresh);
       <Alert
         v-if="selected.state === 'completed'"
         type="success"
-        message="工单已完成，原账号权限已撤销，新账号须重新授权。"
+        :message="
+          selected.kind === 'production_handoff'
+            ? '本次生产交接工单已完成，交付或取消结果以生产与物流的具体回执记录为准。'
+            : '工单已完成，原账号权限已撤销，新账号须重新授权。'
+        "
       />
       <Alert
         v-else-if="selected.state === 'verified'"
@@ -326,6 +332,11 @@ onMounted(refresh);
             ? '本次限时故事校对已核验；新版本仍须本人重新确认。'
             : '本人申请已核验，导出交付、删除执行与后续联动仍待对应流程处理。'
         "
+      />
+      <Alert
+        v-else-if="selected.kind === 'production_handoff'"
+        type="info"
+        message="请在生产与物流中核对本次交接编号、负责人、期限和印厂回执。交接未知或取消待核实时，不能重发文件或释放权益；本工单不执行本人撤回、删除或账号换绑。"
       />
       <Alert
         v-else-if="selected.kind === 'first_copy_expiry'"

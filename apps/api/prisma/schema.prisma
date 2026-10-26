@@ -1180,3 +1180,68 @@ model FulfillmentOutbox {
  deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(3)
  @@map("fulfillment_outbox")
 }
+
+model FulfillmentAttempt {
+ id String @id @db.Uuid
+ orderId String @map("order_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ sequence Int
+ handoffId String @unique @map("handoff_id") @db.Uuid
+ caseId String @unique @map("case_id") @db.Uuid
+ ownerAdminId String @map("owner_admin_id") @db.Uuid
+ dueAt DateTime @map("due_at") @db.Timestamptz(3)
+ supplierRef String @map("supplier_ref")
+ state String @default("approved")
+ receiptRef String? @map("receipt_ref")
+ tracking Json?
+ wechat Json?
+ deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(3)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([orderId,sequence])
+ @@unique([orderId,id])
+ @@unique([projectId,id])
+ @@map("fulfillment_attempts")
+}
+model FulfillmentGrant {
+ id String @id @db.Uuid
+ sequence Int @unique @default(autoincrement())
+ projectId String @map("project_id") @db.Uuid
+ attemptId String @map("attempt_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ accessEpoch Int @map("access_epoch")
+ bindingVersion Int @map("binding_version")
+ expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+ noticeVersion String @map("notice_version")
+ evidenceRef String @map("evidence_ref")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@index([attemptId,createdAt])
+ @@map("fulfillment_grants")
+}
+model FulfillmentCommand {
+ projectId String @map("project_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ action String
+ key String
+ requestHash String @map("request_hash") @db.Char(64)
+ attemptId String? @map("attempt_id") @db.Uuid
+ @@id([projectId,actorId,action,key])
+ @@map("fulfillment_commands")
+}
+model FulfillmentDelivery {
+ orderId String @id @map("order_id") @db.Uuid
+ attemptId String @unique @map("attempt_id") @db.Uuid
+ occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+ evidenceRef String @map("evidence_ref")
+ operatorAdminId String @map("operator_admin_id") @db.Uuid
+ @@map("fulfillment_deliveries")
+}
+model FulfillmentRecord {
+ id String @id @db.Uuid
+ attemptId String @map("attempt_id") @db.Uuid
+ kind String
+ evidence Json
+ operatorAdminId String @map("operator_admin_id") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@map("fulfillment_records")
+}

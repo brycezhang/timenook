@@ -272,3 +272,96 @@ export const tasksApi = {
     ).data;
   },
 };
+
+import type {
+  FirstCopyBinding,
+  FirstCopyApprovalView,
+  FulfillmentView,
+  FulfillmentAttemptCommand,
+  FulfillmentReceiptCommand,
+  FulfillmentShippingCommand,
+  FulfillmentDeliveryCommand,
+  FulfillmentMaterials,
+} from "@timenook/contracts";
+export const fulfillmentApi = {
+  async list() {
+    return (await client.get<ApiResponse<FulfillmentView[]>>("/fulfillment"))
+      .data;
+  },
+  async read(orderId: string) {
+    return (
+      await client.get<ApiResponse<FulfillmentView>>(`/fulfillment/${orderId}`)
+    ).data;
+  },
+  async approve(
+    orderId: string,
+    input: FirstCopyBinding,
+    key: string,
+    csrf: string,
+  ) {
+    return (
+      await client.post<ApiResponse<FirstCopyApprovalView>>(
+        `/first-copy/${orderId}/approve`,
+        input,
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
+  async attempt(
+    orderId: string,
+    input: FulfillmentAttemptCommand,
+    key: string,
+    csrf: string,
+  ) {
+    return (
+      await client.post<ApiResponse<FulfillmentView>>(
+        `/fulfillment/${orderId}/attempts`,
+        input,
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
+  async command(
+    orderId: string,
+    attemptId: string,
+    action: "handoff" | "receipt" | "cancel" | "shipping" | "delivery",
+    input:
+      | {}
+      | FulfillmentReceiptCommand
+      | FulfillmentShippingCommand
+      | FulfillmentDeliveryCommand,
+    key: string,
+    csrf: string,
+  ) {
+    return (
+      await client.post<ApiResponse<FulfillmentView>>(
+        `/fulfillment/${orderId}/attempts/${attemptId}/${action}`,
+        input,
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
+  async materials(orderId: string, attemptId: string, csrf: string) {
+    return (
+      await client.get<ApiResponse<FulfillmentMaterials>>(
+        `/fulfillment/${orderId}/attempts/${attemptId}/materials`,
+        { headers: { "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
+  async pdf(orderId: string, attemptId: string, csrf: string) {
+    const response = await fetch(
+      `/timenook/v1/admin/fulfillment/${orderId}/attempts/${attemptId}/pdf`,
+      {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "X-CSRF-Token": csrf },
+      },
+    );
+    if (!response.ok)
+      throw await response
+        .json()
+        .catch(() => ({ error: { code: "UNAVAILABLE" } }));
+    return response.arrayBuffer();
+  },
+};
