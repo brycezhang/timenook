@@ -28,6 +28,7 @@ Page({
     loggedIn: false,
     targetUserId: "",
     storyPurpose: false,
+    bookPurpose: false,
     storyEvidence: "",
     purposes: [
       { purpose: "collection", label: "采集并保存讲述和照片" },
@@ -37,6 +38,7 @@ Page({
   },
   projectId: "",
   storyId: "",
+  bookVersionId: "",
   interviewId: "",
   generation: 0,
   ownerContext: "",
@@ -45,9 +47,11 @@ Page({
   onLoad(q) {
     this.projectId = q.projectId ?? "";
     this.storyId = q.storyId ?? "";
+    this.bookVersionId = q.bookVersionId ?? "";
     this.interviewId = q.interviewId ?? "";
     this.setData({
       storyPurpose: q.purpose === "story_confirmation" && !!this.storyId,
+      bookPurpose: q.purpose === "book_confirmation" && !!this.bookVersionId,
     });
     setDataMode("live");
   },
@@ -75,7 +79,7 @@ Page({
       granted = e.currentTarget.dataset.granted === "true",
       evidence = this.data.storyEvidence.trim();
     if (
-      !this.data.storyPurpose ||
+      (!this.data.storyPurpose && !this.data.bookPurpose) ||
       !current ||
       this.data.busy ||
       current.policyStatus !== "synthetic-only"
@@ -85,11 +89,14 @@ Page({
       this.setData({ status: "请记录 3 至 160 字的本人当次选择说明（单行）" });
       return;
     }
+    const purpose = this.data.bookPurpose
+      ? "book_confirmation"
+      : "story_confirmation";
     const expectedSessionId = this.data.sessions.find(
-      (s) => s.purpose === "story_confirmation",
+      (s) => s.purpose === purpose,
     )?.id;
     const input = {
-      purpose: "story_confirmation",
+      purpose,
       granted,
       noticeVersion: current.noticeVersion,
       evidenceRef: `synthetic:${evidence}`,
@@ -107,17 +114,24 @@ Page({
       this.intent = null;
       if (!granted) {
         this.setData({
-          status: "本人拒绝已保存；不会进入故事确认",
+          status: `本人拒绝已保存；不会进入${this.data.bookPurpose ? "书稿" : "故事"}确认`,
           storyEvidence: "",
         });
         return;
       }
       if (
-        session.purpose !== "story_confirmation" ||
+        session.purpose !== purpose ||
         session.state !== "active" ||
         !/^[0-9a-f-]{36}$/.test(session.id)
       )
-        throw new Error("当次故事确认协助尚未生效，请重新查询");
+        throw new Error("当次内容确认协助尚未生效，请重新查询");
+      if (this.data.bookPurpose) {
+        go(
+          "print",
+          `projectId=${this.projectId}&versionId=${this.bookVersionId}&assistedSessionId=${session.id}`,
+        );
+        return;
+      }
       go(
         "story",
         `projectId=${this.projectId}&storyId=${this.storyId}${this.interviewId ? `&interviewId=${this.interviewId}` : ""}&assistedSessionId=${session.id}`,

@@ -1,4 +1,5 @@
 export const ADMIN_PERMISSIONS = {
+  writeFulfillment: "fulfillment:write",
   retryTasks: "tasks:retry",
   writeCare: "care:write",
   writeServiceTerms: "service-terms:write",

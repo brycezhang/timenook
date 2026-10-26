@@ -24,3 +24,34 @@
 .entitlement .price {
   font-size: 48rpx;
 }
+.live-first-copy {
+  font-size: 40rpx;
+}
+.live-first-copy .note {
+  font-size: 36rpx;
+  line-height: 1.7;
+}
+.live-first-copy .btn,
+.live-first-copy .check-row {
+  font-size: 40rpx;
+  min-height: 96rpx;
+  height: auto;
+  white-space: normal;
+  line-height: 1.6;
+  padding: 20rpx 28rpx;
+}
+.live-first-copy input,
+.live-first-copy textarea {
+  font-size: 40rpx;
+  min-height: 96rpx;
+  width: 100%;
+  box-sizing: border-box;
+}
+.live-first-copy .first-copy-evidence {
+  padding: 20rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 12rpx;
+}
+.live-first-copy .label {
+  font-size: 36rpx;
+}

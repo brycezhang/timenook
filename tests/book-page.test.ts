@@ -222,6 +222,37 @@ function context(current: any = version()): any {
 }
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
+test("a ready live manuscript and Book overview lead to first-copy confirmation for their exact version", async () => {
+  for (const name of ["book", "manuscript"]) {
+    const h = harness(name);
+    h.page.onLoad({ projectId, versionId });
+    const show = h.page.onShow();
+    h.respond(0, name === "book" ? context() : version());
+    await show;
+    h.page.print();
+    assert.equal(
+      h.routes[0],
+      `/pages/print/index?projectId=${projectId}&versionId=${versionId}`,
+    );
+    h.page.onUnload();
+  }
+});
+
+test("reading a PDF for an assisted book confirmation retains the current purpose identifier on return", async () => {
+  const h = harness("manuscript"),
+    assistedSessionId = "88888888-8888-4888-8888-888888888888";
+  h.page.onLoad({ projectId, versionId, assistedSessionId });
+  const show = h.page.onShow();
+  h.respond(0, version());
+  await show;
+  h.page.print();
+  assert.equal(
+    h.routes[0],
+    `/pages/print/index?projectId=${projectId}&versionId=${versionId}&assistedSessionId=${assistedSessionId}`,
+  );
+  h.page.onUnload();
+});
+
 test("source-story retention expiry leaves a ready frozen book reachable and refuses new source edits or generation", async () => {
   const h = harness(),
     retained = context();

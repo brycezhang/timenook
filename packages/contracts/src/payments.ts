@@ -21,7 +21,11 @@ export interface PaymentOrderView {
     bookTitle: string;
     recipient: PaymentOrderView["recipient"];
     plan: ProjectPlan;
-    entitlement: { id: string; state: "available"; copies: 1 };
+    entitlement: {
+      id: string;
+      state: "available" | "reserved" | "suspended" | "revoked";
+      copies: 1;
+    };
     terms: Record<string, unknown>;
   };
 }

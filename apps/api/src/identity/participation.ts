@@ -781,6 +781,8 @@ export class Participation implements OnModuleDestroy {
     const subject = await this.subject(tx, p.id);
     await tx.$queryRaw`SELECT id FROM care_requests WHERE id=${id}::uuid FOR UPDATE`;
     const care = (await tx.careRequest.findUnique({ where: { id } }))!;
+    // Creation-expiry cases are operational reviews, not D08 subject-right requests.
+    if (care.kind === "first_copy_expiry") throw new ConflictException();
     const hash = digest(JSON.stringify(body));
     const result = () => ({
       id,

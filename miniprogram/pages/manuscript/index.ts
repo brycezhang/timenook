@@ -28,6 +28,7 @@ Page({
   },
   projectId: "",
   versionId: "",
+  assistedSessionId: "",
   generation: 0,
   file: "",
   coverFile: "",
@@ -38,6 +39,7 @@ Page({
     ++this.generation;
     this.projectId = q.projectId || "";
     this.versionId = q.versionId || "";
+    this.assistedSessionId = q.assistedSessionId || "";
     if (dataMode() === "live") this.setData({ live: true });
   },
   removeFile(path: string) {
@@ -281,6 +283,19 @@ Page({
   },
   book() {
     go("book", `projectId=${this.projectId}`);
+  },
+  print() {
+    if (!this.data.live) return go("print");
+    if (this.accessExpired()) {
+      this.onHide();
+      this.setData({ status: "资料访问已到期，请重新查询" });
+      return;
+    }
+    if (this.data.version?.state === "ready")
+      go(
+        "print",
+        `projectId=${this.projectId}&versionId=${this.data.version.id}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+      );
   },
   async onShow() {
     if (dataMode() === "live") {

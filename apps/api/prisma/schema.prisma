@@ -1107,3 +1107,76 @@ model BookCoverVersion {
  @@id([projectId,version])
  @@map("book_cover_versions")
 }
+
+model FirstCopyAddress {
+ projectId String @id @map("project_id") @db.Uuid
+ version Int
+ hash String @db.Char(64)
+ value Json
+ @@map("first_copy_addresses")
+}
+model BookConfirmation {
+ id String @id @db.Uuid
+ sequence Int @unique @default(autoincrement())
+ projectId String @map("project_id") @db.Uuid
+ role String
+ bookId String @map("book_id") @db.Uuid
+ snapshotHash String @map("snapshot_hash") @db.Char(64)
+ pdfHash String @map("pdf_hash") @db.Char(64)
+ addressHash String? @map("address_hash") @db.Char(64)
+ addressVersion Int? @map("address_version")
+ subjectId String @map("subject_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ method String
+ assistedEvidenceId String? @map("assisted_evidence_id") @db.Uuid
+ noticeVersion String @map("notice_version")
+ evidenceRef String @map("evidence_ref")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([projectId,evidenceRef])
+ @@index([projectId,role,sequence])
+ @@map("book_confirmations")
+}
+model FirstCopyOrder {
+ id String @id @db.Uuid
+ projectId String @unique @map("project_id") @db.Uuid
+ entitlementId String @unique @map("entitlement_id") @db.Uuid
+ paymentOrderId String @unique @map("payment_order_id") @db.Uuid
+ bookId String @map("book_id") @db.Uuid
+ snapshotHash String @map("snapshot_hash") @db.Char(64)
+ pdfHash String @map("pdf_hash") @db.Char(64)
+ addressHash String @map("address_hash") @db.Char(64)
+ address Json
+ narratorConfirmationId String @map("narrator_confirmation_id") @db.Uuid
+ initiatorConfirmationId String @map("initiator_confirmation_id") @db.Uuid
+ state String @default("reserved")
+ approvedBy String? @map("approved_by") @db.Uuid
+ approvedAt DateTime? @map("approved_at") @db.Timestamptz(3)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@map("first_copy_orders")
+}
+model FirstCopyCommand {
+ projectId String @map("project_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ action String
+ key String
+ requestHash String @map("request_hash") @db.Char(64)
+ @@id([projectId,actorId,action,key])
+ @@map("first_copy_commands")
+}
+// Durable handoff facts for T23. No queue or automatic printer submission in T22.
+model FulfillmentEvent {
+ id String @id @db.Uuid
+ orderId String @map("order_id") @db.Uuid
+ kind String
+ actorId String @map("actor_id") @db.Uuid
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([orderId,kind])
+ @@map("fulfillment_events")
+}
+model FulfillmentOutbox {
+ eventId String @id @map("event_id") @db.Uuid
+ deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(3)
+ @@map("fulfillment_outbox")
+}

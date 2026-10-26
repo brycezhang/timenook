@@ -143,6 +143,12 @@ const wx: any = {
         ));
     const supported =
       ((!options.method || options.method === "GET") &&
+        /\/v1\/projects\/[a-f0-9-]{36}\/first-copy$/.test(url.pathname)) ||
+      (options.method === "POST" &&
+        /\/v1\/projects\/[a-f0-9-]{36}\/first-copy\/(?:address|confirmations|submit|expiry-review)$/.test(
+          url.pathname,
+        )) ||
+      ((!options.method || options.method === "GET") &&
         /\/v1\/book-audio\/[A-Za-z0-9_-]{22}$/.test(url.pathname)) ||
       ((!options.method || options.method === "GET") &&
         /\/v1\/projects\/[a-f0-9-]{36}\/book(?:\/versions\/[a-f0-9-]{36})?$/.test(

@@ -134,6 +134,36 @@ const current = {
   canRead: false,
   careAvailable: true,
 };
+test("assisted book confirmation records a distinct current purpose and returns to the pinned book", async () => {
+  const { page, requests, routes } = harness("assisted"),
+    bookVersionId = "66666666-6666-4666-8666-666666666666";
+  page.onLoad({ projectId, bookVersionId, purpose: "book_confirmation" });
+  const showing = page.onShow();
+  respond(requests.shift()!, { ...current, role: "initiator" });
+  await tick();
+  respond(requests.shift()!, { sessions: [] });
+  await tick();
+  respond(requests.shift()!, { requests: [] });
+  await showing;
+  page.storyEvidence({ detail: { value: "本人同意本次书稿确认协助" } });
+  const choosing = page.startStoryConfirmation({
+    currentTarget: { dataset: { granted: "true" } },
+  });
+  const request = requests.shift()!;
+  assert.ok(request);
+  assert.equal((request.data as any).purpose, "book_confirmation");
+  respond(request, {
+    id: "55555555-5555-4555-8555-555555555555",
+    purpose: "book_confirmation",
+    state: "active",
+  });
+  await choosing;
+  assert.equal(
+    routes[0],
+    `/pages/print/index?projectId=${projectId}&versionId=${bookVersionId}&assistedSessionId=55555555-5555-4555-8555-555555555555`,
+  );
+  page.onUnload();
+});
 test("actual live invitation page prepares a server token for native sharing and approves a selected applicant", async () => {
   const { page, requests } = harness("invite");
   page.onLoad({ projectId });

@@ -111,3 +111,70 @@ export interface BookAudioEntryView {
   accessEpoch: number;
   accessExpiresAt: string | null;
 }
+
+export interface FirstCopyAddress {
+  recipientName: string;
+  phone: string;
+  regionCode: string;
+  detail: string;
+}
+export interface FirstCopyBinding {
+  bookVersionId: string;
+  snapshotHash: string;
+  pdfHash: string;
+  addressHash: string;
+}
+export interface FirstCopyOrderView extends FirstCopyBinding {
+  id: string;
+  state: "reserved" | "approved";
+  copies: 1;
+  amountDueFen: 0;
+}
+export type FirstCopyBlocker =
+  | "BOOK_NOT_READY"
+  | "ADDRESS_REQUIRED"
+  | "NARRATOR_CONFIRMATION_REQUIRED"
+  | "INITIATOR_CONFIRMATION_REQUIRED"
+  | "CREATION_PAUSED"
+  | "CREATION_EXPIRED"
+  | "POLICY_PENDING"
+  | "SPECIFICATION_MISMATCH"
+  | "ENTITLEMENT_UNAVAILABLE"
+  | "PROJECT_FROZEN"
+  | "ALREADY_SUBMITTED";
+export interface FirstCopyContext {
+  projectId: string;
+  role: "initiator" | "narrator";
+  book: BookVersionView | null;
+  address: {
+    version: number;
+    hash: string | null;
+    value: FirstCopyAddress | null;
+  };
+  confirmations: { narrator: boolean; initiator: boolean };
+  canConfirmNarrator: boolean;
+  payment: {
+    paidAmountFen: number;
+    currency: "CNY";
+    copies: 1;
+    amountDueFen: 0;
+  };
+  shipping: {
+    regionCodes: string[];
+    regionLabels: Record<string, string>;
+    terms: import("./catalog").PackageTerm[];
+  };
+  creation: { state: string; expiresAt: string | null };
+  expiryReview: { available: boolean; caseId: string | null };
+  blockers: FirstCopyBlocker[];
+  canSubmit: boolean;
+  production: FirstCopyOrderView | null;
+  accessExpiresAt: string | null;
+}
+
+/** Operational approval never grants administrative access to private book/address content. */
+export interface FirstCopyApprovalView {
+  projectId: string;
+  production: FirstCopyOrderView;
+  expiryReview: { available: boolean; caseId: string | null };
+}

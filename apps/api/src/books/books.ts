@@ -483,7 +483,8 @@ export class Books implements OnModuleDestroy {
       },
     };
   }
-  private async contextIn(
+  // Transactional Book boundary: caller holds current participation and the project lock.
+  async contextIn(
     tx: Prisma.TransactionClient,
     projectId: string,
     accessExpiresAt: string | null,

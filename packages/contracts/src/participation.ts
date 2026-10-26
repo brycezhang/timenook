@@ -67,7 +67,13 @@ export interface CareCase {
   sourceAccessEpoch: number;
   state: "open" | "verified" | "completed";
   completedBy: string | null;
-  kind: "rebind" | "withdraw" | "export" | "delete" | "correction";
+  kind:
+    | "rebind"
+    | "withdraw"
+    | "export"
+    | "delete"
+    | "correction"
+    | "first_copy_expiry";
   createdAt: string;
   supportCaseRef?: string;
   changes?: CareBindingChangeView[];
@@ -82,7 +88,13 @@ export interface CareCase {
 }
 export interface ProjectCareRequestView {
   id: string;
-  kind: "rebind" | "withdraw" | "export" | "delete" | "correction";
+  kind:
+    | "rebind"
+    | "withdraw"
+    | "export"
+    | "delete"
+    | "correction"
+    | "first_copy_expiry";
   state: "open" | "verified" | "completed";
   createdAt: string;
 }
