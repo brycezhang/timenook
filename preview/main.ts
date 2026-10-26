@@ -142,6 +142,10 @@ const wx: any = {
           url.pathname,
         ));
     const supported =
+      ((!options.method ||
+        options.method === "GET" ||
+        options.method === "POST") &&
+        /\/v1\/orders\/[a-f0-9-]{36}\/refunds$/.test(url.pathname)) ||
       ((!options.method || options.method === "GET") &&
         /\/v1\/projects\/[a-f0-9-]{36}\/fulfillment$/.test(url.pathname)) ||
       (options.method === "POST" &&

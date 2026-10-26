@@ -102,7 +102,12 @@ export class WechatPay {
     if (!data || typeof data !== "object" || Array.isArray(data))
       throw new PaymentProtocolError();
     if (!response.ok) {
-      if (response.status === 404 && data.code === "ORDER_NOT_EXIST")
+      if (
+        response.status === 404 &&
+        (data.code === "ORDER_NOT_EXIST" ||
+          (path.startsWith("/v3/refund/domestic/refunds/") &&
+            data.code === "RESOURCE_NOT_EXISTS"))
+      )
         return null;
       throw new PaymentProtocolError();
     }
@@ -154,7 +159,49 @@ export class WechatPay {
       { mchid: this.config.merchantId },
     );
   }
+  refund(
+    order: { outTradeNo: string; amount: number; currency: string },
+    refund: { outRefundNo: string; amount: number },
+  ) {
+    return this.request("POST", "/v3/refund/domestic/refunds", {
+      out_trade_no: order.outTradeNo,
+      out_refund_no: refund.outRefundNo,
+      reason: "岁月成书售后退款",
+      notify_url: new URL(
+        "/timenook/v1/webhooks/wechat-pay/refunds",
+        this.config.notifyUrl,
+      ).toString(),
+      amount: {
+        total: order.amount,
+        refund: refund.amount,
+        currency: order.currency,
+      },
+    });
+  }
+  queryRefund(outRefundNo: string) {
+    return this.request(
+      "GET",
+      `/v3/refund/domestic/refunds/${encodeURIComponent(outRefundNo)}`,
+    );
+  }
   decrypt(raw: string, headers: Headers) {
+    return this.decryptNotification(raw, headers, "transaction", [
+      "TRANSACTION.SUCCESS",
+    ]);
+  }
+  decryptRefund(raw: string, headers: Headers) {
+    return this.decryptNotification(raw, headers, "refund", [
+      "REFUND.SUCCESS",
+      "REFUND.ABNORMAL",
+      "REFUND.CLOSED",
+    ]);
+  }
+  private decryptNotification(
+    raw: string,
+    headers: Headers,
+    originalType: string,
+    eventTypes: string[],
+  ) {
     this.verify(raw, headers);
     try {
       const notification = JSON.parse(raw);
@@ -163,9 +210,10 @@ export class WechatPay {
         typeof notification.id !== "string" ||
         !notification.id ||
         notification.id.length > 128 ||
-        notification.event_type !== "TRANSACTION.SUCCESS" ||
+        !eventTypes.includes(notification.event_type) ||
+        notification.resource_type !== "encrypt-resource" ||
         resource?.algorithm !== "AEAD_AES_256_GCM" ||
-        resource.original_type !== "transaction" ||
+        resource.original_type !== originalType ||
         typeof resource.nonce !== "string" ||
         typeof resource.ciphertext !== "string" ||
         (resource.associated_data !== undefined &&
@@ -189,6 +237,7 @@ export class WechatPay {
       );
       return {
         eventId: notification.id as string,
+        eventType: notification.event_type as string,
         transaction: data as Record<string, unknown>,
       };
     } catch {

@@ -1,4 +1,8 @@
-import { Fulfillment, FulfillmentController, AdminFulfillmentController } from "./books/fulfillment";
+import {
+  Fulfillment,
+  FulfillmentController,
+  AdminFulfillmentController,
+} from "./books/fulfillment";
 import {
   FirstCopies,
   FirstCopyController,
@@ -53,6 +57,12 @@ import {
   PaymentWebhookController,
   PAYMENT_FETCH,
 } from "./payments/orders";
+import {
+  Refunds,
+  RefundsController,
+  AdminRefundsController,
+  RefundWebhookController,
+} from "./payments/refunds";
 import { AI_FETCH } from "./probe/ai-providers";
 import { AiProbe } from "./probe/ai-probe";
 import { AiProbeController } from "./probe/ai-probe-controller";
@@ -142,6 +152,9 @@ class HealthController {
 
 @Module({
   controllers: [
+    RefundsController,
+    AdminRefundsController,
+    RefundWebhookController,
     OrdersController,
     AdminTermsController,
     PaymentWebhookController,
@@ -491,6 +504,7 @@ export async function createApplication(
       AdminAccess,
       Catalog,
       Orders,
+      Refunds,
       { provide: PAYMENT_FETCH, useValue: options.paymentFetch ?? fetch },
     ],
   };
