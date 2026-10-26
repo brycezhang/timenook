@@ -57,6 +57,19 @@ import {
 import { WechatPay } from "./wechat-pay";
 import { AdminAccess } from "../admin/admin-access";
 type Tx = Prisma.TransactionClient;
+const RESERVED_REFUND_STATES = [
+  "approved",
+  "unknown",
+  "processing",
+  "abnormal",
+];
+const isReservedRefund = (state: string) =>
+  RESERVED_REFUND_STATES.includes(state);
+export const REFUND_RUNTIME = Symbol("REFUND_RUNTIME");
+export interface RefundRuntime {
+  now: () => Date;
+  beforeExecution: (id: string) => Promise<void>;
+}
 export class RequestRefundDto {
   @ApiProperty({ enum: REFUND_REASONS })
   @IsIn(REFUND_REASONS)
@@ -88,14 +101,27 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     private readonly identity: IdentityAccess,
     private readonly orders: Orders,
     @Inject(PAYMENT_FETCH) private readonly paymentFetch: typeof fetch,
+    @Inject(REFUND_RUNTIME) private readonly runtime: RefundRuntime,
   ) {
     this.database = new PrismaClient({ datasourceUrl: config.databaseUrl });
   }
   private enabled() {
     this.orders.enabled();
   }
+  beforeExecution(id: string) {
+    return this.runtime.beforeExecution(id);
+  }
   private view(row: Refund): RefundView {
     return {
+      requestWindowStartedAt: row.requestWindowStartedAt?.toISOString() ?? null,
+      requestWindowEndsAt: row.requestWindowEndsAt?.toISOString() ?? null,
+      processingState: !row.approvedAt
+        ? "not_started"
+        : ["succeeded", "closed", "rejected"].includes(row.state)
+          ? "completed"
+          : row.dueAt && this.runtime.now() >= row.dueAt
+            ? "overdue"
+            : "active",
       id: row.id,
       caseId: row.caseId,
       orderId: row.orderId,
@@ -162,9 +188,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         .filter((r) => r.state === "succeeded")
         .reduce((sum, r) => sum + (r.amount ?? 0), 0),
       reserved = rows
-        .filter((r) =>
-          ["approved", "unknown", "processing", "abnormal"].includes(r.state),
-        )
+        .filter((r) => isReservedRefund(r.state))
         .reduce((sum, r) => sum + (r.amount ?? 0), 0);
     return {
       orderId: order.id,
@@ -189,10 +213,11 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     body: RequestRefundDto,
   ) {
     this.enabled();
+    const requestedAt = this.runtime.now();
     const user = await this.identity.current(authorization);
     return this.database.$transaction(async (tx) => {
       await this.identity.current(authorization, tx);
-      return this.requestIn(tx, orderId, user.id, key, body);
+      return this.requestIn(tx, orderId, user.id, key, body, requestedAt);
     });
   }
   // Trusted T28 composition: caller keeps the buyer's real session locked.
@@ -202,6 +227,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     buyerId: string,
     key: string,
     body: RequestRefundDto,
+    requestedAt = this.runtime.now(),
   ) {
     this.enabled();
     const order = await tx.paymentOrder.findUnique({
@@ -243,6 +269,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         idempotencyKey: `refund-${key}`,
         requestHash: hash(body),
         kind: "refund",
+        createdAt: requestedAt,
       },
     });
     return this.view(
@@ -258,6 +285,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
           reason: body.reason,
           evidenceRef: body.evidenceRef,
           outRefundNo: "TNR" + id.replaceAll("-", ""),
+          createdAt: requestedAt,
         },
       }),
     );
@@ -315,6 +343,43 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       }),
     };
   }
+  // The order lock must cover both state validation and the final claim. An
+  // earlier authorized command is not a reservation once another actor ends it.
+  private async assertReservationIn(
+    tx: Tx,
+    refund: Refund,
+    order: PaymentOrder,
+  ) {
+    if (
+      !isReservedRefund(refund.state) ||
+      !refund.approvedAt ||
+      !refund.amount ||
+      !refund.rule ||
+      order.state !== "paid"
+    )
+      throw new ConflictException(
+        "Current approved refund reservation required",
+      );
+    const payment = await tx.paymentTransaction.findUnique({
+        where: { orderId: order.id },
+      }),
+      rows = await tx.refund.findMany({
+        where: { orderId: order.id },
+        select: { state: true, amount: true },
+      });
+    const committed = rows
+      .filter((row) => row.state === "succeeded" || isReservedRefund(row.state))
+      .reduce((sum, row) => sum + (row.amount ?? 0), 0);
+    const rule = refund.rule as unknown as RefundRule;
+    if (
+      !payment ||
+      payment.currency !== order.currency ||
+      refund.amount !== rule.refundAmount?.value ||
+      refund.amount > payment.amount ||
+      committed > payment.amount
+    )
+      throw new ConflictException("Approved refund funds are not reserved");
+  }
   private async command(
     tx: Tx,
     refundId: string,
@@ -354,14 +419,14 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         where: { orderId: row.orderId },
       }),
       events = await tx.projectServiceEvent.findMany({
-        where: { projectId: row.projectId },
+        where: { projectId: row.projectId, occurredAt: { lte: row.createdAt } },
       }),
       attempts = await tx.fulfillmentAttempt.findMany({
-        where: { projectId: row.projectId },
+        where: { projectId: row.projectId, createdAt: { lte: row.createdAt } },
         orderBy: { createdAt: "asc" },
       }),
       used = await tx.interview.findFirst({
-        where: { projectId: row.projectId },
+        where: { projectId: row.projectId, createdAt: { lte: row.createdAt } },
         orderBy: { createdAt: "asc" },
       });
     const participation = events.find(
@@ -372,6 +437,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       where: {
         attemptId: { in: attempts.map((a) => a.id) },
         kind: "receipt_accepted",
+        createdAt: { lte: row.createdAt },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -411,13 +477,17 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         throw new ConflictException("Verified failure notice required");
       start = new Date(body.failureNotifiedAt);
     }
+    const expiresAt = start
+      ? new Date(start.getTime() + rule.requestWindow.duration.value * 86400000)
+      : null;
     if (
       !start ||
-      start.getTime() > Date.now() ||
-      Date.now() >=
-        start.getTime() + rule.requestWindow.duration.value * 86400000
+      !expiresAt ||
+      start > row.createdAt ||
+      row.createdAt >= expiresAt
     )
       throw new ConflictException("Refund request window unavailable");
+    return { requestWindowStartedAt: start, requestWindowEndsAt: expiresAt };
   }
   async approveIn(
     tx: Tx,
@@ -434,11 +504,11 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     const rule = this.rule(order, refund.reason);
     if (body.amountFen !== rule.refundAmount.value)
       throw new ConflictException("Exact purchased policy amount required");
-    await this.eligibility(tx, refund, rule, body);
+    const window = await this.eligibility(tx, refund, rule, body);
     const balance = await this.listIn(tx, order);
     if (body.amountFen > balance.availableAmountFen)
       throw new ConflictException("Insufficient refundable balance");
-    const now = new Date();
+    const now = this.runtime.now();
     await tx.refund.update({
       where: { id },
       data: {
@@ -447,6 +517,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         rule: JSON.parse(JSON.stringify(rule)) as Prisma.InputJsonValue,
         approvedBy: actorId,
         approvedAt: now,
+        ...window,
         dueAt: new Date(
           now.getTime() + rule.processing.within.value * 86400000,
         ),
@@ -488,7 +559,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       );
     await tx.refund.update({
       where: { id },
-      data: { state: "rejected", completedAt: new Date() },
+      data: { state: "rejected", completedAt: this.runtime.now() },
     });
     await tx.careRequest.update({
       where: { id: refund.caseId },
@@ -497,7 +568,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     const active = await tx.refund.count({
       where: {
         orderId: order.id,
-        state: { in: ["approved", "unknown", "processing", "abnormal"] },
+        state: { in: RESERVED_REFUND_STATES },
       },
     });
     await tx.paymentOrder.update({
@@ -548,14 +619,8 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     const { refund } = await this.lock(tx, id);
     await this.command(tx, id, actorId, action, key, body);
     if (
-      ![
-        "approved",
-        "unknown",
-        "processing",
-        "abnormal",
-        "succeeded",
-        "closed",
-      ].includes(refund.state)
+      !isReservedRefund(refund.state) &&
+      !["succeeded", "closed"].includes(refund.state)
     )
       throw new ConflictException();
     if ((await this.readIn(tx, id)).productionReviewRequired)
@@ -647,6 +712,8 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       }
       if (refund.state === "closed" && value.status !== "CLOSED")
         throw new ConflictException();
+      if (!["succeeded", "closed"].includes(refund.state))
+        await this.assertReservationIn(tx, refund, order);
       const state = {
         SUCCESS: "succeeded",
         CLOSED: "closed",
@@ -715,7 +782,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       const active = await tx.refund.count({
           where: {
             orderId: order.id,
-            state: { in: ["approved", "unknown", "processing", "abnormal"] },
+            state: { in: RESERVED_REFUND_STATES },
           },
         }),
         final = await tx.paymentOrder.findUniqueOrThrow({
@@ -741,15 +808,14 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       const { refund, order } = await this.lock(tx, id);
       if (["succeeded", "closed"].includes(refund.state))
         return { refund, order, first: false, terminal: true };
-      if (!refund.approvedAt || !refund.amount || !refund.rule)
-        throw new ConflictException();
+      await this.assertReservationIn(tx, refund, order);
       if ((await this.readIn(tx, id)).productionReviewRequired)
         throw new ConflictException();
       const first = submit && !refund.submittedAt;
       if (first)
         await tx.refund.update({
           where: { id },
-          data: { submittedAt: new Date(), state: "unknown" },
+          data: { submittedAt: this.runtime.now(), state: "unknown" },
         });
       return { refund, order, first, terminal: false };
     });
@@ -767,19 +833,21 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
             !result &&
             submit &&
             claim.refund.submittedAt &&
-            Date.now() - claim.refund.submittedAt.getTime() >= 10000
+            this.runtime.now().getTime() - claim.refund.submittedAt.getTime() >=
+              10000
           ) {
             const retry = await this.database.$transaction(async (tx) => {
-              const { refund } = await this.lock(tx, id);
+              const { refund, order } = await this.lock(tx, id);
               if (
                 refund.submittedAt?.getTime() !==
                   claim.refund.submittedAt!.getTime() ||
                 ["succeeded", "closed"].includes(refund.state)
               )
                 return false;
+              await this.assertReservationIn(tx, refund, order);
               await tx.refund.update({
                 where: { id },
-                data: { submittedAt: new Date(), state: "unknown" },
+                data: { submittedAt: this.runtime.now(), state: "unknown" },
               });
               return true;
             });
@@ -887,7 +955,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     const rows = await this.database.refund.findMany({
       where: {
         state: { in: ["unknown", "processing", "abnormal"] },
-        submittedAt: { lt: new Date(Date.now() - 10000) },
+        submittedAt: { lt: new Date(this.runtime.now().getTime() - 10000) },
       },
       take: 25,
     });
@@ -1020,6 +1088,7 @@ export class AdminRefundsController {
         body,
       ),
     );
+    await this.refunds.beforeExecution(id);
     return {
       data: await this.refunds.execute(id, true),
       meta: { requestId: req.id },

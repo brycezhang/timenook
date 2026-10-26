@@ -26,7 +26,12 @@ export const paymentConfig = {
 };
 export const supplierOrders = new Map<string, Record<string, unknown>>();
 export const supplierRefunds = new Map<string, Record<string, unknown>>();
-export let nextRefundFault: "" | "timeout" | "signature" = "";
+export let nextRefundFault: "" | "timeout" | "timeout-before" | "signature" =
+  "";
+let refundQueryGate: ((outRefundNo: string) => Promise<void>) | undefined;
+export function interceptRefundQuery(gate?: typeof refundQueryGate) {
+  refundQueryGate = gate;
+}
 export function refundFault(value: typeof nextRefundFault) {
   nextRefundFault = value;
 }
@@ -90,6 +95,10 @@ export const paymentFetch: typeof fetch = async (input, init) => {
   });
   if (url.pathname.startsWith("/v3/refund/domestic/refunds")) {
     if (method === "POST") {
+      if (nextRefundFault === "timeout-before") {
+        nextRefundFault = "";
+        throw new Error("synthetic connection lost before provider acceptance");
+      }
       const order = supplierOrders.get(payload.out_trade_no);
       assert.ok(order, "original synthetic payment exists");
       const row = {
@@ -114,6 +123,7 @@ export const paymentFetch: typeof fetch = async (input, init) => {
     }
     const no = decodeURIComponent(url.pathname.split("/").at(-1)!);
     const row = supplierRefunds.get(no);
+    await refundQueryGate?.(no);
     return row
       ? signed(JSON.stringify(row))
       : signed(JSON.stringify({ code: "RESOURCE_NOT_EXISTS" }), 404);

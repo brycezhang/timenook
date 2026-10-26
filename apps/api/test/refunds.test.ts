@@ -14,15 +14,20 @@ import {
   data,
   request,
   restartBookApplication,
+  interceptRefundExecution,
+  setRefundInstant,
 } from "./book-fixture";
 import { paymentAdmin } from "./payment-admin-fixture";
 import { readyReservedFirstCopy } from "./first-copy-fixture";
+import { createApplication } from "../src/application";
 import {
   supplierRefunds,
   refundFault,
   paymentRequests,
   callback,
   paymentConfig,
+  supplierOrders,
+  interceptRefundQuery,
 } from "./payment-fixture";
 
 let admin: Record<string, string>;
@@ -450,7 +455,7 @@ test("a refund freezes a reserved production attempt and requires a verified ori
     await adminRequest("POST", `/${r.id}/approve`, {
       amountFen: 99900,
       evidenceRef: "synthetic:failure-verified",
-      failureNotifiedAt: new Date().toISOString(),
+      failureNotifiedAt: new Date(Date.now() - 1000).toISOString(),
     }),
   );
   assert.equal(approved.productionReviewRequired, true);
@@ -742,7 +747,7 @@ test("approval blocks an otherwise authorized original handoff before any provid
     await adminRequest("POST", `/${r.id}/approve`, {
       amountFen: 99900,
       evidenceRef: "synthetic:approved-before-handoff",
-      failureNotifiedAt: new Date().toISOString(),
+      failureNotifiedAt: new Date(Date.now() - 1000).toISOString(),
     }),
   );
   assert.equal((await cmd(`/attempts/${attempt.id}/handoff`)).statusCode, 409);
@@ -762,4 +767,240 @@ test("approval blocks an otherwise authorized original handoff before any provid
     ).reservedAmountFen,
     99900,
   );
+});
+test("an approved refund rejected after submit preflight cannot spend the replacement refund reservation", async (t) => {
+  const p = await project(),
+    first = data(await open(p)),
+    second = data(await open(p)),
+    other = await paymentAdmin(config, app, ["care:write"]);
+  const approval = {
+    amountFen: 99900,
+    evidenceRef: "synthetic:approved-reservation",
+  };
+  data(await adminRequest("POST", `/${first.id}/approve`, approval));
+  let reached!: () => void, release!: () => void;
+  const gated = new Promise<void>((resolve) => {
+      reached = resolve;
+    }),
+    resume = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  interceptRefundExecution(async (id) => {
+    if (id === first.id) {
+      reached();
+      await resume;
+    }
+  });
+  t.after(() => {
+    release();
+    interceptRefundExecution();
+  });
+  const before = paymentRequests.filter(
+    (row) =>
+      row.path === "/v3/refund/domestic/refunds" && row.method === "POST",
+  ).length;
+  const pending = adminRequest("POST", `/${first.id}/submit`, {});
+  await gated;
+  data(
+    await adminRequest(
+      "POST",
+      `/${first.id}/reject`,
+      { evidenceRef: "synthetic:rejected-before-final-claim" },
+      randomUUID(),
+      other,
+    ),
+  );
+  data(
+    await adminRequest(
+      "POST",
+      `/${second.id}/approve`,
+      approval,
+      randomUUID(),
+      other,
+    ),
+  );
+  release();
+  const response = await pending;
+  assert.equal(response.statusCode, 409, response.body);
+  const state = data(
+    await request("GET", `/v1/orders/${p.orderId}/refunds`, p.buyer.token),
+    200,
+  );
+  assert.equal(state.reservedAmountFen, 99900);
+  assert.equal(state.availableAmountFen, 0);
+  assert.equal(
+    state.refunds.find((row: { id: string }) => row.id === first.id).state,
+    "rejected",
+  );
+  assert.equal(
+    paymentRequests.filter(
+      (row) =>
+        row.path === "/v3/refund/domestic/refunds" && row.method === "POST",
+    ).length,
+    before,
+  );
+  assert.equal(supplierRefunds.has(first.outRefundNo), false);
+});
+async function refundWindow(p: Awaited<ReturnType<typeof project>>) {
+  const order = data(
+    await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token),
+    200,
+  );
+  const original = supplierOrders.get(order.outTradeNo)!;
+  const paidAt = new Date(String(original.success_time));
+  return { paidAt, expiresAt: new Date(paidAt.getTime() + 30 * 86400000) };
+}
+test("D07 refund applications use the half-open original request window before, exactly at and after its end", async (t) => {
+  t.after(() => setRefundInstant());
+  for (const offset of [-1, 0, 1]) {
+    const p = await project(),
+      window = await refundWindow(p),
+      instant = new Date(window.expiresAt.getTime() + offset);
+    setRefundInstant(instant);
+    const r = data(await open(p));
+    assert.equal(r.createdAt, instant.toISOString());
+    const response = await adminRequest("POST", `/${r.id}/approve`, {
+      amountFen: 99900,
+      evidenceRef: "synthetic:request-window-boundary",
+    });
+    assert.equal(response.statusCode, offset < 0 ? 201 : 409, response.body);
+  }
+});
+test("a timely D07 application can be verified and executed after its request window while its independent processing deadline never moves", async (t) => {
+  t.after(() => setRefundInstant());
+  const p = await project(),
+    window = await refundWindow(p),
+    requestedAt = new Date(window.expiresAt.getTime() - 1),
+    requestKey = randomUUID();
+  setRefundInstant(requestedAt);
+  const r = data(await open(p, refundBody, requestKey));
+  const verifiedAt = new Date(window.expiresAt.getTime() + 86400000);
+  setRefundInstant(verifiedAt);
+  assert.equal(
+    data(await open(p, refundBody, requestKey)).createdAt,
+    requestedAt.toISOString(),
+  );
+  const key = randomUUID(),
+    body = {
+      amountFen: 99900,
+      evidenceRef: "synthetic:timely-request-late-verification",
+    };
+  const approved = data(
+    await adminRequest("POST", `/${r.id}/approve`, body, key),
+  );
+  const dueAt = new Date(verifiedAt.getTime() + 7 * 86400000);
+  assert.equal(approved.approvedAt, verifiedAt.toISOString());
+  assert.equal(approved.dueAt, dueAt.toISOString());
+  assert.equal(approved.requestWindowStartedAt, window.paidAt.toISOString());
+  assert.equal(approved.requestWindowEndsAt, window.expiresAt.toISOString());
+  for (const offset of [-1, 0, 1]) {
+    setRefundInstant(new Date(dueAt.getTime() + offset));
+    const state = data(
+      await request("GET", `/v1/orders/${p.orderId}/refunds`, p.buyer.token),
+      200,
+    ).refunds.find((row: { id: string }) => row.id === r.id);
+    assert.equal(state.processingState, offset < 0 ? "active" : "overdue");
+    assert.equal(state.dueAt, dueAt.toISOString());
+  }
+  const repeated = data(
+    await adminRequest("POST", `/${r.id}/approve`, body, key),
+  );
+  assert.equal(repeated.dueAt, dueAt.toISOString());
+  const processing = data(await adminRequest("POST", `/${r.id}/submit`, {}));
+  assert.equal(processing.state, "processing");
+  assert.equal(processing.dueAt, dueAt.toISOString());
+  assert.equal(processing.processingState, "overdue");
+});
+test("a verified closure while an original not-found query is in flight prevents another retry from spending replacement money", async (t) => {
+  const p = await project(),
+    first = data(await open(p)),
+    second = data(await open(p)),
+    approval = { amountFen: 99900, evidenceRef: "synthetic:fixed-policy" };
+  data(await adminRequest("POST", `/${first.id}/approve`, approval));
+  refundFault("timeout-before");
+  assert.equal(
+    data(await adminRequest("POST", `/${first.id}/submit`, {})).state,
+    "unknown",
+  );
+  assert.equal(supplierRefunds.has(first.outRefundNo), false);
+  const before = paymentRequests.filter(
+    (row) =>
+      row.path === "/v3/refund/domestic/refunds" && row.method === "POST",
+  ).length;
+  let reached!: () => void, release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+      reached = resolve;
+    }),
+    resume = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  interceptRefundQuery(async (no) => {
+    if (no === first.outRefundNo) {
+      reached();
+      await resume;
+    }
+  });
+  t.after(() => {
+    release();
+    interceptRefundQuery();
+    setRefundInstant();
+  });
+  setRefundInstant(new Date(Date.now() + 20000));
+  const pending = adminRequest("POST", `/${first.id}/submit`, {});
+  await gate;
+  const order = data(
+      await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token),
+      200,
+    ),
+    original = supplierOrders.get(order.outTradeNo)!;
+  assert.equal(
+    (
+      await refundCallback({
+        out_trade_no: order.outTradeNo,
+        out_refund_no: first.outRefundNo,
+        transaction_id: original.transaction_id,
+        refund_id: `synthetic-refund-${first.outRefundNo}`,
+        status: "CLOSED",
+        amount: { total: 99900, refund: 99900, currency: "CNY" },
+      })
+    ).statusCode,
+    204,
+  );
+  const other = await paymentAdmin(config, app, ["care:write"]);
+  data(
+    await adminRequest(
+      "POST",
+      `/${second.id}/approve`,
+      approval,
+      randomUUID(),
+      other,
+    ),
+  );
+  release();
+  const settled = data(await pending);
+  assert.equal(settled.state, "closed");
+  const state = data(
+    await request("GET", `/v1/orders/${p.orderId}/refunds`, p.buyer.token),
+    200,
+  );
+  assert.equal(state.reservedAmountFen, 99900);
+  assert.equal(state.availableAmountFen, 0);
+  assert.equal(
+    paymentRequests.filter(
+      (row) =>
+        row.path === "/v3/refund/domestic/refunds" && row.method === "POST",
+    ).length,
+    before,
+  );
+});
+test("refund clock and scheduling controls are unavailable outside isolated test construction", async () => {
+  for (const environment of ["development", "production"] as const)
+    await assert.rejects(
+      () =>
+        createApplication(
+          { ...config, environment },
+          { refundRuntime: { now: () => new Date() } },
+        ),
+      /Refund scheduling and clock overrides require isolated tests/,
+    );
 });

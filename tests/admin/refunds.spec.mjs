@@ -275,6 +275,22 @@ test("buyer requests a refund and the shared support case approves, executes and
   await expect(
     buyer.getByText("尚未参与 · 退款处理中", { exact: true }),
   ).toBeVisible();
+  fixture.setRefundInstant(new Date(Date.now() + 8 * 86400000));
+  await buyer
+    .getByRole("button", { name: "重新查询退款", exact: true })
+    .click();
+  await expect(
+    buyer.getByText("已超过约定处理期限，客服仍需核实实际退款结果。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await admin.getByRole("button", { name: "查询原退款", exact: true }).click();
+  await expect(
+    admin.getByText(
+      "已超过购买时约定的处理期限，请跟进原退款；重试不会延长原截止时间。",
+      { exact: true },
+    ),
+  ).toBeVisible();
   const provider = apiRequire(
     "./dist-test/test/payment-fixture.js",
   ).supplierRefunds.get(refund.outRefundNo);

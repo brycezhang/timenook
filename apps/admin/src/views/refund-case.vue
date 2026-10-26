@@ -135,6 +135,11 @@ onMounted(refresh);
         实际处理人：{{ view.approvedBy }}；处理期限：{{ view.dueAt }}
       </p>
       <p v-if="view.completedAt">核实结果时间：{{ view.completedAt }}</p>
+      <Alert
+        v-if="view.processingState === 'overdue'"
+        type="warning"
+        message="已超过购买时约定的处理期限，请跟进原退款；重试不会延长原截止时间。"
+      />
       <p>
         批准后暂停新投产；已发给印厂的原文件先核实实际接单或取消。退款不清除资料，不重置原始付款事实。
       </p>

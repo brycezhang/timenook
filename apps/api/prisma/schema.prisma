@@ -295,6 +295,8 @@ model PaymentOrder {
 }
 
 model Refund {
+ requestWindowStartedAt DateTime? @map("request_window_started_at") @db.Timestamptz(3)
+ requestWindowEndsAt DateTime? @map("request_window_ends_at") @db.Timestamptz(3)
  id String @id @db.Uuid
  caseId String @unique @map("case_id") @db.Uuid
  orderId String @map("order_id") @db.Uuid

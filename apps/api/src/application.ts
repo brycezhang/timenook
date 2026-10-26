@@ -62,6 +62,8 @@ import {
   RefundsController,
   AdminRefundsController,
   RefundWebhookController,
+  REFUND_RUNTIME,
+  type RefundRuntime,
 } from "./payments/refunds";
 import { AI_FETCH } from "./probe/ai-providers";
 import { AiProbe } from "./probe/ai-probe";
@@ -177,8 +179,13 @@ export async function createApplication(
     aiFetch?: typeof fetch;
     paymentFetch?: typeof fetch;
     recordingObjects?: ProbeObjects;
+    refundRuntime?: Partial<RefundRuntime>;
   } = {},
 ): Promise<NestFastifyApplication> {
+  if (options.refundRuntime && config.environment !== "test")
+    throw new ConfigurationError(
+      "Refund scheduling and clock overrides require isolated tests",
+    );
   if (config.books) {
     let url: URL;
     try {
@@ -505,6 +512,14 @@ export async function createApplication(
       Catalog,
       Orders,
       Refunds,
+      {
+        provide: REFUND_RUNTIME,
+        useValue: {
+          now: options.refundRuntime?.now ?? (() => new Date()),
+          beforeExecution:
+            options.refundRuntime?.beforeExecution ?? (async () => {}),
+        },
+      },
       { provide: PAYMENT_FETCH, useValue: options.paymentFetch ?? fetch },
     ],
   };

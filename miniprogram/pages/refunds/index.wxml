@@ -13,6 +13,7 @@
    <view wx:if="{{item.approvedBy}}" class="muted">客服已核验本次申请</view>
    <view wx:if="{{item.completedLabel}}" class="muted">结果时间：{{item.completedLabel}}</view>
    <view wx:if="{{item.productionReviewRequired}}" class="note">原生产交接仍待核实，客服核对后再执行退款。</view>
+   <view wx:if="{{item.processingState === 'overdue'}}" class="note">已超过约定处理期限，客服仍需核实实际退款结果。</view>
   </view>
   <view wx:if="{{view.availableAmountFen > 0}}">
   <view class="section">申请原因</view>

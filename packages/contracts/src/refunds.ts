@@ -53,6 +53,9 @@ export interface RefundRule {
   ownerRef: string;
 }
 export interface RefundView {
+  requestWindowStartedAt: string | null;
+  requestWindowEndsAt: string | null;
+  processingState: "not_started" | "active" | "overdue" | "completed";
   id: string;
   caseId: string;
   orderId: string;
