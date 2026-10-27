@@ -131,7 +131,13 @@ test.beforeAll(async () => {
     },
   );
   adminVite = start(
-    ["node_modules/vite/bin/vite.js", "--host", "localhost", "--port", "3446"],
+    [
+      "node_modules/vite/bin/vite.js",
+      "--host",
+      "localhost",
+      "--port",
+      new URL(adminOrigin).port,
+    ],
     {
       cwd: resolve("apps/admin"),
       env: {

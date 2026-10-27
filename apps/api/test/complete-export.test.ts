@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
 import {
@@ -1013,5 +1013,501 @@ test("an unused derived-photo retention category does not block an otherwise com
     );
   } finally {
     t.mock.timers.reset();
+  }
+});
+
+import http from "node:http";
+import { formUpload, syntheticAudio, state } from "./book-fixture";
+import { ProductionTasks } from "../src/tasks/tasks";
+async function largeExportSources(
+  projectId: string,
+  token: string,
+  assistedSessionId?: string,
+) {
+  const session = assistedSessionId ? { assistedSessionId } : {},
+    interview = data(
+      await request("POST", `/v1/projects/${projectId}/interviews`, token, {
+        clientInterviewId: randomUUID(),
+        expectedPlanRevision: 1,
+        starterKind: "free-narration",
+        ...session,
+      }),
+    ),
+    base = `/v1/projects/${projectId}/interviews/${interview.id}/clips`,
+    paddingBytes = 1800000,
+    header = Buffer.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0]);
+  for (let index = 0; index < 4; index++)
+    header[6 + index] = (paddingBytes >> (7 * (3 - index))) & 0x7f;
+  const audio = Buffer.concat([
+    header,
+    Buffer.alloc(paddingBytes),
+    syntheticAudio(),
+  ]);
+  // Four independently validated MP3s make the ZIP larger than local socket buffers.
+  for (let index = 0; index < 4; index++) {
+    const clip = data(
+      await request("POST", base, token, {
+        clientClipId: randomUUID(),
+        bytes: audio.length,
+        sha256: createHash("sha256").update(audio).digest("hex"),
+        ...session,
+      }),
+    );
+    const form = data(
+      await request("POST", `${base}/${clip.id}/upload`, token, session),
+    );
+    assert.equal(
+      (await formUpload(app, form, audio, {}, token)).statusCode,
+      204,
+    );
+    data(await request("POST", `${base}/${clip.id}/seal`, token, session));
+  }
+  const tasks = data(
+    await request("POST", `/v1/projects/${projectId}/tasks/status`, token, {
+      interviewId: interview.id,
+      ...session,
+    }),
+  );
+  for (const task of tasks) {
+    await app.get(ProductionTasks).run(task.id);
+    await app.get(ProductionTasks).run(task.id);
+  }
+}
+async function pausedZip(url: string, headers: Record<string, string>) {
+  if (!app.getHttpServer().listening) await app.listen(0, "127.0.0.1");
+  const server = await app.getUrl();
+  const response = await new Promise<http.IncomingMessage>((resolve, reject) =>
+    http.get(`${server}${url}`, { headers }, resolve).on("error", reject),
+  );
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers["content-type"], "application/zip");
+  const chunks: Buffer[] = [];
+  await new Promise<void>((resolve, reject) =>
+    response
+      .once("data", (chunk) => {
+        chunks.push(chunk);
+        response.pause();
+        resolve();
+      })
+      .once("error", reject),
+  );
+  const completed = new Promise<boolean>((resolve) => {
+    response.once("aborted", () => resolve(false));
+    response.once("end", () => resolve(true));
+    response.on("error", () => {});
+  });
+  return {
+    response,
+    async finish() {
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.resume();
+      return { completed: await completed, bytes: Buffer.concat(chunks) };
+    },
+  };
+}
+test("the product ZIP stream stops after committed withdrawal while the receiver is backpressured", async () => {
+  const p = await acceptedBook();
+  await largeExportSources(p.projectId, p.narrator.token);
+  const packed = data(
+      await adminRequest("POST", p.exportBase + "/pack", p.admin, {}),
+    ),
+    url = `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
+    stream = await pausedZip(url, {
+      authorization: `Bearer ${p.narrator.token}`,
+    });
+  try {
+    assert.equal(
+      Number(stream.response.headers["content-length"]),
+      packed.bytes,
+    );
+    data((await choose(p, p.narrator.token, "collection", false)).response);
+    const received = await stream.finish();
+    assert.equal(received.completed, false);
+    assert.ok(received.bytes.length < packed.bytes);
+    assert.equal((await request("GET", url, p.narrator.token)).statusCode, 403);
+  } finally {
+    stream.response.destroy();
+  }
+});
+async function assistedExportChoice(
+  p: { projectId: string; buyer: { token: string } },
+  purpose: string,
+  granted: boolean,
+) {
+  const current = await state(p, p.buyer.token),
+    sessions = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/assisted-sessions`,
+        p.buyer.token,
+      ),
+      200,
+    ).sessions,
+    latest = sessions.find(
+      (row: { purpose: string }) => row.purpose === purpose,
+    );
+  return request(
+    "POST",
+    `/v1/projects/${p.projectId}/assisted-sessions`,
+    p.buyer.token,
+    {
+      purpose,
+      granted,
+      noticeVersion: "synthetic-d08-v1",
+      evidenceRef: `synthetic:export-stream-scope-${randomUUID()}`,
+      expectedBindingVersion: current.bindingVersion,
+      expectedAccessEpoch: current.accessEpoch,
+      ...(latest ? { expectedSessionId: latest.id } : {}),
+    },
+  );
+}
+async function acceptedAlternativeExport() {
+  const p = await project(),
+    collection = data(await assistedExportChoice(p, "collection", true));
+  data(await assistedExportChoice(p, "ai", true));
+  await largeExportSources(p.projectId, p.buyer.token, collection.id);
+  const admin = await paymentAdmin(config, app, ["care:write"]),
+    current = await state(p, p.buyer.token),
+    exp = data(
+      await adminRequest(
+        "POST",
+        `/v1/admin/projects/${p.projectId}/care-requests`,
+        admin,
+        {
+          kind: "export",
+          expectedBindingVersion: current.bindingVersion,
+        },
+      ),
+    ),
+    base = `/v1/admin/care-requests/${exp.id}/export`;
+  data(
+    await adminRequest(
+      "POST",
+      `/v1/admin/care-requests/${exp.id}/verify`,
+      admin,
+      {
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:核验本人及替代交付完整范围",
+      },
+    ),
+  );
+  data(
+    await adminRequest("POST", base + "/accept", admin, {
+      dueAt: new Date(Date.now() + 86400000).toISOString(),
+      evidenceRef: "synthetic:替代交付处理日历和期限",
+      recipientRef: "synthetic:本人指定的替代接收人和渠道",
+    }),
+  );
+  return { ...p, exp, base, admin };
+}
+async function alternativeExport() {
+  const p = await acceptedAlternativeExport(),
+    packed = data(await adminRequest("POST", p.base + "/pack", p.admin, {}));
+  return { ...p, packed };
+}
+async function alternativeWithdrawal(
+  p: Awaited<ReturnType<typeof alternativeExport>>,
+) {
+  const current = await state(p, p.buyer.token),
+    care = data(
+      await adminRequest(
+        "POST",
+        `/v1/admin/projects/${p.projectId}/care-requests`,
+        p.admin,
+        {
+          kind: "withdraw",
+          purpose: "collection",
+          expectedBindingVersion: current.bindingVersion,
+        },
+      ),
+    );
+  data(
+    await adminRequest(
+      "POST",
+      `/v1/admin/care-requests/${care.id}/verify`,
+      p.admin,
+      {
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:本人替代渠道撤回核验",
+      },
+    ),
+  );
+}
+test("the verified alternative ZIP stream stops after the subject's committed withdrawal", async () => {
+  const p = await alternativeExport(),
+    stream = await pausedZip(p.base + "/download", p.admin);
+  try {
+    assert.equal(
+      Number(stream.response.headers["content-length"]),
+      p.packed.bytes,
+    );
+    await alternativeWithdrawal(p);
+    const received = await stream.finish();
+    assert.equal(received.completed, false);
+    assert.ok(received.bytes.length < p.packed.bytes);
+    assert.equal(
+      (await adminRequest("GET", p.base + "/download", p.admin)).statusCode,
+      403,
+    );
+  } finally {
+    stream.response.destroy();
+  }
+});
+async function productExportStream() {
+  const p = await acceptedBook();
+  await largeExportSources(p.projectId, p.narrator.token);
+  return {
+    ...p,
+    packed: data(
+      await adminRequest("POST", p.exportBase + "/pack", p.admin, {}),
+    ),
+    url: `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
+    headers: { authorization: `Bearer ${p.narrator.token}` },
+  };
+}
+async function streamExport(channel: "product" | "alternative") {
+  if (channel === "product") return productExportStream();
+  const p = await alternativeExport();
+  return { ...p, url: p.base + "/download", headers: p.admin };
+}
+async function pendingStreamExport(channel: "product" | "alternative") {
+  if (channel === "product") {
+    const p = await acceptedBook();
+    await largeExportSources(p.projectId, p.narrator.token);
+    return {
+      ...p,
+      caseBase: p.exportBase,
+      url: `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
+      headers: { authorization: `Bearer ${p.narrator.token}` },
+    };
+  }
+  const p = await acceptedAlternativeExport();
+  return {
+    ...p,
+    caseBase: p.base,
+    url: p.base + "/download",
+    headers: p.admin,
+  };
+}
+async function rebindExport(p: Awaited<ReturnType<typeof streamExport>>) {
+  const current = await state(p, p.buyer.token),
+    next = await login(),
+    care = data(
+      await adminRequest(
+        "POST",
+        `/v1/admin/projects/${p.projectId}/care-requests`,
+        p.admin,
+        {
+          kind: "rebind",
+          expectedBindingVersion: current.bindingVersion,
+          targetUserId: next.id,
+        },
+      ),
+    );
+  data(
+    await adminRequest(
+      "POST",
+      `/v1/admin/projects/${p.projectId}/rebind`,
+      p.admin,
+      {
+        supportCaseRef: `record:${care.id}`,
+        targetUserId: next.id,
+        expectedBindingVersion: current.bindingVersion,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:活动导出流期间换绑",
+      },
+    ),
+  );
+}
+for (const channel of ["product", "alternative"] as const) {
+  test(`${channel} ZIP stream rechecks subject binding after its first bytes`, async () => {
+    const p = await streamExport(channel),
+      stream = await pausedZip(p.url, p.headers);
+    try {
+      await rebindExport(p);
+      const received = await stream.finish();
+      assert.equal(received.completed, false);
+      assert.ok(received.bytes.length < p.packed.bytes);
+      assert.equal(
+        (await app.inject({ method: "GET", url: p.url, headers: p.headers }))
+          .statusCode,
+        403,
+      );
+    } finally {
+      stream.response.destroy();
+    }
+  });
+  test(`${channel} ZIP stream stops exactly at its package deadline during backpressure`, async (t) => {
+    const p = await streamExport(channel),
+      end = Date.parse(p.packed.expiresAt);
+    await db.session.updateMany({
+      data: { expiresAt: new Date(end + 86400000) },
+    });
+    await db.adminSession.updateMany({
+      data: { expiresAt: new Date(end + 86400000) },
+    });
+    const stream = await pausedZip(p.url, p.headers);
+    t.mock.timers.enable({ apis: ["Date"], now: end });
+    try {
+      await new Promise<void>((resolve) => setTimeout(resolve, 150));
+      const received = await stream.finish();
+      assert.equal(received.completed, false);
+      assert.ok(received.bytes.length < p.packed.bytes);
+      assert.equal(
+        (await app.inject({ method: "GET", url: p.url, headers: p.headers }))
+          .statusCode,
+        403,
+      );
+    } finally {
+      stream.response.destroy();
+      t.mock.timers.reset();
+    }
+  });
+  test(`${channel} ZIP stream stops when a represented source category expires before the package deadline`, async (t) => {
+    const p = await pendingStreamExport(channel);
+    const terms = new ProjectServiceTerms(config.databaseUrl),
+      deliveredAt = new Date(),
+      end = deliveredAt.getTime() + 400 * 86400000;
+    await terms.recordFact({
+      projectId: p.projectId,
+      eventId: `active-export-category:${randomUUID()}`,
+      kind: "delivery_completed",
+      occurredAt: deliveredAt,
+    });
+    await terms.close();
+    await db.session.updateMany({
+      data: { expiresAt: new Date(end + 86400000) },
+    });
+    await db.adminSession.updateMany({
+      data: { expiresAt: new Date(end + 86400000) },
+    });
+    t.mock.timers.enable({ apis: ["Date"], now: end - 1 });
+    let stream: Awaited<ReturnType<typeof pausedZip>> | undefined;
+    try {
+      const packed = data(
+        await adminRequest("POST", p.caseBase + "/pack", p.admin, {}),
+      );
+      assert.equal(packed.state, "ready");
+      assert.ok(Date.parse(packed.expiresAt) > end);
+      stream = await pausedZip(p.url, p.headers);
+      t.mock.timers.setTime(end);
+      await new Promise<void>((resolve) => setTimeout(resolve, 150));
+      const received = await stream.finish();
+      assert.equal(received.completed, false);
+      assert.ok(received.bytes.length < packed.bytes);
+      assert.equal(
+        (await app.inject({ method: "GET", url: p.url, headers: p.headers }))
+          .statusCode,
+        403,
+      );
+      const asset = await db.recordingAsset.findFirstOrThrow({
+        where: { projectId: p.projectId },
+      });
+      await access(join(root, "objects", asset.objectKey));
+    } finally {
+      stream?.response.destroy();
+      t.mock.timers.reset();
+    }
+  });
+}
+test("alternative ZIP stream rechecks the current administrator session after its first bytes", async () => {
+  const p = await alternativeExport(),
+    stream = await pausedZip(p.base + "/download", p.admin);
+  try {
+    const loggedOut = await adminRequest(
+      "POST",
+      "/v1/admin/logout",
+      p.admin,
+      {},
+    );
+    assert.equal(loggedOut.statusCode, 204, loggedOut.body);
+    const received = await stream.finish();
+    assert.equal(received.completed, false);
+    assert.ok(received.bytes.length < p.packed.bytes);
+    assert.equal(
+      (await adminRequest("GET", p.base + "/download", p.admin)).statusCode,
+      401,
+    );
+  } finally {
+    stream.response.destroy();
+  }
+});
+test("replaying an old assisted revocation leaves the newly authorized same-epoch ZIP stream intact", async () => {
+  const p = await alternativeExport(),
+    originalEpoch = (await state(p, p.buyer.token)).accessEpoch,
+    original = await pausedZip(p.base + "/download", p.admin);
+  let fresh: Awaited<ReturnType<typeof pausedZip>> | undefined;
+  await db.$executeRawUnsafe(
+    "CREATE FUNCTION reject_t25_stream_followup() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic delayed export followup'; END $$",
+  );
+  await db.$executeRawUnsafe(
+    "CREATE TRIGGER reject_t25_stream_followup BEFORE UPDATE ON project_access_revocations FOR EACH ROW EXECUTE FUNCTION reject_t25_stream_followup()",
+  );
+  try {
+    assert.equal(
+      (await assistedExportChoice(p, "collection", false)).statusCode,
+      500,
+    );
+    data(await assistedExportChoice(p, "collection", true));
+    assert.equal((await state(p, p.buyer.token)).accessEpoch, originalEpoch);
+    fresh = await pausedZip(p.base + "/download", p.admin);
+    await db.$executeRawUnsafe(
+      "DROP TRIGGER reject_t25_stream_followup ON project_access_revocations",
+    );
+    await db.$executeRawUnsafe("DROP FUNCTION reject_t25_stream_followup()");
+    const status = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/withdrawal-status`,
+        p.buyer.token,
+      ),
+      200,
+    );
+    assert.equal(status.changes[0].applied, true);
+    assert.equal((await original.finish()).completed, false);
+    const received = await fresh.finish();
+    assert.equal(
+      received.completed,
+      true,
+      "old sequence must not abort a new authorized stream in the same epoch",
+    );
+    assert.equal(received.bytes.length, p.packed.bytes);
+    assert.equal(
+      createHash("sha256").update(received.bytes).digest("hex"),
+      p.packed.sha256,
+    );
+  } finally {
+    original.response.destroy();
+    fresh?.response.destroy();
+    await db.$executeRawUnsafe(
+      "DROP TRIGGER IF EXISTS reject_t25_stream_followup ON project_access_revocations",
+    );
+    await db.$executeRawUnsafe(
+      "DROP FUNCTION IF EXISTS reject_t25_stream_followup()",
+    );
+  }
+});
+test("withdrawal in a separate project does not interrupt a currently authorized ZIP stream", async () => {
+  const p = await productExportStream(),
+    unrelated = await bound(),
+    stream = await pausedZip(p.url, p.headers);
+  try {
+    data(
+      (await choose(unrelated, unrelated.narrator.token, "collection", false))
+        .response,
+    );
+    const received = await stream.finish();
+    assert.equal(received.completed, true);
+    assert.equal(received.bytes.length, p.packed.bytes);
+    assert.equal(
+      createHash("sha256").update(received.bytes).digest("hex"),
+      p.packed.sha256,
+    );
+  } finally {
+    stream.response.destroy();
   }
 });

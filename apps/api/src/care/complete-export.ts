@@ -49,6 +49,7 @@ import { Participation } from "../identity/participation";
 import { IdentityAccess } from "../identity/identity-access";
 import { ProjectServiceTerms } from "../projects/service-terms";
 import { idempotencyKey } from "../payments/orders";
+import { ProjectStreams } from "../media/project-streams";
 const digest = (v: unknown) =>
   createHash("sha256").update(JSON.stringify(v)).digest("hex");
 export class ExportRequestDto {
@@ -1049,7 +1050,10 @@ export class CompleteExports implements OnModuleDestroy {
 @ApiTags("Complete export")
 @ApiBearerAuth()
 export class CompleteExportsController {
-  constructor(private readonly exports: CompleteExports) {}
+  constructor(
+    private readonly exports: CompleteExports,
+    private readonly streams: ProjectStreams,
+  ) {}
   @Post(":caseId/receipt")
   @Header("Cache-Control", "no-store")
   @ApiHeader({ name: "Idempotency-Key", required: true })
@@ -1079,6 +1083,7 @@ export class CompleteExportsController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
+    const fence = await this.streams.userFence(id, req.headers.authorization);
     const file = await this.exports.download(
       id,
       caseId,
@@ -1092,7 +1097,16 @@ export class CompleteExportsController {
       )
       .header("X-Content-Type-Options", "nosniff")
       .type("application/zip")
-      .send(file.bytes);
+      .send(
+        await this.streams.guard(
+          id,
+          fence.epoch,
+          file.bytes,
+          file.check,
+          req.headers.authorization,
+          fence.sequence,
+        ),
+      );
   }
   @Get() @Header("Cache-Control", "no-store") async read(
     @Param("id", new ParseUUIDPipe()) id: string,
@@ -1130,6 +1144,7 @@ export class AdminCompleteExportsController {
   constructor(
     private readonly exports: CompleteExports,
     private readonly access: AdminAccess,
+    private readonly streams: ProjectStreams,
   ) {}
   private run<T>(
     req: FastifyRequest,
@@ -1245,19 +1260,30 @@ export class AdminCompleteExportsController {
       req,
       "care.export.alternative-download",
       async (admin) => {
-        const before = await this.command(req, (tx) =>
-          this.exports.alternativeDownloadIn(tx, id, admin),
-        );
+        const check = () =>
+            this.command(req, (tx) =>
+              this.exports.alternativeDownloadIn(tx, id, admin),
+            ),
+          before = await check(),
+          fence = await this.streams.fence(before.projectId);
         const bytes = await this.exports.readPackage(before);
-        const after = await this.command(req, (tx) =>
-          this.exports.alternativeDownloadIn(tx, id, admin),
-        );
+        const after = await check();
         if (
           before.objectKey !== after.objectKey ||
           before.sha256 !== after.sha256
         )
           throw new ForbiddenException();
-        return bytes;
+        return {
+          length: bytes.length,
+          stream: await this.streams.guard(
+            before.projectId,
+            fence.epoch,
+            bytes,
+            check,
+            undefined,
+            fence.sequence,
+          ),
+        };
       },
     );
     reply
@@ -1267,7 +1293,7 @@ export class AdminCompleteExportsController {
         `attachment; filename="complete-export-${id}.zip"`,
       )
       .type("application/zip")
-      .send(result);
+      .send(result.stream);
   }
   @Post("exports/cleanup") @Header("Cache-Control", "no-store") async cleanup(
     @Req() req: FastifyRequest,

@@ -38,7 +38,7 @@
 
 `CompleteExports.cleanupExpired()` 由 T15 Worker 每次 `recoverDue()` 以及受控清理入口补扫到期和孤儿 ZIP。原始资料仍按自己的保留/删除台账处理，包清理不删除原始资产。T26 可调用 `CompleteExports.purgeProject(projectId)`：访问撤销提交后，撤销包状态、增加 fence、清空内容 manifest 并删除包及孤儿文件。存储位置为 `books.storageRoot/exports/<caseId>-<fence>.zip`，路径只由服务端固定 ID 生成并校验。已传输字节、已导出副本及纸书不能远程收回。
 
-T24 的跨进程活动流终止由 T24 责任票提供；本票独立基线先实现完成/下载两端重验，组合后须复验流式传输联动，不能用上述前后检查冒充活动流终止。
+已消费 T24 [PR #61](https://github.com/brycezhang/timenook/pull/61) / main `78ccf6d` 的 `ProjectStreams`。用户入口在包文件 I/O 前捕获 `userFence`，替代交付在管理员核验后、文件 I/O 前捕获 `fence`，将原 epoch 和撤回序号交给同一 `guard`。已核对大小/hash的有界 ZIP 保留完整 Content-Length，按最多64KiB发送；每块及背压空闲每100ms重验当前会话、主体/绑定/epoch、确切版本和实际资料类别及包期限，替代交付另重验核验管理员的当前权限。撤回、换绑、到期或管理员退出会中止活动流；旧序号的补扫不终止新授权后同 epoch 的流，也不影响其他项目。范围与共享机制见[撤回与活动访问](development-withdrawal.md)。这仍不能收回已传输字节或用户主动保存的副本。
 
 ## 复现
 
