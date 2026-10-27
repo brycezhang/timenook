@@ -185,6 +185,13 @@ export class SessionClient {
       `/projects/${projectId}/book/versions/${versionId}/pdf`,
     );
   }
+  async downloadExport(projectId: string, caseId: string) {
+    if (![projectId, caseId].every((id) => /^[a-f0-9-]{36}$/.test(id)))
+      throw new ApiFailure("INVALID_RESPONSE");
+    return this.downloadContent(
+      `/projects/${projectId}/exports/${caseId}/download`,
+    );
+  }
   async downloadBookAudio(entryId: string, clipId: string, epoch: number) {
     if (
       !/^[A-Za-z0-9_-]{22}$/.test(entryId) ||

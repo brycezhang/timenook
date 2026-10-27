@@ -1,0 +1,30 @@
+.export-page {
+  font-size: 20px;
+  line-height: 1.7;
+  padding-bottom: 48px;
+}
+.export-page .btn {
+  min-height: 48px;
+  min-width: 48px;
+  font-size: 20px;
+  white-space: normal;
+}
+.export-page .card {
+  padding: 20px;
+  border: 1px solid #d9cdbc;
+  border-radius: 16px;
+  background: #fffdf8;
+  overflow-wrap: anywhere;
+}
+.export-page textarea {
+  width: 100%;
+  min-height: 110px;
+  font-size: 20px;
+}
+.export-page .note {
+  font-size: 18px;
+}
+.export-page .hash {
+  font-size: 16px;
+  word-break: break-all;
+}

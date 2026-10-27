@@ -14,6 +14,40 @@ const client = new RequestClient({
   baseURL: "/timenook/v1/admin",
   withCredentials: true,
 });
+import type { CompleteExportView } from "@timenook/contracts";
+export const completeExportApi = {
+  async read(id: string) {
+    return (
+      await client.get<ApiResponse<CompleteExportView | null>>(
+        `/care-requests/${id}/export`,
+      )
+    ).data;
+  },
+  async command(
+    id: string,
+    action: "accept" | "pack" | "delivery",
+    body: object,
+    key: string,
+    csrf: string,
+  ) {
+    return (
+      await client.post<ApiResponse<CompleteExportView>>(
+        `/care-requests/${id}/export/${action}`,
+        body,
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
+  async download(id: string) {
+    const r = await fetch(
+      `/timenook/v1/admin/care-requests/${id}/export/download`,
+      { credentials: "same-origin", cache: "no-store" },
+    );
+    if (!r.ok)
+      throw await r.json().catch(() => ({ error: { code: "UNAVAILABLE" } }));
+    return r.arrayBuffer();
+  },
+};
 client.addResponseInterceptor({ fulfilled: (response) => response.data });
 export const adminApi = {
   async session() {
