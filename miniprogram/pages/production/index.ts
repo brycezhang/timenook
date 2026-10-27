@@ -319,4 +319,9 @@ Page({
   book() {
     go("book", `projectId=${this.projectId}`);
   },
+  quality() {
+    const orderId = this.data.view?.paymentOrderId;
+    if (!this.data.busy && orderId && this.current(this.generation, this.owner))
+      go("quality", `orderId=${orderId}&projectId=${this.projectId}`);
+  },
 });

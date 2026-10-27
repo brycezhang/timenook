@@ -110,6 +110,54 @@ export const refundApi = {
     ).data;
   },
 };
+import type { QualityRequestView, QualityMaterials } from "@timenook/contracts";
+export const qualityApi = {
+  async read(caseId: string) {
+    return (
+      await client.get<ApiResponse<QualityRequestView>>(
+        `/quality/cases/${encodeURIComponent(caseId)}`,
+      )
+    ).data;
+  },
+  async command(
+    caseId: string,
+    action: "assign" | "review" | "reprints",
+    body: object,
+    key: string,
+    csrf: string,
+  ) {
+    return (
+      await client.post<ApiResponse<QualityRequestView>>(
+        `/quality/cases/${encodeURIComponent(caseId)}/${action}`,
+        body,
+        { headers: { "Idempotency-Key": key, "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
+  async materials(caseId: string, csrf: string) {
+    return (
+      await client.get<ApiResponse<QualityMaterials>>(
+        `/quality/cases/${encodeURIComponent(caseId)}/materials`,
+        { headers: { "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
+  async pdf(caseId: string, csrf: string) {
+    const response = await fetch(
+      `/timenook/v1/admin/quality/cases/${encodeURIComponent(caseId)}/pdf`,
+      {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "X-CSRF-Token": csrf },
+      },
+    );
+    if (!response.ok)
+      throw await response
+        .json()
+        .catch(() => ({ error: { code: "UNAVAILABLE" } }));
+    return response.arrayBuffer();
+  },
+};
 
 import type {
   ManagedRecipientType,

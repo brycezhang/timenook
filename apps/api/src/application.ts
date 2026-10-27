@@ -1,4 +1,9 @@
 import {
+  QualityCare,
+  QualityCareController,
+  AdminQualityCareController,
+} from "./care/quality-care";
+import {
   Fulfillment,
   FulfillmentController,
   AdminFulfillmentController,
@@ -406,6 +411,8 @@ export async function createApplication(
             StoriesController,
             ...(config.books
               ? [
+                  QualityCareController,
+                  AdminQualityCareController,
                   BooksController,
                   CompleteExportsController,
                   AdminCompleteExportsController,
@@ -454,6 +461,7 @@ export async function createApplication(
         ? [
             ...(config.books
               ? [
+                  QualityCare,
                   Books,
                   FirstCopies,
                   CompleteExports,

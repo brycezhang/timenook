@@ -137,6 +137,13 @@ test("production Page reads the server's pending handoff and never invents suppl
   assert.match(h.page.data.cancellationNotice, /人工核实/);
   h.page.onUnload();
 });
+test("production Page opens quality care for the original payment order without asking for technical identifiers", async () => {
+  const h = await harness(); h.page.onLoad({ projectId });
+  const shown = h.page.onShow(); h.respond(0, { ...summary(), paymentOrderId: orderId }); await shown;
+  h.page.quality();
+  assert.equal(h.routes[0], `/pages/quality/index?orderId=${orderId}&projectId=${projectId}`);
+  h.page.onUnload();
+});
 
 test("production Page clears private progress at access expiry and ignores a response after departure", async () => {
   const h = await harness();

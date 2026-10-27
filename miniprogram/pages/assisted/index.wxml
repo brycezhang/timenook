@@ -8,10 +8,10 @@
   <button class="btn secondary section" disabled="{{busy}}" bindtap="refresh">重新查询协助与工单状态</button>
   <block wx:if="{{participation}}">
     <view wx:if="{{storyPurpose || bookPurpose}}" class="paper section">
-      <view class="section-title">仅本次{{bookPurpose ? '书稿' : '故事'}}确认协助</view>
-      <view class="note section">请本人选择是否由发起人操作设备核对{{bookPurpose ? '这一版完整书稿' : '这篇故事'}}。返回后仍须核对{{bookPurpose ? '完整 PDF，决定是否确认本版内容' : '全文，分别决定确认内容和允许入书'}}，并记录当次独立说明。采集许可不能代替这一选择。</view>
+      <view class="section-title">{{qualityPurpose ? '仅本次质量售后资料授权协助' : bookPurpose ? '仅本次书稿确认协助' : '仅本次故事确认协助'}}</view>
+      <view wx:if="{{qualityPurpose}}" class="note section">请本人选择是否在场由发起人操作设备。返回售后后仍须本人明确选择向本工单负责人提供哪些资料及有效期；此选择不代替书稿内容确认，也不向发起人开放私人资料。</view><view wx:else="" class="note section">请本人选择是否由发起人操作设备核对{{bookPurpose ? '这一版完整书稿' : '这篇故事'}}。返回后仍须核对{{bookPurpose ? '完整 PDF，决定是否确认本版内容' : '全文，分别决定确认内容和允许入书'}}，并记录当次独立说明。采集许可不能代替这一选择。</view>
       <textarea class="story-evidence section" value="{{storyEvidence}}" bindinput="storyEvidence" auto-height="{{true}}" maxlength="160" placeholder="记录本人本次选择同机协助核对的说明" />
-      <button class="btn section" data-granted="true" bindtap="startStoryConfirmation" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">本人同意当次{{bookPurpose ? '书稿' : '故事'}}确认协助，返回{{bookPurpose ? '书稿确认' : '故事'}}</button>
+      <button class="btn section" data-granted="true" bindtap="startStoryConfirmation" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">{{qualityPurpose ? '本人同意当次售后授权协助，返回售后' : bookPurpose ? '本人同意当次书稿确认协助，返回书稿确认' : '本人同意当次故事确认协助，返回故事'}}</button>
       <button class="btn secondary section" data-granted="false" bindtap="startStoryConfirmation" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">本人拒绝这次{{bookPurpose ? '书稿' : '故事'}}确认协助</button>
     </view>
     <view class="note section">三项用途分别选择；可以拒绝或申请撤回。故事与书稿须在看过或听读实际版本后另行确认，每次重新留证。</view>
@@ -32,7 +32,7 @@
       <button class="btn secondary section" bindtap="requestRight" data-kind="withdraw" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">记录本人撤回申请</button>
       <button class="btn secondary section" bindtap="requestRight" data-kind="export" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">记录本人完整资料导出申请</button>
       <button class="btn secondary section" bindtap="requestRight" data-kind="delete" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">记录本人删除申请</button>
-      <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="note">工单 record:{{item.id}}</view><view>{{item.kind === 'withdraw' ? '撤回' : item.kind === 'export' ? '资料导出' : item.kind === 'delete' ? '删除' : item.kind === 'correction' ? '故事限时校对' : item.kind === 'production_handoff' ? '生产交接' : item.kind === 'first_copy_expiry' ? '制作期限审核' : item.kind === 'refund' ? '退款' : '本人账号绑定'}}：{{item.state === 'open' ? '待客服核验' : item.kind === 'rebind' ? '账号绑定已完成' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : '已核验，后续交付或执行待完成'}}</view></view>
+      <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="note">工单 record:{{item.id}}</view><view>{{item.kind === 'withdraw' ? '撤回' : item.kind === 'export' ? '资料导出' : item.kind === 'delete' ? '删除' : item.kind === 'correction' ? '故事限时校对' : item.kind === 'production_handoff' ? '生产交接' : item.kind === 'first_copy_expiry' ? '制作期限审核' : item.kind === 'quality' ? '质量售后' : item.kind === 'refund' ? '退款' : '本人账号绑定'}}：{{item.state === 'open' ? '待客服核验' : item.kind === 'rebind' ? '账号绑定已完成' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : '已核验，后续交付或执行待完成'}}</view></view>
     </view>
   </block>
   <button wx:if="{{participation}}" class="btn secondary section" bindtap="plan" disabled="{{busy}}">编辑个人大纲与问题</button>

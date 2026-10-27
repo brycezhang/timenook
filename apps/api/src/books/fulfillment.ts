@@ -174,7 +174,13 @@ export class Fulfillment implements OnModuleDestroy {
       addressHash: order.addressHash,
     };
   }
-  private matches(order: FirstCopyOrder, body: FirstCopyBinding) {
+  private matches(
+    order: Pick<
+      FirstCopyOrder,
+      "bookId" | "snapshotHash" | "pdfHash" | "addressHash"
+    >,
+    body: FirstCopyBinding,
+  ) {
     if (
       digest(this.binding(order)) !==
       digest({
@@ -273,6 +279,7 @@ export class Fulfillment implements OnModuleDestroy {
     return {
       projectId,
       orderId: order?.id ?? null,
+      paymentOrderId: order?.paymentOrderId ?? null,
       approvedSupplierRef: order ? await this.supplierIn(tx, order) : null,
       entitlementState:
         (await tx.firstCopyEntitlement.findUnique({ where: { projectId } }))
@@ -291,7 +298,7 @@ export class Fulfillment implements OnModuleDestroy {
       canGrant:
         !!actor &&
         attempts[0]?.state === "approved" &&
-        terms.creation?.state === "active",
+        (!!rows[0]?.qualityRequestId || terms.creation?.state === "active"),
     };
   }
   progress(projectId: string, authorization?: string) {
@@ -318,7 +325,17 @@ export class Fulfillment implements OnModuleDestroy {
     order: FirstCopyOrder,
     operatorId: string,
     key: string,
+    attempt?: import("@prisma/client").FulfillmentAttempt,
   ) {
+    if (attempt?.qualityRequestId) {
+      await this.copies.qualityReviewIn(
+        tx,
+        attempt.qualityRequestId,
+        this.binding(attempt),
+        operatorId,
+      );
+      return true;
+    }
     await this.copies.approveIn(
       tx,
       order.id,
@@ -427,6 +444,90 @@ export class Fulfillment implements OnModuleDestroy {
     await this.command(tx, order, operatorId, "attempt", key, body, attemptId);
     return this.view(tx, order.projectId);
   }
+  async createQualityIn(
+    tx: Tx,
+    requestId: string,
+    body: FirstCopyBinding,
+    operatorId: string,
+    key: string,
+  ) {
+    const quality = await tx.qualityRequest.findUniqueOrThrow({
+        where: { id: requestId },
+      }),
+      order = await this.order(tx, quality.productionOrderId),
+      frozen = await this.copies.qualityReviewIn(
+        tx,
+        requestId,
+        body,
+        operatorId,
+      ),
+      supplierRef = await this.supplierIn(tx, order);
+    if (!supplierRef || !quality.dueAt)
+      throw new ConflictException(
+        "Purchased supplier and assigned deadline required",
+      );
+    if (
+      await tx.fulfillmentAttempt.findFirst({
+        where: {
+          orderId: order.id,
+          state: { notIn: ["cancelled", "delivered"] },
+        },
+      })
+    )
+      throw new ConflictException("An active original-order handoff remains");
+    const latest = await tx.fulfillmentAttempt.findFirst({
+        where: { orderId: order.id },
+        orderBy: { sequence: "desc" },
+      }),
+      attemptId = randomUUID(),
+      caseId = randomUUID(),
+      project = await tx.project.findUniqueOrThrow({
+        where: { id: order.projectId },
+      }),
+      subject = await tx.projectSubject.findUniqueOrThrow({
+        where: { projectId: order.projectId },
+      });
+    await tx.careRequest.create({
+      data: {
+        id: caseId,
+        projectId: order.projectId,
+        requesterSubjectId: subject.id,
+        operatorId,
+        operatorRealm: "admin",
+        sourceBindingVersion: subject.bindingVersion,
+        sourceAccessEpoch: project.accessEpoch,
+        idempotencyKey: `production:${attemptId}`,
+        requestHash: digest(body),
+        kind: "production_handoff",
+      },
+    });
+    await tx.fulfillmentAttempt.create({
+      data: {
+        id: attemptId,
+        qualityRequestId: requestId,
+        ...frozen,
+        address: json(frozen.address),
+        orderId: order.id,
+        projectId: order.projectId,
+        sequence: (latest?.sequence ?? 0) + 1,
+        handoffId: randomUUID(),
+        caseId,
+        ownerAdminId: operatorId,
+        dueAt: quality.dueAt,
+        supplierRef,
+      },
+    });
+    await this.command(
+      tx,
+      order,
+      operatorId,
+      `quality:${requestId}`,
+      key,
+      body,
+      attemptId,
+    );
+    return attemptId;
+  }
   async grant(
     projectId: string,
     body: GrantDto,
@@ -442,12 +543,12 @@ export class Fulfillment implements OnModuleDestroy {
           where: { projectId },
         });
         if (!order) throw new NotFoundException();
-        this.matches(order, body);
         const attempt = await tx.fulfillmentAttempt.findFirst({
           where: { projectId, id: body.attemptId, orderId: order.id },
         });
         if (!attempt || attempt.state !== "approved")
           throw new ConflictException();
+        this.matches(attempt, body);
         const expiry = Date.parse(body.expiresAt);
         if (
           expiry <= Date.now() ||
@@ -480,6 +581,7 @@ export class Fulfillment implements OnModuleDestroy {
             order,
             attempt.ownerAdminId,
             `grant:${digest(key)}`,
+            attempt,
           ))
         )
           return this.view(tx, projectId, actor);
@@ -528,11 +630,14 @@ export class Fulfillment implements OnModuleDestroy {
     const { order, attempt } = await this.attemptIn(tx, id, attemptId);
     if (attempt.ownerAdminId !== operatorId || attempt.state !== "approved")
       throw new ForbiddenException();
-    if (attempt.reservationRevision !== order.reservationRevision)
+    if (
+      !attempt.qualityRequestId &&
+      attempt.reservationRevision !== order.reservationRevision
+    )
       throw new ConflictException(
         "Only the active frozen reservation may disclose materials",
       );
-    this.matches(order, this.binding(attempt));
+    if (!attempt.qualityRequestId) this.matches(order, this.binding(attempt));
     const grant = await tx.fulfillmentGrant.findFirst({
         where: { attemptId },
         orderBy: { sequence: "desc" },
@@ -557,13 +662,19 @@ export class Fulfillment implements OnModuleDestroy {
     )
       throw new ForbiddenException();
     if (
-      !(await this.preflight(tx, order, operatorId, `materials:${attemptId}`))
+      !(await this.preflight(
+        tx,
+        order,
+        operatorId,
+        `materials:${attemptId}`,
+        attempt,
+      ))
     )
       throw new ConflictException("Creation period requires manual review");
     const output = await tx.bookOutput.findUniqueOrThrow({
-      where: { bookId: order.bookId },
+      where: { bookId: attempt.bookId },
     });
-    if (output.sha256 !== order.pdfHash) throw new ConflictException();
+    if (output.sha256 !== attempt.pdfHash) throw new ConflictException();
     return {
       address: attempt.address as unknown as FirstCopyAddress,
       pdf: { sha256: output.sha256, bytes: output.bytes },
@@ -573,13 +684,15 @@ export class Fulfillment implements OnModuleDestroy {
   }
   async pdfIn(tx: Tx, id: string, attemptId: string, operatorId: string) {
     const materials = await this.materialsIn(tx, id, attemptId, operatorId),
-      order = await tx.firstCopyOrder.findUniqueOrThrow({ where: { id } }),
+      attempt = await tx.fulfillmentAttempt.findUniqueOrThrow({
+        where: { id: attemptId },
+      }),
       output = await tx.bookOutput.findUniqueOrThrow({
-        where: { bookId: order.bookId },
+        where: { bookId: attempt.bookId },
       });
     return {
       ...materials,
-      projectId: order.projectId,
+      projectId: attempt.projectId,
       path: join(this.config.books!.storageRoot, output.objectKey),
     };
   }
@@ -646,8 +759,8 @@ export class Fulfillment implements OnModuleDestroy {
       "handoff",
       {
         handoffId: attempt.handoffId,
-        pdfHash: order.pdfHash,
-        addressHash: order.addressHash,
+        pdfHash: attempt.pdfHash,
+        addressHash: attempt.addressHash,
       },
       operatorId,
     );
@@ -783,18 +896,19 @@ export class Fulfillment implements OnModuleDestroy {
         where: { id: attemptId },
         data: { state: "cancelled", receiptRef: body.evidenceRef },
       });
-      await tx.firstCopyEntitlement.updateMany({
-        where: { id: order.entitlementId, state: "consumed" },
-        data: {
-          state: (
-            await tx.paymentOrder.findUniqueOrThrow({
-              where: { id: order.paymentOrderId },
-            })
-          ).firstCopyCancellationRequired
-            ? "revoked"
-            : "reserved",
-        },
-      });
+      if (!attempt.qualityRequestId)
+        await tx.firstCopyEntitlement.updateMany({
+          where: { id: order.entitlementId, state: "consumed" },
+          data: {
+            state: (
+              await tx.paymentOrder.findUniqueOrThrow({
+                where: { id: order.paymentOrderId },
+              })
+            ).firstCopyCancellationRequired
+              ? "revoked"
+              : "reserved",
+          },
+        });
       await tx.careRequest.update({
         where: { id: attempt.caseId },
         data: { state: "completed", completedBy: operatorId },
@@ -895,6 +1009,36 @@ export class Fulfillment implements OnModuleDestroy {
     const existing = await tx.fulfillmentDelivery.findUnique({
       where: { orderId: id },
     });
+    if (existing && attempt.qualityRequestId) {
+      if (attempt.state === "delivered") {
+        const fact = await tx.fulfillmentRecord.findFirst({
+          where: { attemptId, kind: "delivery" },
+        });
+        if (!fact || !isDeepStrictEqual(fact.evidence, body))
+          throw new ConflictException("Delivery fact is immutable");
+        return this.view(tx, order.projectId);
+      }
+      if (attempt.state !== "shipped" || !attempt.tracking)
+        throw new ConflictException("Verified shipment required");
+      const occurredAt = this.occurred(
+        body.deliveredAt,
+        new Date((attempt.tracking as { shippedAt: string }).shippedAt),
+      );
+      await tx.fulfillmentAttempt.update({
+        where: { id: attemptId },
+        data: { state: "delivered", deliveredAt: occurredAt },
+      });
+      const quality = await tx.qualityRequest.update({
+        where: { id: attempt.qualityRequestId },
+        data: { state: "completed", version: { increment: 1 } },
+      });
+      await tx.careRequest.updateMany({
+        where: { id: { in: [attempt.caseId, quality.caseId] } },
+        data: { state: "completed", completedBy: operatorId },
+      });
+      await this.record(tx, attemptId, "delivery", body, operatorId);
+      return this.view(tx, order.projectId);
+    }
     if (existing) {
       if (
         existing.attemptId !== attemptId ||

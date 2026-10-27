@@ -17,6 +17,7 @@
     "pages/production/index",
     "pages/order/index",
     "pages/refunds/index",
+    "pages/quality/index",
     "pages/account/index",
     "pages/settings/index",
     "pages/service/index",
