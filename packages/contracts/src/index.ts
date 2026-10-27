@@ -138,3 +138,5 @@ export * from "./books";
 
 export * from "./fulfillment";
 export * from "./refunds";
+
+export * from "./quality-care";

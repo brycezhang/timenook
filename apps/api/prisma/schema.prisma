@@ -1307,3 +1307,32 @@ model FulfillmentRecord {
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@map("fulfillment_records")
 }
+
+model QualityRequest {
+ id String @id @db.Uuid
+ caseId String @unique @map("case_id") @db.Uuid
+ orderId String @map("order_id") @db.Uuid
+ productionOrderId String @map("production_order_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ originalAttemptId String @map("original_attempt_id") @db.Uuid
+ requesterId String @map("requester_id") @db.Uuid
+ reason String
+ state String @default("requested")
+ requestKey String @map("request_key")
+ requestHash String @map("request_hash") @db.Char(64)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([orderId,requesterId,requestKey])
+ @@unique([projectId,id])
+ @@index([projectId,createdAt])
+ @@map("quality_requests")
+}
+// T26 consumes this explicitly project-owned category. Facts are clearable;
+// immutable commands and audits retain only hashes and non-content references.
+model QualityEvidence {
+ requestId String @id @map("request_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ category String @default("quality_evidence")
+ description String?
+ erasedAt DateTime? @map("erased_at") @db.Timestamptz(3)
+ @@map("quality_evidence")
+}
