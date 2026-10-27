@@ -46,7 +46,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.mode == 'full'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     services:
       postgres:
         image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
