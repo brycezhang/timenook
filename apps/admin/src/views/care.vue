@@ -32,6 +32,7 @@ const cases = ref<CareCase[]>([]),
 const intakeProject = ref(""),
   intakeKind = ref<"withdraw" | "export" | "delete">("withdraw"),
   intakeVersion = ref(0),
+  intakePurpose = ref<"all" | "collection" | "ai" | "sharing">("all"),
   notice = ref("");
 const kindLabel = (kind: string) =>
   kind === "refund"
@@ -201,6 +202,7 @@ async function intake() {
     const input = JSON.stringify({
       project: intakeProject.value,
       kind: intakeKind.value,
+      purpose: intakeKind.value === "withdraw" ? intakePurpose.value : null,
       version: intakeVersion.value,
     });
     if (intent?.input !== input) intent = { input, key: crypto.randomUUID() };
@@ -210,6 +212,9 @@ async function intake() {
       intakeVersion.value,
       intent.key,
       props.csrf,
+      intakeKind.value === "withdraw" && intakePurpose.value !== "all"
+        ? intakePurpose.value
+        : undefined,
     );
     selected.value = await careApi.read(care.id);
     evidence.value = "";
@@ -268,6 +273,18 @@ onMounted(refresh);
           <option value="withdraw">本人撤回申请</option>
           <option value="export">本人资料导出申请</option>
           <option value="delete">本人删除申请</option>
+        </select></label
+      >
+      <label v-if="intakeKind === 'withdraw'"
+        >本人申请撤回范围<select
+          v-model="intakePurpose"
+          aria-label="本人申请撤回范围"
+          :disabled="busy"
+        >
+          <option value="all">全部三项用途</option>
+          <option value="collection">采集保存</option>
+          <option value="ai">AI 处理</option>
+          <option value="sharing">向发起人共享</option>
         </select></label
       >
       <label
@@ -352,7 +369,18 @@ onMounted(refresh);
         message="请核对原订单制作期限和冻结政策，再按服务期限流程跟进。记录本工单不会放行制作、预留首本或删除资料；后续提交与生产审核仍须通过全部核验。"
       />
       <Form v-else layout="vertical" class="section"
-        ><FormItem label="D08 核验证据引用"
+        ><p v-if="selected.kind === 'withdraw'">
+          本人申请撤回范围：{{
+            selected.withdrawalPurpose === "ai"
+              ? "AI 处理"
+              : selected.withdrawalPurpose === "collection"
+                ? "采集保存"
+                : selected.withdrawalPurpose === "sharing"
+                  ? "向发起人共享"
+                  : "全部三项用途"
+          }}
+        </p>
+        <FormItem label="D08 核验证据引用"
           ><Input
             v-model:value="evidence"
             aria-label="D08 核验证据引用"
@@ -364,7 +392,7 @@ onMounted(refresh);
             selected.kind === "rebind"
               ? "核对本人、原账号与目标账号后提交。操作撤销旧授权并保留服务期限。"
               : selected.kind === "withdraw"
-                ? "核验本人真实意愿后撤回当前三项用途许可；后续任务与生产联动由对应流程处理。"
+                ? "核验本人真实意愿后撤回所选用途许可；提交后立即拒绝相关访问，任务及生产按撤回范围联动；已交接的文件仍须核对印厂实际取消回执。"
                 : "核验通过仅记录申请，导出交付和删除执行仍须后续流程。"
           }}
         </p>
@@ -440,6 +468,36 @@ onMounted(refresh);
             第 {{ correction.version }} 版；运营校对不代表本人确认或入书许可。
           </p>
         </div>
+      </section>
+      <section v-if="selected.withdrawal?.changes.length" class="section">
+        <h3>撤回与账号变更处置</h3>
+        <p>{{ selected.withdrawal.boundary }}</p>
+        <p v-if="selected.withdrawal.production">
+          生产阶段：{{ selected.withdrawal.production.state }}；负责人：{{
+            selected.withdrawal.production.ownerAdminId
+          }}；处理期限：{{ selected.withdrawal.production.dueAt }}
+        </p>
+        <p v-for="change in selected.withdrawal.changes" :key="change.id">
+          范围：{{
+            change.purpose === "ai"
+              ? "AI 处理"
+              : change.purpose === "collection"
+                ? "采集保存"
+                : change.purpose === "sharing"
+                  ? "向发起人共享"
+                  : change.purpose === "binding"
+                    ? "账号换绑"
+                    : "全部三项用途"
+          }}；{{
+            change.applied ? "系统联动已执行" : "访问已撤销，系统联动待补扫"
+          }}。{{
+            change.productionAction === "supplier_pending"
+              ? "供应商取消结果待人工核实"
+              : change.productionAction === "already_delivered"
+                ? "纸书已交付，不能远程收回"
+                : ""
+          }}
+        </p>
       </section>
       <div v-if="selected.verification" class="section">
         <p>核验证据：{{ selected.verification.evidenceRef }}</p>

@@ -247,3 +247,19 @@ test("a confirmed cancellation routes correction to the current first-copy conte
   assert.equal(h.routes[0], `/pages/print/index?projectId=${projectId}`);
   h.page.onUnload();
 });
+
+test("production Page clears progress when remote sharing is withdrawn while it stays visible", async () => {
+  const h = await harness();
+  h.page.onLoad({ projectId });
+  const loading = h.page.onShow();
+  h.respond(0, summary());
+  await loading;
+  h.timers[h.timers.length - 1].callback();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(h.requests.length, 2);
+  h.respond(1, null, 403);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(h.page.data.view, null);
+  assert.match(h.page.data.status, /授权|访问/);
+  h.page.onUnload();
+});

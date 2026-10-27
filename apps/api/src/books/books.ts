@@ -1,3 +1,4 @@
+import { ProjectStreams } from "../media/project-streams";
 import {
   Controller,
   Get,
@@ -945,6 +946,7 @@ export class Books implements OnModuleDestroy {
   async retryAllowed(tx: Prisma.TransactionClient, task: ProductionTask) {
     return (
       task.state === "failed" &&
+      !(await this.participation.taskRevokedIn(tx, task.projectId, task.id)) &&
       task.configurationHash === digest(this.configuration()) &&
       !!task.deadline &&
       task.deadline.getTime() > Date.now() &&
@@ -1218,7 +1220,10 @@ export class Books implements OnModuleDestroy {
 @ApiTags("Book")
 @ApiBearerAuth()
 export class BooksController {
-  constructor(private readonly books: Books) {}
+  constructor(
+    private readonly streams: ProjectStreams,
+    private readonly books: Books,
+  ) {}
   @Get()
   @Header("Cache-Control", "no-store")
   async context(
@@ -1328,6 +1333,7 @@ export class BooksController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
+    const fence = await this.streams.userFence(id, req.headers.authorization);
     const bytes = await this.books.download(
       id,
       versionId,
@@ -1341,6 +1347,16 @@ export class BooksController {
         `attachment; filename="book-${versionId}.pdf"`,
       )
       .type("application/pdf")
-      .send(bytes);
+      .header("Content-Length", bytes.length)
+      .send(
+        await this.streams.guard(
+          id,
+          fence.epoch,
+          bytes,
+          () => this.books.read(id, versionId, req.headers.authorization),
+          req.headers.authorization,
+          fence.sequence,
+        ),
+      );
   }
 }

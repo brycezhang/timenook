@@ -69,6 +69,7 @@ test.beforeAll(async () => {
     adminHeaders = await paymentAdmin(fixture.config, fixture.app, [
       "ops:read",
       "fulfillment:write",
+      "care:write",
       "audit:read",
     ]);
     const session = async (who) =>
@@ -176,6 +177,7 @@ async function openMini(
   account,
   target = project,
   route = "production",
+  query = "",
 ) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -193,7 +195,9 @@ async function openMini(
     },
     { origin, account },
   );
-  await page.goto(`${origin}/#/${route}?projectId=${target.projectId}`);
+  await page.goto(
+    `${origin}/#/${route}?projectId=${target.projectId}${query ? `&${query}` : ""}`,
+  );
   await expect(page).toHaveTitle("时光里 · 岁月成书");
   return page;
 }
@@ -584,16 +588,202 @@ test("verified cancellation permits corrected address confirmation and a new att
 test("withdrawing sharing clears the initiator production and tracking details", async ({
   browser,
 }) => {
+  const buyer = await openMini(browser, buyerSession);
+  await expect(
+    buyer.getByText("SYNTHETIC-T23-0001", { exact: false }).first(),
+  ).toBeVisible();
   fixture.data(
     (await fixture.choose(project, project.narrator.token, "sharing", false))
       .response,
   );
-  const buyer = await openMini(browser, buyerSession);
-  await expect(buyer.getByText(/无权查询|授权已失效/).first()).toBeVisible();
+  await expect(
+    buyer.getByText(/无权查询|授权已失效|用途授权已变化/).first(),
+  ).toBeVisible();
   const body = await buyer.locator("#page").innerText();
   expect(body).not.toContain("SYNTHETIC-T23-0001");
   expect(body).not.toContain("合成快递");
-  await buyer.screenshot({ path: "/tmp/timenook-t23-denied-390.png" });
+  await buyer.screenshot({ path: "/tmp/timenook-t24-denied-390.png" });
+  const narrator = await openMini(browser, narratorSession, project, "welcome");
+  await narrator
+    .getByRole("button", { name: "查看撤回处置进度", exact: true })
+    .click();
+  await expect(
+    narrator.getByText("纸书已交付，实物及已导出文件不能远程收回", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    narrator.getByText(/已停止相关在线访问与新处理/).first(),
+  ).toBeVisible();
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 1280, height: 900 },
+  ]) {
+    await narrator.setViewportSize(viewport);
+    await narrator
+      .getByText("撤回与账号变更处置", { exact: true })
+      .scrollIntoViewIfNeeded();
+    expect(
+      await narrator.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await narrator.screenshot({
+      path: `/tmp/timenook-t24-withdrawal-${viewport.width}.png`,
+      fullPage: false,
+    });
+  }
   expect(errors).toEqual([]);
-  await buyer.context().close();
+  await Promise.all([buyer.context().close(), narrator.context().close()]);
+});
+
+test("shared Care intake verifies the chosen withdrawal purpose and shows the actual disposition", async ({
+  browser,
+}) => {
+  const page = await openAdmin(browser);
+  await page.getByRole("button", { name: "客服工单", exact: true }).click();
+  const current = await fixture.state(project, project.narrator.token);
+  await page.getByLabel("代录项目编号").fill(project.projectId);
+  await page.getByLabel("代录申请类型").selectOption("withdraw");
+  await page.getByLabel("本人申请撤回范围").selectOption("ai");
+  await page
+    .getByLabel("代录来源绑定版本")
+    .fill(String(current.bindingVersion));
+  await command(page, "代录本人申请", "/care-requests");
+  await expect(
+    page.getByText("本人申请撤回范围：AI 处理", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("D08 核验证据引用")
+    .fill("synthetic:browser-ai-withdrawal");
+  await command(page, "核验本人申请", "/verify");
+  await expect(
+    page.getByRole("heading", { name: "撤回与账号变更处置", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/系统联动已执行/).first()).toBeVisible();
+  await page
+    .getByRole("heading", { name: "撤回与账号变更处置", exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: "/tmp/timenook-t24-admin-disposition-1280.png",
+  });
+  expect(errors).toEqual([]);
+  await page.context().close();
+});
+
+test("assisted collection-only photos stay usable through periodic authorization, upload and a later refusal", async ({
+  browser,
+}) => {
+  const p = await fixture.project();
+  const account = fixture.data(
+    await fixture.app.inject({
+      method: "POST",
+      url: "/v1/sessions/wechat",
+      payload: { code: `${p.buyer.who}:${randomUUID()}` },
+    }),
+  );
+  const state = await fixture.state(p, p.buyer.token);
+  const session = fixture.data(
+    await fixture.request(
+      "POST",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+      {
+        purpose: "collection",
+        granted: true,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: `synthetic:photos-collection-${randomUUID()}`,
+        expectedBindingVersion: state.bindingVersion,
+        expectedAccessEpoch: state.accessEpoch,
+      },
+    ),
+  );
+  expect((await fixture.state(p, p.buyer.token)).canRead).toBe(false);
+  const interview = fixture.data(
+    await fixture.request(
+      "POST",
+      `/v1/projects/${p.projectId}/interviews`,
+      p.buyer.token,
+      {
+        clientInterviewId: randomUUID(),
+        expectedPlanRevision: 1,
+        starterKind: "free-narration",
+        assistedSessionId: session.id,
+      },
+    ),
+  );
+  const page = await openMini(
+    browser,
+    account,
+    p,
+    "photos",
+    `interviewId=${interview.id}&assistedSessionId=${session.id}`,
+  );
+  await expect(
+    page.getByText("每张照片分别保存和上传；原文件会保留", { exact: true }),
+  ).toBeVisible();
+  const check = await page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/collection-check") &&
+      response.request().method() === "POST",
+  );
+  expect(check.status()).toBe(201);
+  await expect(
+    page.getByRole("button", { name: "选择原照片", exact: true }),
+  ).toBeEnabled();
+  const picker = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "选择原照片", exact: true }).click();
+  const sharp = apiRequire("sharp");
+  const buffer = await sharp({
+    create: { width: 80, height: 60, channels: 3, background: "white" },
+  })
+    .png()
+    .toBuffer();
+  await (
+    await picker
+  ).setFiles({
+    name: "synthetic-assistance.png",
+    mimeType: "image/png",
+    buffer,
+  });
+  await expect(
+    page.getByText("本机原文件和清单已保存，尚未封存", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "单独上传或重试", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "查询封存结果", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "/tmp/timenook-t24-review-assisted-photo.png",
+  });
+  const current = await fixture.state(p, p.buyer.token);
+  fixture.data(
+    await fixture.request(
+      "POST",
+      `/v1/projects/${p.projectId}/assisted-sessions`,
+      p.buyer.token,
+      {
+        purpose: "collection",
+        granted: false,
+        expectedSessionId: session.id,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: `synthetic:photos-refused-${randomUUID()}`,
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+      },
+    ),
+  );
+  await expect(
+    page.getByText(/资料用途或账号授权已变化/).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "查询封存结果", exact: true }),
+  ).toHaveCount(0);
+  await page.screenshot({
+    path: "/tmp/timenook-t24-review-assisted-photo-revoked.png",
+  });
+  expect(errors).toEqual([]);
+  await page.context().close();
 });

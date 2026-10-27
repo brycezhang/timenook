@@ -283,6 +283,7 @@ export class ProductionTasks implements OnModuleDestroy {
           ? await this.textOwner(initial).grantIn(tx, initial)
           : await this.participation.processingGrant(tx, {
               ...initial,
+              taskId: initial.id,
               sourceAssistedSessionId: sourceClip!.assistedSessionId,
             });
       const permitted = !!grant;
@@ -314,7 +315,8 @@ export class ProductionTasks implements OnModuleDestroy {
         if (
           task.kind !== "transcribe_audio" ||
           task.processingGrant ||
-          p.accessEpoch !== task.accessEpoch
+          p.accessEpoch !== task.accessEpoch ||
+          (await this.participation.taskRevokedIn(tx, task.projectId, task.id))
         )
           await this.invalidate(tx, task);
         else
@@ -596,6 +598,7 @@ export class ProductionTasks implements OnModuleDestroy {
         ? !!(await this.textOwner(claim).grantIn(tx, claim))
         : await this.participation.processingAllowed(tx, {
             ...claim,
+            taskId: claim.id,
             sourceAssistedSessionId: sourceClip!.assistedSessionId,
           });
     const row = await this.locked(tx, claim.id);
@@ -831,6 +834,8 @@ export class ProductionTasks implements OnModuleDestroy {
     tx: Prisma.TransactionClient,
     task: ProductionTask,
   ) {
+    if (await this.participation.taskRevokedIn(tx, task.projectId, task.id))
+      return false;
     if (task.kind === "render_book")
       return this.books ? this.books.retryAllowed(tx, task) : false;
     if (task.kind !== "transcribe_audio") {
@@ -908,7 +913,10 @@ export class ProductionTasks implements OnModuleDestroy {
     if (
       !(initial.kind !== "transcribe_audio"
         ? await this.textOwner(initial).grantIn(tx, initial)
-        : await this.participation.processingAllowed(tx, initial))
+        : await this.participation.processingAllowed(tx, {
+            ...initial,
+            taskId: initial.id,
+          }))
     )
       throw new ConflictException();
     const task = await this.locked(tx, id);

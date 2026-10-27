@@ -1,3 +1,4 @@
+import { participationClient } from "../../services/participation";
 import { type Project } from "../../domain/model";
 import { asset, go, home, read } from "../../services/store";
 import { dataMode } from "../../services/mode";
@@ -53,6 +54,7 @@ Page({
     pending: 0,
     bookImage: "",
   },
+  remoteAccessEpoch: -1,
   projectId: "",
   generation: 0,
   generateRequest: null as { hash: string; key: string } | null,
@@ -71,6 +73,7 @@ Page({
     }
   },
   onHide() {
+    this.remoteAccessEpoch = -1;
     if (this.data.live) {
       ++this.generation;
       this.stopSessionWatch?.();
@@ -492,9 +495,10 @@ Page({
     }, true);
   },
   watch(context: string) {
+    const generation = this.generation;
     if (this.expiry) clearTimeout(this.expiry);
     this.expiry = setTimeout(
-      () => {
+      async () => {
         if (
           dataMode() !== "live" ||
           context !== sessionClient.context() ||
@@ -522,6 +526,24 @@ Page({
               await this.loadCover(generation, owner);
             }
           });
+        }
+        try {
+          const permission = await participationClient.state(this.projectId);
+          if (generation !== this.generation) return;
+          if (
+            !permission.canRead ||
+            (this.remoteAccessEpoch >= 0 &&
+              permission.accessEpoch !== this.remoteAccessEpoch)
+          )
+            throw Error("authorization changed");
+          this.remoteAccessEpoch = permission.accessEpoch;
+        } catch {
+          if (generation !== this.generation) return;
+          this.onHide();
+          this.setData({
+            status: "当前访问或用途授权已变化，私人内容已清理，请重新查询",
+          });
+          return;
         }
         this.watch(context);
       },

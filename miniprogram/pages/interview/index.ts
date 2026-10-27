@@ -84,6 +84,7 @@ Page({
   taskDelay: 2000,
   taskRetries: {} as Record<string, string>,
   timerHandle: undefined as ReturnType<typeof setInterval> | undefined,
+  collectionWatch: undefined as ReturnType<typeof setTimeout> | undefined,
   stopSessionWatch: undefined as (() => void) | undefined,
   onLoad(q) {
     if (dataMode() === "live") {
@@ -132,6 +133,8 @@ Page({
     if (dataMode() === "live") await this.refresh();
   },
   onHide() {
+    if (this.collectionWatch) clearTimeout(this.collectionWatch);
+    this.collectionWatch = undefined;
     this.clearFollowup();
     this.stopSessionWatch?.();
     this.stopSessionWatch = undefined;
@@ -309,6 +312,32 @@ Page({
       }
     });
     await device.restore();
+    if (this.current(generation, context))
+      this.watchCollection(generation, context, value.id);
+  },
+  watchCollection(generation: number, context: string, interviewId: string) {
+    if (this.collectionWatch) clearTimeout(this.collectionWatch);
+    this.collectionWatch = setTimeout(async () => {
+      if (!this.current(generation, context)) return;
+      try {
+        const result = await interviewRecordingClient.authorizeCollection(
+          this.projectId,
+          interviewId,
+          this.assistedSessionId || undefined,
+        );
+        if (!this.current(generation, context)) return;
+        if (!result.allowed) throw Error("collection stopped");
+        this.watchCollection(generation, context, interviewId);
+      } catch {
+        if (!this.current(generation, context)) return;
+        this.onHide();
+        this.setData({
+          status: "采集授权已变化，录音已停止；本机原文件仍保留，请重新查询",
+        });
+      }
+    }, 1000);
+    const unref = Reflect.get(Object(this.collectionWatch), "unref");
+    if (typeof unref === "function") unref.call(this.collectionWatch);
   },
   photos() {
     const interview = this.data.interview;

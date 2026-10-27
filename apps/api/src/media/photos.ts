@@ -1,3 +1,4 @@
+import { ProjectStreams } from "./project-streams";
 import { Type } from "class-transformer";
 import {
   Body,
@@ -501,6 +502,59 @@ export class Photos implements OnModuleDestroy {
       },
     );
   }
+  authorizeContent(
+    projectId: string,
+    interviewId: string,
+    id: string,
+    kind: string,
+    authorization?: string,
+    assetId?: string,
+  ) {
+    if (!["original", "preview", "thumbnail", "print"].includes(kind))
+      throw new NotFoundException();
+    return this.participation.withPlanAccess(
+      projectId,
+      authorization,
+      undefined,
+      async (tx) => {
+        const row = await this.intent(tx, projectId, interviewId, id);
+        if (row.state !== "sealed") throw new ConflictException();
+        const terms = await this.terms.read(projectId, undefined, tx);
+        const snapshot = await this.readSnapshot(tx, projectId, interviewId);
+        const selected = snapshot?.entries
+          .find((e) => e.photoId === id)
+          ?.assets.find(
+            (a) => a.kind === (kind === "thumbnail" ? "preview" : kind),
+          );
+        const asset = await tx.photoAsset.findFirst({
+          where: {
+            projectId,
+            intentId: id,
+            ...(assetId
+              ? { id: assetId }
+              : {
+                  id: selected?.id,
+                  kind: kind === "thumbnail" ? "preview" : kind,
+                }),
+          },
+        });
+        if (!asset) throw new NotFoundException();
+        const retention =
+          terms.retention?.[
+            asset.kind === "original" ? "originalPhotos" : "derivedPhotos"
+          ];
+        if (!retention || retention.state === "expired")
+          throw new ForbiddenException();
+        if (
+          asset.storageScope !== this.scope ||
+          asset.storage !== this.storage ||
+          asset.store !== this.store
+        )
+          throw new NotFoundException();
+        return asset;
+      },
+    );
+  }
   async content(
     projectId: string,
     interviewId: string,
@@ -512,47 +566,13 @@ export class Photos implements OnModuleDestroy {
     if (!["original", "preview", "thumbnail", "print"].includes(kind))
       throw new NotFoundException();
     const authorized = () =>
-      this.participation.withPlanAccess(
+      this.authorizeContent(
         projectId,
+        interviewId,
+        id,
+        kind,
         authorization,
-        undefined,
-        async (tx) => {
-          const row = await this.intent(tx, projectId, interviewId, id);
-          if (row.state !== "sealed") throw new ConflictException();
-          const terms = await this.terms.read(projectId, undefined, tx);
-          const snapshot = await this.readSnapshot(tx, projectId, interviewId);
-          const selected = snapshot?.entries
-            .find((e) => e.photoId === id)
-            ?.assets.find(
-              (a) => a.kind === (kind === "thumbnail" ? "preview" : kind),
-            );
-          const asset = await tx.photoAsset.findFirst({
-            where: {
-              projectId,
-              intentId: id,
-              ...(assetId
-                ? { id: assetId }
-                : {
-                    id: selected?.id,
-                    kind: kind === "thumbnail" ? "preview" : kind,
-                  }),
-            },
-          });
-          if (!asset) throw new NotFoundException();
-          const retention =
-            terms.retention?.[
-              asset.kind === "original" ? "originalPhotos" : "derivedPhotos"
-            ];
-          if (!retention || retention.state === "expired")
-            throw new ForbiddenException();
-          if (
-            asset.storageScope !== this.scope ||
-            asset.storage !== this.storage ||
-            asset.store !== this.store
-          )
-            throw new NotFoundException();
-          return asset;
-        },
+        assetId,
       );
     const asset = await authorized();
     let bytes: Buffer;
@@ -1027,7 +1047,10 @@ export class Photos implements OnModuleDestroy {
 @ApiTags("Story photos")
 @ApiBearerAuth()
 export class PhotosController {
-  constructor(private readonly photos: Photos) {}
+  constructor(
+    private readonly streams: ProjectStreams,
+    private readonly photos: Photos,
+  ) {}
   @Get() @Header("Cache-Control", "no-store") async list(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Param("interviewId", new ParseUUIDPipe()) interview: string,
@@ -1101,6 +1124,7 @@ export class PhotosController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
+    const fence = await this.streams.userFence(id, req.headers.authorization);
     const result = await this.photos.content(
       id,
       interview,
@@ -1113,7 +1137,25 @@ export class PhotosController {
       .header("Cache-Control", "private, no-store")
       .header("X-Content-Type-Options", "nosniff")
       .type(result.mime)
-      .send(result.bytes);
+      .header("Content-Length", result.bytes.length)
+      .send(
+        await this.streams.guard(
+          id,
+          fence.epoch,
+          result.bytes,
+          () =>
+            this.photos.authorizeContent(
+              id,
+              interview,
+              photo,
+              "print",
+              req.headers.authorization,
+              asset,
+            ),
+          req.headers.authorization,
+          fence.sequence,
+        ),
+      );
   }
 
   @Post(":photoId/release") @Header("Cache-Control", "no-store") async release(
@@ -1230,6 +1272,7 @@ export class PhotosController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
+    const fence = await this.streams.userFence(id, req.headers.authorization);
     const result = await this.photos.content(
       id,
       interview,
@@ -1241,7 +1284,24 @@ export class PhotosController {
       .header("Cache-Control", "private, no-store")
       .header("X-Content-Type-Options", "nosniff")
       .type(result.mime)
-      .send(result.bytes);
+      .header("Content-Length", result.bytes.length)
+      .send(
+        await this.streams.guard(
+          id,
+          fence.epoch,
+          result.bytes,
+          () =>
+            this.photos.authorizeContent(
+              id,
+              interview,
+              photo,
+              kind,
+              req.headers.authorization,
+            ),
+          req.headers.authorization,
+          fence.sequence,
+        ),
+      );
   }
 }
 

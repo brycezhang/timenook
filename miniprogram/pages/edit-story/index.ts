@@ -1,3 +1,4 @@
+import { watchProjectAccess } from "../../services/project-access";
 import { editStory } from "../../domain/model";
 import { home, required, save } from "../../services/store";
 import { dataMode } from "../../services/mode";
@@ -37,6 +38,7 @@ Page({
   generation: 0,
   ownerContext: "",
   command: null as { input: string; key: string } | null,
+  stopProjectWatch: undefined as (() => void) | undefined,
   stopSessionWatch: undefined as (() => void) | undefined,
   onLoad(q) {
     if (dataMode() === "live") {
@@ -60,6 +62,8 @@ Page({
     );
   },
   onHide() {
+    this.stopProjectWatch?.();
+    this.stopProjectWatch = undefined;
     if (!this.data.live) return;
     ++this.generation;
     this.stopSessionWatch?.();
@@ -131,6 +135,17 @@ Page({
           return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
         }),
       });
+      this.stopProjectWatch?.();
+      this.stopProjectWatch = watchProjectAccess(
+        this.projectId,
+        () => this.current(generation, context),
+        () => {
+          this.onHide();
+          this.setData({
+            error: "资料用途或账号授权已变化，私人草稿已清理，请重新查询",
+          });
+        },
+      );
     } catch (error) {
       if (this.current(generation, context))
         this.setData({

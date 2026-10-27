@@ -1,3 +1,4 @@
+import { participationClient } from "../../services/participation";
 import type {
   FulfillmentView,
   FulfillmentGrantCommand,
@@ -28,6 +29,7 @@ Page({
     grantChecked: false,
     canGrant: false,
   },
+  remoteAccessEpoch: -1,
   projectId: "",
   assistedSessionId: "",
   intent: null as {
@@ -45,6 +47,7 @@ Page({
     this.assistedSessionId = q.assistedSessionId || "";
   },
   onHide() {
+    this.remoteAccessEpoch = -1;
     this.active = false;
     ++this.generation;
     this.owner = "";
@@ -92,11 +95,29 @@ Page({
   watch(generation: number, owner: string) {
     if (this.expiry) clearTimeout(this.expiry);
     this.expiry = setTimeout(
-      () => {
+      async () => {
         if (generation !== this.generation || !this.active) return;
         if (!this.current(generation, owner)) {
           this.onHide();
           this.setData({ status: "授权已到期或账号已变化，请重新查询" });
+          return;
+        }
+        try {
+          const permission = await participationClient.state(this.projectId);
+          if (generation !== this.generation) return;
+          if (
+            !permission.canRead ||
+            (this.remoteAccessEpoch >= 0 &&
+              permission.accessEpoch !== this.remoteAccessEpoch)
+          )
+            throw Error("authorization changed");
+          this.remoteAccessEpoch = permission.accessEpoch;
+        } catch {
+          if (generation !== this.generation) return;
+          this.onHide();
+          this.setData({
+            status: "当前访问或用途授权已变化，私人内容已清理，请重新查询",
+          });
           return;
         }
         this.watch(generation, owner);

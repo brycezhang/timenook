@@ -61,7 +61,8 @@ Page({
   },
   armPrivacy(context: string) {
     if (this.timer) clearTimeout(this.timer);
-    const check = () => {
+    const generation = this.generation;
+    const check = async () => {
       const expiresAt = this.data.plan?.accessExpiresAt;
       if (
         dataMode() !== "live" ||
@@ -73,7 +74,19 @@ Page({
           loggedIn: !!sessionClient.context(),
           status: "授权已到期或账号已变化，请重新查询",
         });
-      } else this.timer = setTimeout(check, 1000);
+      } else {
+        try {
+          await personalPlanClient.read(this.projectId);
+          if (generation !== this.generation) return;
+          this.timer = setTimeout(check, 1000);
+        } catch {
+          if (generation !== this.generation) return;
+          this.onHide();
+          this.setData({
+            status: "当前计划授权已变化，私人内容与草稿已清理，请重新查询",
+          });
+        }
+      }
     };
     this.timer = setTimeout(check, 1000);
   },

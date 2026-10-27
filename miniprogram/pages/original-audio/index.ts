@@ -102,10 +102,25 @@ Page({
   watch(generation: number, owner: string) {
     if (this.expiry) clearTimeout(this.expiry);
     this.expiry = setTimeout(
-      () => {
+      async () => {
         if (generation !== this.generation || !this.active) return;
         if (!this.current(generation, owner)) {
           this.deny("授权已到期或账号已变化，请重新登录或查询");
+          return;
+        }
+        try {
+          const current = await bookAudioClient.resolve(this.entryId);
+          if (generation !== this.generation || !this.active) return;
+          if (
+            !this.current(generation, owner) ||
+            current.accessEpoch !== this.data.entry?.accessEpoch
+          ) {
+            this.deny("资料用途或账号授权已变化，临时回听已清理，请重新查询");
+            return;
+          }
+        } catch (error) {
+          if (generation !== this.generation || !this.active) return;
+          this.denyFor(error);
           return;
         }
         this.watch(generation, owner);

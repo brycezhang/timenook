@@ -147,7 +147,9 @@ const wx: any = {
         options.method === "POST") &&
         /\/v1\/orders\/[a-f0-9-]{36}\/refunds$/.test(url.pathname)) ||
       ((!options.method || options.method === "GET") &&
-        /\/v1\/projects\/[a-f0-9-]{36}\/fulfillment$/.test(url.pathname)) ||
+        /\/v1\/projects\/[a-f0-9-]{36}\/(?:fulfillment|withdrawal-status)$/.test(
+          url.pathname,
+        )) ||
       (options.method === "POST" &&
         /\/v1\/projects\/[a-f0-9-]{36}\/fulfillment\/grants$/.test(
           url.pathname,

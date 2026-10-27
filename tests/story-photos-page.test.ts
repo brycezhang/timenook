@@ -26,7 +26,9 @@ const compiled = await build({
   platform: "neutral",
   define: { __TIMENOOK_API_BASE_URL__: JSON.stringify(base) },
 });
-function harness() {
+function harness(options: { controlledTimers?: boolean } = {}) {
+  const timers: { callback: () => Promise<void> | void; cleared: boolean }[] =
+    [];
   let now = Date.now();
   class DeviceDate extends Date {
     static now() {
@@ -53,8 +55,18 @@ function harness() {
     chooseOptions: any;
   runInNewContext(compiled.outputFiles[0].text, {
     Date: DeviceDate,
-    setTimeout,
-    clearTimeout,
+    setTimeout: options.controlledTimers
+      ? (callback: () => Promise<void> | void) => {
+          const timer = { callback, cleared: false };
+          timers.push(timer);
+          return timer;
+        }
+      : setTimeout,
+    clearTimeout: options.controlledTimers
+      ? (timer: { cleared: boolean }) => {
+          if (timer) timer.cleared = true;
+        }
+      : clearTimeout,
     setInterval,
     clearInterval,
     Page: (v: any) => {
@@ -138,6 +150,7 @@ function harness() {
   });
   return {
     page,
+    timers,
     interviewPage: pages[0],
     storage,
     requests,
@@ -1076,4 +1089,59 @@ test("a forbidden photo response remains authoritative when cleanup storage fail
   assert.ok(h.removed.includes("forbidden-cleanup-storage-error"));
   assert.equal(h.page.data.status, "照片权限已变化，请重新查询");
   h.page.onHide();
+});
+
+test("assisted collection-only photos keep a valid page through remote checks and uploads, then clear on revocation", async () => {
+  const h = harness({ controlledTimers: true }),
+    assistedSessionId = "88888888-8888-4888-8888-888888888888";
+  h.page.onLoad({
+    projectId: project,
+    interviewId: interview,
+    assistedSessionId,
+  });
+  const show = h.page.onShow();
+  await tick();
+  assert.match(h.requests[0].url, /photos\/context$/);
+  respond(
+    h.requests.shift(),
+    {
+      photos: [],
+      snapshot: null,
+      usage: { reservedCount: 0, consumedCount: 0 },
+    },
+    201,
+  );
+  await show;
+  try {
+    const check = h.timers
+      .filter((timer) => !timer.cleared)
+      .slice(-1)[0]
+      .callback();
+    await tick();
+    const current = h.requests.shift();
+    assert.equal(
+      current.url,
+      `${base}/projects/${project}/interviews/${interview}/collection-check`,
+    );
+    assert.equal(current.data.assistedSessionId, assistedSessionId);
+    respond(current, { allowed: true }, 201);
+    await check;
+    assert.ok(h.page.owner, "no sharing permission is needed for collection");
+    await choose(h);
+    const first = h.page.data.photos[0];
+    await uploading(h, first, "55555555-5555-4555-8555-555555555555");
+    assert.equal(h.page.data.photos[0].state, "sealed");
+    const denied = h.timers
+      .filter((timer) => !timer.cleared)
+      .slice(-1)[0]
+      .callback();
+    await tick();
+    respond(h.requests.shift(), undefined, 403);
+    await denied;
+    assert.equal(h.page.owner, null);
+    assert.equal(h.page.data.photos.length, 0);
+    assert.match(h.page.data.status, /授权已变化/);
+  } finally {
+    h.page.onHide();
+  }
 });
