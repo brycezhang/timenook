@@ -1294,6 +1294,7 @@ model FulfillmentAttempt {
  receiptRef String? @map("receipt_ref")
  tracking Json?
  wechat Json?
+ shippedAt DateTime? @map("shipped_at") @db.Timestamptz(3)
  deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(3)
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@unique([orderId,sequence])

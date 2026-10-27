@@ -378,7 +378,17 @@ BEGIN
   IF TG_TABLE_NAME='care_exports' AND registry.category IN ('originalAudio','transcripts','confirmedStories','bookPdf','originalPhotos','derivedPhotos') AND ((to_jsonb(NEW)->'manifest')='null'::jsonb OR NOT privacy_export_has_category(to_jsonb(NEW)->'manifest',registry.category)) AND (TG_OP='INSERT' OR (to_jsonb(OLD)->'manifest')='null'::jsonb OR NOT privacy_export_has_category(to_jsonb(OLD)->'manifest',registry.category)) THEN CONTINUE; END IF;
   IF EXISTS(SELECT 1 FROM privacy_deletions WHERE project_id=owner AND (scoped_export_id IS NULL OR (TG_TABLE_NAME='care_exports' AND scoped_export_id=(to_jsonb(NEW)->>'id')::uuid)) AND (categories ? 'all' OR categories ? registry.category)) OR EXISTS(SELECT 1 FROM privacy_recovery_holds WHERE project_id=owner) THEN
    IF TG_OP='INSERT' THEN
-    IF TG_TABLE_NAME='consent_records' AND (to_jsonb(NEW)->>'granted')::boolean=false AND NOT EXISTS(SELECT 1 FROM privacy_deletions WHERE project_id=owner AND categories ? 'all') AND NOT EXISTS(SELECT 1 FROM privacy_recovery_holds WHERE project_id=owner) AND NOT EXISTS(SELECT 1 FROM unnest(registry.columns) c WHERE to_jsonb(NEW)->c IS DISTINCT FROM 'null'::jsonb) THEN CONTINUE; END IF;
+    IF registry.category='activeData' AND TG_TABLE_NAME IN ('consent_records','assisted_sessions') AND (to_jsonb(NEW)->>'granted')::boolean=false AND EXISTS(SELECT 1 FROM privacy_deletions WHERE project_id=owner AND categories ? 'activeData' AND scoped_export_id IS NULL) AND NOT EXISTS(SELECT 1 FROM privacy_deletions WHERE project_id=owner AND categories ? 'all') AND NOT EXISTS(SELECT 1 FROM privacy_recovery_holds WHERE project_id=owner) AND NOT EXISTS(SELECT 1 FROM unnest(registry.columns) c WHERE to_jsonb(NEW)->c IS DISTINCT FROM 'null'::jsonb) AND EXISTS(SELECT 1 FROM project_subjects s JOIN projects p ON p.id=s.project_id JOIN payment_orders o ON o.id=p.order_id WHERE p.id=owner AND s.id=(to_jsonb(NEW)->>'subject_id')::uuid AND s.binding_version=(to_jsonb(NEW)->>'binding_version')::integer AND p.access_epoch=(to_jsonb(NEW)->>'access_epoch')::integer AND ((to_jsonb(NEW)->>'operator_user_id')::uuid IN (s.bound_user_id,o.buyer_id) OR (TG_TABLE_NAME='consent_records' AND to_jsonb(NEW)->>'method'='care_verified' AND (to_jsonb(NEW)->>'operator_user_id') IS NULL AND EXISTS(SELECT 1 FROM admin_accounts admin WHERE admin.id=(to_jsonb(NEW)->>'operator_admin_id')::uuid AND NOT admin.disabled AND 'care:write'=ANY(admin.permissions))))) THEN CONTINUE; END IF;
+    IF registry.category='activeData' AND EXISTS(SELECT 1 FROM privacy_deletions WHERE project_id=owner AND categories ? 'activeData' AND scoped_export_id IS NULL) AND NOT EXISTS(SELECT 1 FROM privacy_deletions WHERE project_id=owner AND categories ? 'all') AND NOT EXISTS(SELECT 1 FROM privacy_recovery_holds WHERE project_id=owner) THEN
+     -- journal_story_denial_guard independently checks every exact identity,
+     -- version/hash, refusal flag and authentic positive confirmation basis.
+     IF TG_TABLE_NAME='story_decisions' AND to_jsonb(NEW)->>'method'='journal_denial' AND NOT ((to_jsonb(NEW)->>'confirmed')::boolean AND (to_jsonb(NEW)->>'allow_in_book')::boolean) AND EXISTS(SELECT 1 FROM privacy_events e WHERE e.id=(to_jsonb(NEW)->>'id')::uuid AND e.project_id=owner AND e.kind='revocation' AND e.payload->>'operation'='story_decision' AND to_jsonb(NEW)->>'evidence_ref'='journal:'||e.hash) THEN CONTINUE; END IF;
+     IF NOT EXISTS(SELECT 1 FROM unnest(registry.columns) c WHERE to_jsonb(NEW)->c IS DISTINCT FROM 'null'::jsonb) THEN
+      IF TG_TABLE_NAME='fulfillment_records' AND to_jsonb(NEW)->>'kind' IN ('handoff','cancelled','cancellation_pending','receipt_unknown','receipt_accepted','receipt_cancelled','receipt_cancellation_rejected','shipping','delivery') AND EXISTS(SELECT 1 FROM fulfillment_commands c JOIN fulfillment_attempts a ON a.id=c.attempt_id WHERE a.id=(to_jsonb(NEW)->>'attempt_id')::uuid AND a.project_id=owner AND c.project_id=owner AND c.actor_id=(to_jsonb(NEW)->>'operator_admin_id')::uuid AND c.action=(CASE WHEN to_jsonb(NEW)->>'kind' LIKE 'receipt_%' THEN 'receipt' WHEN to_jsonb(NEW)->>'kind' IN ('cancelled','cancellation_pending') THEN 'cancel' ELSE to_jsonb(NEW)->>'kind' END)||':'||a.id::text) THEN CONTINUE; END IF;
+      IF TG_TABLE_NAME='fulfillment_deliveries' AND EXISTS(SELECT 1 FROM fulfillment_attempts a JOIN fulfillment_commands c ON c.attempt_id=a.id WHERE a.id=(to_jsonb(NEW)->>'attempt_id')::uuid AND a.project_id=owner AND a.order_id=(to_jsonb(NEW)->>'order_id')::uuid AND a.state='shipped' AND a.shipped_at IS NOT NULL AND (to_jsonb(NEW)->>'occurred_at')::timestamptz>=a.shipped_at AND c.actor_id=(to_jsonb(NEW)->>'operator_admin_id')::uuid AND c.action='delivery:'||a.id::text) THEN CONTINUE; END IF;
+      IF TG_TABLE_NAME='binding_changes' AND EXISTS(SELECT 1 FROM project_subjects s JOIN projects p ON p.id=s.project_id JOIN payment_orders o ON o.id=p.order_id WHERE p.id=owner AND s.id=(to_jsonb(NEW)->>'subject_id')::uuid AND s.bound_user_id=(to_jsonb(NEW)->>'to_user_id')::uuid AND s.binding_version=(to_jsonb(NEW)->>'binding_version')::integer AND p.access_epoch=(to_jsonb(NEW)->>'access_epoch')::integer AND ((to_jsonb(NEW)->>'method'='care_verified' AND to_jsonb(NEW)->>'operator_realm'='admin' AND EXISTS(SELECT 1 FROM care_requests c WHERE c.id=(to_jsonb(NEW)->>'support_case_id')::uuid AND c.project_id=owner AND c.kind='rebind' AND c.state='completed' AND c.completed_by=(to_jsonb(NEW)->>'operator_id')::uuid AND c.target_user_id=s.bound_user_id AND c.source_binding_version=(to_jsonb(NEW)->>'source_binding_version')::integer)) OR (to_jsonb(NEW)->>'method'='initiator_review' AND to_jsonb(NEW)->>'operator_realm'='product' AND (to_jsonb(NEW)->>'operator_id')::uuid=o.buyer_id AND (to_jsonb(NEW)->>'source_binding_version')::integer=0 AND s.binding_version=1 AND EXISTS(SELECT 1 FROM binding_requests b JOIN invitations i ON i.id=b.invitation_id WHERE i.project_id=owner AND b.applicant_user_id=s.bound_user_id AND b.state='approved' AND b.approved_by=o.buyer_id)))) THEN CONTINUE; END IF;
+     END IF;
+    END IF;
     IF TG_TABLE_NAME IN ('refunds','refund_commands','payment_commands','care_requests') AND NOT EXISTS(SELECT 1 FROM unnest(registry.columns) c WHERE to_jsonb(NEW)->c IS DISTINCT FROM 'null'::jsonb) THEN CONTINUE; END IF;
     RAISE EXCEPTION 'Deleted project/category cannot acquire new payload';
    END IF;
@@ -482,3 +492,30 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER journal_story_denial_guard BEFORE INSERT OR UPDATE ON story_decisions FOR EACH ROW EXECUTE FUNCTION protect_journal_story_denial();
+-- Preserve the already-existing actual shipment time independently of private
+-- carrier/number/WeChat payload. Missing or invalid historical times stay NULL.
+ALTER TABLE fulfillment_attempts ADD COLUMN shipped_at timestamptz(3);
+CREATE OR REPLACE FUNCTION protect_fulfillment_attempt_binding() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='UPDATE' AND privacy_erasure_allowed(TG_TABLE_NAME,to_jsonb(OLD),to_jsonb(NEW)) THEN RETURN NEW; END IF;
+ IF OLD.shipped_at IS NOT NULL AND NEW.shipped_at IS DISTINCT FROM OLD.shipped_at THEN RAISE EXCEPTION 'Actual shipment time is immutable'; END IF;
+ IF OLD.delivered_at IS NOT NULL AND NEW.delivered_at IS DISTINCT FROM OLD.delivered_at THEN RAISE EXCEPTION 'Actual delivery time is immutable'; END IF;
+ IF NEW.shipped_at IS NOT NULL AND (NOT isfinite(NEW.shipped_at) OR NEW.shipped_at<NEW.created_at OR (NEW.delivered_at IS NOT NULL AND NEW.shipped_at>NEW.delivered_at)) THEN RAISE EXCEPTION 'Actual shipment chronology required'; END IF;
+ IF (to_jsonb(NEW)-'state'-'receipt_ref'-'tracking'-'wechat'-'shipped_at'-'delivered_at') IS DISTINCT FROM (to_jsonb(OLD)-'state'-'receipt_ref'-'tracking'-'wechat'-'shipped_at'-'delivered_at') THEN RAISE EXCEPTION 'Production attempt binding is immutable'; END IF;
+ RETURN NEW;
+END $$;
+DO $backfill$
+DECLARE r record; actual timestamptz;
+BEGIN
+ FOR r IN SELECT id,tracking,created_at,delivered_at FROM fulfillment_attempts WHERE jsonb_typeof(tracking->'shippedAt')='string' LOOP
+  BEGIN
+   IF r.tracking->>'shippedAt' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$' THEN CONTINUE; END IF;
+   actual:=(r.tracking->>'shippedAt')::timestamptz;
+   IF isfinite(actual) AND actual>=r.created_at AND actual<=clock_timestamp() AND (r.delivered_at IS NULL OR actual<=r.delivered_at) THEN
+    UPDATE fulfillment_attempts SET shipped_at=actual WHERE id=r.id;
+   END IF;
+  EXCEPTION WHEN invalid_datetime_format OR datetime_field_overflow THEN
+   CONTINUE;
+  END;
+ END LOOP;
+END $backfill$;

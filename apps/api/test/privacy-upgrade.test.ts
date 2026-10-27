@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { fork, spawnSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
+import { writeFileSync } from "node:fs";
 import {
   mkdtemp,
   mkdir,
@@ -8,6 +9,9 @@ import {
   readdir,
   rm,
   writeFile,
+  copyFile,
+  symlink,
+  realpath,
 } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -52,7 +56,7 @@ async function historicalSources(directory: string, api: string) {
   const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
   await writeFile(
     generator,
-    `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(join(api, "node_modules/@prisma/client/generator-build/index.js"))}\n`,
+    `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(await realpath(join(api, "node_modules/@prisma/client/generator-build/index.js")))}\n`,
     { mode: 0o700 },
   );
   await writeFile(
@@ -100,6 +104,12 @@ async function historicalSources(directory: string, api: string) {
     0,
     `isolated historical client generation; diagnostic ${join(directory, "generation-failure.txt")}`,
   );
+  const generatedSchema = await readFile(join(client, "schema.prisma"), "utf8");
+  assert.equal(
+    generatedSchema.includes("shippedAt"),
+    false,
+    "the real historical client uses the old shipment model",
+  );
   async function compile(path: string) {
     for (const entry of await readdir(path, { withFileTypes: true })) {
       const file = join(path, entry.name);
@@ -117,7 +127,8 @@ async function historicalSources(directory: string, api: string) {
           fileName: file,
           compilerOptions: {
             target: ts.ScriptTarget.ES2022,
-            module: ts.ModuleKind.CommonJS,
+            module: ts.ModuleKind.Node16,
+            moduleResolution: ts.ModuleResolutionKind.Node16,
             experimentalDecorators: true,
             emitDecoratorMetadata: true,
             esModuleInterop: true,
@@ -135,6 +146,34 @@ async function historicalSources(directory: string, api: string) {
   }
   await compile(join(oldApi, "src"));
   await compile(join(oldApi, "test"));
+  // The historical public print flow uses the same verified, Git-ignored font
+  // prerequisite as the current fixture; its business sources stay unchanged.
+  const fontDirectory = resolve(oldApi, "../../.cache/print-probe");
+  await mkdir(fontDirectory, { recursive: true });
+  await copyFile(
+    resolve(api, "../../.cache/print-probe/NotoSansCJKsc-Regular.otf"),
+    join(fontDirectory, "NotoSansCJKsc-Regular.otf"),
+  );
+  // ESM worker resolution does not use NODE_PATH. Link only locked print/photo
+  // dependencies; @prisma/client keeps its separate historical generator output.
+  for (const dependency of [
+    "@playwright/test",
+    "fontkit",
+    "qrcode",
+    "pdfjs-dist",
+    "@napi-rs/canvas",
+    "jsqr",
+    "sharp",
+    "libheif-js",
+  ]) {
+    const target = resolve(oldApi, "../../node_modules", dependency);
+    await mkdir(dirname(target), { recursive: true });
+    await symlink(
+      resolve(api, "../../node_modules", dependency),
+      target,
+      "dir",
+    );
+  }
   return oldApi;
 }
 
@@ -144,6 +183,23 @@ async function historicalUpgradeScenario(
   directory: string,
 ) {
   const oldRequire = createRequire(join(oldApi, "package.json"));
+  assert.ok(
+    oldRequire
+      .resolve("@prisma/client")
+      .includes("/historical-deps/@prisma/client/"),
+    "old application must never fall back to the current generated client",
+  );
+  const historicalModel = oldRequire(
+    "@prisma/client",
+  ).Prisma.dmmf.datamodel.models.find(
+    (model: { name: string }) => model.name === "FulfillmentAttempt",
+  );
+  assert.equal(
+    historicalModel.fields.some(
+      (field: { name: string }) => field.name === "shippedAt",
+    ),
+    false,
+  );
   const oldApplication = oldRequire("./dist-test/src/application.js");
   const originalCreate = oldApplication.createApplication;
   let options: Parameters<typeof createApplication>[1];
@@ -164,6 +220,33 @@ async function historicalUpgradeScenario(
   };
   const fixture = oldRequire("./dist-test/test/book-fixture.js");
   const adminFixture = oldRequire("./dist-test/test/payment-admin-fixture.js");
+  const oldFilter = oldRequire(
+    "./dist-test/src/http-error-filter.js",
+  ).HttpErrorFilter;
+  const originalCatch = oldFilter.prototype.catch;
+  oldFilter.prototype.catch = function (error: unknown, host: unknown) {
+    if (!(error as { getStatus?: unknown })?.getStatus)
+      writeFileSync(
+        join(directory, "historical-http-failure.txt"),
+        String((error as Error).stack ?? error),
+        { mode: 0o600 },
+      );
+    return originalCatch.call(this, error, host);
+  };
+  const historicalRenderer = oldRequire("./dist-test/src/books/render-book.js");
+  const originalRenderer = historicalRenderer.renderBook;
+  historicalRenderer.renderBook = async (...args: unknown[]) => {
+    try {
+      return await originalRenderer(...args);
+    } catch (error) {
+      await writeFile(
+        join(directory, "historical-render-failure.txt"),
+        String((error as Error).stack ?? error),
+        { mode: 0o600 },
+      );
+      throw error;
+    }
+  };
   let phase = "historical setup";
   let backup = "";
   let initialized = false;
@@ -289,6 +372,53 @@ async function historicalUpgradeScenario(
       fixture.data(await book(storyProject), 200).eligibleStories.length,
       1,
     );
+    const qualityFixture = oldRequire("./dist-test/test/quality-fixture.js");
+    const shipmentControls: {
+      id: string;
+      expected: string | null;
+      orderId: string;
+      headers: Record<string, string>;
+    }[] = [];
+    for (const kind of ["valid", "invalid", "missing"]) {
+      const shipped = await qualityFixture.deliveredQualityOrder();
+      const row = await fixture.db.fulfillmentAttempt.findUniqueOrThrow({
+        where: { id: shipped.attempt.id },
+      });
+      const tracking = row.tracking;
+      if (kind === "invalid")
+        await fixture.db.fulfillmentAttempt.update({
+          where: { id: row.id },
+          data: {
+            tracking: { ...tracking, shippedAt: "2026-02-31T12:00:00.000Z" },
+          },
+        });
+      if (kind === "missing") {
+        const { shippedAt: ignored, ...privateTracking } = tracking;
+        await fixture.db.fulfillmentAttempt.update({
+          where: { id: row.id },
+          data: { tracking: privateTracking },
+        });
+      }
+      shipmentControls.push({
+        id: row.id,
+        expected: kind === "valid" ? tracking.shippedAt : null,
+        orderId: shipped.order.id,
+        headers: shipped.headers,
+      });
+    }
+    const verifyShipmentBackfill = async () => {
+      for (const expected of shipmentControls) {
+        const [row] = await fixture.db.$queryRawUnsafe(
+          "SELECT shipped_at FROM fulfillment_attempts WHERE id=$1::uuid",
+          expected.id,
+        );
+        assert.equal(
+          row.shipped_at?.toISOString() ?? null,
+          expected.expected,
+          "only an actual valid historical shipment time is backfilled",
+        );
+      }
+    };
     const schema = new URL(fixture.config.databaseUrl).searchParams.get(
       "schema",
     )!;
@@ -391,6 +521,7 @@ async function historicalUpgradeScenario(
 
     phase = "explicit source and incremental upgrade";
     migrate();
+    await verifyShipmentBackfill();
     const [installation] = await fixture.db.$queryRawUnsafe(
       "SELECT database_id FROM privacy_recovery_state WHERE singleton",
     );
@@ -423,6 +554,21 @@ async function historicalUpgradeScenario(
       imported.events.some((e) => e.payload.operation === "story_decision"),
     );
     const verify = async () => {
+      for (const shipped of shipmentControls) {
+        const progress = fixture.data(
+          await fixture.app.inject({
+            method: "GET",
+            url: `/v1/admin/fulfillment/${shipped.orderId}`,
+            headers: shipped.headers,
+          }),
+          200,
+        );
+        assert.equal(progress.current.id, shipped.id);
+        assert.equal(
+          progress.current.cancellationNotice.includes("原实际发货时间待核实"),
+          shipped.expected === null,
+        );
+      }
       assert.equal((await privatePlan(revoked)).statusCode, 403);
       assert.equal((await privatePlan(control)).statusCode, 200);
       assert.equal((await privatePlan(unknown)).statusCode, 403);
@@ -553,6 +699,7 @@ async function historicalUpgradeScenario(
       "real restore of the same old schema and logical file roots",
     );
     migrate();
+    await verifyShipmentBackfill();
     fixture.db = new PrismaClient({
       datasourceUrl: fixture.config.databaseUrl,
     });

@@ -280,9 +280,11 @@ export class Fulfillment implements OnModuleDestroy {
         deliveredAt: row.deliveredAt?.toISOString() ?? null,
         grantExpiresAt: grant?.expiresAt.toISOString() ?? null,
         cancellationNotice:
-          row.state === "cancellation_pending"
-            ? "已请求取消，须人工核实印厂结果；不承诺撤回实物。"
-            : "取消和实物状态以印厂核实回执为准。",
+          !row.shippedAt && ["shipped", "delivered"].includes(row.state)
+            ? "原实际发货时间待核实；请核对原发货记录，不能推测或改写时间。"
+            : row.state === "cancellation_pending"
+              ? "已请求取消，须人工核实印厂结果；不承诺撤回实物。"
+              : "取消和实物状态以印厂核实回执为准。",
       });
     }
     return {
@@ -727,15 +729,45 @@ export class Fulfillment implements OnModuleDestroy {
     evidence: unknown,
     operatorAdminId: string,
   ) {
+    const attempt = await tx.fulfillmentAttempt.findUniqueOrThrow({
+      where: { id: attemptId },
+      select: { projectId: true },
+    });
+    const expired = await this.participation.activeDataPayloadExpiredIn(
+      tx,
+      attempt.projectId,
+    );
     await tx.fulfillmentRecord.create({
       data: {
         id: randomUUID(),
         attemptId,
         kind,
-        evidence: json(evidence),
+        evidence: expired ? Prisma.DbNull : json(evidence),
         operatorAdminId,
       },
     });
+  }
+  private async originalInputIn(
+    tx: Tx,
+    order: FirstCopyOrder,
+    attemptId: string,
+    kind: string,
+    actorId: string,
+    key: string,
+    body: unknown,
+  ) {
+    const original = await tx.fulfillmentCommand.findFirst({
+      where: {
+        projectId: order.projectId,
+        attemptId,
+        action: `${kind}:${attemptId}`,
+        requestHash: digest(body),
+        NOT: { actorId, key },
+      },
+      select: { key: true },
+    });
+    if (!original)
+      throw new ConflictException("Original verified input required");
   }
   async handoffIn(
     tx: Tx,
@@ -835,16 +867,30 @@ export class Fulfillment implements OnModuleDestroy {
         attemptId,
       );
     if (!prior.fresh) return this.view(tx, order.projectId);
+    const expired = await this.participation.activeDataPayloadExpiredIn(
+      tx,
+      order.projectId,
+    );
     if (body.outcome === "unknown") {
       if (!["handoff_pending", "cancellation_pending"].includes(attempt.state))
         throw new ConflictException();
       await tx.fulfillmentAttempt.update({
         where: { id: attemptId },
-        data: { receiptRef: body.evidenceRef },
+        data: { receiptRef: expired ? undefined : body.evidenceRef },
       });
     } else if (body.outcome === "accepted") {
       if (["in_production", "shipped", "delivered"].includes(attempt.state)) {
-        if (attempt.receiptRef !== body.evidenceRef)
+        if (expired)
+          await this.originalInputIn(
+            tx,
+            order,
+            attemptId,
+            "receipt",
+            operatorId,
+            key,
+            body,
+          );
+        else if (attempt.receiptRef !== body.evidenceRef)
           throw new ConflictException();
         return this.view(tx, order.projectId);
       }
@@ -871,7 +917,7 @@ export class Fulfillment implements OnModuleDestroy {
             attempt.state === "cancellation_pending"
               ? "cancellation_pending"
               : "in_production",
-          receiptRef: body.evidenceRef,
+          receiptRef: expired ? undefined : body.evidenceRef,
         },
       });
     } else if (body.outcome === "cancellation_rejected") {
@@ -884,7 +930,7 @@ export class Fulfillment implements OnModuleDestroy {
       });
       // Restore only known physical facts. Refusing cancellation is not itself
       // evidence that an unknown handoff was accepted or shipped.
-      const state = attempt.tracking
+      const state = attempt.shippedAt
         ? "shipped"
         : accepted
           ? "in_production"
@@ -895,7 +941,17 @@ export class Fulfillment implements OnModuleDestroy {
       });
     } else {
       if (attempt.state === "cancelled") {
-        if (attempt.receiptRef !== body.evidenceRef)
+        if (expired)
+          await this.originalInputIn(
+            tx,
+            order,
+            attemptId,
+            "receipt",
+            operatorId,
+            key,
+            body,
+          );
+        else if (attempt.receiptRef !== body.evidenceRef)
           throw new ConflictException();
         return this.view(tx, order.projectId);
       }
@@ -905,7 +961,10 @@ export class Fulfillment implements OnModuleDestroy {
         );
       await tx.fulfillmentAttempt.update({
         where: { id: attemptId },
-        data: { state: "cancelled", receiptRef: body.evidenceRef },
+        data: {
+          state: "cancelled",
+          receiptRef: expired ? undefined : body.evidenceRef,
+        },
       });
       if (!attempt.qualityRequestId)
         await tx.firstCopyEntitlement.updateMany({
@@ -979,7 +1038,26 @@ export class Fulfillment implements OnModuleDestroy {
       throw new ConflictException(
         "Applicable WeChat shipping path is not ready",
       );
-    this.occurred(body.shippedAt, attempt.createdAt);
+    const shippedAt = this.occurred(body.shippedAt, attempt.createdAt),
+      expired = await this.participation.activeDataPayloadExpiredIn(
+        tx,
+        order.projectId,
+      );
+    if (
+      attempt.shippedAt &&
+      attempt.shippedAt.getTime() !== shippedAt.getTime()
+    )
+      throw new ConflictException("Actual shipment time is immutable");
+    if (expired && attempt.shippedAt)
+      await this.originalInputIn(
+        tx,
+        order,
+        attemptId,
+        "shipping",
+        operatorId,
+        key,
+        body,
+      );
     const tracking = {
       carrier: body.carrier.trim(),
       number: body.number,
@@ -991,8 +1069,9 @@ export class Fulfillment implements OnModuleDestroy {
       where: { id: attemptId },
       data: {
         state: attempt.state === "delivered" ? "delivered" : "shipped",
-        tracking: json(tracking),
-        wechat: json(body.wechat),
+        shippedAt,
+        tracking: expired ? undefined : json(tracking),
+        wechat: expired ? undefined : json(body.wechat),
       },
     });
     await this.record(tx, attemptId, "shipping", body, operatorId);
@@ -1017,11 +1096,32 @@ export class Fulfillment implements OnModuleDestroy {
         attemptId,
       );
     if (!prior.fresh) return this.view(tx, order.projectId);
+    const expired = await this.participation.activeDataPayloadExpiredIn(
+      tx,
+      order.projectId,
+    );
     const existing = await tx.fulfillmentDelivery.findUnique({
       where: { orderId: id },
     });
     if (existing && attempt.qualityRequestId) {
       if (attempt.state === "delivered") {
+        if (expired) {
+          if (
+            attempt.deliveredAt?.toISOString() !==
+            new Date(body.deliveredAt).toISOString()
+          )
+            throw new ConflictException("Delivery fact is immutable");
+          await this.originalInputIn(
+            tx,
+            order,
+            attemptId,
+            "delivery",
+            operatorId,
+            key,
+            body,
+          );
+          return this.view(tx, order.projectId);
+        }
         const fact = await tx.fulfillmentRecord.findFirst({
           where: { attemptId, kind: "delivery" },
         });
@@ -1029,12 +1129,11 @@ export class Fulfillment implements OnModuleDestroy {
           throw new ConflictException("Delivery fact is immutable");
         return this.view(tx, order.projectId);
       }
-      if (attempt.state !== "shipped" || !attempt.tracking)
-        throw new ConflictException("Verified shipment required");
-      const occurredAt = this.occurred(
-        body.deliveredAt,
-        new Date((attempt.tracking as { shippedAt: string }).shippedAt),
-      );
+      if (attempt.state !== "shipped" || !attempt.shippedAt)
+        throw new ConflictException(
+          "Actual shipment time requires verification",
+        );
+      const occurredAt = this.occurred(body.deliveredAt, attempt.shippedAt);
       await tx.fulfillmentAttempt.update({
         where: { id: attemptId },
         data: { state: "delivered", deliveredAt: occurredAt },
@@ -1055,23 +1154,30 @@ export class Fulfillment implements OnModuleDestroy {
         existing.attemptId !== attemptId ||
         existing.occurredAt.toISOString() !==
           new Date(body.deliveredAt).toISOString() ||
-        existing.evidenceRef !== body.evidenceRef
+        (!expired && existing.evidenceRef !== body.evidenceRef)
       )
         throw new ConflictException("Delivery fact is immutable");
+      if (expired)
+        await this.originalInputIn(
+          tx,
+          order,
+          attemptId,
+          "delivery",
+          operatorId,
+          key,
+          body,
+        );
       return this.view(tx, order.projectId);
     }
-    if (attempt.state !== "shipped" || !attempt.tracking)
-      throw new ConflictException("Verified shipment required");
-    const occurredAt = this.occurred(
-      body.deliveredAt,
-      new Date((attempt.tracking as { shippedAt: string }).shippedAt),
-    );
+    if (attempt.state !== "shipped" || !attempt.shippedAt)
+      throw new ConflictException("Actual shipment time requires verification");
+    const occurredAt = this.occurred(body.deliveredAt, attempt.shippedAt);
     await tx.fulfillmentDelivery.create({
       data: {
         orderId: id,
         attemptId,
         occurredAt,
-        evidenceRef: body.evidenceRef,
+        evidenceRef: expired ? null : body.evidenceRef,
         operatorAdminId: operatorId,
       },
     });

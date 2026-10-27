@@ -417,6 +417,7 @@ export class Stories {
     operator: { id: string; realm: "product" | "admin" },
     key: string,
   ) {
+    await this.participation.requireMaterialIn(tx, projectId, "activeData");
     await this.participation.requireMaterialIn(
       tx,
       projectId,
@@ -513,6 +514,72 @@ export class Stories {
         });
         if (revision.contentHash !== body.contentHash)
           throw new ConflictException();
+        const requestHash = hash(JSON.stringify(body));
+        const prior = await tx.storyDecision.findFirst({
+          where: {
+            projectId,
+            storyId: id,
+            operatorUserId: actor.userId,
+            idempotencyKey: key,
+          },
+        });
+        if (prior) {
+          if (prior.requestHash !== requestHash) throw new ConflictException();
+          return this.view(tx, projectId, id);
+        }
+        if (!body.confirmed && body.allowInBook)
+          throw new BadRequestException();
+        const payloadExpired =
+          await this.participation.activeDataPayloadExpiredIn(tx, projectId);
+        if (payloadExpired) {
+          if (body.confirmed && body.allowInBook)
+            throw new ForbiddenException(
+              "Expired activity cannot acquire new authorization",
+            );
+          const basis = body.confirmed
+            ? await tx.storyDecision.findFirst({
+                where: {
+                  projectId,
+                  revisionId: revision.id,
+                  subjectId: actor.subjectId,
+                  bindingVersion: actor.bindingVersion,
+                  accessEpoch: actor.accessEpoch,
+                },
+                orderBy: { sequence: "desc" },
+              })
+            : null;
+          if (body.confirmed && !basis?.confirmed)
+            throw new ForbiddenException(
+              "A refusal cannot create confirmation",
+            );
+          if (actor.subjectDecision !== "self") {
+            if (!body.assistedSessionId) throw new ForbiddenException();
+            await this.participation.authorizeAssisted(tx, {
+              projectId,
+              sessionId: body.assistedSessionId,
+              operatorUserId: actor.userId,
+              purpose: "story_confirmation",
+            });
+          }
+          await this.participation.recordStoryDenialIn(tx, {
+            id: randomUUID(),
+            projectId,
+            storyId: id,
+            revisionId: revision.id,
+            contentHash: revision.contentHash,
+            subjectId: actor.subjectId,
+            operatorUserId: actor.userId,
+            bindingVersion: actor.bindingVersion,
+            accessEpoch: actor.accessEpoch,
+            method: "journal_denial",
+            noticeVersion: body.noticeVersion,
+            confirmed: body.confirmed,
+            allowInBook: body.allowInBook,
+            idempotencyKey: key,
+            requestHash,
+          });
+          return this.view(tx, projectId, id);
+        }
         if (
           body.confirmed &&
           (revision.reviewItems as string[]).some(
@@ -544,21 +611,6 @@ export class Stories {
               idempotencyKey: key,
             });
           assistedEvidenceId = evidence.id;
-        }
-        if (!body.confirmed && body.allowInBook)
-          throw new BadRequestException();
-        const requestHash = hash(JSON.stringify(body));
-        const prior = await tx.storyDecision.findFirst({
-          where: {
-            projectId,
-            storyId: id,
-            operatorUserId: actor.userId,
-            idempotencyKey: key,
-          },
-        });
-        if (prior) {
-          if (prior.requestHash !== requestHash) throw new ConflictException();
-          return this.view(tx, projectId, id);
         }
         if (
           await tx.storyDecision.findFirst({

@@ -66,6 +66,7 @@ export class StoryCare {
       authorization,
       undefined,
       async (tx, actor) => {
+        await this.participation.requireMaterialIn(tx, projectId, "activeData");
         if (
           !Number.isFinite(Date.parse(body.expiresAt)) ||
           Date.parse(body.expiresAt) <= Date.now()

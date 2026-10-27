@@ -458,6 +458,7 @@ export class FirstCopies implements OnModuleDestroy {
       authorization,
       undefined,
       async (tx, actor) => {
+        await this.participation.requireMaterialIn(tx, projectId, "activeData");
         const current = await this.contextIn(tx, projectId, actor);
         if (current.production && !current.canReviseProduction)
           throw new ConflictException();

@@ -426,7 +426,10 @@ export class QualityCare implements OnModuleDestroy {
     key: string,
   ) {
     const { row, order } = await this.caseIn(tx, caseId);
-    await this.rights.requireAvailableIn(tx, row.projectId, "activeData");
+    const payloadExpired = await this.participation.activeDataPayloadExpiredIn(
+      tx,
+      row.projectId,
+    );
     if (!(await this.command(tx, row, actorId, "assign", key, body)))
       return this.viewIn(tx, row);
     if (row.version !== body.expectedVersion || row.state !== "requested")
@@ -453,7 +456,7 @@ export class QualityCare implements OnModuleDestroy {
           ownerAdminId: actorId,
           assignedAt: new Date(),
           dueAt: new Date(body.dueAt),
-          assignmentEvidenceRef: body.evidenceRef,
+          assignmentEvidenceRef: payloadExpired ? undefined : body.evidenceRef,
         },
       }),
     );
@@ -633,26 +636,37 @@ export class QualityCare implements OnModuleDestroy {
     body: ReviewQualityDto,
     key: string,
   ) {
-    const { row, order, grant } = await this.scopeIn(tx, caseId, actorId);
+    const { row, order } = await this.caseIn(tx, caseId);
+    const payloadExpired = await this.participation.activeDataPayloadExpiredIn(
+      tx,
+      row.projectId,
+    );
+    const minimumRefund = payloadExpired && body.resolution === "refund";
+    const scope = minimumRefund
+      ? null
+      : await this.scopeIn(tx, caseId, actorId);
+    if (row.ownerAdminId !== actorId) throw new ForbiddenException();
     if (!(await this.command(tx, row, actorId, "review", key, body)))
       return this.viewIn(tx, row);
     if (
       row.version !== body.expectedVersion ||
       row.state !== "assigned" ||
-      !grant.scopes.includes("pdf") ||
-      !grant.scopes.includes("evidence")
+      (!minimumRefund &&
+        (!scope!.grant.scopes.includes("pdf") ||
+          !scope!.grant.scopes.includes("evidence")))
     )
       throw new ConflictException();
-    await this.evidenceTermsIn(tx, row.projectId);
+    if (!minimumRefund) await this.evidenceTermsIn(tx, row.projectId);
     const original = await tx.fulfillmentAttempt.findUniqueOrThrow({
       where: { id: row.originalAttemptId },
     });
-    await this.books.frozenOutputIn(
-      tx,
-      row.projectId,
-      original.bookId,
-      original.pdfHash,
-    );
+    if (!minimumRefund)
+      await this.books.frozenOutputIn(
+        tx,
+        row.projectId,
+        original.bookId,
+        original.pdfHash,
+      );
     const d07 = (order.packageSnapshot as any).admission?.d07,
       rule = d07?.[row.reason];
     if (
@@ -716,7 +730,7 @@ export class QualityCare implements OnModuleDestroy {
         resolution: body.resolution,
         reprintMode: body.mode ?? null,
         reviewedAt: new Date(),
-        reviewEvidenceRef: body.evidenceRef,
+        reviewEvidenceRef: payloadExpired ? undefined : body.evidenceRef,
         requestWindowStartedAt: start,
         requestWindowEndsAt: end,
       },
@@ -727,7 +741,7 @@ export class QualityCare implements OnModuleDestroy {
         state: "verified",
         verifiedBy: actorId,
         verifiedAt: updated.reviewedAt,
-        verificationEvidence: body.evidenceRef,
+        verificationEvidence: payloadExpired ? undefined : body.evidenceRef,
       },
     });
     return this.viewIn(tx, updated);

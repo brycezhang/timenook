@@ -456,7 +456,9 @@ export class Participation
           operatorRealm: "product",
           noticeVersion: application.noticeVersion,
           method: "initiator_review",
-          evidenceRef: body.evidenceRef,
+          evidenceRef: (await this.activeDataPayloadExpiredIn(tx, p.id))
+            ? null
+            : body.evidenceRef,
           requestId,
         },
       });
@@ -1229,7 +1231,9 @@ export class Participation
         supportCaseId: caseId,
         noticeVersion: body.noticeVersion,
         method: "care_verified",
-        evidenceRef: body.evidenceRef,
+        evidenceRef: (await this.activeDataPayloadExpiredIn(tx, id))
+          ? null
+          : body.evidenceRef,
         requestId,
       },
     });
@@ -1725,6 +1729,7 @@ export class Participation
       idempotencyKey: string;
     },
   ) {
+    await this.requireMaterialIn(tx, command.projectId, "activeData");
     const purpose =
       command.content.kind === "story"
         ? "story_confirmation"
@@ -1843,7 +1848,7 @@ export class Participation
             row.bindingVersion !== bindingVersion ||
             row.accessEpoch !== accessEpoch
           ? "revoked"
-          : row.expiresAt.getTime() <= Date.now()
+          : payloadExpired || row.expiresAt.getTime() <= Date.now()
             ? "expired"
             : "active",
     };
@@ -1902,6 +1907,10 @@ export class Participation
           payloadExpired,
         );
       }
+      if (payloadExpired && body.granted)
+        throw new ForbiddenException(
+          "Expired activity cannot acquire new authorization payload",
+        );
       if (
         (await tx.assistedSession.findFirst({
           where: { projectId: id, evidenceRef: body.evidenceRef },
@@ -1956,7 +1965,7 @@ export class Participation
           purpose: body.purpose,
           granted: body.granted,
           noticeVersion: body.noticeVersion,
-          evidenceRef: body.evidenceRef,
+          evidenceRef: payloadExpired ? null : body.evidenceRef,
           bindingVersion: subject.bindingVersion,
           accessEpoch: p.accessEpoch,
           idempotencyKey: key!,
@@ -1977,7 +1986,7 @@ export class Participation
             purpose: body.purpose,
             granted: body.granted,
             noticeVersion: body.noticeVersion,
-            evidenceRef: body.evidenceRef,
+            evidenceRef: payloadExpired ? null : body.evidenceRef,
             method: "assisted",
           },
         });
