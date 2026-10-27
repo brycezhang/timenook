@@ -1,3 +1,4 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -94,6 +95,7 @@ before(async () => {
       active: true,
     },
   });
+  await bootPrivacyFixture(config);
   app = await createApplication(config, { wechatFetch, paymentFetch });
 });
 after(async () => {
@@ -1726,4 +1728,8 @@ test("withdrawal and renewed collection cannot revive an interview from the prev
     }),
   );
   assert.notEqual(fresh.id, previous.id);
+});
+
+after(async () => {
+  await closePrivacyFixture(config);
 });

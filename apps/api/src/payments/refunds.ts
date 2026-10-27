@@ -1,3 +1,4 @@
+import { PrivacyRights } from "../care/privacy-rights";
 import {
   Body,
   Controller,
@@ -99,6 +100,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     private readonly identity: IdentityAccess,
+    private readonly rights: PrivacyRights,
     private readonly orders: Orders,
     @Inject(PAYMENT_FETCH) private readonly paymentFetch: typeof fetch,
     @Inject(REFUND_RUNTIME) private readonly runtime: RefundRuntime,
@@ -111,7 +113,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
   beforeExecution(id: string) {
     return this.runtime.beforeExecution(id);
   }
-  private view(row: Refund): RefundView {
+  private view(row: Refund, materialsDeleted = false): RefundView {
     return {
       requestWindowStartedAt: row.requestWindowStartedAt?.toISOString() ?? null,
       requestWindowEndsAt: row.requestWindowEndsAt?.toISOString() ?? null,
@@ -138,7 +140,10 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       rule: row.rule as unknown as RefundView["rule"],
       deleteData: false,
       productionReviewRequired: false,
-      requestDescription: row.evidenceRef.replace(/^synthetic:/, ""),
+      requestDescription: materialsDeleted
+        ? "资料已删除；仅保留退款事实"
+        : (row.evidenceRef?.replace(/^synthetic:/, "") ??
+          "资料已删除；仅保留退款事实"),
       productionAttemptId: null,
     };
   }
@@ -162,7 +167,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         /* Unfrozen or unsupported policies remain visibly unavailable. */
       }
     return {
-      ...this.view(row),
+      ...this.view(row, await this.rights.deletedIn(tx, row.projectId)),
       rule,
       productionAttemptId: attempt?.id ?? null,
       productionReviewRequired:
@@ -173,7 +178,8 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
           "shipped",
           "cancellation_pending",
         ].includes(attempt.state) &&
-        !row.productionEvidence,
+        !row.productionEvidence &&
+        !row.productionEvidenceHash,
     };
   }
   async listIn(tx: Tx, order: PaymentOrder): Promise<OrderRefundsView> {
@@ -249,7 +255,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     });
     if (prior) {
       if (prior.requestHash !== hash(body)) throw conflict();
-      return this.view(prior);
+      return this.view(prior, await this.rights.deletedIn(tx, project.id));
     }
     const subject = await tx.projectSubject.findUniqueOrThrow({
         where: { projectId: project.id },
@@ -272,6 +278,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         createdAt: requestedAt,
       },
     });
+    const materialsDeleted = await this.rights.deletedIn(tx, project.id);
     return this.view(
       await tx.refund.create({
         data: {
@@ -283,11 +290,12 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
           requestKey: key,
           requestHash: hash(body),
           reason: body.reason,
-          evidenceRef: body.evidenceRef,
+          evidenceRef: materialsDeleted ? null : body.evidenceRef,
           outRefundNo: "TNR" + id.replaceAll("-", ""),
           createdAt: requestedAt,
         },
       }),
+      materialsDeleted,
     );
   }
   private rule(order: PaymentOrder, reason: string): RefundRule {
@@ -397,6 +405,11 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       if (prior.requestHash !== requestHash) throw conflict();
       return false;
     }
+    const refund = await tx.refund.findUniqueOrThrow({
+      where: { id: refundId },
+      select: { projectId: true },
+    });
+    const erased = await this.rights.deletedIn(tx, refund.projectId);
     await tx.refundCommand.create({
       data: {
         refundId,
@@ -404,7 +417,9 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         action,
         key,
         requestHash,
-        payload: JSON.parse(JSON.stringify(body)) as Prisma.InputJsonValue,
+        payload: erased
+          ? Prisma.DbNull
+          : (JSON.parse(JSON.stringify(body)) as Prisma.InputJsonValue),
       },
     });
     return true;
@@ -533,7 +548,12 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         state: "verified",
         verifiedBy: actorId,
         verifiedAt: now,
-        verificationEvidence: body.evidenceRef,
+        verificationEvidence: (await this.rights.deletedIn(
+          tx,
+          refund.projectId,
+        ))
+          ? null
+          : body.evidenceRef,
       },
     });
     return this.readIn(tx, id);
@@ -603,7 +623,12 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       throw new ConflictException("Original handoff still unknown");
     await tx.refund.update({
       where: { id },
-      data: { productionEvidence: body.evidenceRef },
+      data: {
+        productionEvidence: (await this.rights.deletedIn(tx, refund.projectId))
+          ? null
+          : body.evidenceRef,
+        productionEvidenceHash: hash(body.evidenceRef),
+      },
     });
     return this.readIn(tx, id);
   }
@@ -802,6 +827,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     });
   }
   async execute(id: string, submit: boolean) {
+    await this.rights.assertHealthy();
     this.enabled();
     const provider = new WechatPay(this.config.payments!, this.paymentFetch);
     const claim = await this.database.$transaction(async (tx) => {
@@ -940,6 +966,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     this.scan.unref();
   }
   async recover() {
+    await this.rights.assertHealthy();
     const inbox = await this.database.refundInbox.findMany({
       where: { processedAt: null },
       take: 25,

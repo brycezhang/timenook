@@ -1,3 +1,4 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { ProjectPlans } from "../src/projects/project-plans";
 import { Stories } from "../src/stories/stories";
 import { Participation } from "../src/identity/participation";
@@ -190,6 +191,7 @@ before(async () => {
     }
   }
   const aiFetch: typeof fetch = (...args) => providerTransport(...args);
+  await bootPrivacyFixture(config);
   app = await createApplication(config, {
     wechatFetch,
     paymentFetch,
@@ -1948,4 +1950,8 @@ test("a story relay endpoint change stops the frozen task before any provider su
     if (previous === undefined) delete deepseek.baseUrl;
     else deepseek.baseUrl = previous;
   }
+});
+
+after(async () => {
+  await closePrivacyFixture(config);
 });

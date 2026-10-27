@@ -1,3 +1,4 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { paymentAdmin } from "./payment-admin-fixture";
 import { once } from "node:events";
 import { ProductionTasks } from "../src/tasks/tasks";
@@ -142,6 +143,7 @@ before(async () => {
     }
   }
   const aiFetch: typeof fetch = (...args) => providerTransport(...args);
+  await bootPrivacyFixture(config);
   app = await createApplication(config, {
     wechatFetch,
     paymentFetch,
@@ -1798,4 +1800,8 @@ test("a full due batch waiting for AI authorization does not starve another auth
   } finally {
     await runtime.close();
   }
+});
+
+after(async () => {
+  await closePrivacyFixture(config);
 });

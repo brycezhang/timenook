@@ -1,3 +1,4 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -87,6 +88,7 @@ before(async () => {
       active: true,
     },
   });
+  await bootPrivacyFixture(config);
   app = await createApplication(config, { wechatFetch, paymentFetch });
 });
 after(async () => {
@@ -1739,14 +1741,12 @@ test("assisted purposes remain independently active, same-purpose renewal replac
   );
   const authorize = (row: any) =>
     db.$transaction((tx) =>
-      app
-        .get(Participation)
-        .authorizeAssisted(tx, {
-          projectId: p.projectId,
-          sessionId: row.id,
-          operatorUserId: p.buyer.id,
-          purpose: row.purpose,
-        }),
+      app.get(Participation).authorizeAssisted(tx, {
+        projectId: p.projectId,
+        sessionId: row.id,
+        operatorUserId: p.buyer.id,
+        purpose: row.purpose,
+      }),
     );
   for (const row of [collection, ai, sharing])
     assert.equal((await authorize(row)).subjectId, p.subjectId);
@@ -1805,14 +1805,12 @@ test("assisted sharing expiry at the exact deadline stops private project reads 
   assert.equal(
     (
       await db.$transaction((tx) =>
-        app
-          .get(Participation)
-          .authorizeAssisted(tx, {
-            projectId: p.projectId,
-            sessionId: collection.id,
-            operatorUserId: p.buyer.id,
-            purpose: "collection",
-          }),
+        app.get(Participation).authorizeAssisted(tx, {
+          projectId: p.projectId,
+          sessionId: collection.id,
+          operatorUserId: p.buyer.id,
+          purpose: "collection",
+        }),
       )
     ).subjectId,
     p.subjectId,
@@ -1932,14 +1930,12 @@ test("narrator and Care global revocations keep old assisted sessions invalid af
   const oldEpoch = (await state(p, p.buyer.token)).accessEpoch;
   const authorize = (row: any) =>
     db.$transaction((tx) =>
-      app
-        .get(Participation)
-        .authorizeAssisted(tx, {
-          projectId: p.projectId,
-          sessionId: row.id,
-          operatorUserId: p.buyer.id,
-          purpose: row.purpose,
-        }),
+      app.get(Participation).authorizeAssisted(tx, {
+        projectId: p.projectId,
+        sessionId: row.id,
+        operatorUserId: p.buyer.id,
+        purpose: row.purpose,
+      }),
     );
   data((await choose(p, p.narrator.token, "ai", false)).response);
   assert.equal((await state(p, p.buyer.token)).accessEpoch, oldEpoch + 1);
@@ -1992,4 +1988,8 @@ test("narrator and Care global revocations keep old assisted sessions invalid af
       .statusCode,
     403,
   );
+});
+
+after(async () => {
+  await closePrivacyFixture(config);
 });

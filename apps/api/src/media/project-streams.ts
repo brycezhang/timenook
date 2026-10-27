@@ -1,3 +1,4 @@
+import { PrivacyRights } from "../care/privacy-rights";
 import {
   Injectable,
   Inject,
@@ -40,6 +41,7 @@ export class ProjectStreams implements OnModuleDestroy {
   constructor(
     @Inject(API_CONFIG) config: ApiConfig,
     private readonly identity: IdentityAccess,
+    private readonly rights: PrivacyRights,
   ) {
     this.db = new PrismaClient({ datasourceUrl: config.databaseUrl });
   }
@@ -57,6 +59,9 @@ export class ProjectStreams implements OnModuleDestroy {
     projectId: string,
     usesSharing = true,
   ): Promise<ProjectStreamFence> {
+    await this.rights.assertReplayed();
+    if (await this.rights.deletedIn(this.db as never, projectId))
+      throw new ForbiddenException();
     const project = await this.db.project.findUnique({
       where: { id: projectId },
       select: { accessEpoch: true },

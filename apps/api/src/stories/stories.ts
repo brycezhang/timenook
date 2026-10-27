@@ -561,7 +561,7 @@ export class Stories {
           })
         )
           throw new ConflictException("Fresh decision evidence required");
-        await tx.storyDecision.create({
+        const decision = await tx.storyDecision.create({
           data: {
             id: randomUUID(),
             projectId,
@@ -582,6 +582,10 @@ export class Stories {
             requestHash: hash(JSON.stringify(body)),
           },
         });
+        if (!decision.confirmed || !decision.allowInBook) {
+          const { sequence, createdAt, evidenceRef, ...minimal } = decision;
+          await this.participation.recordStoryDenialIn(tx, minimal);
+        }
         return this.view(tx, projectId, id);
       },
     );

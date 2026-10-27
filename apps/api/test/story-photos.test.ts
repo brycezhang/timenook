@@ -1,3 +1,4 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import sharp from "sharp";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
@@ -152,6 +153,7 @@ before(async () => {
       active: true,
     },
   });
+  await bootPrivacyFixture(config);
   app = await createApplication(config, fixtureOptions());
 });
 after(async () => {
@@ -1354,4 +1356,8 @@ test("photo derivative dimensions describe the actual resized preview rather tha
   const actual = await sharp(r.rawPayload).metadata();
   assert.equal(actual.width, preview.width);
   assert.equal(actual.height, preview.height);
+});
+
+after(async () => {
+  await closePrivacyFixture(config);
 });

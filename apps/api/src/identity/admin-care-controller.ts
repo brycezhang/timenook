@@ -1,3 +1,4 @@
+import { Deletions } from "../care/deletions";
 import {
   Body,
   Controller,
@@ -26,6 +27,7 @@ export class AdminCareController {
   constructor(
     private readonly access: AdminAccess,
     private readonly participation: Participation,
+    private readonly deletions: Deletions,
   ) {}
   @Get("care-requests")
   @Header("Cache-Control", "no-store")
@@ -106,6 +108,8 @@ export class AdminCareController {
             ),
         );
         await this.participation.reconcileRevocations();
+        if (result.fulfillment === "deletion-ledger")
+          await this.deletions.reconcile(await this.deletions.caseProject(id));
         return result;
       }),
       meta: { requestId: request.id },

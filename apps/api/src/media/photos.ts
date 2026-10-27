@@ -1,3 +1,5 @@
+import { PrivacyRights } from "../care/privacy-rights";
+import { join } from "node:path";
 import { ProjectStreams } from "./project-streams";
 import { Type } from "class-transformer";
 import {
@@ -94,6 +96,7 @@ export class Photos implements OnModuleDestroy {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     private readonly participation: Participation,
+    private readonly rights: PrivacyRights,
     @Inject(PHOTO_OBJECTS) private readonly objects: ProbeObjects,
   ) {
     this.redis = new Redis(config.redisUrl, { maxRetriesPerRequest: 0 });
@@ -403,6 +406,45 @@ export class Photos implements OnModuleDestroy {
     );
   }
 
+  private async ownedPhotoRun(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    target: string,
+    crop = false,
+  ) {
+    const run = randomUUID(),
+      snapshots: Record<string, string> = {
+        original: `photos/staging/${randomUUID()}.bin`,
+        preview: `photos/staging/${randomUUID()}.jpg`,
+        print: `photos/staging/${randomUUID()}.png`,
+      };
+    if (!crop)
+      await this.rights.registerOwnedIn(
+        tx,
+        projectId,
+        "originalPhotos",
+        this.scope,
+        [snapshots.original, `photos/sealed/${target}/original.bin`],
+        run,
+      );
+    await this.rights.registerOwnedIn(
+      tx,
+      projectId,
+      "derivedPhotos",
+      this.scope,
+      [
+        snapshots.preview,
+        snapshots.print,
+        `photos/sealed/${target}/preview.jpg`,
+        `photos/sealed/${target}/print.png`,
+      ],
+      run,
+    );
+    return {
+      root: join(this.config.recording!.storageRoot, ".privacy-runs", run),
+      snapshots,
+    };
+  }
   async seal(
     projectId: string,
     interviewId: string,
@@ -424,19 +466,22 @@ export class Photos implements OnModuleDestroy {
     if (existing.state === "released") throw new ConflictException();
     if (existing.state === "sealed")
       return this.status(projectId, interviewId, id, body, authorization);
-    await this.participation.withCollectionAccess(
+    const owned = await this.participation.withCollectionAccess(
       projectId,
       authorization,
       body.assistedSessionId,
-      async (tx, actor) =>
+      async (tx, actor) => {
         this.sameActor(
           await this.intent(tx, projectId, interviewId, id),
           actor,
-        ),
+        );
+        return this.ownedPhotoRun(tx, projectId, id);
+      },
     );
     let verified: Awaited<ReturnType<typeof sealPhoto>>;
     try {
       verified = await sealPhoto(this.objects, {
+        owned,
         id,
         bytes: existing.bytes,
         sha256: existing.sha256,
@@ -921,13 +966,17 @@ export class Photos implements OnModuleDestroy {
         const asset = await tx.photoAsset.findFirstOrThrow({
           where: { intentId: id, kind: "original" },
         });
-        return { asset };
+        return {
+          asset,
+          owned: await this.ownedPhotoRun(tx, projectId, target, true),
+        };
       },
     );
     if (source.done) return source.done;
     let verified: Awaited<ReturnType<typeof sealPhoto>>;
     try {
       verified = await sealPhoto(this.objects, {
+        owned: source.owned,
         id: target,
         bytes: source.asset!.bytes,
         sha256: source.asset!.sha256,

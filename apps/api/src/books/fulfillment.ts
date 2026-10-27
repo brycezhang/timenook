@@ -1,3 +1,4 @@
+import { PrivacyRights } from "../care/privacy-rights";
 import { ProjectStreams } from "../media/project-streams";
 import {
   Injectable,
@@ -141,6 +142,7 @@ export class Fulfillment implements OnModuleDestroy {
   private readonly terms: ProjectServiceTerms;
   constructor(
     private readonly participation: Participation,
+    private readonly rights: PrivacyRights,
     private readonly copies: FirstCopies,
     @Inject(API_CONFIG) private readonly config: ApiConfig,
   ) {
@@ -232,6 +234,7 @@ export class Fulfillment implements OnModuleDestroy {
       accessExpiresAt: string | null;
     },
   ): Promise<FulfillmentView> {
+    const erased = await this.rights.deletedIn(tx, projectId);
     const order = await tx.firstCopyOrder.findUnique({ where: { projectId } }),
       terms = await this.terms.read(projectId, undefined, tx),
       subject = await tx.projectSubject.findUniqueOrThrow({
@@ -248,6 +251,7 @@ export class Fulfillment implements OnModuleDestroy {
       const grant = await tx.fulfillmentGrant.findFirst({
         where: { attemptId: row.id },
         orderBy: { sequence: "desc" },
+        select: { expiresAt: true },
       });
       attempts.push({
         id: row.id,
@@ -257,11 +261,15 @@ export class Fulfillment implements OnModuleDestroy {
         caseId: row.caseId,
         ownerAdminId: row.ownerAdminId,
         dueAt: row.dueAt.toISOString(),
-        supplierRef: row.supplierRef,
-        receiptRef: row.receiptRef,
+        supplierRef: erased ? "资料已删除" : (row.supplierRef ?? "资料已删除"),
+        receiptRef: erased ? null : row.receiptRef,
         ...this.binding(row),
-        tracking: row.tracking as unknown as FulfillmentAttemptView["tracking"],
-        wechat: row.wechat as unknown as FulfillmentWechat | null,
+        tracking: erased
+          ? null
+          : (row.tracking as unknown as FulfillmentAttemptView["tracking"]),
+        wechat: erased
+          ? null
+          : (row.wechat as unknown as FulfillmentWechat | null),
         deliveredAt: row.deliveredAt?.toISOString() ?? null,
         grantExpiresAt: grant?.expiresAt.toISOString() ?? null,
         cancellationNotice:
@@ -280,7 +288,8 @@ export class Fulfillment implements OnModuleDestroy {
       reservation: order ? this.binding(order) : null,
       accessExpiresAt: actor?.accessExpiresAt ?? null,
       grantMaxMinutes: 30,
-      canGrantNarrator: !!actor && subject.boundUserId === actor.userId,
+      canGrantNarrator:
+        !erased && !!actor && subject.boundUserId === actor.userId,
       attempts,
       current: attempts[0] ?? null,
       creation: {
@@ -289,6 +298,7 @@ export class Fulfillment implements OnModuleDestroy {
       },
       serviceTerms: { playback: terms.playback ?? null },
       canGrant:
+        !erased &&
         !!actor &&
         attempts[0]?.state === "approved" &&
         terms.creation?.state === "active",

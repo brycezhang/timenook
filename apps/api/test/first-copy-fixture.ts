@@ -12,10 +12,13 @@ export async function readyFirstCopyBook(
   photoRetention: Partial<
     Record<"originalPhotos" | "derivedPhotos", number>
   > = {},
+  retention: Record<string, number> = {},
 ) {
   const snapshot = JSON.parse(
     readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
   );
+  for (const [kind, value] of Object.entries(retention))
+    snapshot.admission.d03.retention[kind].duration.value = value;
   for (const [kind, value] of Object.entries(photoRetention))
     snapshot.admission.d03.retention[kind].duration.value = value;
   snapshot.d01.minPages = 1;

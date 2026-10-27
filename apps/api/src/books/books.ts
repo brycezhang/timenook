@@ -362,7 +362,7 @@ export class Books implements OnModuleDestroy {
     const snapshot: BookSnapshot = {
       schemaVersion: "t20-v1",
       cover: {
-        title: project.bookTitle ?? order.bookTitle,
+        title: project.bookTitle ?? order.bookTitle ?? "资料已删除",
         template: "t20-a5-v3",
         version: cover.version,
         salutation: cover.salutation,

@@ -1,3 +1,4 @@
+import { PrivacyRights } from "../care/privacy-rights";
 import { Followups } from "../followups/followups";
 import { Books } from "../books/books";
 import { Stories } from "../stories/stories";
@@ -124,6 +125,7 @@ export class ProductionTasks implements OnModuleDestroy {
   private readonly text?: DeepSeekText;
   constructor(
     private readonly participation: Participation,
+    private readonly rights: PrivacyRights,
     private readonly stories: Stories,
     private readonly followups: Followups,
     @Inject(API_CONFIG) private readonly config: ApiConfig,
@@ -141,6 +143,7 @@ export class ProductionTasks implements OnModuleDestroy {
     return task.kind === "ask_followup" ? this.followups : this.stories;
   }
   async due() {
+    await this.rights.assertHealthy();
     return (
       await this.db.productionTask.findMany({
         where: {
@@ -506,10 +509,12 @@ export class ProductionTasks implements OnModuleDestroy {
       );
     });
     if (!maySend) return;
+    await this.rights.assertHealthy();
     const result = await this.text!.generate(
       task.kind === "ask_followup" ? "question" : "story",
       claimed.input,
     );
+    await this.rights.assertHealthy();
     await this.db.$transaction(async (tx) => {
       const current = await this.currentClaim(tx, task);
       if (
@@ -651,6 +656,7 @@ export class ProductionTasks implements OnModuleDestroy {
     return true;
   }
   async run(id: string) {
+    await this.rights.assertHealthy();
     const kind = await this.db.productionTask.findUnique({
       where: { id },
       select: { kind: true },
@@ -701,6 +707,7 @@ export class ProductionTasks implements OnModuleDestroy {
         return true;
       });
       if (!maySend) return;
+      await this.rights.assertHealthy();
       result = submit
         ? await this.asr!.submit(task.providerRequestId, source!)
         : await this.asr!.query(task.providerRequestId);
@@ -729,6 +736,7 @@ export class ProductionTasks implements OnModuleDestroy {
       });
       return;
     }
+    await this.rights.assertHealthy();
     await this.db.$transaction(async (tx) => {
       const current = await this.currentClaim(tx, task);
       // Observed external work remains accountable when its content has become
@@ -1078,7 +1086,8 @@ export class ProductionTasks implements OnModuleDestroy {
       queuedAt: task.createdAt.toISOString(),
       deadline: task.deadline?.toISOString() ?? null,
       providerRequestId: task.providerRequestId,
-      configurationVersion: (task.configuration as Prisma.JsonObject).version,
+      configurationVersion:
+        (task.configuration as Prisma.JsonObject | null)?.version ?? "erased",
       providerCode: task.providerCode,
       errorCode: task.errorCode,
       retryable,

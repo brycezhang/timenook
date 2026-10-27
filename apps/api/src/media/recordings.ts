@@ -1,3 +1,4 @@
+import { PrivacyRights } from "../care/privacy-rights";
 import { ProjectStreams } from "./project-streams";
 import { createTranscription } from "../tasks/tasks";
 import {
@@ -67,6 +68,7 @@ export class Recordings implements OnModuleDestroy {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     private readonly participation: Participation,
+    private readonly rights: PrivacyRights,
     @Inject(RECORDING_OBJECTS) private readonly objects: ProbeObjects,
   ) {
     this.redis = new Redis(config.redisUrl, { maxRetriesPerRequest: 0 });
@@ -492,6 +494,7 @@ export class Recordings implements OnModuleDestroy {
         },
         "existing",
       );
+    const snapshotKey = `staging/${randomUUID()}.mp3`;
     await this.participation.withCollectionAccess(
       projectId,
       authorization,
@@ -501,11 +504,19 @@ export class Recordings implements OnModuleDestroy {
           await this.intent(tx, projectId, interviewId, id),
           actor,
         );
+        await this.rights.registerOwnedIn(
+          tx,
+          projectId,
+          "originalAudio",
+          this.scope,
+          [snapshotKey, `sealed/${id}.mp3`],
+        );
       },
     );
     let verified: Awaited<ReturnType<typeof sealAudio>>;
     try {
       verified = await sealAudio(this.objects, {
+        snapshotKey,
         source: `staging/${id}.mp3`,
         target: `sealed/${id}.mp3`,
         bytes: existing.bytes,

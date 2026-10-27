@@ -1,3 +1,4 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import sharp from "sharp";
 import { ProductionTasks } from "../src/tasks/tasks";
 import assert from "node:assert/strict";
@@ -19,6 +20,16 @@ export let root: string;
 export let app: Awaited<ReturnType<typeof createApplication>>;
 export let db: PrismaClient;
 let fixtureOptions: Parameters<typeof createApplication>[1];
+let objectCopyGate:
+  | ((
+      source: string,
+      target: string,
+      write: () => Promise<void>,
+    ) => Promise<void>)
+  | undefined;
+export function interceptBookObjectCopy(gate?: typeof objectCopyGate) {
+  objectCopyGate = gate;
+}
 let objectReadGate: ((key: string) => Promise<void>) | undefined;
 let refundExecutionGate: ((id: string) => Promise<void>) | undefined;
 let refundInstant: Date | undefined;
@@ -207,6 +218,11 @@ export async function startBookFixture() {
     },
   });
   class Objects extends LocalProbeObjects {
+    async copy(source: string, target: string) {
+      if (!objectCopyGate) return super.copy(source, target);
+      const bytes = await super.read(source);
+      return objectCopyGate(source, target, () => super.put(target, bytes));
+    }
     async read(key: string) {
       await objectReadGate?.(key);
       return super.read(key);
@@ -232,12 +248,15 @@ export async function startBookFixture() {
       },
     },
   };
+  await bootPrivacyFixture(config);
   app = await createApplication(config, fixtureOptions);
 }
 export async function stopBookFixture() {
   refundExecutionGate = undefined;
+  objectCopyGate = undefined;
   refundInstant = undefined;
   await app?.close();
+  if (config) await closePrivacyFixture(config);
   if (root) await rm(root, { recursive: true, force: true });
   if (db) {
     await db.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);

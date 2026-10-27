@@ -1,3 +1,4 @@
+import { PrivacyRights } from "../care/privacy-rights";
 import { isDeepStrictEqual } from "node:util";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
@@ -179,6 +180,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     private readonly identity: IdentityAccess,
+    private readonly rights: PrivacyRights,
   ) {
     this.db = new PrismaClient({ datasourceUrl: config.databaseUrl });
     this.terms = new ProjectServiceTerms(config.databaseUrl);
@@ -211,6 +213,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     if (lock)
       await tx.$queryRaw`SELECT id FROM projects WHERE id=${id}::uuid FOR UPDATE`;
     const p = await tx.project.findUnique({ where: { id } });
+    await this.rights.requireAvailableIn(tx, id);
     const order = p?.orderId
       ? await tx.paymentOrder.findUnique({ where: { id: p.orderId } })
       : null;
@@ -478,15 +481,30 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     subject: Awaited<ReturnType<Participation["subject"]>>,
     record: Pick<
       ConsentRecord,
-      "purpose" | "granted" | "method" | "evidenceRef" | "operatorUserId"
+      | "purpose"
+      | "granted"
+      | "method"
+      | "evidenceRef"
+      | "operatorUserId"
+      | "accessEpoch"
     >,
   ) {
+    const denied = await tx.$queryRaw<
+      { denied: boolean }[]
+    >`SELECT EXISTS(SELECT 1 FROM privacy_events WHERE project_id=${p.id}::uuid AND kind='revocation' AND payload->>'operation'='revoke' AND payload->>'purpose' IN (${record.purpose},'all','binding') AND (payload->>'accessEpoch')::integer>${record.accessEpoch}) AS denied`;
+    if (denied[0].denied) return false;
     if (record.method === "assisted") {
       const session = await this.latestAssisted(
         tx,
         p.id,
         record.purpose as ConsentPurpose,
       );
+      if (session) {
+        const denied = await tx.$queryRaw<
+          { denied: boolean }[]
+        >`SELECT EXISTS(SELECT 1 FROM privacy_events WHERE project_id=${p.id}::uuid AND payload->>'sourceSessionId'=${session.id}) AS denied`;
+        if (denied[0].denied) return false;
+      }
       return (
         record.granted &&
         this.activeAssisted(session, p, subject) &&
@@ -590,7 +608,8 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         record,
       );
     }
-    const collection = enabled && effective.collection === true;
+    const deleted = await this.rights.deletedIn(tx, p.id);
+    const collection = !deleted && enabled && effective.collection === true;
     const terms = await this.terms.read(p.id, undefined, tx);
     return {
       projectId: p.id,
@@ -602,7 +621,8 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       policyStatus: enabled ? "synthetic-only" : "pending",
       choices: CONSENT_PURPOSES.map((purpose) => ({
         purpose,
-        granted: granted[purpose] ?? null,
+        granted:
+          effective[purpose] === false ? false : (granted[purpose] ?? null),
       })),
       consent: narrator
         ? records.map(({ operatorAdminId, ...record }) => ({
@@ -632,6 +652,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     this.policy();
     const result = await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
+      await this.rights.requireAvailableIn(tx, id);
       const subject = await this.subject(tx, id);
       if (
         subject.boundUserId !== user.id ||
@@ -918,6 +939,24 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     this.policy();
     const found = await tx.careRequest.findUnique({ where: { id } });
     if (!found) throw new NotFoundException();
+    if (
+      found.kind === "delete" &&
+      (await this.rights.deletedIn(tx, found.projectId))
+    ) {
+      if (
+        found.state !== "verified" ||
+        found.verificationKey !== key ||
+        found.verificationHash !== digest(JSON.stringify(body)) ||
+        found.verifiedBy !== operatorId
+      )
+        throw new ConflictException();
+      return {
+        id,
+        state: "verified",
+        currentAccessRevoked: true,
+        fulfillment: "deletion-ledger",
+      };
+    }
     const p = await this.project(tx, found.projectId, true);
     const subject = await this.subject(tx, p.id);
     await tx.$queryRaw`SELECT id FROM care_requests WHERE id=${id}::uuid FOR UPDATE`;
@@ -929,8 +968,9 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     const result = () => ({
       id,
       state: "verified",
-      currentAccessRevoked: care.kind === "withdraw",
-      fulfillment: "pending-consumer",
+      currentAccessRevoked: ["withdraw", "delete"].includes(care.kind),
+      fulfillment:
+        care.kind === "delete" ? "deletion-ledger" : "pending-consumer",
     });
     if (care.state === "verified") {
       if (
@@ -951,7 +991,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     )
       throw new ConflictException();
     let epoch: number | null = null;
-    if (care.kind === "withdraw") {
+    if (["withdraw", "delete"].includes(care.kind)) {
       epoch = (
         await tx.project.update({
           where: { id: p.id },
@@ -977,7 +1017,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
           },
         });
     }
-    if (epoch !== null)
+    if (epoch !== null && care.kind !== "delete")
       await this.recordRevocationIn(
         tx,
         p.id,
@@ -998,6 +1038,13 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         revokedAccessEpoch: epoch,
       },
     });
+    if (care.kind === "delete")
+      await this.rights.deleteVerifiedIn(tx, {
+        projectId: p.id,
+        requestId: id,
+        accessEpoch: epoch!,
+        verification: { key, hash, adminId: operatorId },
+      });
     return result();
   }
   async careCases(id?: string) {
@@ -1296,6 +1343,9 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     return this.db.$transaction(async (tx) => {
       const user = await this.identity.current(authorization, tx);
       const p = await this.project(tx, projectId, true);
+      await this.rights.requireAvailableIn(tx, projectId);
+      if (mode === "record")
+        await this.rights.requireAvailableIn(tx, projectId, "activeData");
       const subject = await this.subject(tx, projectId);
       let method: "self_wechat" | "assisted";
       if (subject.boundUserId === user.id) {
@@ -1360,6 +1410,12 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     },
   ): Promise<Prisma.JsonObject | null> {
     this.policy();
+    if (
+      (await this.rights.deletedIn(tx, input.projectId)) ||
+      (await this.rights.deletedIn(tx, input.projectId, "originalAudio")) ||
+      (await this.rights.deletedIn(tx, input.projectId, "transcripts"))
+    )
+      return null;
     const p = await this.project(tx, input.projectId, true);
     const subject = await this.subject(tx, input.projectId);
     if (
@@ -1439,6 +1495,11 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     },
   ): Promise<Prisma.JsonObject | null> {
     this.policy();
+    if (
+      (await this.rights.deletedIn(tx, input.projectId)) ||
+      (await this.rights.deletedIn(tx, input.projectId, "bookPdf"))
+    )
+      return null;
     const project = await this.project(tx, input.projectId, true),
       subject = await this.subject(tx, input.projectId);
     if (
@@ -1511,6 +1572,10 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     const p = await this.project(tx, command.projectId, true);
     const subject = await this.subject(tx, p.id);
     const row = await this.latestAssisted(tx, p.id, command.purpose);
+    const denied = await tx.$queryRaw<
+      { denied: boolean }[]
+    >`SELECT EXISTS(SELECT 1 FROM privacy_events WHERE project_id=${p.id}::uuid AND payload->>'sourceSessionId'=${command.sessionId}) AS denied`;
+    if (denied[0].denied) throw new ForbiddenException();
     if (
       !this.activeAssisted(row, p, subject) ||
       row.id !== command.sessionId ||
@@ -1739,6 +1804,23 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         throw new ConflictException();
       if (
         !body.granted &&
+        !CONSENT_PURPOSES.includes(body.purpose as ConsentPurpose) &&
+        latest
+      ) {
+        await this.rights.publishIn(tx, {
+          eventId: randomUUID(),
+          projectId: id,
+          kind: "revocation",
+          occurredAt: new Date().toISOString(),
+          payload: {
+            operation: "assisted_session_end",
+            sourceSessionId: latest.id,
+            purpose: body.purpose,
+          },
+        });
+      }
+      if (
+        !body.granted &&
         CONSENT_PURPOSES.includes(body.purpose as ConsentPurpose)
       ) {
         await this.recordRevocationIn(
@@ -1834,7 +1916,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
           select: { id: true },
         })
       : null;
-    await tx.projectAccessRevocation.create({
+    const revocation = await tx.projectAccessRevocation.create({
       data: {
         id: randomUUID(),
         projectId,
@@ -1845,6 +1927,43 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         sourceSessionId: sourceSessionId ?? null,
         targetAttemptId: attempt?.id ?? null,
       },
+    });
+    const binding =
+      reason === "rebind"
+        ? await tx.projectSubject.findUniqueOrThrow({
+            where: { projectId },
+            select: { id: true, bindingVersion: true, boundUserId: true },
+          })
+        : null;
+    await this.rights.publishIn(tx, {
+      eventId: revocation.id,
+      projectId,
+      kind: "revocation",
+      occurredAt: revocation.createdAt.toISOString(),
+      payload: {
+        operation: "revoke",
+        revocationId: revocation.id,
+        sequence: revocation.sequence,
+        accessEpoch,
+        purpose,
+        reason,
+        taskFences,
+        sourceSessionId: sourceSessionId ?? null,
+        targetAttemptId: attempt?.id ?? null,
+        ...(binding ? { binding } : {}),
+      },
+    });
+  }
+  async recordStoryDenialIn(
+    tx: Prisma.TransactionClient,
+    decision: Omit<Prisma.StoryDecisionUncheckedCreateInput, "evidenceRef">,
+  ) {
+    await this.rights.publishIn(tx, {
+      eventId: decision.id!,
+      projectId: decision.projectId,
+      kind: "revocation",
+      occurredAt: new Date().toISOString(),
+      payload: { operation: "story_decision", decision },
     });
   }
   /** Recoverable follow-up. The denied purpose and exact work targets have already committed. */
@@ -1866,7 +1985,8 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         change.reason === "assisted",
       );
       await this.db.$transaction(async (tx) => {
-        await this.project(tx, change.projectId, true);
+        await tx.$queryRaw`SELECT id FROM projects WHERE id=${change.projectId}::uuid FOR UPDATE`;
+        await tx.project.findUniqueOrThrow({ where: { id: change.projectId } });
         const current = await tx.projectAccessRevocation.findUniqueOrThrow({
           where: { id: change.id },
         });

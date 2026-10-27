@@ -270,6 +270,10 @@ export class ProjectServiceTerms {
     const policy = fixedPolicy(row.policy);
     if (!policy)
       return { policyStatus: "pending", deleteData: false, canRecord: false };
+    const erasedRows = await database.$queryRaw<
+      { categories: string[] }[]
+    >`SELECT categories FROM privacy_deletions WHERE project_id=${projectId}::uuid`;
+    const erased = new Set(erasedRows.flatMap((r) => r.categories));
     const events = await database.projectServiceEvent.findMany({
       where: { projectId, occurredAt: { lte: at } },
     });
@@ -320,6 +324,9 @@ export class ProjectServiceTerms {
               rule.duration,
               at,
             ),
+            ...(erased.has("all") || erased.has(name)
+              ? { state: "expired" }
+              : {}),
             trigger: rule.startsAt,
           },
         ]),

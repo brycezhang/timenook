@@ -4,7 +4,13 @@ import type { ProbeObjects } from "../probe/local-objects";
 /** Shared bounded file verification. Identity and durable facts belong to callers. */
 export async function sealAudio(
   objects: ProbeObjects,
-  input: { source: string; target: string; bytes: number; sha256: string },
+  input: {
+    source: string;
+    target: string;
+    bytes: number;
+    sha256: string;
+    snapshotKey?: string;
+  },
 ) {
   const expected = (bytes: Buffer) =>
     bytes.length === input.bytes &&
@@ -14,7 +20,7 @@ export async function sealAudio(
   const durationMs = await inspectAudio(bytes);
   // A client may still replace its staging key. Publish only the immutable
   // bytes we inspected; every concurrent completion of this intent has this hash.
-  const snapshot = `staging/${randomUUID()}.mp3`;
+  const snapshot = input.snapshotKey ?? `staging/${randomUUID()}.mp3`;
   try {
     await objects.putSnapshot(snapshot, bytes);
     await objects.copy(snapshot, input.target);

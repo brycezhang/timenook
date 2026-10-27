@@ -1,3 +1,4 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { paymentAdmin } from "./payment-admin-fixture";
 import { once } from "node:events";
 import { ProductionTasks } from "../src/tasks/tasks";
@@ -183,6 +184,7 @@ before(async () => {
     }
   }
   const aiFetch: typeof fetch = (...args) => providerTransport(...args);
+  await bootPrivacyFixture(config);
   app = await createApplication(config, {
     wechatFetch,
     paymentFetch,
@@ -1774,4 +1776,8 @@ test("a follow-up relay endpoint change stops the frozen task before any provide
     if (previous === undefined) delete deepseek.baseUrl;
     else deepseek.baseUrl = previous;
   }
+});
+
+after(async () => {
+  await closePrivacyFixture(config);
 });

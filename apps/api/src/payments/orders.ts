@@ -1,3 +1,4 @@
+import { PrivacyRights } from "../care/privacy-rights";
 import {
   PaymentOrderResponseDto,
   PaymentOrdersResponseDto,
@@ -122,6 +123,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     private readonly identity: IdentityAccess,
+    private readonly rights: PrivacyRights,
     @Inject(PAYMENT_FETCH) private readonly paymentFetch: typeof fetch,
   ) {
     this.database = new PrismaClient({ datasourceUrl: config.databaseUrl });
@@ -427,6 +429,9 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
           where: { projectId: project.id },
         })
       : null;
+    const deleted = project
+      ? await this.rights.deletedIn(this.database as never, project.id)
+      : false;
     const template = order.template as {
       id: string;
       version: number;
@@ -440,16 +445,19 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       mode: order.mode,
       state: order.state,
       packageVersionId: order.packageVersionId,
-      recipient: order.recipient,
+      materialsUnavailable: deleted,
+      recipient: deleted
+        ? { typeCode: null, relationshipLabel: "资料已删除" }
+        : order.recipient,
       template: {
         id: template.id,
         version: template.version,
         reviewStatus: template.reviewStatus,
       },
-      subjectName: order.subjectName,
-      bookTitle: order.bookTitle,
+      subjectName: deleted ? null : order.subjectName,
+      bookTitle: deleted ? "资料已删除" : order.bookTitle,
       project:
-        project && subject && entitlement
+        project && subject && entitlement && !deleted
           ? {
               id: project.id,
               subject: {
@@ -646,6 +654,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
   private async scanInbox() {
     const cfg = this.enabled();
     try {
+      await this.rights.assertHealthy();
       const events = await this.database.paymentInbox.findMany({
         where: { processedAt: null },
         orderBy: { verifiedAt: "asc" },

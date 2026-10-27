@@ -1,3 +1,4 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { WechatPay } from "../src/payments/wechat-pay";
 import { paymentAdmin } from "./payment-admin-fixture";
 import { ProjectServiceTerms } from "../src/projects/service-terms";
@@ -97,6 +98,7 @@ before(async () => {
       active: true,
     },
   });
+  await bootPrivacyFixture(config);
   app = await createApplication(config, { wechatFetch, ...{ paymentFetch } });
 });
 after(async () => {
@@ -1005,4 +1007,8 @@ test("provider empty 204 and encrypted callback bytes must independently authent
     payload: body,
   });
   assert.equal(response.statusCode, 400);
+});
+
+after(async () => {
+  await closePrivacyFixture(config);
 });
