@@ -305,6 +305,8 @@ async function inspect(page, name, caseId) {
           .getByRole("heading", { name: "质量核验与原单重印", exact: true })
           .scrollIntoViewIfNeeded();
     }
+    if (name.startsWith("second-request-"))
+      await page.locator(".case.selected").scrollIntoViewIfNeeded();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
@@ -543,5 +545,92 @@ test("an explicit assisted quality grant does not grant the buyer private conten
     admin.getByText("本次质量说明：合成专属客服质量说明", { exact: true }),
   ).toHaveCount(0);
   await inspect(buyer, "assisted-private-grant-mini");
+
+  await buyer
+    .getByRole("button", { name: "查看本人资料授权选择", exact: true })
+    .click();
+  await buyer
+    .getByRole("button", { name: "未选：原确定 PDF", exact: true })
+    .click();
+  await buyer
+    .getByRole("button", {
+      name: "尚未确认：我同意本次范围与时限",
+      exact: true,
+    })
+    .click();
+  await buyer.getByRole("button", { name: "缺页或漏印", exact: true }).click();
+  await buyer
+    .getByPlaceholder("简述质量问题（3到1500字）")
+    .fill("合成第二次质量说明：同次制作另有书页缺页，请分别处理。");
+  const second = await command(buyer, "提交质量申请", "/quality-care");
+  expect(second.id).not.toBe(created.id);
+  await expect(buyer.locator(".case.selected")).toContainText(
+    "缺页或漏印 · 待客服核验",
+  );
+  expect(
+    await buyer
+      .getByRole("button", { name: "查看本人资料授权选择", exact: true })
+      .count(),
+  ).toBe(0);
+  expect(
+    await buyer
+      .getByRole("button", { name: "记录本次限时授权", exact: true })
+      .count(),
+  ).toBe(0);
+  await inspect(buyer, "second-request-selected-mini");
+  fixture.data(
+    await qualityFixture.adminRequest(
+      "POST",
+      `/v1/admin/quality/cases/${second.caseId}/assign`,
+      p.headers,
+      {
+        expectedVersion: second.version,
+        dueAt: new Date(Date.now() + 86400000).toISOString(),
+        evidenceRef: "synthetic:第二次质量申请独立核验负责人及原D06",
+      },
+    ),
+  );
+  await buyer
+    .getByRole("button", { name: "重新查询质量售后", exact: true })
+    .click();
+  await buyer
+    .getByRole("button", { name: "查看本人资料授权选择", exact: true })
+    .click();
+  await expect(
+    buyer.getByRole("button", { name: "与本人同机确认本次授权", exact: true }),
+  ).toBeVisible();
+  expect(
+    await buyer
+      .getByRole("button", { name: "记录本次限时授权", exact: true })
+      .count(),
+  ).toBe(0);
+  await buyer
+    .getByRole("button", { name: "与本人同机确认本次授权", exact: true })
+    .click();
+  await buyer
+    .getByPlaceholder("记录本人本次选择同机协助核对的说明")
+    .fill("合成本人在场，为第二次质量申请重新选择授权协助");
+  await buyer
+    .getByRole("button", {
+      name: "本人同意当次售后授权协助，返回售后",
+      exact: true,
+    })
+    .click();
+  await expect(buyer).toHaveURL(
+    new RegExp(`requestId=${second.id}&assistedSessionId=`),
+  );
+  const target = buyer.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/${second.id}/access`),
+  );
+  const secondGrant = await grant(buyer);
+  expect((await target).status()).toBe(201);
+  expect(secondGrant.id).toBe(second.id);
+  expect(secondGrant.grant.scopes).toEqual(["pdf", "evidence"]);
+  await expect(buyer.locator(".case.selected")).toContainText(
+    "缺页或漏印 · 客服已领取",
+  );
+  await inspect(buyer, "second-request-fresh-grant-mini");
   expect(errors).toEqual([]);
 });

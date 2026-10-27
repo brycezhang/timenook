@@ -148,6 +148,129 @@ test("quality page uses delivered attempts and retains one uncertain request int
   assert.equal(h.page.data.description, "");
   h.page.onUnload();
 });
+test("a second quality request selects its own case and requires fresh case-specific access choices", async () => {
+  const h = await harness();
+  const nextId = "77777777-7777-4777-8777-777777777777";
+  h.page.onLoad({
+    orderId: id,
+    projectId,
+    requestId,
+    assistedSessionId: attemptId,
+  });
+  const assigned = {
+    ...row(),
+    version: 2,
+    state: "assigned",
+    ownerLabel: "客服一",
+  };
+  const shown = h.page.onShow();
+  await tick();
+  success(h.calls[0], { ...initial(), requests: [assigned] });
+  await shown;
+  const preparing = h.page.prepareAccess();
+  await tick();
+  const permission = {
+    projectId,
+    subjectId: id,
+    role: "initiator",
+    bindingVersion: 1,
+    accessEpoch: 0,
+    choices: ["collection", "ai", "sharing"].map((purpose) => ({
+      purpose,
+      granted: true,
+    })),
+    canRead: true,
+  };
+  success(h.calls[1], permission);
+  await preparing;
+  h.page.chooseGrant();
+  h.page.chooseScope({ currentTarget: { dataset: { scope: "pdf" } } });
+  const granting = h.page.grant();
+  await tick();
+  assert.equal(h.calls[2].data.assistedSessionId, attemptId);
+  h.calls[2].fail({ errMsg: "timeout" });
+  await granting;
+
+  h.page.descriptionInput({ detail: { value: "合成第二次质量申请" } });
+  const applying = h.page.apply();
+  await tick();
+  const requested = { ...row(), id: nextId, caseId: nextId };
+  success(h.calls[3], requested, 201);
+  await applying;
+  assert.equal(h.page.data.selectedId, nextId);
+  assert.equal(h.page.data.selected.id, nextId);
+  assert.equal(h.page.data.selected.ownerLabel, null);
+  for (const choice of [
+    "accessChoice",
+    "canGrant",
+    "canAssist",
+    "grantChecked",
+    "pdfScope",
+    "evidenceScope",
+  ])
+    assert.equal(
+      h.page.data[choice],
+      false,
+      `${choice} belongs to the old case`,
+    );
+  await h.page.prepareAccess();
+  await h.page.grant();
+  assert.equal(
+    h.calls.length,
+    4,
+    "new unassigned case cannot grant to the old owner",
+  );
+
+  const nextAssigned = {
+    ...requested,
+    version: 2,
+    state: "assigned",
+    ownerLabel: "客服二",
+  };
+  const refreshing = h.page.refresh();
+  await tick();
+  success(h.calls[4], { ...initial(), requests: [nextAssigned, assigned] });
+  await refreshing;
+  const nextChoice = h.page.prepareAccess();
+  await tick();
+  success(h.calls[5], permission);
+  await nextChoice;
+  assert.equal(
+    h.page.data.canGrant,
+    false,
+    "another case needs a fresh assisted session",
+  );
+  assert.equal(h.page.data.canAssist, true);
+  h.page.assist();
+  assert.match(h.routes[0], new RegExp(`requestId=${nextId}$`));
+  h.page.chooseRequest({ currentTarget: { dataset: { id: requestId } } });
+  const oldChoice = h.page.prepareAccess();
+  await tick();
+  success(h.calls[6], { ...permission, role: "narrator" });
+  await oldChoice;
+  await h.page.grant();
+  assert.equal(
+    h.calls.length,
+    7,
+    "returning to the old case cannot reuse unchecked scopes",
+  );
+  h.page.chooseGrant();
+  h.page.chooseScope({ currentTarget: { dataset: { scope: "pdf" } } });
+  const fresh = h.page.grant();
+  await tick();
+  assert.equal(
+    h.calls[7].url,
+    `${base}/orders/${id}/quality-care/${requestId}/access`,
+  );
+  assert.notEqual(
+    h.calls[7].header["Idempotency-Key"],
+    h.calls[2].header["Idempotency-Key"],
+  );
+  assert.equal(h.calls[7].data.assistedSessionId, undefined);
+  success(h.calls[7], assigned, 201);
+  await fresh;
+  h.page.onUnload();
+});
 test("only the narrator or an explicit assisted session grants selected scopes, with a stable retry expiry", async () => {
   const h = await harness();
   h.page.onLoad({ orderId: id, projectId });
@@ -213,6 +336,92 @@ test("only the narrator or an explicit assisted session grants selected scopes, 
   await retry;
   assert.equal(h.page.data.grantChecked, false);
   assert.match(h.page.data.status, /限时授权已记录/);
+  h.page.onUnload();
+});
+test("a late poll cannot restore a previous case after a new application, and refund retries remain within the current selection", async () => {
+  const h = await harness(),
+    nextId = "77777777-7777-4777-8777-777777777777",
+    reviewed = {
+      ...row(),
+      version: 4,
+      state: "reviewed",
+      resolution: "refund",
+    },
+    value = { ...initial(), requests: [reviewed] },
+    permission = {
+      projectId,
+      subjectId: id,
+      role: "initiator",
+      bindingVersion: 1,
+      accessEpoch: 0,
+      choices: ["collection", "ai", "sharing"].map((purpose) => ({
+        purpose,
+        granted: true,
+      })),
+      canRead: true,
+    };
+  h.page.onLoad({ orderId: id, projectId });
+  const shown = h.page.onShow();
+  await tick();
+  success(h.calls[0], value);
+  await shown;
+  const first = h.page.requestRefund();
+  await tick();
+  success(h.calls[1], permission);
+  await tick();
+  h.calls[2].fail({ errMsg: "timeout" });
+  await first;
+  const retry = h.page.requestRefund();
+  await tick();
+  success(h.calls[3], permission);
+  await tick();
+  assert.equal(
+    h.calls[4].header["Idempotency-Key"],
+    h.calls[2].header["Idempotency-Key"],
+  );
+  h.calls[4].fail({ errMsg: "timeout" });
+  await retry;
+  const polling = [...h.timers.values()].pop()!();
+  await tick();
+  h.page.descriptionInput({ detail: { value: "合成第二次质量申请" } });
+  const applying = h.page.apply();
+  await tick();
+  success(h.calls[6], { ...row(), id: nextId, caseId: nextId }, 201);
+  await applying;
+  success(h.calls[5], value);
+  await polling;
+  assert.equal(h.page.data.selectedId, nextId);
+  assert.equal(h.page.data.selected.id, nextId);
+  await h.page.requestRefund();
+  assert.equal(
+    h.calls.length,
+    7,
+    "an old refund remedy cannot be used from the new selection",
+  );
+  h.page.chooseRequest({ currentTarget: { dataset: { id: requestId } } });
+  const fresh = h.page.requestRefund();
+  await tick();
+  success(h.calls[7], permission);
+  await tick();
+  assert.equal(
+    h.calls[8].url,
+    `${base}/orders/${id}/quality-care/${requestId}/refund`,
+  );
+  assert.notEqual(
+    h.calls[8].header["Idempotency-Key"],
+    h.calls[2].header["Idempotency-Key"],
+  );
+  success(
+    h.calls[8],
+    {
+      ...reviewed,
+      state: "refund_requested",
+      refund: { id, state: "requested" },
+    },
+    201,
+  );
+  await fresh;
+  assert.equal(h.routes[0], `/pages/refunds/index?orderId=${id}`);
   h.page.onUnload();
 });
 test("quality page clears private drafts when account ownership changes and ignores late departure results", async () => {

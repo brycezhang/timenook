@@ -141,7 +141,7 @@ Page({
       this.watch(generation, owner);
     }
   },
-  show(view: OrderQualityView) {
+  show(view: OrderQualityView, preferredId?: string) {
     const rows = view.requests.map((request) => ({
       ...request,
       grant:
@@ -156,11 +156,16 @@ Page({
           ? dateLabel(request.grant.expiresAt)
           : "",
     }));
-    const selectedId = view.requests.some(
-      (request) => request.id === this.data.selectedId,
-    )
-      ? this.data.selectedId
+    const preferred = preferredId ?? this.data.selectedId;
+    const selectedId = view.requests.some((request) => request.id === preferred)
+      ? preferred
       : view.requests[0]?.id || "";
+    const changed = selectedId !== this.data.selectedId;
+    if (changed) {
+      this.grantIntent = null;
+      this.refundIntent = null;
+      if (this.data.selectedId) this.assistedSessionId = "";
+    }
     this.setData({
       view,
       attempts: view.attempts.map((attempt) => ({
@@ -175,6 +180,17 @@ Page({
       rows,
       selectedId,
       selected: rows.find((request) => request.id === selectedId) || null,
+      ...(changed
+        ? {
+            accessChoice: false,
+            canGrant: false,
+            canAssist: false,
+            grantChecked: false,
+            pdfScope: false,
+            evidenceScope: false,
+            grantMinutes: "10",
+          }
+        : {}),
     });
   },
   async refresh() {
@@ -280,16 +296,10 @@ Page({
     const selected = this.data.rows.find(
       (r) => r.id === e.currentTarget.dataset.id,
     );
-    if (selected) {
-      this.grantIntent = null;
-      this.setData({
-        selectedId: selected.id,
-        selected,
-        accessChoice: false,
-        grantChecked: false,
-        pdfScope: false,
-        evidenceScope: false,
-      });
+    if (selected && selected.id !== this.data.selectedId) {
+      ++this.generation;
+      this.show(this.data.view!, selected.id);
+      this.watch(this.generation, this.ownerContext);
     }
   },
   async prepareAccess() {
@@ -539,17 +549,19 @@ Page({
         this.intent.key,
       );
       if (!this.current(generation, owner)) return;
-      this.show({
-        ...this.data.view,
-        requests: [
-          saved,
-          ...this.data.view.requests.filter((r) => r.id !== saved.id),
-        ],
-      });
+      this.show(
+        {
+          ...this.data.view,
+          requests: [
+            saved,
+            ...this.data.view.requests.filter((r) => r.id !== saved.id),
+          ],
+        },
+        saved.id,
+      );
       this.intent = null;
       this.setData({
         description: "",
-        selectedId: saved.id,
         status: "质量申请已提交，请在此查看实际处理进展。",
       });
     } catch (error) {
