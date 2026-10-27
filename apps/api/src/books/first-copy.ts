@@ -169,10 +169,34 @@ export class FirstCopies implements OnModuleDestroy {
           orderBy: { sequence: "desc" },
         })
       : null;
+    const qualityRevision = production
+      ? await tx.qualityRequest.findFirst({
+          where: {
+            productionOrderId: production.id,
+            state: { in: ["reviewed", "reprinting"] },
+            resolution: "reprint",
+            reprintMode: "revised",
+          },
+          orderBy: { reviewedAt: "desc" },
+        })
+      : null;
+    const noActiveAttempt =
+      !latestAttempt ||
+      ["delivered", "cancelled"].includes(latestAttempt.state);
+    const qualityRevisionRequestId =
+      qualityRevision &&
+      noActiveAttempt &&
+      !order.productionFrozen &&
+      !order.firstCopyCancellationRequired &&
+      order.creationState === "active"
+        ? qualityRevision.id
+        : null;
     const canReviseProduction =
       !!production &&
-      latestAttempt?.state === "cancelled" &&
-      latestAttempt.reservationRevision === production.reservationRevision;
+      ((latestAttempt?.state === "cancelled" &&
+        !latestAttempt.qualityRequestId &&
+        latestAttempt.reservationRevision === production.reservationRevision) ||
+        !!qualityRevisionRequestId);
     const role = order.buyerId === actor.userId ? "initiator" : "narrator";
     const book = context.current;
     const confirmations = { narrator: false, initiator: false };
@@ -321,6 +345,7 @@ export class FirstCopies implements OnModuleDestroy {
       blockers,
       canSubmit: role === "initiator" && blockers.length === 0,
       canReviseProduction,
+      qualityRevisionRequestId,
       production: production ? this.orderView(production) : null,
       accessExpiresAt: context.accessExpiresAt,
     };
@@ -547,6 +572,10 @@ export class FirstCopies implements OnModuleDestroy {
           body,
         );
         if (!fresh) return current;
+        if (current.blockers.includes("ENTITLEMENT_UNAVAILABLE"))
+          throw new ConflictException(
+            "First-copy entitlement cannot be reused by ordinary submission",
+          );
         if (current.production && !current.canReviseProduction) {
           const prior = current.production;
           if (
@@ -803,6 +832,226 @@ export class FirstCopies implements OnModuleDestroy {
       );
     }
     return this.approvalView(await this.contextIn(tx, projectId, actor));
+  }
+  async qualityReplacementIn(
+    tx: Prisma.TransactionClient,
+    requestId: string,
+  ): Promise<FirstCopyBinding | null> {
+    const row = await tx.qualityRequest.findUniqueOrThrow({
+      where: { id: requestId },
+    });
+    if (
+      !["reviewed", "reprinting"].includes(row.state) ||
+      row.resolution !== "reprint" ||
+      row.reprintMode !== "revised" ||
+      !row.ownerAdminId
+    )
+      return null;
+    try {
+      const context = await this.books.contextIn(tx, row.projectId, null),
+        address = await tx.firstCopyAddress.findUnique({
+          where: { projectId: row.projectId },
+        }),
+        book = context.current;
+      if (!book || book.state !== "ready" || !book.pdf || !address) return null;
+      const binding = {
+        bookVersionId: book.id,
+        snapshotHash: book.snapshotHash,
+        pdfHash: book.pdf.sha256,
+        addressHash: address.hash,
+      };
+      await this.qualityReviewIn(tx, row.id, binding, row.ownerAdminId);
+      return binding;
+    } catch (error) {
+      if (
+        error instanceof ForbiddenException ||
+        error instanceof ConflictException ||
+        error instanceof NotFoundException
+      )
+        return null;
+      throw error;
+    }
+  }
+  // A quality remedy keeps the original unique first-copy order and consumed
+  // entitlement. Only an explicitly reviewed case can supply a new attempt binding.
+  async qualityReviewIn(
+    tx: Prisma.TransactionClient,
+    requestId: string,
+    body: FirstCopyBinding,
+    operatorId: string,
+  ) {
+    const quality = await tx.qualityRequest.findUnique({
+      where: { id: requestId },
+    });
+    if (
+      !quality ||
+      !["reviewed", "reprinting"].includes(quality.state) ||
+      quality.resolution !== "reprint" ||
+      quality.ownerAdminId !== operatorId ||
+      !quality.reviewedAt
+    )
+      throw new ConflictException("Reviewed original-order remedy required");
+    const order = await tx.firstCopyOrder.findUniqueOrThrow({
+        where: { id: quality.productionOrderId },
+      }),
+      payment = await tx.paymentOrder.findUniqueOrThrow({
+        where: { id: order.paymentOrderId },
+      }),
+      entitlement = await tx.firstCopyEntitlement.findUniqueOrThrow({
+        where: { id: order.entitlementId },
+      }),
+      project = await tx.project.findUniqueOrThrow({
+        where: { id: order.projectId },
+      }),
+      subject = await tx.projectSubject.findUniqueOrThrow({
+        where: { projectId: order.projectId },
+      }),
+      original = await tx.fulfillmentAttempt.findUniqueOrThrow({
+        where: { id: quality.originalAttemptId },
+      });
+    if (
+      payment.state !== "paid" ||
+      payment.productionFrozen ||
+      payment.firstCopyCancellationRequired ||
+      payment.creationState !== "active" ||
+      entitlement.state !== "consumed" ||
+      original.orderId !== order.id ||
+      original.state !== "delivered"
+    )
+      throw new ConflictException(
+        "Original entitlement and current commercial state required",
+      );
+    if (
+      await tx.careRequest.findFirst({
+        where: {
+          projectId: project.id,
+          kind: { in: ["withdraw", "delete"] },
+          state: { not: "completed" },
+        },
+      })
+    )
+      throw new ForbiddenException();
+    if (
+      !(await this.participation.bookGrantIn(tx, {
+        projectId: project.id,
+        subjectId: subject.id,
+        bindingVersion: subject.bindingVersion,
+        accessEpoch: project.accessEpoch,
+        operatorId: payment.buyerId,
+      }))
+    )
+      throw new ForbiddenException();
+    if (quality.reprintMode === "original") {
+      const binding = {
+        bookVersionId: original.bookId,
+        snapshotHash: original.snapshotHash,
+        pdfHash: original.pdfHash,
+        addressHash: original.addressHash,
+      };
+      if (
+        digest(binding) !==
+        digest({
+          bookVersionId: body.bookVersionId,
+          snapshotHash: body.snapshotHash,
+          pdfHash: body.pdfHash,
+          addressHash: body.addressHash,
+        })
+      )
+        throw new ConflictException("Exact original file required");
+      await this.books.frozenOutputIn(
+        tx,
+        project.id,
+        original.bookId,
+        original.pdfHash,
+      );
+      await this.books.assertFrozenPrintPermissionIn(tx, {
+        projectId: project.id,
+        bookId: original.bookId,
+        subjectId: subject.id,
+        bindingVersion: subject.bindingVersion,
+      });
+      return {
+        reservationRevision: original.reservationRevision,
+        bookId: original.bookId,
+        snapshotHash: original.snapshotHash,
+        pdfHash: original.pdfHash,
+        addressHash: original.addressHash,
+        address: original.address,
+        narratorConfirmationId: original.narratorConfirmationId,
+        initiatorConfirmationId: original.initiatorConfirmationId,
+      };
+    }
+    const actor: Actor = {
+        userId: payment.buyerId,
+        subjectId: subject.id,
+        bindingVersion: subject.bindingVersion,
+        accessEpoch: project.accessEpoch,
+        method: "participant",
+        subjectDecision: null,
+        decisionSessionId: null,
+        accessExpiresAt: null,
+      },
+      current = await this.contextIn(tx, project.id, actor);
+    const book = this.assertBook(current, body),
+      storedBook = await tx.bookVersion.findUniqueOrThrow({
+        where: { id: book.id },
+      }),
+      address = await tx.firstCopyAddress.findUniqueOrThrow({
+        where: { projectId: project.id },
+      });
+    if (
+      book.id === original.bookId ||
+      storedBook.createdAt < quality.reviewedAt ||
+      current.address.hash !== body.addressHash ||
+      current.blockers.some(
+        (code) =>
+          ![
+            "ENTITLEMENT_UNAVAILABLE",
+            "ALREADY_SUBMITTED",
+            "CREATION_EXPIRED",
+          ].includes(code),
+      )
+    )
+      throw new ConflictException(
+        "New reviewed PDF and current confirmations required",
+      );
+    const reviewedAt = quality.reviewedAt;
+    const confirmations = await Promise.all(
+      (["narrator", "initiator"] as const).map((role) =>
+        tx.bookConfirmation.findFirst({
+          where: { projectId: project.id, role },
+          orderBy: { sequence: "desc" },
+        }),
+      ),
+    );
+    if (
+      confirmations.some(
+        (c) =>
+          !c ||
+          c.createdAt < reviewedAt ||
+          c.bookId !== book.id ||
+          c.snapshotHash !== book.snapshotHash ||
+          c.pdfHash !== book.pdf!.sha256 ||
+          c.subjectId !== subject.id ||
+          c.bindingVersion !== subject.bindingVersion ||
+          c.accessEpoch !== project.accessEpoch,
+      ) ||
+      confirmations[1]?.addressHash !== address.hash ||
+      confirmations[1]?.addressVersion !== address.version
+    )
+      throw new ConflictException(
+        "Both fresh exact-version confirmations required",
+      );
+    return {
+      reservationRevision: order.reservationRevision,
+      bookId: book.id,
+      snapshotHash: book.snapshotHash,
+      pdfHash: book.pdf!.sha256,
+      addressHash: address.hash,
+      address: address.value,
+      narratorConfirmationId: confirmations[0]!.id,
+      initiatorConfirmationId: confirmations[1]!.id,
+    };
   }
   async onModuleDestroy() {
     await this.terms.close();

@@ -169,6 +169,7 @@ export interface FirstCopyContext {
   blockers: FirstCopyBlocker[];
   canSubmit: boolean;
   canReviseProduction: boolean;
+  qualityRevisionRequestId?: string | null;
   production: FirstCopyOrderView | null;
   accessExpiresAt: string | null;
 }

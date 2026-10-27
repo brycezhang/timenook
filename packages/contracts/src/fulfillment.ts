@@ -31,6 +31,7 @@ export interface FulfillmentAttemptView extends FirstCopyBinding {
 export interface FulfillmentView {
   projectId: string;
   orderId: string | null;
+  paymentOrderId?: string | null;
   entitlementState: string | null;
   approvedSupplierRef: string | null;
   reservation: FirstCopyBinding | null;

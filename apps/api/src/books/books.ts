@@ -484,6 +484,68 @@ export class Books implements OnModuleDestroy {
       },
     };
   }
+  async assertFrozenPrintPermissionIn(
+    tx: Prisma.TransactionClient,
+    input: {
+      projectId: string;
+      bookId: string;
+      subjectId: string;
+      bindingVersion: number;
+    },
+  ) {
+    const book = await tx.bookVersion.findFirst({
+      where: { id: input.bookId, projectId: input.projectId },
+    });
+    if (!book) throw new ConflictException("Frozen book required");
+    const snapshot = book.snapshot as unknown as BookSnapshot;
+    for (const story of snapshot.chapters.flatMap(
+      (chapter) => chapter.stories,
+    )) {
+      const decision = await tx.storyDecision.findFirst({
+        where: {
+          projectId: input.projectId,
+          storyId: story.id,
+          revisionId: story.revisionId,
+          subjectId: input.subjectId,
+          bindingVersion: input.bindingVersion,
+        },
+        orderBy: { sequence: "desc" },
+      });
+      if (
+        !decision?.confirmed ||
+        !decision.allowInBook ||
+        decision.contentHash !== story.contentHash
+      )
+        throw new ConflictException(
+          "Current permission for every frozen story version required",
+        );
+    }
+  }
+  // Quality review uses the immutable file actually printed, even after a newer
+  // draft exists. Retention, current consent and stream fences still apply.
+  async frozenOutputIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    bookId: string,
+    pdfHash: string,
+  ) {
+    await this.bookTerms(tx, projectId);
+    const book = await tx.bookVersion.findFirst({
+        where: { id: bookId, projectId },
+      }),
+      output = await tx.bookOutput.findUnique({ where: { bookId } });
+    if (
+      !book ||
+      !output ||
+      digest(book.snapshot) !== book.snapshotHash ||
+      output.sha256 !== pdfHash
+    )
+      throw new ForbiddenException();
+    return {
+      path: join(this.config.books!.storageRoot, output.objectKey),
+      pdf: { sha256: output.sha256, bytes: output.bytes },
+    };
+  }
   // Transactional Book boundary: caller holds current participation and the project lock.
   async contextIn(
     tx: Prisma.TransactionClient,

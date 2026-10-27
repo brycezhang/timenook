@@ -86,3 +86,47 @@ export async function deliveredQualityOrder() {
     qualityBase: `/v1/orders/${p.orderId}/quality-care`,
   };
 }
+export async function reviewedQualityOrder(
+  mode: "original" | "revised" | "refund" = "original",
+) {
+  const p = await deliveredQualityOrder(),
+    created = data(
+      await request("POST", p.qualityBase, p.buyer.token, {
+        attemptId: p.attempt.id,
+        reason: "qualityMissingPages",
+        description: "合成原单质量核对说明",
+      }),
+    ),
+    qualityAdminBase = `/v1/admin/quality/cases/${created.caseId}`;
+  const assigned = data(
+    await adminRequest("POST", qualityAdminBase + "/assign", p.headers, {
+      expectedVersion: created.version,
+      dueAt: new Date(Date.now() + 86400000).toISOString(),
+      evidenceRef: "synthetic:按原D06日历确定实际截止",
+    }),
+  );
+  const qualityAccess = {
+    expectedVersion: assigned.version,
+    scopes: ["pdf", "evidence"],
+    expiresAt: new Date(Date.now() + 600000).toISOString(),
+    consented: true,
+    noticeVersion: "synthetic-d08-v1",
+  };
+  data(
+    await request(
+      "POST",
+      `${p.qualityBase}/${created.id}/access`,
+      p.narrator.token,
+      qualityAccess,
+    ),
+  );
+  const quality = data(
+    await adminRequest("POST", qualityAdminBase + "/review", p.headers, {
+      expectedVersion: assigned.version,
+      resolution: mode === "refund" ? "refund" : "reprint",
+      ...(mode === "refund" ? {} : { mode }),
+      evidenceRef: "synthetic:原D07及原印刷责任核验",
+    }),
+  );
+  return { ...p, qualityAdminBase, quality, qualityAccess };
+}
