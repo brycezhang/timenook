@@ -9,6 +9,11 @@ import {
   AdminFulfillmentController,
 } from "./books/fulfillment";
 import {
+  CompleteExports,
+  CompleteExportsController,
+  AdminCompleteExportsController,
+} from "./care/complete-export";
+import {
   FirstCopies,
   FirstCopyController,
   AdminFirstCopyController,
@@ -409,6 +414,8 @@ export async function createApplication(
                   QualityCareController,
                   AdminQualityCareController,
                   BooksController,
+                  CompleteExportsController,
+                  AdminCompleteExportsController,
                   BookAudioController,
                   FirstCopyController,
                   FulfillmentController,
@@ -457,6 +464,7 @@ export async function createApplication(
                   QualityCare,
                   Books,
                   FirstCopies,
+                  CompleteExports,
                   Fulfillment,
                   BookAudio,
                   {

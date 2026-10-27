@@ -41,6 +41,9 @@ test("local preview forwards cloud health and probe requests with exactly one pu
     assert.ok(local && typeof local === "object");
     for (const path of [
       "/timenook/health/ready",
+      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/exports",
+      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/exports/44444444-4444-4444-8444-444444444444/download",
+      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/exports/44444444-4444-4444-8444-444444444444/receipt",
       "/timenook/v1/probes/audio/clips",
       "/timenook/v1/probes/ai/metrics",
       "/timenook/v1/users/me",

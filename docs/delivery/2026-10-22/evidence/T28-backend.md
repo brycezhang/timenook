@@ -34,7 +34,7 @@ Root 定点审查指出：原 scope 用 buyer 的 bookGrantIn，把「向发起�
 
 定点公开回归复现原文件重印未检查原故事版本入书许可：撤销 allowInBook 后仍201（`/tmp/timenook-t28-red-original-story-permission.log`）。生产 preflight 现核验原 PDF 快照内精确 revision/content hash、当前 subject/binding 的最新 confirmed/allowInBook；专属质量证据查看保持独立。没有用当前不同草稿覆盖原文件，也未放宽普通首本条件。最终本票回归记录于 `/tmp/timenook-t28-api-quality-final.log`。
 
-## 本地最终结果
+## T25 合入前的本地结果
 
 - T28/T22/T23/T27/T24/Book 相关六文件 serial 整轮 **98/98**，日志 `/tmp/timenook-t28-api-related-final-v2.log`；涵盖 subjectCareGrantIn 与 ProjectStreams 用途扩展后的既有回归。
 - 随后仅增加精确故事入书许可生产 guard，T28 最新全文件 **12/12**，日志 `/tmp/timenook-t28-api-quality-final.log`。两轮包含重叠场景，不相加冒充一次测试总数；最后这项 guard 只进入质量生产路径。
@@ -42,4 +42,17 @@ Root 定点审查指出：原 scope 用 buyer 的 bookGrantIn，把「向发起�
 - 本机独立数据库增量迁移应用成功（`/tmp/timenook-t28-migrate-final.log`），各 HTTP 夹具继续覆盖 fresh/replay；未修改任何已应用旧迁移或共享服务配置。
 - UI 由分区协作者在同票提交 2e5165e；相关 Page/Vben/实际浏览器及 native 的责任证据由其交接及主流程记录，本后端未重复运行前端检查。
 
-最终同步时 published origin/main 为 78ccf6d，已由 a96f407 纳入。新的质量数据清理清单交由 T26 消费；D03/D06/D07 实际政策、供应商、资金、真机和印刷证据仍待原责任票验收。独立 Standards/Spec 与精确 PR/main CI 仍待主交付，不以以上本地结果关闭 #29 或放行生产/售卖。
+以上结果对应已由 a96f407 纳入的 main 78ccf6d。新的质量数据清理清单交由 T26 消费；D03/D06/D07 实际政策、供应商、资金、真机和印刷证据仍待原责任票验收。独立 Standards/Spec 与精确 PR/main CI 仍待主交付，不以以上本地结果关闭 #29 或放行生产/售卖。
+
+## T25 发布后的整票整合
+
+合入 T25 PR #62 已发布 main `79f82e54ff1c9de12fb8b5fd0ddd58e11544a147`，保留其 `CareRequest.exportCollectionStamp`、完整资料导出、共享运营和小程序入口。该候选 `8b9cbf6` 的 PR CI `40438843650` 成功；main CI `40442841501` 独立跟踪，候选通过不替代 main 结论。
+
+三个冲突只合并双方契约：Participation 的当前用途判断共用 T25 effectiveConsentIn，质量专属 grant 和导出专属授权仍独立核验；预览白名单和 Vite 代理同时保留质量与导出路径。未放宽 T23 投产或买方共享，也未改变退款、首次交付及 D03。其余 schema、CareKind、路由、组件、页面清单与 SessionClient 的双方增量均保留。
+
+先核对本机回环且数据库为独立 `timenook_t28`，重新生成本工作树 Prisma Client，再应用独立新增的 `20261026130000_complete_export`；现共 40 迁移，保留所有已应用旧迁移，未修改共享服务配置。日志 `/tmp/timenook-t28-integration-migrate.log`。
+
+- 质量、完整导出、参与授权、撤回、退款、首本及履约七文件按 `--test-concurrency=1` 实际顺序运行，**126/126**，346.6 秒，`/tmp/timenook-t28-integration-api-test.log`。覆盖两个 consumer 各自当前用途、同 epoch 拒绝、旧包/旧 grant、明确新授权、活动流和实际 PDF/ZIP，以及商业冻结、终止、取消占位与唯一活动交接。该轮包含先前 98/12 的重叠用例，不相加。
+- Contracts 构建、API 类型/构建/OpenAPI 通过；日志 `/tmp/timenook-t28-integration-api-{typecheck,build}.log`、`/tmp/timenook-t28-integration-openapi.log`。整仓检查留给本次固定提交的 PR CI，45 分钟 workflow 预算未提前更改。
+- 相关十一前端文件 **130/130**，前端/运营类型及构建通过，Mac 官方 wcc/wcsc **24 页**；日志 `/tmp/timenook-t28-integration-frontend-test.log`、`/tmp/timenook-t28-integration-{frontend,admin}-{typecheck,build}.log`、`/tmp/timenook-t28-integration-native.log`。其中质量二次申请原子选择、清旧 scope/同机/退款意图及迟到轮询门禁保留。
+- 清除本工作树的 Vite 优化缓存后，沿仓库 Playwright 顺序运行真实质量三场与导出一场，**4/4**，42.5 秒，`/tmp/timenook-t28-integration-browser.log`。质量使用 5198/3480/3483，导出使用 5195/3445/3446；实际 API、Page/Vben、PG/Redis、PDF canvas 与 ZIP 都参与验证，只有外部协议使用明确合成替身。缓存清理属于环境准备，没有记作业务 RED。四场完整退出且测试服务均由 afterAll 停止。

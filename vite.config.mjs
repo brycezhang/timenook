@@ -21,6 +21,12 @@ export default defineConfig({
               changeOrigin: true,
               rewrite: (path) => path.replace(/^\/timenook/, ""),
             },
+          "^/timenook/v1/projects/[a-f0-9-]{36}/exports(?:/[a-f0-9-]{36}/(?:download|receipt))?$":
+            {
+              target: process.env.TIMENOOK_PREVIEW_API_TARGET,
+              changeOrigin: true,
+              rewrite: (path) => path.replace(/^\/timenook/, ""),
+            },
           "^/timenook/v1/orders/[a-f0-9-]{36}/refunds$": {
             target: process.env.TIMENOOK_PREVIEW_API_TARGET,
             changeOrigin: true,
