@@ -1,4 +1,5 @@
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
+import { installPrivacyFailureDiagnostic } from "./privacy-failure-diagnostic";
 import sharp from "sharp";
 import { ProductionTasks } from "../src/tasks/tasks";
 import { PrivacyRights } from "../src/care/privacy-rights";
@@ -147,6 +148,7 @@ const wechatFetch: typeof fetch = async (input) =>
     }),
   );
 export async function startBookFixture() {
+  installPrivacyFailureDiagnostic();
   assert.ok(process.env.DATABASE_URL);
   assert.ok(process.env.REDIS_URL);
   const url = new URL(process.env.DATABASE_URL);
