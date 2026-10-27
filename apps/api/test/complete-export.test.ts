@@ -869,17 +869,20 @@ test("a first pack at or after source retention expiry records a stable failure 
   }
 });
 test("derived-photo retention stops new complete packs and existing ZIP downloads exactly at its own deadline", async (t) => {
-  const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 });
-  await storyPhoto(p, "本次期限不同的原图与衍生照片");
-  const at = await anotherAcceptedExport(p),
-    after = await anotherAcceptedExport(p),
-    end = await photoDeadline(p);
-  const assets = await db.photoAsset.findMany({
-    where: { projectId: p.projectId },
-  });
-  assert.ok(assets.some((a) => a.kind !== "original"));
-  t.mock.timers.enable({ apis: ["Date"], now: end - 1 });
+  // Quiesce actual maintenance before creating this project's sources. Logical
+  // cutoff is checked first while every owned copy is provably still present.
+  await app.get(Deletions).onModuleDestroy();
   try {
+    const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 });
+    await storyPhoto(p, "本次期限不同的原图与衍生照片");
+    const at = await anotherAcceptedExport(p),
+      after = await anotherAcceptedExport(p),
+      end = await photoDeadline(p);
+    const assets = await db.photoAsset.findMany({
+      where: { projectId: p.projectId },
+    });
+    assert.ok(assets.some((a) => a.kind !== "original"));
+    t.mock.timers.enable({ apis: ["Date"], now: end - 1 });
     const packed = data(
       await adminRequest("POST", p.exportBase + "/pack", p.admin, {}),
     );
@@ -938,34 +941,96 @@ test("derived-photo retention stops new complete packs and existing ZIP download
       ).statusCode,
       403,
     );
+    const [{ n }] = await db.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) n FROM privacy_deletions WHERE project_id=${p.projectId}::uuid AND categories ? 'derivedPhotos'
+    `;
+    assert.equal(n, 0n, "logical denial precedes source-category scanning");
     for (const asset of assets)
       await access(join(root, "objects", asset.objectKey));
     assert.ok(
       Date.parse(packed.expiresAt) > end,
       "the package's own download window remains unexpired",
     );
+    const original = assets.find((asset) => asset.kind === "original");
+    const derived = assets.find((asset) => asset.kind === "print");
+    assert.ok(original);
+    assert.ok(derived);
+    const photo = `/v1/projects/${p.projectId}/interviews/${p.interviewId}/photos/${original.intentId}`;
+    const readOriginal = async () => {
+      const result = await request(
+        "GET",
+        photo + "/content/original",
+        p.narrator.token,
+      );
+      assert.equal(result.statusCode, 200);
+      assert.equal(
+        createHash("sha256").update(result.rawPayload).digest("hex"),
+        original.sha256,
+      );
+    };
+    await readOriginal();
+    assert.equal(
+      (
+        await request(
+          "GET",
+          `${photo}/assets/${derived.id}/content`,
+          p.narrator.token,
+        )
+      ).statusCode,
+      403,
+    );
+
+    // A fresh instance reuses the same authenticated source. Explicitly run
+    // production maintenance and verify physical deletion as a separate phase.
+    await restartBookApplication();
+    await app.get(Deletions).sweep(new Date(end + 1));
+    for (const asset of assets) {
+      const path = join(root, "objects", asset.objectKey);
+      if (asset.kind === "original") await access(path);
+      else await assert.rejects(access(path), { code: "ENOENT" });
+    }
+    await readOriginal();
+    assert.equal(
+      (
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
+          p.narrator.token,
+        )
+      ).statusCode,
+      403,
+    );
+    assert.equal(
+      (
+        await db.careExport.findUniqueOrThrow({ where: { id: p.exp.id } })
+      ).expiresAt?.toISOString(),
+      packed.expiresAt,
+    );
   } finally {
     t.mock.timers.reset();
+    await restartBookApplication();
   }
 });
 
 test("a derived-photo deadline crossed during packing prevents the late ZIP from becoming ready", async (t) => {
-  const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 });
-  await storyPhoto(p, "慢打包期间到期的衍生图");
-  const end = await photoDeadline(p);
-  let release!: () => void, entered!: () => void;
-  const gate = new Promise<void>((r) => {
-      release = r;
-    }),
-    started = new Promise<void>((r) => {
-      entered = r;
-    });
-  t.mock.timers.enable({ apis: ["Date"], now: end - 1 });
-  interceptBookObjectRead(async () => {
-    entered();
-    await gate;
-  });
+  await app.get(Deletions).onModuleDestroy();
+  let release = () => {};
   try {
+    const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 });
+    await storyPhoto(p, "慢打包期间到期的衍生图");
+    const end = await photoDeadline(p);
+    let entered!: () => void;
+    const gate = new Promise<void>((r) => {
+        release = r;
+      }),
+      started = new Promise<void>((r) => {
+        entered = r;
+      });
+    t.mock.timers.enable({ apis: ["Date"], now: end - 1 });
+    interceptBookObjectRead(async () => {
+      entered();
+      await gate;
+    });
     const packing = adminRequest("POST", p.exportBase + "/pack", p.admin, {});
     await started;
     t.mock.timers.setTime(end);
@@ -999,6 +1064,7 @@ test("a derived-photo deadline crossed during packing prevents the late ZIP from
     release();
     interceptBookObjectRead();
     t.mock.timers.reset();
+    await restartBookApplication();
   }
 });
 test("an unused derived-photo retention category does not block an otherwise complete archive", async (t) => {
@@ -1442,26 +1508,27 @@ for (const channel of ["product", "alternative"] as const) {
     }
   });
   test(`${channel} ZIP stream stops when a represented source category expires before the package deadline`, async (t) => {
-    const p = await pendingStreamExport(channel);
-    const terms = new ProjectServiceTerms(config.databaseUrl),
-      deliveredAt = new Date(),
-      end = deliveredAt.getTime() + 400 * 86400000;
-    await terms.recordFact({
-      projectId: p.projectId,
-      eventId: `active-export-category:${randomUUID()}`,
-      kind: "delivery_completed",
-      occurredAt: deliveredAt,
-    });
-    await terms.close();
-    await db.session.updateMany({
-      data: { expiresAt: new Date(end + 86400000) },
-    });
-    await db.adminSession.updateMany({
-      data: { expiresAt: new Date(end + 86400000) },
-    });
-    t.mock.timers.enable({ apis: ["Date"], now: end - 1 });
+    await app.get(Deletions).onModuleDestroy();
     let stream: Awaited<ReturnType<typeof pausedZip>> | undefined;
     try {
+      const p = await pendingStreamExport(channel);
+      const terms = new ProjectServiceTerms(config.databaseUrl),
+        deliveredAt = new Date(),
+        end = deliveredAt.getTime() + 400 * 86400000;
+      await terms.recordFact({
+        projectId: p.projectId,
+        eventId: `active-export-category:${randomUUID()}`,
+        kind: "delivery_completed",
+        occurredAt: deliveredAt,
+      });
+      await terms.close();
+      await db.session.updateMany({
+        data: { expiresAt: new Date(end + 86400000) },
+      });
+      await db.adminSession.updateMany({
+        data: { expiresAt: new Date(end + 86400000) },
+      });
+      t.mock.timers.enable({ apis: ["Date"], now: end - 1 });
       if (channel === "alternative")
         data(await assistedExportChoice(p, "collection", true));
       const packed = data(
@@ -1483,10 +1550,26 @@ for (const channel of ["product", "alternative"] as const) {
       const asset = await db.recordingAsset.findFirstOrThrow({
         where: { projectId: p.projectId },
       });
-      await access(join(root, "objects", asset.objectKey));
+      const path = join(root, "objects", asset.objectKey);
+      await access(path);
+      const [{ n }] = await db.$queryRaw<{ n: bigint }[]>`
+        SELECT count(*) n FROM privacy_deletions WHERE project_id=${p.projectId}::uuid AND categories ? 'originalAudio'
+      `;
+      assert.equal(n, 0n, "stream cutoff precedes physical source cleanup");
+      stream.response.destroy();
+      await restartBookApplication();
+      await app.get(Deletions).sweep(new Date(end));
+      await assert.rejects(access(path), { code: "ENOENT" });
+      assert.equal(
+        (
+          await db.careExport.findUniqueOrThrow({ where: { id: p.exp.id } })
+        ).expiresAt?.toISOString(),
+        packed.expiresAt,
+      );
     } finally {
       stream?.response.destroy();
       t.mock.timers.reset();
+      await restartBookApplication();
     }
   });
 }
