@@ -353,8 +353,12 @@ test("本人申请删除、客服核验、在线停止与逐层外部证据保�
   await expect(
     mini.getByText("备份待到期或核验", { exact: true }).first(),
   ).toBeVisible();
+  const backup = confirmed.changes
+    .flatMap((change) => change.items)
+    .find((item) => item.layer === "backup");
+  expect(backup.deadline).toBeTruthy();
   await expect(
-    mini.getByText(/规则、起算或处理截止待确认/).first(),
+    mini.getByText(`原截止：${backup.deadline}`, { exact: true }).first(),
   ).toBeVisible();
   const body = await mini.locator("#page").innerText();
   expect(body).not.toContain("我记得那一年");

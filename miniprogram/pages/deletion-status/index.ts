@@ -204,13 +204,17 @@ Page({
                 : `原截止：${item.deadline}`
               : "规则、起算或处理截止待确认",
             reason:
-              item.reason === "RULE_NOT_FROZEN"
-                ? "处理规则尚待冻结"
-                : item.reason === "EXTERNAL_RECEIPT_REQUIRED"
-                  ? "等待独立核验回执"
-                  : item.reason
-                    ? "处理尚未确认，请联系客服核实"
-                    : "",
+              item.reason === "NO_PLATFORM_TARGETS"
+                ? "本层没有待清理的活动文件"
+                : item.reason === "RETRY_REQUIRED"
+                  ? "活动清理待重试"
+                  : item.reason === "RULE_NOT_FROZEN"
+                    ? "处理规则尚待冻结"
+                    : item.reason === "EXTERNAL_RECEIPT_REQUIRED"
+                      ? "等待独立核验回执"
+                      : item.reason
+                        ? "处理尚未确认，请联系客服核实"
+                        : "",
           })),
         ),
       });

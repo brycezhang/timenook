@@ -18,6 +18,12 @@ const value = ref<DeletionStatus | null>(null),
 let active = true,
   generation = 0,
   intent: { input: string; key: string } | null = null;
+const reasonLabels: Record<string, string> = {
+  NO_PLATFORM_TARGETS: "本层没有待清理的活动文件",
+  RETRY_REQUIRED: "活动清理待重试",
+  RULE_NOT_FROZEN: "处理规则尚待冻结",
+  EXTERNAL_RECEIPT_REQUIRED: "等待独立核验回执",
+};
 const rows = computed(
   () => value.value?.changes.flatMap((change) => change.items) || [],
 );
@@ -214,7 +220,11 @@ onMounted(refresh);
             >；已到期，结果仍待核实</span
           >
         </p>
-        <p v-if="item.reason">待处理原因：{{ item.reason }}</p>
+        <p v-if="item.reason">
+          待处理原因：{{
+            reasonLabels[item.reason] || "处理尚未确认，请核实原清单"
+          }}
+        </p>
         <p v-if="item.evidenceRef">本项回执：{{ item.evidenceRef }}</p>
         <p v-if="item.completedAt">本层完成时间：{{ item.completedAt }}</p>
         <Button v-if="editable(item)" :disabled="busy" @click="select(item)"
