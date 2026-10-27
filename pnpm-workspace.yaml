@@ -8,6 +8,7 @@ onlyBuiltDependencies:
   - "@prisma/client"
   - "@prisma/engines"
   - esbuild
+  - fs-ext
   - prisma
 
 ignoredBuiltDependencies:
