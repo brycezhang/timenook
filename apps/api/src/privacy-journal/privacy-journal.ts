@@ -80,7 +80,14 @@ interface StoredEvent extends JournalEvent {
 }
 const EMPTY_HASH = "0".repeat(64);
 const MAX_BYTES = 16 * 1024 * 1024;
-const inProcessLocks = new Set<string>();
+type LocalWaiter = {
+  deadline: number;
+  resolve(release: () => void): void;
+  reject(error: PrivacyJournalError): void;
+  timer?: NodeJS.Timeout;
+};
+type LocalQueue = { waiters: LocalWaiter[] };
+const inProcessLocks = new Map<string, LocalQueue>();
 const TEMPORARY =
   /^\.tmp-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const FINAL = /^(\d{16})-([0-9a-f]{64})\.json$/;
@@ -94,6 +101,54 @@ export class PrivacyJournalError extends Error {
 }
 function refuse(message: string): never {
   throw new PrivacyJournalError(message);
+}
+function localRelease(key: string, queue: LocalQueue): () => void {
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    for (let next = queue.waiters.shift(); next; next = queue.waiters.shift()) {
+      clearTimeout(next.timer);
+      if (performance.now() >= next.deadline) {
+        next.reject(new PrivacyJournalError("lock timeout"));
+        continue;
+      }
+      // Reserve the slot before waking the next owner: a fresh snapshot cannot
+      // bypass this waiter during an unlock/reacquire polling gap.
+      next.resolve(localRelease(key, queue));
+      return;
+    }
+    inProcessLocks.delete(key);
+  };
+}
+function acquireLocal(key: string, deadline: number): Promise<() => void> {
+  if (performance.now() >= deadline)
+    return Promise.reject(new PrivacyJournalError("lock timeout"));
+  const queue = inProcessLocks.get(key);
+  if (!queue) {
+    const created: LocalQueue = { waiters: [] };
+    inProcessLocks.set(key, created);
+    return Promise.resolve(localRelease(key, created));
+  }
+  return new Promise((resolve, reject) => {
+    const waiter: LocalWaiter = { deadline, resolve, reject };
+    queue.waiters.push(waiter);
+    const expire = () => {
+      const index = queue.waiters.indexOf(waiter);
+      if (index < 0) return; // Already granted; a late timer cannot release it.
+      const remaining = deadline - performance.now();
+      if (remaining > 0) {
+        waiter.timer = setTimeout(expire, Math.ceil(remaining));
+        return;
+      }
+      queue.waiters.splice(index, 1);
+      reject(new PrivacyJournalError("lock timeout"));
+    };
+    waiter.timer = setTimeout(
+      expire,
+      Math.max(1, Math.ceil(deadline - performance.now())),
+    );
+  });
 }
 function canonical(value: unknown): string {
   if (value === null || typeof value === "boolean" || typeof value === "string")
@@ -573,19 +628,13 @@ export class PrivacyJournal {
   }
   private async exclusive<T>(work: () => Promise<T>): Promise<T> {
     let file: FileHandle | undefined;
-    let localKey: string | undefined;
+    let releaseLocal: (() => void) | undefined;
     let acquired = false;
     const deadline = performance.now() + this.timeout;
     try {
       await privateDirectory(this.root);
       const key = await realpath(this.root);
-      while (inProcessLocks.has(key)) {
-        if (performance.now() >= deadline) refuse("lock timeout");
-        await delay(Math.min(10, Math.max(1, deadline - performance.now())));
-      }
-      if (performance.now() >= deadline) refuse("lock timeout");
-      inProcessLocks.add(key);
-      localKey = key;
+      releaseLocal = await acquireLocal(key, deadline);
       file = await privateFile(join(this.root, "lock"));
       const inode = await file.stat();
       while (!acquired) {
@@ -626,7 +675,7 @@ export class PrivacyJournal {
         try {
           await file?.close();
         } finally {
-          if (localKey) inProcessLocks.delete(localKey);
+          releaseLocal?.();
         }
       }
     }
