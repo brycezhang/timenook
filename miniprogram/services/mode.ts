@@ -28,6 +28,7 @@ export function livePageAllowed(page: string): boolean {
     "production",
     "original-audio",
     "export",
+    "deletion-status",
     "account",
   ].includes(page);
 }

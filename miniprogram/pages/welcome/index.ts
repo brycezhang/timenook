@@ -21,6 +21,7 @@ type E = {
 };
 Page({
   data: {
+    statusProjectId: "",
     withdrawal: null as WithdrawalStatus | null,
     productionDisposition: "",
     p: null as Project | null,
@@ -52,6 +53,7 @@ Page({
     if (dataMode() === "live") {
       this.inviteToken = q.token ?? "";
       this.projectId = q.projectId ?? "";
+      this.setData({ statusProjectId: this.projectId });
       this.setData({ mode: "live", p: null });
       return;
     }
@@ -67,6 +69,7 @@ Page({
     this.setData({ p, agreed: p.consent });
   },
   onHide() {
+    this.intent = null;
     this.setData({ withdrawal: null, productionDisposition: "" });
     ++this.generation;
     this.setData({
@@ -202,6 +205,7 @@ Page({
   },
   async openParticipation(e: E) {
     this.projectId = e.currentTarget.dataset.id;
+    this.setData({ statusProjectId: this.projectId });
     await this.refreshLive();
   },
   async chooseConsent(e: E) {
@@ -360,6 +364,51 @@ Page({
     p.role = "narrator";
     save(p);
     home();
+  },
+  async requestDelete() {
+    const state = this.data.participation;
+    if (
+      this.data.busy ||
+      state?.role !== "narrator" ||
+      state.policyStatus !== "synthetic-only"
+    )
+      return;
+    const context = sessionClient.context(),
+      generation = this.generation;
+    const input = JSON.stringify({
+      projectId: state.projectId,
+      kind: "delete",
+      version: state.bindingVersion,
+    });
+    if (this.intent?.input !== input)
+      this.intent = { input, key: paymentKey() };
+    this.setData({ busy: true, status: "" });
+    try {
+      const request = await participationClient.subjectCare(
+        state,
+        "delete",
+        this.intent.key,
+      );
+      if (generation !== this.generation || context !== sessionClient.context())
+        return;
+      this.intent = null;
+      this.setData({
+        supportCaseRef: request.supportCaseRef,
+        status: "本人删除申请已记录，待客服核验；尚未确认在线访问停止。",
+      });
+    } catch (error) {
+      if (this.recoverExpiredSession(error, generation, context)) return;
+      if (generation === this.generation && context === sessionClient.context())
+        this.setData({
+          status: "申请结果未确认，请查询进度或重试；重试保留同一申请。",
+        });
+    } finally {
+      if (generation === this.generation && context === sessionClient.context())
+        this.setData({ busy: false });
+    }
+  },
+  deletion() {
+    if (this.projectId) go("deletion-status", `projectId=${this.projectId}`);
   },
   project() {
     go("project", `projectId=${this.projectId}`);

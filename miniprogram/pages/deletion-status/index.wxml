@@ -1,0 +1,17 @@
+<view class="page deletion-page">
+  <view class="title">资料删除进度</view>
+  <view class="soft section">隔离合成验证 · 真实处理规则、备份与供应商回执仍待核验。</view>
+  <view wx:if="{{status}}" class="soft section" role="alert">{{status}}</view>
+  <view wx:if="{{busy}}" class="section" role="status">正在查询当前进度…</view>
+  <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">重新查询删除进度</button>
+  <view wx:if="{{view}}">
+    <view class="paper section"><view class="section-title">{{view.onlineAccessStopped ? '在线访问已停止' : '在线访问尚未确认停止'}}</view><view class="section">{{summary}}</view></view>
+    <view class="paper section" wx:if="{{layerSummary.length}}"><view wx:for="{{layerSummary}}" wx:key="*this" class="section">{{item}}</view></view>
+    <view wx:for="{{rows}}" wx:key="id" class="paper section">
+      <view class="section-title">{{item.category}} · {{item.layer}}</view>
+      <view class="section">{{item.state}}</view><view>{{item.deadline}}</view><view wx:if="{{item.reason}}" class="section">{{item.reason}}</view>
+    </view>
+    <view class="paper section">已传输到设备、已交付导出与纸书不能由平台收回；本机原始录音与主动另存文件需由持有人处理。供应商与备份按各自证据处理。财务记录与内容资料分别处理。</view>
+  </view>
+  <button class="btn secondary section" bindtap="back">返回本人参与页</button>
+</view>

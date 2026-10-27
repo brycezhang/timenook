@@ -36,6 +36,7 @@
     </view>
   </block>
   <button wx:if="{{participation}}" class="btn secondary section" bindtap="plan" disabled="{{busy}}">编辑个人大纲与问题</button>
+  <button wx:if="{{loggedIn}}" class="btn secondary section" bindtap="deletion">查看资料删除进度</button>
   <button class="btn secondary section" bindtap="back">返回本人参与页</button>
 </view>
 

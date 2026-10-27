@@ -1,5 +1,6 @@
 import { RequestClient } from "@vben/request";
 import type {
+  DeletionStatus,
   StoryView,
   AdminAuditEntry,
   AdminEnrollment,
@@ -46,6 +47,30 @@ export const completeExportApi = {
     if (!r.ok)
       throw await r.json().catch(() => ({ error: { code: "UNAVAILABLE" } }));
     return r.arrayBuffer();
+  },
+};
+export const deletionApi = {
+  async read(id: string) {
+    return (
+      await client.get<ApiResponse<DeletionStatus>>(
+        `/care-requests/${id}/deletion-status`,
+      )
+    ).data;
+  },
+  async command(
+    id: string,
+    action: string,
+    body: object,
+    key: string,
+    csrf: string,
+  ) {
+    return (
+      await client.post<ApiResponse<DeletionStatus>>(
+        `/care-requests/${id}/deletion/${action}`,
+        body,
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
   },
 };
 client.addResponseInterceptor({ fulfilled: (response) => response.data });

@@ -26,6 +26,7 @@
         <button class="btn secondary section" data-purpose="{{item.purpose}}" data-granted="true" bindtap="chooseConsent" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">同意此用途</button>
         <button class="link" data-purpose="{{item.purpose}}" data-granted="false" bindtap="chooseConsent" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">{{item.granted ? '撤回此用途' : '拒绝此用途'}}</button>
       </view>
+      <view class="paper section"><view>删除申请核验通过后，在线访问立即停止且项目删除不可逆。各层副本仍分别清理和核验。</view><button class="btn secondary section" bindtap="requestDelete" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">提交本人删除申请，等待客服核验</button></view>
       <view class="soft section">{{participation.canCollect ? '已授权采集，可以进入项目开始讲述。' : '未获采集许可，不能开始录音。'}}{{participation.canProcessAi ? '已单独授权AI处理。' : 'AI处理未获许可。'}}</view>
     </view>
     <view class="paper section"><view class="section-title">联系服务与本人账号绑定</view><view class="note section">目标账号先微信登录，再提供其账号编号。客服核验本人后换绑；新账号须重新选择资料用途。</view>
@@ -35,6 +36,7 @@
       <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="small muted">{{item.kind === 'rebind' ? '换绑工单' : item.kind === 'withdraw' ? '撤回工单' : item.kind === 'export' ? '资料导出工单' : item.kind === 'correction' ? '故事限时校对工单' : item.kind === 'production_handoff' ? '生产交接工单' : item.kind === 'first_copy_expiry' ? '制作期限审核工单' : item.kind === 'refund' ? '退款工单' : '删除工单'}}：record:{{item.id}}</view><view class="note">处理状态：{{item.state === 'open' ? '待客服核验' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : item.state === 'verified' ? '已核验，后续交付或执行待完成' : '已完成'}}</view></view>
     </view>
   </view>
+  <button wx:if="{{loggedIn && statusProjectId}}" class="btn secondary section" bindtap="deletion">查看资料删除进度</button>
   <button class="link" bindtap="back">返回首页</button>
 </view>
 <block wx:else="">
