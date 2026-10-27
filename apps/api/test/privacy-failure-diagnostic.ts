@@ -21,7 +21,6 @@ type Cause = {
 type Stream = { id: number; closed: boolean | null };
 const gate = new AsyncLocalStorage<{ cause?: Cause }>();
 const stream = new AsyncLocalStorage<Stream>();
-const reported = new WeakSet<object>();
 const generations = new WeakMap<object, number>();
 const instances = new WeakMap<object, number>();
 let installed = false,
@@ -189,26 +188,24 @@ export function installPrivacyFailureDiagnostic() {
         try {
           return await call();
         } catch (error) {
-          if (
-            !wasFailed &&
-            Reflect.get(target, "failed") &&
-            !reported.has(target)
-          ) {
-            reported.add(target);
+          // This interval can overlap another invocation's write to failed.
+          // Preserve every in-flight error; none claims transition ownership.
+          if (!wasFailed && Reflect.get(target, "failed")) {
             if (!instances.has(target))
               instances.set(target, ++instanceSequence);
             const journal = Reflect.get(target, "journal");
             try {
               process.stderr.write(
-                `[T26_PRIVACY_GATE_FIRST_FAILURE] ${JSON.stringify({
+                `[T26_PRIVACY_GATE_FAILURE_CANDIDATE] ${JSON.stringify({
                   pid: process.pid,
                   instance: instances.get(target),
+                  ownership: "unknown",
                   phase: method,
                   monotonicMs: Math.round(performance.now()),
                   elapsedMs: Math.round(performance.now() - started),
                   lastVerifiedGeneration: journal && generations.get(journal),
                   stream: stream.getStore() ?? "unknown",
-                  cause:
+                  error:
                     gate.getStore()?.cause ?? cause(error, method, started),
                 })}\n`,
               );
