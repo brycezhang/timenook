@@ -1,3 +1,4 @@
+import { watchProjectAccess } from "../../services/project-access";
 import { dataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
 import { storyClient } from "../../services/stories";
@@ -63,6 +64,7 @@ Page({
   ownerContext: "",
   audioSequence: 0,
   liveAudio: null as WechatMiniprogram.InnerAudioContext | null,
+  stopProjectWatch: undefined as (() => void) | undefined,
   stopSessionWatch: undefined as (() => void) | undefined,
   poll: undefined as ReturnType<typeof setTimeout> | undefined,
   decisionCommand: null as { input: string; key: string } | null,
@@ -164,6 +166,20 @@ Page({
         return;
       }
       await this.refreshLive(generation, context);
+      if (this.currentLive(generation, context) && this.data.story) {
+        this.stopProjectWatch?.();
+        this.stopProjectWatch = watchProjectAccess(
+          this.projectId,
+          () => this.currentLive(generation, context),
+          () => {
+            this.onHide();
+            this.setData({
+              stage:
+                "资料用途或账号授权已变化，私人内容与临时回听已清理，请重新查询",
+            });
+          },
+        );
+      }
       return;
     }
     const s = required().stories.find((s) => s.id === this.data.id);
@@ -174,6 +190,8 @@ Page({
     this.setData({ s, paragraphs: s.body.split("\n\n") });
   },
   onHide() {
+    this.stopProjectWatch?.();
+    this.stopProjectWatch = undefined;
     if (this.data.live) {
       this.stopSessionWatch?.();
       this.stopSessionWatch = undefined;

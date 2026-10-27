@@ -19,6 +19,10 @@ Page({
     paymentError: "",
     loading: false,
   },
+  refunds() {
+    const order = this.data.activeOrder;
+    if (order?.state === "paid") go("refunds", `orderId=${order.id}`);
+  },
   orderGeneration: 0,
   selectedOrderId: "",
   onLoad(q) {

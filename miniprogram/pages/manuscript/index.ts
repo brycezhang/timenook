@@ -146,9 +146,10 @@ Page({
     );
   },
   watch(owner: string) {
+    const generation = this.generation;
     if (this.expiry) clearTimeout(this.expiry);
     this.expiry = setTimeout(
-      () => {
+      async () => {
         if (
           dataMode() !== "live" ||
           owner !== sessionClient.context() ||
@@ -164,6 +165,17 @@ Page({
           this.setData({
             coverStatus: "封面照片预览已到期，请从完整 PDF 核对照片。",
           });
+        }
+        try {
+          await bookClient.readVersion(this.projectId, this.versionId);
+          if (generation !== this.generation) return;
+        } catch {
+          if (generation !== this.generation) return;
+          this.onHide();
+          this.setData({
+            status: "当前书稿授权已变化，私人预览与临时 PDF 已清理，请重新查询",
+          });
+          return;
         }
         this.watch(owner);
       },

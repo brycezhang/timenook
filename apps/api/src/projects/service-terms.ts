@@ -286,6 +286,16 @@ export class ProjectServiceTerms {
     );
     creation.startsAt = participation?.toISOString() ?? null;
     if (clock.paused && creation.state === "active") creation.state = "paused";
+    const project = await database.project.findUnique({
+      where: { id: projectId },
+    });
+    const order = project?.orderId
+      ? await database.paymentOrder.findUnique({
+          where: { id: project.orderId },
+        })
+      : null;
+    if (order?.creationState === "terminated") creation.state = "terminated";
+    else if (order?.creationState === "suspended") creation.state = "suspended";
     return {
       policyStatus: "synthetic-fixed-policy",
       creation,
@@ -294,7 +304,11 @@ export class ProjectServiceTerms {
         maxMilliseconds: policy.d02.pause.maxTotal.value * DAY,
       },
       firstCopyAction:
-        creation.state === "expired" ? "manual_review" : "available",
+        creation.state === "expired"
+          ? "manual_review"
+          : ["terminated", "suspended"].includes(creation.state)
+            ? "blocked"
+            : "available",
       playback: window(delivery, policy.d03.onlinePlayback.duration, at),
       exportRequests: window(delivery, policy.d03.exportRequests.duration, at),
       retention: Object.fromEntries(

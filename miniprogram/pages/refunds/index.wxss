@@ -1,0 +1,1 @@
+.refund-page{padding:24rpx 32rpx 64rpx;font-size:40rpx;line-height:1.7}.refund-row{padding:24rpx 0;border-bottom:1rpx solid #ded6ca;overflow-wrap:anywhere}.refund-page .btn{min-height:96rpx;min-width:96rpx;margin-top:20rpx}.refund-page textarea{width:100%;min-height:200rpx;font-size:40rpx;background:#fffaf3;padding:16rpx;box-sizing:border-box}.refund-page .muted{font-size:36rpx}

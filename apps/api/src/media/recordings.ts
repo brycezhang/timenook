@@ -1,3 +1,4 @@
+import { ProjectStreams } from "./project-streams";
 import { createTranscription } from "../tasks/tasks";
 import {
   Body,
@@ -284,6 +285,29 @@ export class Recordings implements OnModuleDestroy {
         this.view(tx, await this.intent(tx, projectId, interviewId, id)),
     );
   }
+  authorizeContent(
+    projectId: string,
+    interviewId: string,
+    id: string,
+    authorization?: string,
+  ) {
+    return this.participation.withPlanAccess(
+      projectId,
+      authorization,
+      undefined,
+      async (tx) => {
+        const row = await this.intent(tx, projectId, interviewId, id);
+        if (row.state !== "sealed") throw new ConflictException();
+        const terms = await this.terms.read(projectId, undefined, tx);
+        if (
+          terms.playback?.state === "expired" ||
+          terms.retention?.originalAudio?.state === "expired"
+        )
+          throw new ForbiddenException();
+        return row;
+      },
+    );
+  }
   async content(
     projectId: string,
     interviewId: string,
@@ -291,19 +315,7 @@ export class Recordings implements OnModuleDestroy {
     authorization?: string,
   ) {
     const authorized = () =>
-      this.participation.withPlanAccess(
-        projectId,
-        authorization,
-        undefined,
-        async (tx) => {
-          const row = await this.intent(tx, projectId, interviewId, id);
-          if (row.state !== "sealed") throw new ConflictException();
-          const terms = await this.terms.read(projectId, undefined, tx);
-          if (terms.playback?.state === "expired")
-            throw new ForbiddenException();
-          return row;
-        },
-      );
+      this.authorizeContent(projectId, interviewId, id, authorization);
     const row = await authorized();
     const bytes = await this.objects.read(`sealed/${id}.mp3`);
     if (
@@ -601,7 +613,10 @@ export class Recordings implements OnModuleDestroy {
 @ApiTags("Interview recording")
 @ApiBearerAuth()
 export class RecordingsController {
-  constructor(private readonly recordings: Recordings) {}
+  constructor(
+    private readonly streams: ProjectStreams,
+    private readonly recordings: Recordings,
+  ) {}
   @Post() @Header("Cache-Control", "no-store") async create(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Param("interviewId", new ParseUUIDPipe()) interview: string,
@@ -660,6 +675,7 @@ export class RecordingsController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
+    const fence = await this.streams.userFence(id, req.headers.authorization);
     return sendAudio(
       await this.recordings.content(
         id,
@@ -670,6 +686,21 @@ export class RecordingsController {
       clip,
       req.headers.range,
       reply,
+      (bytes) =>
+        this.streams.guard(
+          id,
+          fence.epoch,
+          bytes,
+          () =>
+            this.recordings.authorizeContent(
+              id,
+              interview,
+              clip,
+              req.headers.authorization,
+            ),
+          req.headers.authorization,
+          fence.sequence,
+        ),
     );
   }
   @Post(":clipId/status") @Header("Cache-Control", "no-store") async status(

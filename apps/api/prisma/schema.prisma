@@ -299,6 +299,9 @@ model ProbeAiGeneration {
 
 // T10 local verification only. Financial fields/snapshots are immutable.
 model PaymentOrder {
+  firstCopyCancellationRequired Boolean @default(false) @map("first_copy_cancellation_required")
+  productionFrozen Boolean @default(false) @map("production_frozen")
+  creationState String @default("active") @map("creation_state")
   id String @id @db.Uuid
   buyerId String @map("buyer_id") @db.Uuid
   appId String @map("app_id")
@@ -322,6 +325,56 @@ model PaymentOrder {
   @@unique([buyerId,idempotencyKey])
   @@index([buyerId,createdAt])
   @@map("payment_orders")
+}
+
+model Refund {
+ requestWindowStartedAt DateTime? @map("request_window_started_at") @db.Timestamptz(3)
+ requestWindowEndsAt DateTime? @map("request_window_ends_at") @db.Timestamptz(3)
+ id String @id @db.Uuid
+ caseId String @unique @map("case_id") @db.Uuid
+ orderId String @map("order_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ requesterId String @map("requester_id") @db.Uuid
+ requestKey String @map("request_key")
+ requestHash String @map("request_hash") @db.Char(64)
+ reason String
+ state String @default("requested")
+ amount Int?
+ outRefundNo String @unique @map("out_refund_no")
+ providerRefundId String? @unique @map("provider_refund_id")
+ rule Json?
+ evidenceRef String @map("evidence_ref")
+ approvedBy String? @map("approved_by") @db.Uuid
+ approvedAt DateTime? @map("approved_at") @db.Timestamptz(3)
+ dueAt DateTime? @map("due_at") @db.Timestamptz(3)
+ submittedAt DateTime? @map("submitted_at") @db.Timestamptz(3)
+ completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+ productionEvidence String? @map("production_evidence")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([orderId,requesterId,requestKey])
+ @@unique([orderId,id])
+ @@index([state,createdAt])
+ @@map("refunds")
+}
+model RefundCommand {
+ refundId String @map("refund_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ action String
+ key String
+ requestHash String @map("request_hash") @db.Char(64)
+ payload Json
+ @@id([refundId,actorId,action,key])
+ @@map("refund_commands")
+}
+model RefundInbox {
+ eventId String @id @map("event_id")
+ refundId String @map("refund_id") @db.Uuid
+ payloadHash String @map("payload_hash") @db.Char(64)
+ verifiedRefund Json @map("verified_refund")
+ verifiedAt DateTime @default(now()) @map("verified_at") @db.Timestamptz(3)
+ processedAt DateTime? @map("processed_at") @db.Timestamptz(3)
+ @@index([processedAt])
+ @@map("refund_inbox")
 }
 
 model PaymentSubmission {
@@ -454,6 +507,7 @@ model ConsentRecord {
 }
 
 model CareRequest {
+  withdrawalPurpose String? @map("withdrawal_purpose")
   id                   String   @id @db.Uuid
   projectId            String   @map("project_id") @db.Uuid
   requesterId          String?   @map("requester_id") @db.Uuid
@@ -1286,4 +1340,24 @@ model FulfillmentRecord {
  operatorAdminId String @map("operator_admin_id") @db.Uuid
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@map("fulfillment_records")
+}
+
+// Durable access withdrawal outbox; no private content is retained here.
+model ProjectAccessRevocation {
+ id String @id @db.Uuid
+ sequence Int @unique @default(autoincrement())
+ captureVersion Int @default(1) @map("capture_version")
+ taskFences Json @default("[]") @map("task_fences")
+ sourceSessionId String? @map("source_session_id") @db.Uuid
+ targetAttemptId String? @map("target_attempt_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ accessEpoch Int @map("access_epoch")
+ purpose String
+ reason String
+ appliedAt DateTime? @map("applied_at") @db.Timestamptz(3)
+ productionAction String? @map("production_action")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@index([projectId,accessEpoch])
+ @@index([projectId,sequence], map: "project_access_revocations_project_sequence")
+ @@map("project_access_revocations")
 }

@@ -11,6 +11,7 @@ export function livePageAllowed(page: string): boolean {
     "home",
     "purchase",
     "order",
+    "refunds",
     "invite",
     "welcome",
     "assisted",
