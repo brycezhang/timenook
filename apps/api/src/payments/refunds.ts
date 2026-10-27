@@ -167,7 +167,10 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         /* Unfrozen or unsupported policies remain visibly unavailable. */
       }
     return {
-      ...this.view(row, await this.rights.deletedIn(tx, row.projectId)),
+      ...this.view(
+        row,
+        await this.rights.deletedIn(tx, row.projectId, "activeData"),
+      ),
       rule,
       productionAttemptId: attempt?.id ?? null,
       productionReviewRequired:
@@ -255,7 +258,10 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     });
     if (prior) {
       if (prior.requestHash !== hash(body)) throw conflict();
-      return this.view(prior, await this.rights.deletedIn(tx, project.id));
+      return this.view(
+        prior,
+        await this.rights.deletedIn(tx, project.id, "activeData"),
+      );
     }
     const subject = await tx.projectSubject.findUniqueOrThrow({
         where: { projectId: project.id },
@@ -278,7 +284,11 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         createdAt: requestedAt,
       },
     });
-    const materialsDeleted = await this.rights.deletedIn(tx, project.id);
+    const materialsDeleted = await this.rights.deletedIn(
+      tx,
+      project.id,
+      "activeData",
+    );
     return this.view(
       await tx.refund.create({
         data: {
@@ -409,7 +419,11 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       where: { id: refundId },
       select: { projectId: true },
     });
-    const erased = await this.rights.deletedIn(tx, refund.projectId);
+    const erased = await this.rights.deletedIn(
+      tx,
+      refund.projectId,
+      "activeData",
+    );
     await tx.refundCommand.create({
       data: {
         refundId,
@@ -551,6 +565,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         verificationEvidence: (await this.rights.deletedIn(
           tx,
           refund.projectId,
+          "activeData",
         ))
           ? null
           : body.evidenceRef,
@@ -624,7 +639,11 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     await tx.refund.update({
       where: { id },
       data: {
-        productionEvidence: (await this.rights.deletedIn(tx, refund.projectId))
+        productionEvidence: (await this.rights.deletedIn(
+          tx,
+          refund.projectId,
+          "activeData",
+        ))
           ? null
           : body.evidenceRef,
         productionEvidenceHash: createHash("sha256")

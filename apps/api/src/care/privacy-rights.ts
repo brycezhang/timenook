@@ -47,7 +47,7 @@ export const privacyAuthorityId = (
   return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20)}`;
 };
 export type PrivateFileTarget = {
-  kind: "object" | "book_directory" | "export" | "temporary";
+  kind: "object" | "book_directory" | "export" | "temporary" | "temporary_file";
   category: string;
   scope: string;
   key: string;
@@ -893,7 +893,7 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
           });
         if (o.directory)
           targets.push({
-            kind: "temporary",
+            kind: o.directory.includes("/") ? "temporary_file" : "temporary",
             category: o.category,
             scope: this.config.recording?.storageRoot || "",
             key: o.directory,

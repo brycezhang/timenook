@@ -378,6 +378,7 @@ BEGIN
   IF TG_TABLE_NAME='care_exports' AND registry.category IN ('originalAudio','transcripts','confirmedStories','bookPdf','originalPhotos','derivedPhotos') AND ((to_jsonb(NEW)->'manifest')='null'::jsonb OR NOT privacy_export_has_category(to_jsonb(NEW)->'manifest',registry.category)) AND (TG_OP='INSERT' OR (to_jsonb(OLD)->'manifest')='null'::jsonb OR NOT privacy_export_has_category(to_jsonb(OLD)->'manifest',registry.category)) THEN CONTINUE; END IF;
   IF EXISTS(SELECT 1 FROM privacy_deletions WHERE project_id=owner AND (scoped_export_id IS NULL OR (TG_TABLE_NAME='care_exports' AND scoped_export_id=(to_jsonb(NEW)->>'id')::uuid)) AND (categories ? 'all' OR categories ? registry.category)) OR EXISTS(SELECT 1 FROM privacy_recovery_holds WHERE project_id=owner) THEN
    IF TG_OP='INSERT' THEN
+    IF TG_TABLE_NAME='consent_records' AND (to_jsonb(NEW)->>'granted')::boolean=false AND NOT EXISTS(SELECT 1 FROM privacy_deletions WHERE project_id=owner AND categories ? 'all') AND NOT EXISTS(SELECT 1 FROM privacy_recovery_holds WHERE project_id=owner) AND NOT EXISTS(SELECT 1 FROM unnest(registry.columns) c WHERE to_jsonb(NEW)->c IS DISTINCT FROM 'null'::jsonb) THEN CONTINUE; END IF;
     IF TG_TABLE_NAME IN ('refunds','refund_commands','payment_commands','care_requests') AND NOT EXISTS(SELECT 1 FROM unnest(registry.columns) c WHERE to_jsonb(NEW)->c IS DISTINCT FROM 'null'::jsonb) THEN CONTINUE; END IF;
     RAISE EXCEPTION 'Deleted project/category cannot acquire new payload';
    END IF;

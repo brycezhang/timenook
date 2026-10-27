@@ -221,3 +221,58 @@ test("verified deletion progress stays readable when the old care content route 
   assert.match(h.page.data.summary, /不可逆/);
   h.page.onHide();
 });
+test("a successful deletion poll applies irreversible progress and clears only controlled media", async () => {
+  const h = await harness();
+  h.storage.set(`timenook.story-audio.v1:${base}`, ["controlled-audio"]);
+  h.storage.set(`timenook.photo-previews.v1:${base}`, ["controlled-photo"]);
+  h.storage.set("original-recording", "device-original");
+  h.storage.set("rights-intent", "new-input");
+  h.page.onLoad({ projectId });
+  const loading = h.page.onShow();
+  h.respond(0, view());
+  await new Promise((r) => setImmediate(r));
+  h.respond(1, { requests: [] });
+  await loading;
+  const poll = h.timers[h.timers.length - 1]();
+  h.respond(2, deleted());
+  await poll;
+  assert.equal(h.page.data.view.permanentProjectDeletion, true);
+  assert.match(h.page.data.summary, /不可逆/);
+  assert.equal(h.storage.get(`timenook.story-audio.v1:${base}`).length, 0);
+  assert.equal(h.storage.get(`timenook.photo-previews.v1:${base}`).length, 0);
+  assert.equal(h.storage.get("original-recording"), "device-original");
+  assert.equal(h.storage.get("rights-intent"), "new-input");
+  h.page.onHide();
+});
+for (const event of ["hide", "project"] as const)
+  test(`a late successful deletion poll cannot apply or purge after ${event}`, async () => {
+    const h = await harness();
+    h.storage.set(`timenook.story-audio.v1:${base}`, ["new-controlled-audio"]);
+    h.page.onLoad({ projectId });
+    const loading = h.page.onShow();
+    h.respond(0, view());
+    await new Promise((r) => setImmediate(r));
+    h.respond(1, { requests: [] });
+    await loading;
+    const poll = h.timers[h.timers.length - 1]();
+    h.page.onHide();
+    if (event === "project") {
+      const nextId = "77777777-7777-4777-8777-777777777777";
+      h.page.onLoad({ projectId: nextId });
+      const next = h.page.onShow();
+      h.respond(3, { ...view(), projectId: nextId });
+      await new Promise((r) => setImmediate(r));
+      h.respond(4, { requests: [] });
+      await next;
+    }
+    h.respond(2, deleted());
+    await poll;
+    assert.equal(h.storage.get(`timenook.story-audio.v1:${base}`).length, 1);
+    if (event === "hide") assert.equal(h.page.data.view, null);
+    else
+      assert.equal(
+        h.page.data.view.projectId,
+        "77777777-7777-4777-8777-777777777777",
+      );
+    h.page.onHide();
+  });

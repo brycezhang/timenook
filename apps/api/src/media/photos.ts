@@ -114,13 +114,21 @@ export class Photos implements OnModuleDestroy {
     interviewId: string,
     id: string,
   ) {
-    await this.participation.requireMaterialIn(tx, projectId, "originalPhotos");
-    await this.participation.requireMaterialIn(tx, projectId, "derivedPhotos");
     const row = await tx.photoIntent.findFirst({
       where: { projectId, interviewId, id, storageScope: this.scope },
     });
     if (!row) throw new NotFoundException();
     return row;
+  }
+  private async productionIntent(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    interviewId: string,
+    id: string,
+  ) {
+    await this.participation.requireMaterialIn(tx, projectId, "originalPhotos");
+    await this.participation.requireMaterialIn(tx, projectId, "derivedPhotos");
+    return this.intent(tx, projectId, interviewId, id);
   }
   private sameActor(
     row: Pick<
@@ -307,7 +315,7 @@ export class Photos implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        const row = await this.intent(tx, projectId, interviewId, id);
+        const row = await this.productionIntent(tx, projectId, interviewId, id);
         this.sameActor(row, actor);
         if (row.state !== "pending") throw new ConflictException();
         return row;
@@ -328,7 +336,7 @@ export class Photos implements OnModuleDestroy {
         body.assistedSessionId,
         async (tx, actor) =>
           this.sameActor(
-            await this.intent(tx, projectId, interviewId, id),
+            await this.productionIntent(tx, projectId, interviewId, id),
             actor,
           ),
       );
@@ -397,7 +405,7 @@ export class Photos implements OnModuleDestroy {
       authorization,
       permission.assistedSessionId,
       async (tx, actor) => {
-        const row = await this.intent(
+        const row = await this.productionIntent(
           tx,
           permission.projectId,
           permission.interviewId,
@@ -422,15 +430,22 @@ export class Photos implements OnModuleDestroy {
         preview: `photos/staging/${randomUUID()}.jpg`,
         print: `photos/staging/${randomUUID()}.png`,
       };
-    if (!crop)
-      await this.rights.registerOwnedIn(
-        tx,
-        projectId,
-        "originalPhotos",
-        this.scope,
-        [snapshots.original, `photos/sealed/${target}/original.bin`],
-        run,
-      );
+    await this.rights.registerOwnedIn(
+      tx,
+      projectId,
+      "originalPhotos",
+      this.scope,
+      crop ? [] : [snapshots.original, `photos/sealed/${target}/original.bin`],
+      `${run}/input`,
+    );
+    await this.rights.registerOwnedIn(
+      tx,
+      projectId,
+      "originalPhotos",
+      this.scope,
+      [],
+      `${run}/output/original.bin`,
+    );
     await this.rights.registerOwnedIn(
       tx,
       projectId,
@@ -442,8 +457,17 @@ export class Photos implements OnModuleDestroy {
         `photos/sealed/${target}/preview.jpg`,
         `photos/sealed/${target}/print.png`,
       ],
-      run,
+      `${run}/output/preview.jpg`,
     );
+    for (const file of ["print.png", "photo.json"])
+      await this.rights.registerOwnedIn(
+        tx,
+        projectId,
+        "derivedPhotos",
+        this.scope,
+        [],
+        `${run}/output/${file}`,
+      );
     return {
       root: join(this.config.recording!.storageRoot, ".privacy-runs", run),
       snapshots,
@@ -461,7 +485,7 @@ export class Photos implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        const row = await this.intent(tx, projectId, interviewId, id);
+        const row = await this.productionIntent(tx, projectId, interviewId, id);
         this.sameActor(row, actor);
         return row;
       },
@@ -476,7 +500,7 @@ export class Photos implements OnModuleDestroy {
       body.assistedSessionId,
       async (tx, actor) => {
         this.sameActor(
-          await this.intent(tx, projectId, interviewId, id),
+          await this.productionIntent(tx, projectId, interviewId, id),
           actor,
         );
         return this.ownedPhotoRun(tx, projectId, id);
@@ -503,7 +527,7 @@ export class Photos implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        const row = await this.intent(tx, projectId, interviewId, id);
+        const row = await this.productionIntent(tx, projectId, interviewId, id);
         this.sameActor(row, actor);
         if (row.state === "sealed") return this.view(tx, row);
         if (row.state !== "pending") throw new ConflictException();
@@ -926,7 +950,7 @@ export class Photos implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        const row = await this.intent(tx, projectId, interviewId, id);
+        const row = await this.productionIntent(tx, projectId, interviewId, id);
         this.sameActor(row, actor);
         if (row.state !== "sealed") throw new ConflictException();
         await claimRecordingCommand(tx, projectId, actor.operatorUserId, key, {
@@ -999,7 +1023,7 @@ export class Photos implements OnModuleDestroy {
       body.assistedSessionId,
       async (tx, actor) => {
         this.sameActor(
-          await this.intent(tx, projectId, interviewId, id),
+          await this.productionIntent(tx, projectId, interviewId, id),
           actor,
         );
         const replay = await tx.photoSnapshot.findFirst({

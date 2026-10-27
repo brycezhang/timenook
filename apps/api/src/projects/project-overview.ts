@@ -50,13 +50,20 @@ export class ProjectOverview {
       order = await tx.paymentOrder.findUniqueOrThrow({
         where: { id: p.orderId! },
       });
+    const canReadStories = await this.participation.materialAvailableIn(
+      tx,
+      projectId,
+      "confirmedStories",
+    );
     const stories = await Promise.all(
       (
         await tx.story.findMany({
           where: { projectId },
           orderBy: { createdAt: "desc" },
         })
-      ).map((s) => this.stories.view(tx, projectId, s.id)),
+      ).map((s) =>
+        this.stories.view(tx, projectId, s.id, undefined, canReadStories),
+      ),
     );
     const confirmed = stories.filter((s) => s.decision?.confirmed).length,
       included = stories.filter(
@@ -133,6 +140,7 @@ export class ProjectOverview {
       authorization,
       undefined,
       async (tx, actor) => {
+        await this.participation.requireMaterialIn(tx, projectId, "activeData");
         const requestHash = createHash("sha256")
             .update(JSON.stringify(body))
             .digest("hex"),

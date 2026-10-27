@@ -694,6 +694,11 @@ export class Participation
       }
       if (p.accessEpoch !== body.expectedAccessEpoch)
         throw new ConflictException();
+      const payloadExpired = await this.rights.deletedIn(tx, id, "activeData");
+      if (payloadExpired && body.granted)
+        throw new ForbiddenException(
+          "Expired activity cannot acquire new authorization payload",
+        );
       const updated = await tx.project.update({
         where: { id },
         // New positive purpose choices do not revoke existing capabilities.
@@ -712,7 +717,7 @@ export class Participation
           purpose: body.purpose,
           granted: body.granted,
           noticeVersion: body.noticeVersion,
-          evidenceRef: body.evidenceRef,
+          evidenceRef: payloadExpired ? null : body.evidenceRef,
           method: "self_wechat",
         },
       });
@@ -1012,6 +1017,7 @@ export class Participation
     )
       throw new ConflictException();
     let epoch: number | null = null;
+    const payloadExpired = await this.rights.deletedIn(tx, p.id, "activeData");
     if (["withdraw", "delete"].includes(care.kind)) {
       epoch = (
         await tx.project.update({
@@ -1033,19 +1039,11 @@ export class Participation
             purpose,
             granted: false,
             noticeVersion: body.noticeVersion,
-            evidenceRef: body.evidenceRef,
+            evidenceRef: payloadExpired ? null : body.evidenceRef,
             method: "care_verified",
           },
         });
     }
-    if (epoch !== null && care.kind !== "delete")
-      await this.recordRevocationIn(
-        tx,
-        p.id,
-        epoch,
-        care.withdrawalPurpose ?? "all",
-        "care_verified",
-      );
     await tx.careRequest.update({
       where: { id },
       data: {
@@ -1054,11 +1052,19 @@ export class Participation
         verifiedAt: new Date(),
         verificationKey: key,
         verificationHash: hash,
-        verificationEvidence: body.evidenceRef,
-        verificationNotice: body.noticeVersion,
+        verificationEvidence: payloadExpired ? null : body.evidenceRef,
+        verificationNotice: payloadExpired ? null : body.noticeVersion,
         revokedAccessEpoch: epoch,
       },
     });
+    if (epoch !== null && care.kind !== "delete")
+      await this.recordRevocationIn(
+        tx,
+        p.id,
+        epoch,
+        care.withdrawalPurpose ?? "all",
+        "care_verified",
+      );
     if (care.kind === "delete")
       await this.rights.deleteVerifiedIn(tx, {
         projectId: p.id,
@@ -1195,13 +1201,6 @@ export class Participation
       where: { id },
       data: { accessEpoch: { increment: 1 } },
     });
-    await this.recordRevocationIn(
-      tx,
-      id,
-      updated.accessEpoch,
-      "binding",
-      "rebind",
-    );
     await tx.invitation.updateMany({
       where: { projectId: id, consumedAt: null },
       data: { consumedAt: new Date() },
@@ -1240,6 +1239,13 @@ export class Participation
         accessEpoch: updated.accessEpoch,
       },
     });
+    await this.recordRevocationIn(
+      tx,
+      id,
+      updated.accessEpoch,
+      "binding",
+      "rebind",
+    );
     return {
       projectId: id,
       subjectId: subject.id,

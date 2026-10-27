@@ -27,8 +27,8 @@ import {
 import { IsIn, Matches, IsISO8601, IsOptional } from "class-validator";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
-import { readdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, rm, rmdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { FastifyRequest } from "fastify";
 import type { DeletionStatus, DeletionItemView } from "@timenook/contracts";
 import { ADMIN_PERMISSIONS } from "@timenook/contracts";
@@ -327,17 +327,40 @@ export class Deletions implements OnModuleDestroy {
       await this.objects.remove(target.key);
       return;
     }
-    if (target.kind === "temporary") {
+    if (target.kind === "temporary" || target.kind === "temporary_file") {
       if (
         !this.config.recording ||
         target.scope !== this.config.recording.storageRoot ||
-        !/^[-a-f0-9]{36}$/.test(target.key)
+        !(
+          target.kind === "temporary"
+            ? /^[-a-f0-9]{36}$/
+            : /^[-a-f0-9]{36}\/(input|output\/(original\.bin|preview\.jpg|print\.png|photo\.json))$/
+        ).test(target.key)
       )
         throw new Error("Unknown temporary owner");
       await rm(join(target.scope, ".privacy-runs", target.key), {
-        recursive: true,
+        recursive: target.kind === "temporary",
         force: true,
       });
+      if (target.kind === "temporary_file") {
+        const top = join(target.scope, ".privacy-runs");
+        for (
+          let parent = dirname(join(top, target.key));
+          parent !== top;
+          parent = dirname(parent)
+        ) {
+          try {
+            await rmdir(parent);
+          } catch (error) {
+            if (
+              !["ENOENT", "ENOTEMPTY"].includes(
+                (error as NodeJS.ErrnoException).code || "",
+              )
+            )
+              throw error;
+          }
+        }
+      }
       return;
     }
     if (
