@@ -12,6 +12,7 @@ export function livePageAllowed(page: string): boolean {
     "purchase",
     "order",
     "refunds",
+    "quality",
     "invite",
     "welcome",
     "assisted",
@@ -27,6 +28,7 @@ export function livePageAllowed(page: string): boolean {
     "print",
     "production",
     "original-audio",
+    "export",
     "account",
   ].includes(page);
 }

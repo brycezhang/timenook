@@ -16,6 +16,39 @@ model ServiceSchema {
   @@map("service_schema")
 }
 
+model CareExport {
+ id String @id @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ recipient String
+ recipientUserId String? @map("recipient_user_id") @db.Uuid
+ recipientRef String? @map("recipient_ref")
+ evidenceRef String @map("evidence_ref")
+ state String @default("requested")
+ ownerId String? @map("owner_id") @db.Uuid
+ requestedAt DateTime @default(now()) @map("requested_at") @db.Timestamptz(3)
+ acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(3)
+ dueAt DateTime? @map("due_at") @db.Timestamptz(3)
+ readyAt DateTime? @map("ready_at") @db.Timestamptz(3)
+ expiresAt DateTime? @map("expires_at") @db.Timestamptz(3)
+ deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(3)
+ deliveryEvidence String? @map("delivery_evidence")
+ objectKey String? @map("object_key")
+ sha256 String? @db.Char(64)
+ bytes Int?
+ manifest Json?
+ missingReason String? @map("missing_reason")
+ fence Int @default(0)
+ leaseUntil DateTime? @map("lease_until") @db.Timestamptz(3)
+ reviewHash String? @map("review_hash") @db.Char(64)
+ @@unique([projectId,id])
+ @@index([projectId,state])
+ @@index([expiresAt])
+ @@map("care_exports")
+}
+
 model OutlineTemplateVersion {
   templateId   String    @map("template_id")
   version      Int
@@ -474,6 +507,7 @@ model ConsentRecord {
 }
 
 model CareRequest {
+  exportCollectionStamp Json? @map("export_collection_stamp")
   withdrawalPurpose String? @map("withdrawal_purpose")
   id                   String   @id @db.Uuid
   projectId            String   @map("project_id") @db.Uuid
@@ -1237,6 +1271,7 @@ model FulfillmentOutbox {
 }
 
 model FulfillmentAttempt {
+ qualityRequestId String? @map("quality_request_id") @db.Uuid
  id String @id @db.Uuid
  reservationRevision Int @map("reservation_revision")
  bookId String @map("book_id") @db.Uuid
@@ -1309,6 +1344,47 @@ model FulfillmentRecord {
  @@map("fulfillment_records")
 }
 
+model QualityRequest {
+ refundId String? @unique @map("refund_id") @db.Uuid
+ resolution String?
+ reprintMode String? @map("reprint_mode")
+ reviewedAt DateTime? @map("reviewed_at") @db.Timestamptz(3)
+ reviewEvidenceRef String? @map("review_evidence_ref")
+ requestWindowStartedAt DateTime? @map("request_window_started_at") @db.Timestamptz(3)
+ requestWindowEndsAt DateTime? @map("request_window_ends_at") @db.Timestamptz(3)
+ version Int @default(1)
+ ownerAdminId String? @map("owner_admin_id") @db.Uuid
+ assignedAt DateTime? @map("assigned_at") @db.Timestamptz(3)
+ dueAt DateTime? @map("due_at") @db.Timestamptz(3)
+ assignmentEvidenceRef String? @map("assignment_evidence_ref")
+ id String @id @db.Uuid
+ caseId String @unique @map("case_id") @db.Uuid
+ orderId String @map("order_id") @db.Uuid
+ productionOrderId String @map("production_order_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ originalAttemptId String @map("original_attempt_id") @db.Uuid
+ requesterId String @map("requester_id") @db.Uuid
+ reason String
+ state String @default("requested")
+ requestKey String @map("request_key")
+ requestHash String @map("request_hash") @db.Char(64)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([orderId,requesterId,requestKey])
+ @@unique([projectId,id])
+ @@index([projectId,createdAt])
+ @@map("quality_requests")
+}
+// T26 consumes this explicitly project-owned category. Facts are clearable;
+// immutable commands and audits retain only hashes and non-content references.
+model QualityEvidence {
+ requestId String @id @map("request_id") @db.Uuid
+ projectId String @map("project_id") @db.Uuid
+ category String @default("quality_evidence")
+ description String?
+ erasedAt DateTime? @map("erased_at") @db.Timestamptz(3)
+ @@map("quality_evidence")
+}
+
 // Durable access withdrawal outbox; no private content is retained here.
 model ProjectAccessRevocation {
  id String @id @db.Uuid
@@ -1327,4 +1403,33 @@ model ProjectAccessRevocation {
  @@index([projectId,accessEpoch])
  @@index([projectId,sequence], map: "project_access_revocations_project_sequence")
  @@map("project_access_revocations")
+}
+
+model QualityCommand {
+ requestId String @map("request_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ action String
+ key String
+ requestHash String @map("request_hash") @db.Char(64)
+ @@id([requestId,actorId,action,key])
+ @@map("quality_commands")
+}
+model QualityGrant {
+ assistedSessionId String? @map("assisted_session_id") @db.Uuid
+ accessSequence Int @default(0) @map("access_sequence")
+ id String @id @db.Uuid
+ sequence Int @unique @default(autoincrement())
+ projectId String @map("project_id") @db.Uuid
+ requestId String @map("request_id") @db.Uuid
+ ownerAdminId String @map("owner_admin_id") @db.Uuid
+ actorId String @map("actor_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ scopes String[]
+ expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+ noticeVersion String @map("notice_version")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@index([requestId,sequence])
+ @@map("quality_grants")
 }

@@ -1,0 +1,47 @@
+<view class="page quality-page">
+ <view class="title">质量售后与进展</view>
+ <view class="note section">隔离合成验证。质量问题由客服按购买时的政策核验；重印沿用原订单，不另付款，也不新增首本权益。</view>
+ <view wx:if="{{status}}" class="section note" role="alert">{{status}}</view>
+ <button class="btn secondary" bindtap="refresh" disabled="{{busy}}">重新查询质量售后</button>
+ <view wx:if="{{view}}">
+  <view class="section-title section">选择已收到的这次制作</view>
+  <view wx:if="{{!attempts.length}}" class="note section">当前没有已交付的制作记录。交接未知或尚未签收时，请先查看生产与物流并联系客户服务。</view>
+  <button wx:for="{{attempts}}" wx:key="id" data-id="{{item.id}}" bindtap="chooseAttempt" class="btn secondary" disabled="{{busy}}">{{attemptId === item.id ? '已选：' : ''}}{{item.label}}</button>
+  <block wx:if="{{attempts.length}}">
+   <view class="section-title section">问题类别</view>
+   <button wx:for="{{options}}" wx:key="reason" data-reason="{{item.reason}}" bindtap="chooseReason" class="btn secondary" disabled="{{busy}}">{{reason === item.reason ? '已选：' : ''}}{{item.label}}</button>
+   <textarea class="section" value="{{description}}" bindinput="descriptionInput" maxlength="1500" disabled="{{busy}}" placeholder="简述质量问题（3到1500字）" />
+   <button class="btn" bindtap="apply" disabled="{{busy || !description || !attemptId}}">提交质量申请</button>
+  </block>
+  <view wx:for="{{rows}}" wx:key="id" class="case {{selectedId === item.id ? 'selected' : ''}}">
+   <view>{{item.reasonLabel}} · {{item.stateLabel}}</view>
+   <view>原制作第{{item.original.sequence}}次 · 书稿第{{item.original.bookVersion}}版</view>
+   <view wx:if="{{item.ownerLabel}}">处理人：{{item.ownerLabel}}</view><view wx:else="">等待客服领取并核验处理时限</view>
+   <view wx:if="{{item.dueLabel}}">处理期限：{{item.dueLabel}}</view>
+   <view wx:if="{{item.grantLabel}}">本次资料授权截止：{{item.grantLabel}}</view>
+   <view wx:if="{{item.reprintMode === 'original'}}" class="note">按原文件重印，仍须核对当前授权与印厂实际状态。</view>
+   <view wx:if="{{item.reprintMode === 'revised'}}" class="note">修订书稿后重印，须双方重新核对同一份 PDF。</view>
+   <button class="btn secondary" data-id="{{item.id}}" bindtap="chooseRequest" disabled="{{busy}}">{{selectedId === item.id ? '正在查看本次处理' : '查看本次处理'}}</button>
+  </view>
+  <view wx:if="{{selected}}" class="section">
+   <button wx:if="{{selected.ownerLabel && selected.state !== 'completed'}}" class="btn secondary" bindtap="prepareAccess" disabled="{{busy}}">查看本人资料授权选择</button>
+   <view wx:if="{{accessChoice}}" class="choice section">
+    <view>由讲述者本人明确选择。只向本工单负责人提供所选资料；不包含配送地址。</view>
+    <button wx:if="{{canAssist}}" class="btn secondary" bindtap="assist" disabled="{{busy}}">与本人同机确认本次授权</button>
+    <block wx:if="{{canGrant}}">
+     <button class="btn secondary" data-scope="pdf" bindtap="chooseScope" disabled="{{busy}}">{{pdfScope ? '已选：' : '未选：'}}原确定 PDF</button>
+     <button class="btn secondary" data-scope="evidence" bindtap="chooseScope" disabled="{{busy}}">{{evidenceScope ? '已选：' : '未选：'}}本次质量问题说明</button>
+     <view class="section">授权有效期（1至30分钟）</view><input value="{{grantMinutes}}" bindinput="minutesInput" type="number" maxlength="2" disabled="{{busy}}" />
+     <button class="btn secondary" bindtap="chooseGrant" disabled="{{busy}}">{{grantChecked ? '已确认：' : '尚未确认：'}}我同意本次范围与时限</button>
+     <button class="btn" bindtap="grant" disabled="{{busy || !grantChecked || (!pdfScope && !evidenceScope)}}">记录本次限时授权</button>
+    </block>
+   </view>
+   <button wx:if="{{selected.resolution === 'reprint' && selected.reprintMode === 'revised' && selected.state === 'reviewed'}}" class="btn" bindtap="revise" disabled="{{busy}}">修订书稿并重新核对</button>
+   <button wx:if="{{selected.resolution === 'reprint' && selected.reprintMode === 'revised' && selected.state === 'reviewed'}}" class="btn secondary" bindtap="confirmRevision" disabled="{{busy}}">核对修订 PDF 与双方确认</button>
+   <button wx:if="{{selected.resolution === 'refund' && !selected.refund}}" class="btn" bindtap="requestRefund" disabled="{{busy}}">付款发起人继续退款申请</button>
+   <button wx:if="{{selected.refund}}" class="btn secondary" bindtap="refunds" disabled="{{busy}}">付款发起人查看退款进展</button>
+  </view>
+ </view>
+ <button class="btn secondary section" bindtap="production" disabled="{{busy}}">查看原订单生产与物流</button>
+ <view class="note section">原交付时间和资料服务期限保持原约定。已传至设备的文件、用户另存资料及纸书不能远程收回。</view>
+</view>

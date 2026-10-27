@@ -102,13 +102,16 @@ export class ProjectStreams implements OnModuleDestroy {
     check: () => Promise<unknown>,
     authorization?: string,
     capturedSequence?: number,
+    // Only a content owner with its own current operational grant uses this.
+    // Product Authorization always derives purpose from the real user instead.
+    usesSharingOverride?: boolean,
   ): Promise<Readable> {
     const user = authorization
       ? await this.identity.current(authorization)
       : null;
     const usesSharing = user
       ? await this.usesSharing(projectId, user.id)
-      : true;
+      : (usesSharingOverride ?? true);
     const sequence =
       capturedSequence ?? (await this.sequence(projectId, usesSharing));
     const verify = async () => {

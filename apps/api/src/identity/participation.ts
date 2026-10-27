@@ -38,7 +38,12 @@ import {
   IsOptional,
   ValidateIf,
 } from "class-validator";
-import { Prisma, PrismaClient, type AssistedSession } from "@prisma/client";
+import {
+  Prisma,
+  PrismaClient,
+  type AssistedSession,
+  type ConsentRecord,
+} from "@prisma/client";
 import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
 import { IdentityAccess } from "./identity-access";
@@ -467,13 +472,84 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       return this.status(tx, p, subject, user.id);
     });
   }
-  private async status(
+  private async effectiveConsentIn(
     tx: Prisma.TransactionClient,
     p: Awaited<ReturnType<Participation["project"]>>,
     subject: Awaited<ReturnType<Participation["subject"]>>,
-    userId: string,
-  ): Promise<ParticipationState> {
-    const narrator = subject.boundUserId === userId;
+    record: Pick<
+      ConsentRecord,
+      "purpose" | "granted" | "method" | "evidenceRef" | "operatorUserId"
+    >,
+  ) {
+    if (record.method === "assisted") {
+      const session = await this.latestAssisted(
+        tx,
+        p.id,
+        record.purpose as ConsentPurpose,
+      );
+      return (
+        record.granted &&
+        this.activeAssisted(session, p, subject) &&
+        session.evidenceRef === record.evidenceRef &&
+        session.operatorUserId === record.operatorUserId
+      );
+    }
+    return record.granted && record.method === "self_wechat";
+  }
+  private async collectionStampIn(
+    tx: Prisma.TransactionClient,
+    p: Awaited<ReturnType<Participation["project"]>>,
+    subject: Awaited<ReturnType<Participation["subject"]>>,
+  ) {
+    const record = await tx.consentRecord.findFirst({
+      where: {
+        projectId: p.id,
+        bindingVersion: subject.bindingVersion,
+        purpose: "collection",
+      },
+      orderBy: { sequence: "desc" },
+    });
+    return {
+      choiceId: record?.id ?? null,
+      allowed: record
+        ? await this.effectiveConsentIn(tx, p, subject, record)
+        : null,
+    };
+  }
+  /** A verified, explicit export request made under the current unavailable
+   * collection fact authorizes only that case. A stream sequence is no grant. */
+  async exportPurposeAllowedIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    caseId: string,
+  ) {
+    this.policy();
+    const p = await this.project(tx, projectId, true),
+      subject = await this.subject(tx, projectId),
+      care = await tx.careRequest.findUnique({ where: { id: caseId } });
+    if (
+      !care ||
+      care.kind !== "export" ||
+      care.projectId !== projectId ||
+      care.sourceBindingVersion !== subject.bindingVersion ||
+      care.sourceAccessEpoch !== p.accessEpoch
+    )
+      return false;
+    const current = await this.collectionStampIn(tx, p, subject);
+    // The separately verified export case supplies recipient authority, so
+    // ordinary buyer sharing is not a prerequisite or a substitute for it.
+    if (current.allowed !== false) return true;
+    return (
+      !!care.verifiedBy &&
+      ["verified", "completed"].includes(care.state) &&
+      isDeepStrictEqual(care.exportCollectionStamp, current)
+    );
+  }
+  private async currentPurposesIn(
+    tx: Prisma.TransactionClient,
+    p: Awaited<ReturnType<Participation["project"]>>,
+    subject: Awaited<ReturnType<Participation["subject"]>>,
+  ) {
     const records = await tx.consentRecord.findMany({
       where: { projectId: p.id, bindingVersion: subject.bindingVersion },
       orderBy: { sequence: "asc" },
@@ -505,16 +581,24 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     // permission only while their latest matching session remains valid.
     for (const [key, record] of decisions) {
       const purpose = key as ConsentPurpose;
-      if (record.method === "assisted") {
-        const session = await this.latestAssisted(tx, p.id, purpose);
-        effective[purpose] =
-          record.granted &&
-          this.activeAssisted(session, p, subject) &&
-          session.evidenceRef === record.evidenceRef &&
-          session.operatorUserId === record.operatorUserId;
-      } else
-        effective[purpose] = record.granted && record.method === "self_wechat";
+      effective[purpose] = await this.effectiveConsentIn(
+        tx,
+        p,
+        subject,
+        record,
+      );
     }
+    return { records, granted, enabled, effective };
+  }
+  private async status(
+    tx: Prisma.TransactionClient,
+    p: Awaited<ReturnType<Participation["project"]>>,
+    subject: Awaited<ReturnType<Participation["subject"]>>,
+    userId: string,
+  ): Promise<ParticipationState> {
+    const narrator = subject.boundUserId === userId;
+    const { records, granted, enabled, effective } =
+      await this.currentPurposesIn(tx, p, subject);
     const collection = enabled && effective.collection === true;
     const terms = await this.terms.read(p.id, undefined, tx);
     return {
@@ -719,6 +803,15 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         sourceBindingVersion: subject.bindingVersion,
         sourceAccessEpoch: p.accessEpoch,
         kind: body.kind,
+        ...(body.kind === "export"
+          ? {
+              exportCollectionStamp: await this.collectionStampIn(
+                tx,
+                p,
+                subject,
+              ),
+            }
+          : {}),
         withdrawalPurpose: body.purpose ?? null,
         idempotencyKey: key,
         requestHash: hash,
@@ -767,6 +860,27 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       operatorUserId,
       "product",
       subject.boundUserId === operatorUserId ? operatorUserId : null,
+    );
+  }
+  async openExportCaseIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    operatorUserId: string,
+    key: string,
+  ) {
+    this.policy();
+    const p = await this.project(tx, projectId, true),
+      subject = await this.subject(tx, projectId);
+    if (subject.boundUserId !== operatorUserId) throw new ForbiddenException();
+    return this.createCare(
+      tx,
+      p,
+      subject,
+      { kind: "export", expectedBindingVersion: subject.bindingVersion },
+      key,
+      operatorUserId,
+      "product",
+      operatorUserId,
     );
   }
   async authorizeCorrectionCareIn(
@@ -818,7 +932,9 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     await tx.$queryRaw`SELECT id FROM care_requests WHERE id=${id}::uuid FOR UPDATE`;
     const care = (await tx.careRequest.findUnique({ where: { id } }))!;
     // Operational review and production cases are not D08 subject-right requests.
-    if (["first_copy_expiry", "production_handoff"].includes(care.kind))
+    if (
+      ["first_copy_expiry", "production_handoff", "quality"].includes(care.kind)
+    )
       throw new ConflictException();
     const hash = digest(JSON.stringify(body));
     const result = () => ({
@@ -1320,6 +1436,54 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     return !!(await this.processingGrant(tx, input));
   }
 
+  // A dedicated care grant names its actual subject decision. Sharing with the
+  // buyer is a separate purpose and cannot stand in for (or negate) this grant.
+  async subjectCareGrantIn(
+    tx: Prisma.TransactionClient,
+    input: {
+      projectId: string;
+      subjectId: string;
+      bindingVersion: number;
+      accessEpoch: number;
+      operatorUserId: string;
+      assistedSessionId?: string | null;
+    },
+  ): Promise<boolean> {
+    this.policy();
+    const project = await this.project(tx, input.projectId, true),
+      subject = await this.subject(tx, input.projectId);
+    if (
+      subject.id !== input.subjectId ||
+      subject.bindingVersion !== input.bindingVersion ||
+      project.accessEpoch !== input.accessEpoch
+    )
+      return false;
+    const { enabled, effective } = await this.currentPurposesIn(
+      tx,
+      project,
+      subject,
+    );
+    if (!enabled || effective.collection !== true) return false;
+    if (subject.boundUserId === input.operatorUserId) return true;
+    if (
+      project.order.buyerId !== input.operatorUserId ||
+      !input.assistedSessionId
+    )
+      return false;
+    try {
+      await this.authorizeAssisted(tx, {
+        projectId: project.id,
+        sessionId: input.assistedSessionId,
+        operatorUserId: input.operatorUserId,
+        purpose: "book_confirmation",
+        requireRecording: false,
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof ForbiddenException) return false;
+      throw error;
+    }
+  }
   /** Book rendering is local material processing, not a new AI submission. */
   async bookGrantIn(
     tx: Prisma.TransactionClient,
@@ -1438,7 +1602,10 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       // Content owners distinguish their actions even for the same version.
       // Omitted only by the existing evidence-only caller contract.
       action?:
-        "story_decision" | "story_care_access" | "production_handoff_access";
+        | "story_decision"
+        | "story_care_access"
+        | "production_handoff_access"
+        | "quality_care_access";
       noticeVersion: string;
       evidenceRef: string;
       idempotencyKey: string;

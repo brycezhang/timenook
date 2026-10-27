@@ -35,6 +35,7 @@ Page({
     targetUserId: "",
     storyPurpose: false,
     bookPurpose: false,
+    qualityPurpose: false,
     storyEvidence: "",
     purposes: [
       { purpose: "collection", label: "采集并保存讲述和照片" },
@@ -46,6 +47,9 @@ Page({
   storyId: "",
   bookVersionId: "",
   productionReturn: false,
+  qualityReturn: false,
+  qualityOrderId: "",
+  qualityRequestId: "",
   interviewId: "",
   generation: 0,
   ownerContext: "",
@@ -56,10 +60,17 @@ Page({
     this.storyId = q.storyId ?? "";
     this.bookVersionId = q.bookVersionId ?? "";
     this.productionReturn = q.returnTo === "production";
+    this.qualityReturn = q.returnTo === "quality";
+    this.qualityOrderId = q.orderId || "";
+    this.qualityRequestId = q.requestId || "";
     this.interviewId = q.interviewId ?? "";
     this.setData({
       storyPurpose: q.purpose === "story_confirmation" && !!this.storyId,
       bookPurpose: q.purpose === "book_confirmation" && !!this.bookVersionId,
+      qualityPurpose:
+        q.returnTo === "quality" &&
+        q.purpose === "book_confirmation" &&
+        !!this.bookVersionId,
     });
     setDataMode("live");
   },
@@ -134,6 +145,13 @@ Page({
         !/^[0-9a-f-]{36}$/.test(session.id)
       )
         throw new Error("当次内容确认协助尚未生效，请重新查询");
+      if (this.data.bookPurpose && this.qualityReturn) {
+        go(
+          "quality",
+          `projectId=${this.projectId}&orderId=${this.qualityOrderId}&requestId=${this.qualityRequestId}&assistedSessionId=${session.id}`,
+        );
+        return;
+      }
       if (this.data.bookPurpose && this.productionReturn) {
         go(
           "production",

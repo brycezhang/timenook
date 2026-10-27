@@ -14,6 +14,40 @@ const client = new RequestClient({
   baseURL: "/timenook/v1/admin",
   withCredentials: true,
 });
+import type { CompleteExportView } from "@timenook/contracts";
+export const completeExportApi = {
+  async read(id: string) {
+    return (
+      await client.get<ApiResponse<CompleteExportView | null>>(
+        `/care-requests/${id}/export`,
+      )
+    ).data;
+  },
+  async command(
+    id: string,
+    action: "accept" | "pack" | "delivery",
+    body: object,
+    key: string,
+    csrf: string,
+  ) {
+    return (
+      await client.post<ApiResponse<CompleteExportView>>(
+        `/care-requests/${id}/export/${action}`,
+        body,
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
+  async download(id: string) {
+    const r = await fetch(
+      `/timenook/v1/admin/care-requests/${id}/export/download`,
+      { credentials: "same-origin", cache: "no-store" },
+    );
+    if (!r.ok)
+      throw await r.json().catch(() => ({ error: { code: "UNAVAILABLE" } }));
+    return r.arrayBuffer();
+  },
+};
 client.addResponseInterceptor({ fulfilled: (response) => response.data });
 export const adminApi = {
   async session() {
@@ -74,6 +108,54 @@ export const refundApi = {
         { headers: { "Idempotency-Key": key, "X-CSRF-Token": csrf } },
       )
     ).data;
+  },
+};
+import type { QualityRequestView, QualityMaterials } from "@timenook/contracts";
+export const qualityApi = {
+  async read(caseId: string) {
+    return (
+      await client.get<ApiResponse<QualityRequestView>>(
+        `/quality/cases/${encodeURIComponent(caseId)}`,
+      )
+    ).data;
+  },
+  async command(
+    caseId: string,
+    action: "assign" | "review" | "reprints",
+    body: object,
+    key: string,
+    csrf: string,
+  ) {
+    return (
+      await client.post<ApiResponse<QualityRequestView>>(
+        `/quality/cases/${encodeURIComponent(caseId)}/${action}`,
+        body,
+        { headers: { "Idempotency-Key": key, "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
+  async materials(caseId: string, csrf: string) {
+    return (
+      await client.get<ApiResponse<QualityMaterials>>(
+        `/quality/cases/${encodeURIComponent(caseId)}/materials`,
+        { headers: { "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
+  async pdf(caseId: string, csrf: string) {
+    const response = await fetch(
+      `/timenook/v1/admin/quality/cases/${encodeURIComponent(caseId)}/pdf`,
+      {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "X-CSRF-Token": csrf },
+      },
+    );
+    if (!response.ok)
+      throw await response
+        .json()
+        .catch(() => ({ error: { code: "UNAVAILABLE" } }));
+    return response.arrayBuffer();
   },
 };
 

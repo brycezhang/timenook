@@ -3,11 +3,13 @@ import Redis from "ioredis";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { API_CONFIG, ApiConfig } from "../config";
 import { ProductionTasks } from "./tasks";
+import { CompleteExports } from "../care/complete-export";
 
 /** Redis only wakes the durable use case; every delivery can safely repeat. */
 export async function startProductionWorker(app: NestFastifyApplication) {
   const config = app.get<ApiConfig>(API_CONFIG),
-    tasks = app.get(ProductionTasks);
+    tasks = app.get(ProductionTasks),
+    exports = config.books ? app.get(CompleteExports) : null;
   const prefix = `${config.redisKeyPrefix ?? "timenook"}:production`;
   const producer = new Redis(config.redisUrl, {
     maxRetriesPerRequest: 0,
@@ -31,6 +33,7 @@ export async function startProductionWorker(app: NestFastifyApplication) {
   return {
     worker,
     async recoverDue() {
+      await exports?.cleanupExpired();
       const ids = await tasks.due();
       for (const id of ids) {
         await queue.add(

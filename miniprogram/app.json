@@ -17,11 +17,13 @@
     "pages/production/index",
     "pages/order/index",
     "pages/refunds/index",
+    "pages/quality/index",
     "pages/account/index",
     "pages/settings/index",
     "pages/service/index",
     "pages/audio-probe/index",
-    "pages/original-audio/index"
+    "pages/original-audio/index",
+    "pages/export/index"
   ],
   "window": {
     "navigationBarTitleText": "时光里 · 岁月成书",
