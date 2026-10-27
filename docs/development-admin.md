@@ -1,6 +1,20 @@
 # 独立管理员与本地管理入口
 
-T07 管理身份独立于小程序账号。只有受控 CLI 可建号，未提供注册 API、默认管理员或默认口令。管理员只持有明确列出的 `ops:read`（运行信息）和 `audit:read`（最近100条审计）权限；空权限账号可以登录但不能查看这两类信息。管理员身份没有私人内容权限。
+T07 管理身份独立于小程序账号。只有受控 CLI 可建号，未提供注册 API、默认管理员或默认口令。管理员按实际职责获得明确权限；空权限账号可以登录，但不能执行受限操作。权限白名单以[共享契约](../packages/contracts/src/admin.ts)为准，私人内容仍需适用工单、本人限时授权及当前版本核验。
+
+| 权限 | 允许的业务范围 |
+| --- | --- |
+| `ops:read` | 运行信息 |
+| `audit:read` | 最近 100 条审计 |
+| `catalog:read` | 读取运营关系目录和套餐 |
+| `catalog:write` | 编辑关系目录和套餐草稿 |
+| `catalog:freeze` | 受准入约束的套餐冻结操作 |
+| `care:write` | 共享工单及其受控动作，包括本人权利、校对和退款处理 |
+| `fulfillment:write` | 首本审核、生产尝试、交接与物流 |
+| `service-terms:write` | 已购项目服务期限的受控操作 |
+| `tasks:retry` | 在原预算及授权条件内重试任务 |
+
+正式建号时选择各负责人需要的权限。`care:write` 当前也覆盖退款审批等资金动作；金额、原订单预留、生产核验和实际微信结果仍由相同业务用例约束。具备业务权限不等于具备所有私人资料的查看权，缺少对应内容授权时仍拒绝。
 
 ## 配置与建号
 
@@ -12,7 +26,7 @@ node --env-file=.env --env-file=.env.admin-local apps/api/dist/main.js
 
 `ADMIN_ORIGIN` 必须是不带路径的 HTTPS origin；本地 `https://localhost:3443`，目标生产 `https://lawyerapi.threeminreading.com`。`ADMIN_ENCRYPTION_KEY` 为密码学随机32字节的base64字符串，服务端保管，用于 AES-256-GCM 加密 TOTP 种子与派生 CSRF；不填到 Vite 环境变量、不输出或提交。不复用其他应用密钥。密钥丢失会阻止现有 MFA 验证；正式备份/轮换流程由发布验收另行验证。
 
-以安全编辑器在受限目录创建 mode-600 JSON 文件，字段为 `username`、`password`、`permissions` 和 `realm`。账号格式为3–64位小写字母/数字/点/下划线/连字符；密码16–128字符且使用独立随机强密码；permissions 只接受上述两项；本地 realm 为 `local`，生产为 `production`。不要把密码放进 shell 命令、argv、聊天、截图或日志。
+以安全编辑器在受限目录创建 mode-600 JSON 文件，字段为 `username`、`password`、`permissions` 和 `realm`。账号格式为3–64位小写字母/数字/点/下划线/连字符；密码16–128字符且使用独立随机强密码；permissions 只接受上述白名单；本地 realm 为 `local`，生产为 `production`。不要把密码放进 shell 命令、argv、聊天、截图或日志。
 
 ```sh
 pnpm admin:create --input-file /absolute/private/admin-create.json
