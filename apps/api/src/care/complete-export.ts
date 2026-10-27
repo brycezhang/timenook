@@ -175,7 +175,11 @@ export class CompleteExports implements OnModuleDestroy {
     if (!terms.exportRequests) throw new ConflictException();
     return terms;
   }
-  private view(row: CareExport, userId?: string): CompleteExportView {
+  private view(
+    row: CareExport,
+    userId?: string,
+    contentAllowed?: boolean | null,
+  ): CompleteExportView {
     return {
       id: row.id,
       projectId: row.projectId,
@@ -190,9 +194,13 @@ export class CompleteExports implements OnModuleDestroy {
       expiresAt: row.expiresAt?.toISOString() ?? null,
       sha256: row.sha256,
       bytes: row.bytes,
-      missingReason: row.missingReason,
+      missingReason:
+        contentAllowed === false
+          ? "EXPORT_CURRENT_AUTHORIZATION_REQUIRED"
+          : row.missingReason,
       deliveredAt: row.deliveredAt?.toISOString() ?? null,
       canDownload:
+        contentAllowed !== false &&
         !!userId &&
         row.recipientUserId === userId &&
         ["ready", "delivered"].includes(row.state) &&
@@ -226,7 +234,11 @@ export class CompleteExports implements OnModuleDestroy {
           row.recipient !== body.recipient
         )
           throw new ConflictException();
-        return this.view(row, userId);
+        return this.view(
+          row,
+          userId,
+          await this.participation.exportPurposeAllowedIn(tx, id, row.id),
+        );
       }
       const terms = await this.policy(tx, id);
       if (terms.exportRequests!.state === "expired")
@@ -250,7 +262,11 @@ export class CompleteExports implements OnModuleDestroy {
           evidenceRef: body.evidenceRef,
         },
       });
-      return this.view(row, userId);
+      return this.view(
+        row,
+        userId,
+        await this.participation.exportPurposeAllowedIn(tx, id, row.id),
+      );
     });
   }
   async read(id: string, authorization?: string) {
@@ -281,28 +297,33 @@ export class CompleteExports implements OnModuleDestroy {
           calendarRef: snapshot.admission.d06.businessCalendarRef,
         },
         accessEpoch: p.project.accessEpoch,
-        requests: rows.map((row) => {
-          const value = this.view(
-            row.accessEpoch === p.project.accessEpoch &&
-              row.bindingVersion === p.subject.bindingVersion
-              ? row
-              : { ...row, state: "revoked" },
-            userId,
-          );
-          if (row.manifest) {
-            try {
-              this.assertSourceRetention(
-                terms,
-                (row.manifest as { files?: unknown }).files,
-              );
-            } catch (error) {
-              if (!(error instanceof SourceRetentionExpired)) throw error;
-              value.canDownload = false;
-              value.missingReason = "EXPORT_SOURCE_RETENTION_EXPIRED";
+        requests: await Promise.all(
+          rows.map(async (row) => {
+            const contentAllowed =
+              await this.participation.exportPurposeAllowedIn(tx, id, row.id);
+            const value = this.view(
+              row.accessEpoch === p.project.accessEpoch &&
+                row.bindingVersion === p.subject.bindingVersion
+                ? row
+                : { ...row, state: "revoked" },
+              userId,
+              contentAllowed,
+            );
+            if (row.manifest) {
+              try {
+                this.assertSourceRetention(
+                  terms,
+                  (row.manifest as { files?: unknown }).files,
+                );
+              } catch (error) {
+                if (!(error instanceof SourceRetentionExpired)) throw error;
+                value.canDownload = false;
+                value.missingReason = "EXPORT_SOURCE_RETENTION_EXPIRED";
+              }
             }
-          }
-          return value;
-        }),
+            return value;
+          }),
+        ),
       };
     });
   }
@@ -310,6 +331,7 @@ export class CompleteExports implements OnModuleDestroy {
     tx: Prisma.TransactionClient,
     id: string,
     adminId?: string,
+    requireContent = true,
   ) {
     const found = await tx.careRequest.findUnique({ where: { id } });
     if (!found || found.kind !== "export") throw new NotFoundException();
@@ -324,7 +346,14 @@ export class CompleteExports implements OnModuleDestroy {
       care.sourceAccessEpoch !== p.project.accessEpoch
     )
       throw new ForbiddenException();
-    const terms = await this.policy(tx, p.project.id);
+    const terms = await this.policy(tx, p.project.id),
+      contentAllowed = await this.participation.exportPurposeAllowedIn(
+        tx,
+        p.project.id,
+        id,
+      );
+    if (requireContent && contentAllowed === false)
+      throw new ForbiddenException("EXPORT_CURRENT_AUTHORIZATION_REQUIRED");
     if (
       terms.exportRequests!.expiresAt &&
       care.createdAt.getTime() >= Date.parse(terms.exportRequests!.expiresAt)
@@ -351,7 +380,7 @@ export class CompleteExports implements OnModuleDestroy {
         (row.manifest as { files?: unknown }).files,
       );
     }
-    return { ...p, care, row, terms };
+    return { ...p, care, row, terms, contentAllowed };
   }
   private assertSourceRetention(
     terms: Awaited<ReturnType<ProjectServiceTerms["read"]>>,
@@ -431,12 +460,12 @@ export class CompleteExports implements OnModuleDestroy {
     adminId: string,
     body: ExportReviewDto,
   ) {
-    const p = await this.scopeIn(tx, id, adminId),
+    const p = await this.scopeIn(tx, id, adminId, false),
       reviewHash = digest(body);
     if (p.row?.acceptedAt) {
       if (p.row.reviewHash !== reviewHash || p.row.ownerId !== adminId)
         throw new ConflictException();
-      return this.view(p.row);
+      return this.view(p.row, undefined, p.contentAllowed);
     }
     if (Date.parse(body.dueAt) <= Date.now()) throw new BadRequestException();
     const snapshot = p.order.packageSnapshot as unknown as ExportSales;
@@ -482,11 +511,11 @@ export class CompleteExports implements OnModuleDestroy {
         reviewHash,
       },
     });
-    return this.view(row);
+    return this.view(row, undefined, p.contentAllowed);
   }
   async adminReadIn(tx: Prisma.TransactionClient, id: string, adminId: string) {
-    const p = await this.scopeIn(tx, id, adminId);
-    return p.row ? this.view(p.row) : null;
+    const p = await this.scopeIn(tx, id, adminId, false);
+    return p.row ? this.view(p.row, undefined, p.contentAllowed) : null;
   }
   async startIn(
     tx: Prisma.TransactionClient,

@@ -1,3 +1,15 @@
+ALTER TABLE care_requests ADD COLUMN export_collection_stamp jsonb
+ CHECK(export_collection_stamp IS NULL OR (kind='export' AND jsonb_typeof(export_collection_stamp)='object'));
+CREATE FUNCTION protect_export_collection_stamp() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.export_collection_stamp IS DISTINCT FROM OLD.export_collection_stamp THEN
+   RAISE EXCEPTION 'Export request collection fact is immutable';
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER care_export_collection_stamp_immutable BEFORE UPDATE ON care_requests
+ FOR EACH ROW EXECUTE FUNCTION protect_export_collection_stamp();
+
 CREATE TABLE care_exports (
  id uuid PRIMARY KEY REFERENCES care_requests(id), project_id uuid NOT NULL REFERENCES projects(id),
  subject_id uuid NOT NULL, binding_version integer NOT NULL CHECK(binding_version>=0), access_epoch integer NOT NULL CHECK(access_epoch>=0),

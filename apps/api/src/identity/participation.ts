@@ -38,7 +38,12 @@ import {
   IsOptional,
   ValidateIf,
 } from "class-validator";
-import { Prisma, PrismaClient, type AssistedSession } from "@prisma/client";
+import {
+  Prisma,
+  PrismaClient,
+  type AssistedSession,
+  type ConsentRecord,
+} from "@prisma/client";
 import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
 import { IdentityAccess } from "./identity-access";
@@ -467,6 +472,79 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       return this.status(tx, p, subject, user.id);
     });
   }
+  private async effectiveConsentIn(
+    tx: Prisma.TransactionClient,
+    p: Awaited<ReturnType<Participation["project"]>>,
+    subject: Awaited<ReturnType<Participation["subject"]>>,
+    record: Pick<
+      ConsentRecord,
+      "purpose" | "granted" | "method" | "evidenceRef" | "operatorUserId"
+    >,
+  ) {
+    if (record.method === "assisted") {
+      const session = await this.latestAssisted(
+        tx,
+        p.id,
+        record.purpose as ConsentPurpose,
+      );
+      return (
+        record.granted &&
+        this.activeAssisted(session, p, subject) &&
+        session.evidenceRef === record.evidenceRef &&
+        session.operatorUserId === record.operatorUserId
+      );
+    }
+    return record.granted && record.method === "self_wechat";
+  }
+  private async collectionStampIn(
+    tx: Prisma.TransactionClient,
+    p: Awaited<ReturnType<Participation["project"]>>,
+    subject: Awaited<ReturnType<Participation["subject"]>>,
+  ) {
+    const record = await tx.consentRecord.findFirst({
+      where: {
+        projectId: p.id,
+        bindingVersion: subject.bindingVersion,
+        purpose: "collection",
+      },
+      orderBy: { sequence: "desc" },
+    });
+    return {
+      choiceId: record?.id ?? null,
+      allowed: record
+        ? await this.effectiveConsentIn(tx, p, subject, record)
+        : null,
+    };
+  }
+  /** A verified, explicit export request made under the current unavailable
+   * collection fact authorizes only that case. A stream sequence is no grant. */
+  async exportPurposeAllowedIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    caseId: string,
+  ) {
+    this.policy();
+    const p = await this.project(tx, projectId, true),
+      subject = await this.subject(tx, projectId),
+      care = await tx.careRequest.findUnique({ where: { id: caseId } });
+    if (
+      !care ||
+      care.kind !== "export" ||
+      care.projectId !== projectId ||
+      care.sourceBindingVersion !== subject.bindingVersion ||
+      care.sourceAccessEpoch !== p.accessEpoch
+    )
+      return false;
+    const current = await this.collectionStampIn(tx, p, subject);
+    // The separately verified export case supplies recipient authority, so
+    // ordinary buyer sharing is not a prerequisite or a substitute for it.
+    if (current.allowed !== false) return true;
+    return (
+      !!care.verifiedBy &&
+      ["verified", "completed"].includes(care.state) &&
+      isDeepStrictEqual(care.exportCollectionStamp, current)
+    );
+  }
   private async status(
     tx: Prisma.TransactionClient,
     p: Awaited<ReturnType<Participation["project"]>>,
@@ -505,15 +583,12 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     // permission only while their latest matching session remains valid.
     for (const [key, record] of decisions) {
       const purpose = key as ConsentPurpose;
-      if (record.method === "assisted") {
-        const session = await this.latestAssisted(tx, p.id, purpose);
-        effective[purpose] =
-          record.granted &&
-          this.activeAssisted(session, p, subject) &&
-          session.evidenceRef === record.evidenceRef &&
-          session.operatorUserId === record.operatorUserId;
-      } else
-        effective[purpose] = record.granted && record.method === "self_wechat";
+      effective[purpose] = await this.effectiveConsentIn(
+        tx,
+        p,
+        subject,
+        record,
+      );
     }
     const collection = enabled && effective.collection === true;
     const terms = await this.terms.read(p.id, undefined, tx);
@@ -719,6 +794,15 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         sourceBindingVersion: subject.bindingVersion,
         sourceAccessEpoch: p.accessEpoch,
         kind: body.kind,
+        ...(body.kind === "export"
+          ? {
+              exportCollectionStamp: await this.collectionStampIn(
+                tx,
+                p,
+                subject,
+              ),
+            }
+          : {}),
         withdrawalPurpose: body.purpose ?? null,
         idempotencyKey: key,
         requestHash: hash,

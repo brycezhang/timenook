@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { Alert, Button, Input } from "antdv-next";
 import type { CareCase, CompleteExportView } from "@timenook/contracts";
 import { completeExportApi } from "../api/admin";
@@ -11,6 +11,9 @@ const value = ref<CompleteExportView | null>(null),
   dueAt = ref(""),
   evidence = ref(""),
   recipientRef = ref("");
+const contentBlocked = computed(
+  () => value.value?.missingReason === "EXPORT_CURRENT_AUTHORIZATION_REQUIRED",
+);
 let generation = 0,
   intent: { input: string; key: string } | null = null;
 const stateLabel: Record<string, string> = {
@@ -128,7 +131,13 @@ async function download() {
     <template v-else
       ><Button :disabled="busy" @click="refresh">查询导出进展</Button
       ><template v-if="value"
-        ><p>状态：{{ stateLabel[value.state] }}</p>
+        ><p>
+          状态：{{
+            contentBlocked
+              ? "当前本人授权不可用，请重新核验"
+              : stateLabel[value.state]
+          }}
+        </p>
         <p>
           接收方式：{{
             value.recipient === "verified_alternative"
@@ -178,7 +187,7 @@ async function download() {
       </div>
       <Button
         v-if="value && ['accepted', 'failed', 'packing'].includes(value.state)"
-        :disabled="busy"
+        :disabled="busy || contentBlocked"
         @click="command('pack')"
         >打包并核对完整 ZIP</Button
       ><template
@@ -187,14 +196,17 @@ async function download() {
           value.recipient === 'verified_alternative' &&
           ['ready', 'delivered'].includes(value.state)
         "
-        ><Button :disabled="busy" @click="download">按核验渠道领取资料包</Button
+        ><Button :disabled="busy || contentBlocked" @click="download"
+          >按核验渠道领取资料包</Button
         ><label
           >实际交付回执引用<Input
             v-model:value="evidence"
             aria-label="导出交付回执"
             :disabled="busy" /></label
         ><Button
-          :disabled="busy || !evidence.startsWith('synthetic:')"
+          :disabled="
+            busy || contentBlocked || !evidence.startsWith('synthetic:')
+          "
           @click="command('delivery')"
           >记录替代渠道实际交付回执</Button
         ></template

@@ -298,6 +298,76 @@ test("narrator requests a complete export, operator verifies and packs it, recip
   await expect(
     admin.getByText("状态：已完成，接收人可领取", { exact: true }),
   ).toBeVisible();
+  const current = await fixture.state(project, project.buyer.token),
+    refused = fixture.data(
+      await fixture.request(
+        "POST",
+        `/v1/projects/${project.projectId}/assisted-sessions`,
+        project.buyer.token,
+        {
+          purpose: "collection",
+          granted: false,
+          noticeVersion: "synthetic-d08-v1",
+          evidenceRef: "synthetic:浏览器核对同epoch采集拒绝",
+          expectedBindingVersion: current.bindingVersion,
+          expectedAccessEpoch: current.accessEpoch,
+        },
+      ),
+    );
+  expect(
+    (await fixture.state(project, project.narrator.token)).accessEpoch,
+  ).toBe(current.accessEpoch);
+  const blockedZip = await fixture.request(
+    "GET",
+    `/v1/projects/${project.projectId}/exports/${created.id}/download`,
+    project.narrator.token,
+  );
+  expect(blockedZip.statusCode).toBe(403);
+  await mini.getByRole("button", { name: "重新查询", exact: true }).click();
+  await expect(
+    mini.getByText("当前本人授权不可用，请重新核验", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    mini.getByRole("button", { name: "下载并保存完整 ZIP", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    mini.getByRole("button", { name: "提交申请，等待客服核验", exact: true }),
+  ).toBeVisible();
+  await admin
+    .getByRole("button", { name: "查询导出进展", exact: true })
+    .click();
+  await expect(
+    admin.getByText("状态：当前本人授权不可用，请重新核验", { exact: true }),
+  ).toBeVisible();
+  await mini
+    .getByText("当前本人授权不可用，请重新核验", { exact: true })
+    .scrollIntoViewIfNeeded();
+  await mini.screenshot({
+    path: "/tmp/timenook-t25-current-authority.png",
+    fullPage: true,
+  });
+  fixture.data(
+    await fixture.request(
+      "POST",
+      `/v1/projects/${project.projectId}/assisted-sessions`,
+      project.buyer.token,
+      {
+        purpose: "collection",
+        granted: true,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:浏览器核对本人重新授权",
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+        expectedSessionId: refused.id,
+      },
+    ),
+  );
+  await admin
+    .getByRole("button", { name: "查询导出进展", exact: true })
+    .click();
+  await expect(
+    admin.getByText("状态：已完成，接收人可领取", { exact: true }),
+  ).toBeVisible();
   await mini.getByRole("button", { name: "重新查询", exact: true }).click();
   await expect(
     mini.getByRole("button", { name: "下载并保存完整 ZIP", exact: true }),

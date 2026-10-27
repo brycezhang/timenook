@@ -172,6 +172,27 @@ function ready() {
     deliveredAt: null,
   };
 }
+test("a current collection denial keeps the rights request visible while the ready package is unavailable", async () => {
+  const h = await harness();
+  h.page.onLoad({ projectId });
+  const loading = h.page.onShow();
+  h.respond(0, {
+    ...view(),
+    requests: [
+      {
+        ...ready(),
+        canDownload: false,
+        missingReason: "EXPORT_CURRENT_AUTHORIZATION_REQUIRED",
+      },
+    ],
+  });
+  await loading;
+  assert.equal(h.page.data.context.canRequest, true);
+  assert.equal(h.page.data.rows[0].canDownload, false);
+  assert.equal(h.page.data.rows[0].label, "当前本人授权不可用，请重新核验");
+  await h.page.download({ currentTarget: { dataset: { id } } });
+  assert.equal(h.downloads.length, 0);
+});
 test("leaving during package download discards late bytes and never offers them to another session", async () => {
   const h = await harness();
   h.page.onLoad({ projectId });

@@ -80,9 +80,11 @@ Page({
       rows: value.requests.map((row) => ({
         ...row,
         label:
-          row.missingReason === "EXPORT_SOURCE_RETENTION_EXPIRED"
-            ? "资料保留期限已到，不能领取"
-            : labels[row.state],
+          row.missingReason === "EXPORT_CURRENT_AUTHORIZATION_REQUIRED"
+            ? "当前本人授权不可用，请重新核验"
+            : row.missingReason === "EXPORT_SOURCE_RETENTION_EXPIRED"
+              ? "资料保留期限已到，不能领取"
+              : labels[row.state],
       })),
     });
   },

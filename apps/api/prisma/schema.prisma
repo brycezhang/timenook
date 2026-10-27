@@ -507,6 +507,7 @@ model ConsentRecord {
 }
 
 model CareRequest {
+  exportCollectionStamp Json? @map("export_collection_stamp")
   withdrawalPurpose String? @map("withdrawal_purpose")
   id                   String   @id @db.Uuid
   projectId            String   @map("project_id") @db.Uuid
