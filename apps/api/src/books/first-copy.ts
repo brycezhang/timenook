@@ -230,7 +230,11 @@ export class FirstCopies implements OnModuleDestroy {
     });
     const blockers: FirstCopyBlocker[] = [];
     if (book?.state !== "ready" || !book.pdf) blockers.push("BOOK_NOT_READY");
-    const currentAddress = address?.value as unknown as
+    const activeData = !(await this.participation.activeDataPayloadExpiredIn(
+      tx,
+      projectId,
+    ));
+    const currentAddress = (activeData ? address?.value : null) as unknown as
       FirstCopyAddress | undefined;
     if (
       !currentAddress ||
@@ -301,12 +305,12 @@ export class FirstCopies implements OnModuleDestroy {
         version: address?.version ?? 0,
         hash: address?.hash ?? null,
         value:
-          role === "initiator" && address
+          activeData && role === "initiator" && address
             ? (address.value as unknown as FirstCopyAddress)
             : null,
       },
       confirmations,
-      canConfirmNarrator: subject.boundUserId === actor.userId,
+      canConfirmNarrator: activeData && subject.boundUserId === actor.userId,
       payment: {
         paidAmountFen: payment?.amount ?? 0,
         currency: "CNY",
@@ -391,6 +395,7 @@ export class FirstCopies implements OnModuleDestroy {
       authorization,
       undefined,
       async (tx, actor) => {
+        await this.participation.requireMaterialIn(tx, projectId, "activeData");
         const current = await this.contextIn(tx, projectId, actor);
         if (current.role !== "initiator") throw new ForbiddenException();
         if (current.production && !current.canReviseProduction)
@@ -891,6 +896,11 @@ export class FirstCopies implements OnModuleDestroy {
       !quality.reviewedAt
     )
       throw new ConflictException("Reviewed original-order remedy required");
+    await this.participation.requireMaterialIn(
+      tx,
+      quality.projectId,
+      "activeData",
+    );
     const order = await tx.firstCopyOrder.findUniqueOrThrow({
         where: { id: quality.productionOrderId },
       }),

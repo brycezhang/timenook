@@ -1085,61 +1085,66 @@ export class Participation
           })
         ).map(careView),
       };
-    const row = await this.db.careRequest.findUnique({
-      where: { id },
-      select: {
-        ...CARE_SELECT,
-        verifiedBy: true,
-        verifiedAt: true,
-        verificationEvidence: true,
-        verificationNotice: true,
-        revokedAccessEpoch: true,
-      },
-    });
-    if (!row) throw new NotFoundException();
-    const changes: CareBindingChangeView[] = (
-      await this.db.bindingChange.findMany({
-        where: { supportCaseId: id },
+    return this.db.$transaction(async (tx) => {
+      const row = await tx.careRequest.findUnique({
+        where: { id },
         select: {
-          subjectId: true,
-          sourceBindingVersion: true,
-          bindingVersion: true,
-          accessEpoch: true,
-          operatorId: true,
-          supportCaseId: true,
-          noticeVersion: true,
-          method: true,
-          evidenceRef: true,
-          requestId: true,
-          createdAt: true,
+          ...CARE_SELECT,
+          verifiedBy: true,
+          verifiedAt: true,
+          verificationEvidence: true,
+          verificationNotice: true,
+          revokedAccessEpoch: true,
         },
-      })
-    ).map((change) => ({
-      ...change,
-      createdAt: change.createdAt.toISOString(),
-    }));
-    return {
-      ...careView(row),
-      supportCaseRef: `record:${id}`,
-      correctionGrant: await this.db.storyCareGrant.findUnique({
-        where: { caseId: id },
-        select: { storyId: true, expiresAt: true },
-      }),
-      verification: row.verifiedBy
-        ? {
-            operatorAdminId: row.verifiedBy,
-            createdAt: row.verifiedAt?.toISOString(),
-            evidenceRef: row.verificationEvidence,
-            noticeVersion: row.verificationNotice,
-            method: "care_verified",
-            accessEpoch: row.revokedAccessEpoch,
-          }
-        : null,
-      changes,
-      withdrawal: await this.db.$transaction((tx) =>
-        this.withdrawalStatusIn(tx, row.projectId),
-      ),
-    };
+      });
+      if (!row) throw new NotFoundException();
+      const payloadExpired = await this.activeDataPayloadExpiredIn(
+        tx,
+        row.projectId,
+      );
+      const changes: CareBindingChangeView[] = (
+        await tx.bindingChange.findMany({
+          where: { supportCaseId: id },
+          select: {
+            subjectId: true,
+            sourceBindingVersion: true,
+            bindingVersion: true,
+            accessEpoch: true,
+            operatorId: true,
+            supportCaseId: true,
+            noticeVersion: true,
+            method: true,
+            evidenceRef: true,
+            requestId: true,
+            createdAt: true,
+          },
+        })
+      ).map((change) => ({
+        ...change,
+        evidenceRef: payloadExpired ? null : change.evidenceRef,
+        createdAt: change.createdAt.toISOString(),
+      }));
+      return {
+        ...careView(row),
+        supportCaseRef: `record:${id}`,
+        correctionGrant: await tx.storyCareGrant.findUnique({
+          where: { caseId: id },
+          select: { storyId: true, expiresAt: true },
+        }),
+        verification: row.verifiedBy
+          ? {
+              operatorAdminId: row.verifiedBy,
+              createdAt: row.verifiedAt?.toISOString(),
+              evidenceRef: payloadExpired ? null : row.verificationEvidence,
+              noticeVersion: payloadExpired ? null : row.verificationNotice,
+              method: "care_verified",
+              accessEpoch: row.revokedAccessEpoch,
+            }
+          : null,
+        changes,
+        withdrawal: await this.withdrawalStatusIn(tx, row.projectId),
+      };
+    });
   }
   async rebind(
     tx: Prisma.TransactionClient,
@@ -1270,7 +1275,7 @@ export class Participation
       };
     });
   }
-  private async activeDataPayloadExpiredIn(
+  async activeDataPayloadExpiredIn(
     tx: Prisma.TransactionClient,
     projectId: string,
   ) {
@@ -1817,6 +1822,7 @@ export class Participation
     bindingVersion: number,
     accessEpoch: number,
     latestSessionId: string,
+    payloadExpired: boolean,
   ): AssistedSessionView {
     return {
       id: row.id,
@@ -1826,7 +1832,7 @@ export class Participation
       purpose: row.purpose as AssistedPurpose,
       granted: row.granted,
       noticeVersion: row.noticeVersion,
-      evidenceRef: row.evidenceRef,
+      evidenceRef: payloadExpired ? null : row.evidenceRef,
       bindingVersion: row.bindingVersion,
       accessEpoch: row.accessEpoch,
       createdAt: row.createdAt.toISOString(),
@@ -1854,6 +1860,7 @@ export class Participation
       const p = await this.project(tx, id, true);
       if (p.order.buyerId !== user.id) throw new ForbiddenException();
       const subject = await this.subject(tx, id);
+      const payloadExpired = await this.activeDataPayloadExpiredIn(tx, id);
       if (!body) {
         const sessions = await tx.assistedSession.findMany({
           where: { projectId: id, operatorUserId: user.id },
@@ -1869,6 +1876,7 @@ export class Participation
               subject.bindingVersion,
               p.accessEpoch,
               latest.get(row.purpose)!,
+              payloadExpired,
             ),
           ),
         };
@@ -1891,6 +1899,7 @@ export class Participation
           subject.bindingVersion,
           p.accessEpoch,
           latest!.id,
+          payloadExpired,
         );
       }
       if (
@@ -1979,6 +1988,7 @@ export class Participation
         subject.bindingVersion,
         p.accessEpoch,
         row.id,
+        payloadExpired,
       );
     });
     if (body && !body.granted) await this.reconcileRevocations(id);

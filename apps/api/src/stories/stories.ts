@@ -1071,16 +1071,27 @@ export class Stories {
       ...story,
       decision:
         privateContent && story.currentRevisionId
-          ? await tx.storyDecision.findFirst({
-              where: {
-                projectId,
-                storyId: id,
-                revisionId: story.currentRevisionId,
-                bindingVersion: subject.bindingVersion,
-                accessEpoch: project.accessEpoch,
-              },
-              orderBy: { sequence: "desc" },
-            })
+          ? await tx.storyDecision
+              .findFirst({
+                where: {
+                  projectId,
+                  storyId: id,
+                  revisionId: story.currentRevisionId,
+                  bindingVersion: subject.bindingVersion,
+                  accessEpoch: project.accessEpoch,
+                },
+                orderBy: { sequence: "desc" },
+              })
+              .then((decision) =>
+                decision
+                  ? {
+                      ...decision,
+                      evidenceRef: canReadQuestions
+                        ? decision.evidenceRef
+                        : null,
+                    }
+                  : null,
+              )
           : null,
       usage: {
         organizations: await tx.storyGeneration.count({

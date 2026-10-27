@@ -190,7 +190,10 @@ export class QualityCare implements OnModuleDestroy {
       pdfHash: attempt.pdfHash,
       addressHash: attempt.addressHash,
       deliveredAt: attempt.deliveredAt?.toISOString() ?? null,
-      tracking: (await this.rights.deletedIn(tx, attempt.projectId))
+      tracking: (await this.participation.activeDataPayloadExpiredIn(
+        tx,
+        attempt.projectId,
+      ))
         ? null
         : (attempt.tracking as unknown as QualityAttemptOption["tracking"]),
     };

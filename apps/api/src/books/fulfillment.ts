@@ -1,4 +1,3 @@
-import { PrivacyRights } from "../care/privacy-rights";
 import { ProjectStreams } from "../media/project-streams";
 import {
   Injectable,
@@ -142,7 +141,6 @@ export class Fulfillment implements OnModuleDestroy {
   private readonly terms: ProjectServiceTerms;
   constructor(
     private readonly participation: Participation,
-    private readonly rights: PrivacyRights,
     private readonly copies: FirstCopies,
     @Inject(API_CONFIG) private readonly config: ApiConfig,
   ) {
@@ -240,7 +238,10 @@ export class Fulfillment implements OnModuleDestroy {
       accessExpiresAt: string | null;
     },
   ): Promise<FulfillmentView> {
-    const erased = await this.rights.deletedIn(tx, projectId);
+    const erased = await this.participation.activeDataPayloadExpiredIn(
+      tx,
+      projectId,
+    );
     const order = await tx.firstCopyOrder.findUnique({ where: { projectId } }),
       terms = await this.terms.read(projectId, undefined, tx),
       subject = await tx.projectSubject.findUniqueOrThrow({
