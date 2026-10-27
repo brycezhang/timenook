@@ -57,6 +57,7 @@ import {
 } from "./orders";
 import { WechatPay } from "./wechat-pay";
 import { AdminAccess } from "../admin/admin-access";
+import { ProjectServiceTerms } from "../projects/service-terms";
 type Tx = Prisma.TransactionClient;
 const RESERVED_REFUND_STATES = [
   "approved",
@@ -94,6 +95,7 @@ export class RefundProductionReviewDto extends RefundEvidenceDto {
 @Injectable()
 export class Refunds implements OnModuleDestroy, OnModuleInit {
   readonly database: PrismaClient;
+  private readonly terms: ProjectServiceTerms;
   private scan?: NodeJS.Timeout;
   private recovery?: Promise<void>;
   private stopped = false;
@@ -106,12 +108,19 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     @Inject(REFUND_RUNTIME) private readonly runtime: RefundRuntime,
   ) {
     this.database = new PrismaClient({ datasourceUrl: config.databaseUrl });
+    this.terms = new ProjectServiceTerms(config.databaseUrl);
   }
   private enabled() {
     this.orders.enabled();
   }
   beforeExecution(id: string) {
     return this.runtime.beforeExecution(id);
+  }
+  private async payloadExpiredIn(tx: Tx, projectId: string) {
+    if (await this.rights.deletedIn(tx, projectId, "activeData")) return true;
+    // The sold cutoff takes effect even while physical cleanup awaits a scan.
+    const terms = await this.terms.read(projectId, undefined, tx);
+    return terms.retention?.activeData?.state === "expired";
   }
   private view(row: Refund, materialsDeleted = false): RefundView {
     return {
@@ -167,10 +176,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         /* Unfrozen or unsupported policies remain visibly unavailable. */
       }
     return {
-      ...this.view(
-        row,
-        await this.rights.deletedIn(tx, row.projectId, "activeData"),
-      ),
+      ...this.view(row, await this.payloadExpiredIn(tx, row.projectId)),
       rule,
       productionAttemptId: attempt?.id ?? null,
       productionReviewRequired:
@@ -258,10 +264,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     });
     if (prior) {
       if (prior.requestHash !== hash(body)) throw conflict();
-      return this.view(
-        prior,
-        await this.rights.deletedIn(tx, project.id, "activeData"),
-      );
+      return this.view(prior, await this.payloadExpiredIn(tx, project.id));
     }
     const subject = await tx.projectSubject.findUniqueOrThrow({
         where: { projectId: project.id },
@@ -284,11 +287,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         createdAt: requestedAt,
       },
     });
-    const materialsDeleted = await this.rights.deletedIn(
-      tx,
-      project.id,
-      "activeData",
-    );
+    const materialsDeleted = await this.payloadExpiredIn(tx, project.id);
     return this.view(
       await tx.refund.create({
         data: {
@@ -419,11 +418,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       where: { id: refundId },
       select: { projectId: true },
     });
-    const erased = await this.rights.deletedIn(
-      tx,
-      refund.projectId,
-      "activeData",
-    );
+    const erased = await this.payloadExpiredIn(tx, refund.projectId);
     await tx.refundCommand.create({
       data: {
         refundId,
@@ -562,10 +557,9 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         state: "verified",
         verifiedBy: actorId,
         verifiedAt: now,
-        verificationEvidence: (await this.rights.deletedIn(
+        verificationEvidence: (await this.payloadExpiredIn(
           tx,
           refund.projectId,
-          "activeData",
         ))
           ? null
           : body.evidenceRef,
@@ -639,11 +633,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     await tx.refund.update({
       where: { id },
       data: {
-        productionEvidence: (await this.rights.deletedIn(
-          tx,
-          refund.projectId,
-          "activeData",
-        ))
+        productionEvidence: (await this.payloadExpiredIn(tx, refund.projectId))
           ? null
           : body.evidenceRef,
         productionEvidenceHash: createHash("sha256")
@@ -1017,6 +1007,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     if (this.scan) clearInterval(this.scan);
     await this.recovery;
     await this.database.$disconnect();
+    await this.terms.close();
   }
 }
 @Controller("v1/admin/refunds")

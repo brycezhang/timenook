@@ -694,7 +694,7 @@ export class Participation
       }
       if (p.accessEpoch !== body.expectedAccessEpoch)
         throw new ConflictException();
-      const payloadExpired = await this.rights.deletedIn(tx, id, "activeData");
+      const payloadExpired = await this.activeDataPayloadExpiredIn(tx, id);
       if (payloadExpired && body.granted)
         throw new ForbiddenException(
           "Expired activity cannot acquire new authorization payload",
@@ -1017,7 +1017,7 @@ export class Participation
     )
       throw new ConflictException();
     let epoch: number | null = null;
-    const payloadExpired = await this.rights.deletedIn(tx, p.id, "activeData");
+    const payloadExpired = await this.activeDataPayloadExpiredIn(tx, p.id);
     if (["withdraw", "delete"].includes(care.kind)) {
       epoch = (
         await tx.project.update({
@@ -1269,6 +1269,14 @@ export class Participation
         subjectName: active ? subject.name : null,
       };
     });
+  }
+  private async activeDataPayloadExpiredIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ) {
+    if (await this.rights.deletedIn(tx, projectId, "activeData")) return true;
+    const terms = await this.terms.read(projectId, undefined, tx);
+    return terms.retention?.activeData?.state === "expired";
   }
   // Plan callers keep authentication, current purpose/epoch checks and writes
   // under the same Session -> Project -> Subject lock order.
