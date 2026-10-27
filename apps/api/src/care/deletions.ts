@@ -15,6 +15,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import {
   ApiProperty,
@@ -40,6 +41,7 @@ import { idempotencyKey } from "../payments/orders";
 import type { ProbeObjects } from "../probe/local-objects";
 import { probeStorageScope } from "../probe/storage-scope";
 import { createHash } from "node:crypto";
+import Redis from "ioredis";
 import {
   PrivacyRights,
   type DeletionPayload,
@@ -68,7 +70,7 @@ type Item = {
   target_table: string | null;
   target_key: Record<string, unknown> | null;
   target_columns: string[] | null;
-  locator: { targets?: PrivateFileTarget[] };
+  locator: { targets?: PrivateFileTarget[]; categories?: string[] };
   state: string;
   deadline: Date | null;
   completed_at: Date | null;
@@ -78,8 +80,10 @@ type Item = {
 @Injectable()
 export class Deletions implements OnModuleDestroy {
   private readonly terms: ProjectServiceTerms;
+  private readonly redis: Redis;
   private running?: Promise<void>;
   private timer?: ReturnType<typeof setInterval>;
+  private stopped = false;
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     private readonly rights: PrivacyRights,
@@ -90,11 +94,24 @@ export class Deletions implements OnModuleDestroy {
     private readonly objects?: ProbeObjects,
   ) {
     this.terms = new ProjectServiceTerms(config.databaseUrl);
+    this.redis = new Redis(config.redisUrl, {
+      lazyConnect: true,
+      maxRetriesPerRequest: 0,
+      retryStrategy: () => null,
+    });
+    this.redis.on("error", () => {});
   }
-  async sweep(at = new Date()) {
-    await this.rights.assertHealthy();
-    if (this.running) return this.running;
+  async sweep(at = new Date()): Promise<void> {
+    if (this.stopped)
+      throw new ServiceUnavailableException("Deletion maintenance is stopping");
+    // An explicit wakeup keeps its selected clock even if a timer is already
+    // scanning. Timers themselves skip a busy run instead of queuing forever.
+    if (this.running) {
+      await this.running;
+      return this.sweep(at);
+    }
     this.running = (async () => {
+      await this.rights.assertHealthy();
       await this.scanRetention(at);
       await this.participation.reconcileRevocations();
       const events = await this.rights.db.$queryRaw<
@@ -109,6 +126,7 @@ export class Deletions implements OnModuleDestroy {
   onModuleInit() {
     if (this.rights.enabled) {
       this.timer = setInterval(() => {
+        if (this.stopped || this.running) return;
         void this.sweep().catch(() => {});
       }, 1000);
       this.timer.unref();
@@ -200,6 +218,7 @@ export class Deletions implements OnModuleDestroy {
       }
       cursor = projects[projects.length - 1].projectId;
     }
+    await this.rights.expireExports(at);
   }
   async reconcile(projectId: string) {
     const items = await this.rights.db.$queryRaw<
@@ -207,8 +226,10 @@ export class Deletions implements OnModuleDestroy {
     >`SELECT * FROM privacy_deletion_items WHERE project_id=${projectId}::uuid ORDER BY CASE layer WHEN 'active_database' THEN 1 WHEN 'cache' THEN 2 ELSE 3 END,id`;
     for (const item of items) {
       if (
+        item.state === "awaiting_evidence" ||
         !["active_database", "active_files", "cache"].includes(item.layer) ||
-        (item.state === "completed" && item.layer !== "active_files")
+        (item.state === "completed" &&
+          !["active_files", "cache"].includes(item.layer))
       )
         continue;
       try {
@@ -216,8 +237,8 @@ export class Deletions implements OnModuleDestroy {
         else if (item.layer === "active_files") {
           for (const target of item.locator.targets || [])
             await this.remove(target);
-        }
-        // Redis stores only rate counters. Payment capability caches live in registered PG payload columns;
+        } else if (item.layer === "cache") await this.clearCache(item);
+        // Payment capability caches live in registered PG payload columns;
         // client cache eviction follows the user's permanent status fence.
         await this.rights.db
           .$executeRaw`UPDATE privacy_deletion_items SET state='completed',completed_at=COALESCE(completed_at,now()),reason=${item.layer === "active_files" && !item.locator.targets?.length ? "NO_PLATFORM_TARGETS" : null} WHERE id=${item.id}::uuid`;
@@ -225,6 +246,47 @@ export class Deletions implements OnModuleDestroy {
         await this.rights.db
           .$executeRaw`UPDATE privacy_deletion_items SET state='pending',completed_at=NULL,reason='RETRY_REQUIRED' WHERE id=${item.id}::uuid`;
       }
+    }
+  }
+  private async clearCache(item: Item) {
+    const categories = item.locator.categories;
+    if (!Array.isArray(categories))
+      throw new Error("Unknown cache erasure scope");
+    const all = categories.includes("all") || categories.includes("activeData");
+    const kinds = [
+      ...(all || categories.includes("originalAudio") ? ["recording"] : []),
+      ...(all ||
+      categories.some((c: string) =>
+        ["originalPhotos", "derivedPhotos"].includes(c),
+      )
+        ? ["photo"]
+        : []),
+    ];
+    const namespace = (this.config.redisKeyPrefix ?? "timenook").replace(
+      /[\\*?\[\]]/g,
+      "\\$&",
+    );
+    for (const kind of kinds) {
+      let cursor = "0";
+      do {
+        const page = await this.redis.scan(
+          cursor,
+          "MATCH",
+          `${namespace}:${kind}:upload:*`,
+          "COUNT",
+          100,
+        );
+        cursor = page[0];
+        for (const key of page[1]) {
+          const value = await this.redis.get(key);
+          if (value === null) continue;
+          const permission = JSON.parse(value);
+          if (typeof permission.projectId !== "string")
+            throw new Error("Upload capability ownership is unknown");
+          if (permission.projectId === item.project_id)
+            await this.redis.del(key);
+        }
+      } while (cursor !== "0");
     }
   }
   private async erase(item: Item) {
@@ -241,9 +303,13 @@ export class Deletions implements OnModuleDestroy {
     )
       throw new Error("Unknown erasure target");
     const columns = item.target_columns;
+    const receipt =
+      entry.table === "quality_evidence"
+        ? ",erased_at=COALESCE(erased_at,date_trunc('milliseconds',statement_timestamp()))"
+        : "";
     // Scope and exact PK are rechecked by SQL's existing immutable and privacy guards.
     await this.rights.db.$executeRawUnsafe(
-      `UPDATE "${entry.table}" r SET ${columns.map((c) => `"${c}"=NULL`).join(",")},privacy_erased_columns=ARRAY(SELECT DISTINCT unnest(privacy_erased_columns || $2::text[])) WHERE privacy_row_key('${entry.table}',to_jsonb(r))=$1::jsonb AND ${entry.owner}=$3::uuid AND ${"filter" in entry ? entry.filter : "true"}`,
+      `UPDATE "${entry.table}" r SET ${columns.map((c) => `"${c}"=NULL`).join(",")},privacy_erased_columns=privacy_erased_columns || ARRAY(SELECT c FROM unnest($2::text[]) c WHERE NOT c=ANY(privacy_erased_columns))${receipt} WHERE privacy_row_key('${entry.table}',to_jsonb(r))=$1::jsonb AND ${entry.owner}=$3::uuid AND ${"filter" in entry ? entry.filter : "true"} AND NOT ($2::text[] <@ privacy_erased_columns)`,
       JSON.stringify(item.target_key),
       columns,
       item.project_id,
@@ -313,6 +379,9 @@ export class Deletions implements OnModuleDestroy {
         })
       : null;
     if (!p || !subject || !order) throw new NotFoundException();
+    const holds = await this.rights.recoveryHoldsIn(this.rights.db, projectId);
+    if (holds.some((h) => h.reason === "BINDING_HISTORY_REVIEW_REQUIRED"))
+      throw new ForbiddenException();
     if (user.id !== order.buyerId && user.id !== subject.boundUserId)
       throw new ForbiddenException();
   }
@@ -347,9 +416,10 @@ export class Deletions implements OnModuleDestroy {
       Item[]
     >`SELECT * FROM privacy_deletion_items WHERE project_id=${projectId}::uuid ORDER BY layer,category,id`;
     const permanent = events.some((e) => e.categories.includes("all"));
+    const holds = await this.rights.recoveryHoldsIn(this.rights.db, projectId);
     return {
       projectId,
-      onlineAccessStopped: permanent,
+      onlineAccessStopped: permanent || holds.length > 0,
       permanentProjectDeletion: permanent,
       accessEpoch: project.accessEpoch,
       changes: events.map((e) => ({
@@ -373,6 +443,7 @@ export class Deletions implements OnModuleDestroy {
           })),
       })),
       boundary:
+        (holds.length ? "历史权利范围待独立核验，当前在线访问已停止。" : "") +
         "已传输到设备、已交付导出与纸书不能由平台收回；供应商与备份按各自证据处理。",
     };
   }
@@ -421,8 +492,11 @@ export class Deletions implements OnModuleDestroy {
     await tx.$executeRaw`UPDATE privacy_deletion_items SET state=${body.state === "confirmed" ? "completed" : "awaiting_evidence"},evidence_ref=${body.evidenceRef},completed_at=${body.state === "confirmed" ? new Date() : null},reason=${body.state === "confirmed" ? null : "EXTERNAL_RECEIPT_REQUIRED"} WHERE id=${itemId}::uuid`;
   }
   async onModuleDestroy() {
+    this.stopped = true;
     if (this.timer) clearInterval(this.timer);
+    await this.running?.catch(() => {});
     await this.terms.close();
+    this.redis.disconnect();
   }
 }
 @Controller("v1/projects/:id/deletion-status")

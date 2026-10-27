@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { test, beforeEach, afterEach } from "node:test";
 import { randomUUID } from "node:crypto";
 import { fork, spawnSync, type ChildProcess } from "node:child_process";
-import { cp, mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
+import {
+  cp,
+  mkdtemp,
+  writeFile,
+  rm,
+  readFile,
+  symlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
@@ -21,20 +28,67 @@ import {
   request,
   data,
   login,
+  createBookApplication,
 } from "./book-fixture";
 import { paymentAdmin } from "./payment-admin-fixture";
 import { PrivacyJournal } from "../src/privacy-journal/privacy-journal";
 import { privacyAuthorityId } from "../src/care/privacy-rights";
 import type { ApiConfig } from "../src/config";
 beforeEach(startBookFixture);
-afterEach(stopBookFixture);
 const children = new Set<ChildProcess>();
+const restoredSchemas = new Set<string>();
+const directories = new Set<string>();
 afterEach(async () => {
   for (const child of children) {
     child.kill("SIGCONT");
     child.kill("SIGKILL");
+    if (child.exitCode === null && child.signalCode === null)
+      await new Promise<void>((resolve) => child.once("exit", () => resolve()));
   }
   children.clear();
+  try {
+    for (const schema of restoredSchemas)
+      await db.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+  } finally {
+    restoredSchemas.clear();
+    for (const directory of directories)
+      await rm(directory, { recursive: true, force: true });
+    directories.clear();
+    await stopBookFixture();
+  }
+});
+async function fixtureDirectory(prefix: string) {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  directories.add(directory);
+  return directory;
+}
+test("a valid authenticated source copied inside business file storage cannot open private capabilities", async () => {
+  const copied = join(
+    config.books!.storageRoot,
+    "independent-source-is-not-business-data",
+  );
+  await cp(config.privacyJournal!.root, copied, { recursive: true });
+  await assert.rejects(
+    createBookApplication({
+      ...config,
+      privacyJournal: { ...config.privacyJournal!, root: copied },
+    }),
+    /separate from business storage roots/,
+  );
+  const directory = await fixtureDirectory("timenook-source-alias-");
+  const alias = join(directory, "alias");
+  await symlink(config.privacyJournal!.root, alias);
+  await assert.rejects(
+    createBookApplication({
+      ...config,
+      books: {
+        ...config.books!,
+        storageRoot: join(alias, "not-created-media"),
+      },
+    }),
+    /separate from business storage roots/,
+  );
+  assert.equal((await request("GET", "/health/live")).statusCode, 200);
 });
 async function child(configPath: string, mode = "api") {
   const proc = fork(
@@ -108,6 +162,8 @@ function dump(schema: string) {
   return out.stdout;
 }
 function restore(sql: string, source: string, target: string) {
+  assert.match(target, /^[a-z_0-9]+$/);
+  restoredSchemas.add(target);
   const out = spawnSync(
     "docker",
     [
@@ -198,7 +254,7 @@ test("a real older PostgreSQL and file backup stays closed until independent rep
   const sourceSchema = new URL(config.databaseUrl).searchParams.get("schema")!,
     targetSchema = "restore_" + randomUUID().replaceAll("-", "");
   const backup = dump(sourceSchema),
-    directory = await mkdtemp(join(tmpdir(), "timenook-restore-"));
+    directory = await fixtureDirectory("timenook-restore-");
   await cp(root, join(directory, "files"), { recursive: true });
   await deletion(erased);
   data(
@@ -410,7 +466,7 @@ test("a source event whose later project is absent from the backup prevents acti
     later = await bound();
   await deletion(later);
   const targetSchema = "missing_" + randomUUID().replaceAll("-", ""),
-    directory = await mkdtemp(join(tmpdir(), "timenook-restore-missing-"));
+    directory = await fixtureDirectory("timenook-restore-missing-");
   restore(backup, sourceSchema, targetSchema);
   const url = new URL(config.databaseUrl);
   url.searchParams.set("schema", targetSchema);
@@ -459,7 +515,7 @@ test("a valid older authenticated source head cannot pass a newer durable checkp
   await cp(config.privacyJournal!.root, older, { recursive: true });
   data((await choose(p, p.narrator.token, "collection", false)).response);
   await app.close();
-  const directory = await mkdtemp(join(tmpdir(), "timenook-short-source-")),
+  const directory = await fixtureDirectory("timenook-short-source-"),
     path = await fileConfig(directory, {
       ...config,
       privacyJournal: { ...config.privacyJournal!, root: older },
@@ -496,7 +552,7 @@ test("SIGKILL after independent publication and before PostgreSQL commit replays
   await db.$executeRawUnsafe(
     `CREATE TRIGGER hold_privacy_commit BEFORE INSERT ON privacy_events FOR EACH ROW EXECUTE FUNCTION hold_privacy_commit()`,
   );
-  const directory = await mkdtemp(join(tmpdir(), "timenook-commit-crash-")),
+  const directory = await fixtureDirectory("timenook-commit-crash-"),
     path = await fileConfig(directory, config),
     api = await child(path),
     key = randomUUID(),
@@ -655,7 +711,7 @@ test("an assisted version rejection restores as an authenticated denial without 
   assert.ok(rejected.decision.assistedEvidenceId);
   await app.close();
   restore(backup, schema, target);
-  const directory = await mkdtemp(join(tmpdir(), "timenook-story-denial-")),
+  const directory = await fixtureDirectory("timenook-story-denial-"),
     url = new URL(config.databaseUrl);
   url.searchParams.set("schema", target);
   const recovered = { ...config, databaseUrl: url.toString() },
@@ -683,6 +739,7 @@ test("an assisted version rejection restores as an authenticated denial without 
   assert.equal(denial.method, "journal_denial");
   assert.equal(denial.allowInBook, false);
   assert.equal(denial.assistedEvidenceId, null);
+  assert.ok(denial.evidenceRef);
   assert.match(denial.evidenceRef, /^journal:[a-f0-9]{64}$/);
   assert.equal(
     await targetDb.assistedVersionEvidence.count({

@@ -351,16 +351,42 @@ test("withdrawal of the exact historical story permission and deleted recording 
   assert.equal(missing.statusCode, 404, missing.body);
   assert.ok(!missing.body.includes("书中固定的私人故事"));
   await writeFile(object, syntheticAudio());
-  // T26 will own deletion orchestration. This fixture represents its removed entry metadata.
-  await db.bookAudioEntry.delete({ where: { id: available.id } });
+  const current = await state(other, other.narrator.token);
+  const care = data(
+    await request(
+      "POST",
+      `/v1/projects/${other.projectId}/care-requests`,
+      other.narrator.token,
+      { kind: "delete", expectedBindingVersion: current.bindingVersion },
+    ),
+  );
+  const headers = await paymentAdmin(config, app, ["care:write", "audit:read"]);
+  data(
+    await app.inject({
+      method: "POST",
+      url: `/v1/admin/care-requests/${care.id}/verify`,
+      headers: { ...headers, "idempotency-key": randomUUID() },
+      payload: {
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:原声入口删除核验",
+      },
+    }),
+  );
+  assert.equal(
+    (await db.bookAudioEntry.findUniqueOrThrow({ where: { id: available.id } }))
+      .audio,
+    null,
+  );
   assert.equal(
     (await request("GET", other.entry, other.narrator.token)).statusCode,
-    404,
+    403,
   );
   assert.equal(
     (await request("GET", audioUrl(other, available), other.narrator.token))
       .statusCode,
-    404,
+    403,
   );
 });
 

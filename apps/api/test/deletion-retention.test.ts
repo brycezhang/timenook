@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test, before, after } from "node:test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -14,12 +14,67 @@ import {
   data,
   request,
   restartBookApplication,
+  formUpload,
+  syntheticAudio,
 } from "./book-fixture";
 import { readyFirstCopyBook } from "./first-copy-fixture";
 import { ProjectServiceTerms } from "../src/projects/service-terms";
 import { Deletions } from "../src/care/deletions";
 before(startBookFixture);
 after(stopBookFixture);
+test("derived-photo expiry and repeated cache cleanup preserve a fresh valid original-audio upload in the same project", async (t) => {
+  const p = await readyFirstCopyBook(
+    {},
+    {},
+    { derivedPhotos: 1, originalAudio: 30 },
+    30,
+  );
+  const terms = new ProjectServiceTerms(config.databaseUrl),
+    anchor = new Date();
+  await terms.recordFact({
+    projectId: p.projectId,
+    eventId: "synthetic-category-cache-" + randomUUID(),
+    kind: "delivery_completed",
+    occurredAt: anchor,
+  });
+  await terms.close();
+  const cutoff = new Date(anchor.getTime() + 86400000);
+  await db.session.updateMany({
+    where: { userId: p.narrator.id },
+    data: { expiresAt: new Date(cutoff.getTime() + 86400000) },
+  });
+  t.mock.timers.enable({ apis: ["Date"], now: cutoff.getTime() });
+  try {
+    await app.get(Deletions).sweep(cutoff);
+    assert.equal(
+      (
+        await db.$queryRaw<
+          { n: bigint }[]
+        >`SELECT count(*) n FROM privacy_deletions WHERE project_id=${p.projectId}::uuid AND categories ? 'derivedPhotos'`
+      )[0].n,
+      1n,
+    );
+    const audio = syntheticAudio(),
+      base = `/v1/projects/${p.projectId}/interviews/${p.interviewId}/clips`;
+    const clip = data(
+      await request("POST", base, p.narrator.token, {
+        clientClipId: randomUUID(),
+        bytes: audio.length,
+        sha256: createHash("sha256").update(audio).digest("hex"),
+      }),
+    );
+    const form = data(
+      await request("POST", `${base}/${clip.id}/upload`, p.narrator.token, {}),
+    );
+    await app.get(Deletions).sweep(new Date(cutoff.getTime() + 1));
+    assert.equal(
+      (await formUpload(app, form, audio, {}, p.narrator.token)).statusCode,
+      204,
+    );
+  } finally {
+    t.mock.timers.reset();
+  }
+});
 test("the selected D03 category uses its original deadline before, at and after expiry and preserves an independently retained PDF across replay", async () => {
   const p = await readyFirstCopyBook({}, {}, { transcripts: 1, bookPdf: 20 });
   const terms = new ProjectServiceTerms(config.databaseUrl),

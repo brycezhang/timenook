@@ -417,6 +417,11 @@ export class Stories {
     operator: { id: string; realm: "product" | "admin" },
     key: string,
   ) {
+    await this.participation.requireMaterialIn(
+      tx,
+      projectId,
+      "confirmedStories",
+    );
     const requestHash = hash(JSON.stringify(body));
     const prior = await tx.storyRevision.findFirst({
       where: {
@@ -698,7 +703,7 @@ export class Stories {
         });
       if (
         dependency.state !== "no_speech" &&
-        !(dependency.state === "succeeded" && transcript?.text.trim())
+        !(dependency.state === "succeeded" && transcript?.text?.trim())
       ) {
         waiting = true;
         failed ||= ["failed", "manual_review", "invalidated"].includes(
@@ -707,14 +712,15 @@ export class Stories {
       }
       manifest.push({
         ...source,
-        transcript: transcript
-          ? {
-              taskId: transcript.taskId,
-              text: transcript.text,
-              sha256: transcript.sha256,
-              inputHash: transcript.inputHash,
-            }
-          : null,
+        transcript:
+          transcript && transcript.text !== null
+            ? {
+                taskId: transcript.taskId,
+                text: transcript.text,
+                sha256: transcript.sha256,
+                inputHash: transcript.inputHash,
+              }
+            : null,
         state: dependency.state,
         completedAt: dependency.completedAt?.toISOString() ?? null,
       });
@@ -1018,6 +1024,26 @@ export class Stories {
     taskId?: string,
     privateContent = true,
   ) {
+    if (privateContent)
+      await this.participation.requireMaterialIn(
+        tx,
+        projectId,
+        "confirmedStories",
+      );
+    const canReadQuestions =
+        privateContent &&
+        (await this.participation.materialAvailableIn(
+          tx,
+          projectId,
+          "activeData",
+        )),
+      canReadTranscripts =
+        privateContent &&
+        (await this.participation.materialAvailableIn(
+          tx,
+          projectId,
+          "transcripts",
+        ));
     const story = await tx.story.findFirst({ where: { id, projectId } });
     if (!story) throw new NotFoundException();
     const project = await tx.project.findUniqueOrThrow({
@@ -1066,9 +1092,15 @@ export class Stories {
       },
       revision:
         privateContent && story.currentRevisionId
-          ? await tx.storyRevision.findUniqueOrThrow({
-              where: { id: story.currentRevisionId },
-            })
+          ? await tx.storyRevision
+              .findUniqueOrThrow({ where: { id: story.currentRevisionId } })
+              .then((revision) => ({
+                ...revision,
+                sourceManifest:
+                  canReadQuestions && canReadTranscripts
+                    ? revision.sourceManifest
+                    : [],
+              }))
           : null,
       task: task
         ? {
@@ -1117,14 +1149,14 @@ export class Stories {
             sources: await Promise.all(
               sources.map(async (source) => ({
                 ...source,
-                question: privateContent ? source.question : undefined,
+                question: canReadQuestions ? source.question : undefined,
                 state: (
                   await tx.productionTask.findUniqueOrThrow({
                     where: { id: source.transcriptionTaskId },
                     select: { state: true },
                   })
                 ).state,
-                transcript: privateContent
+                transcript: canReadTranscripts
                   ? await tx.formalTranscript.findUnique({
                       where: { taskId: source.transcriptionTaskId },
                       select: {

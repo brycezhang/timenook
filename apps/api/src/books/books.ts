@@ -178,7 +178,8 @@ export class Books implements OnModuleDestroy {
     const terms = await this.bookTerms(tx, projectId);
     if (
       !terms.retention?.confirmedStories ||
-      terms.retention.confirmedStories.state === "expired"
+      terms.retention.confirmedStories.state === "expired" ||
+      terms.retention?.activeData?.state === "expired"
     )
       throw new ForbiddenException();
     return terms;
@@ -192,6 +193,7 @@ export class Books implements OnModuleDestroy {
       allowed = !!(
         rule &&
         rule.state !== "expired" &&
+        terms.retention?.activeData?.state !== "expired" &&
         (!expiresAt || Date.parse(expiresAt) > Date.now())
       );
     return { allowed, expiresAt: allowed ? expiresAt : null };
@@ -275,6 +277,8 @@ export class Books implements OnModuleDestroy {
         inputHash: string;
         sequence: number;
       }[];
+      if (revision.title === null || revision.paragraphs === null)
+        throw new ForbiddenException();
       eligible.push({
         id: story.id,
         revisionId: revision.id,

@@ -40,6 +40,6 @@ export async function recoverPrivacy(config: ApiConfig) {
       authority,
     };
   } finally {
-    await rights.onModuleDestroy();
+    await rights.onApplicationShutdown();
   }
 }

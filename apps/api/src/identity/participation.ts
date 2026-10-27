@@ -13,6 +13,7 @@ import {
   Inject,
   Injectable,
   OnModuleDestroy,
+  OnApplicationShutdown,
   OnModuleInit,
   ForbiddenException,
   BadRequestException,
@@ -172,9 +173,11 @@ export class RebindDto extends ParticipationNoticeDto {
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
 }
 @Injectable()
-export class Participation implements OnModuleDestroy, OnModuleInit {
+export class Participation
+  implements OnModuleDestroy, OnModuleInit, OnApplicationShutdown
+{
   private revocationSweep: ReturnType<typeof setInterval> | undefined;
-  private sweeping = false;
+  private sweeping?: Promise<void>;
   private readonly db: PrismaClient;
   private readonly terms: ProjectServiceTerms;
   constructor(
@@ -189,11 +192,10 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     if (this.config.participation?.mode !== "synthetic-d08") return;
     this.revocationSweep = setInterval(() => {
       if (this.sweeping) return;
-      this.sweeping = true;
-      void this.reconcileRevocations()
+      this.sweeping = this.reconcileRevocations()
         .catch(() => {})
         .finally(() => {
-          this.sweeping = false;
+          this.sweeping = undefined;
         });
     }, 1000);
     this.revocationSweep.unref();
@@ -617,7 +619,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     const narrator = subject.boundUserId === userId;
     const { records, granted, enabled, effective } =
       await this.currentPurposesIn(tx, p, subject);
-    const deleted=await this.rights.deletedIn(tx,p.id);
+    const deleted = await this.rights.deletedIn(tx, p.id);
     const collection = !deleted && enabled && effective.collection === true;
     const terms = await this.terms.read(p.id, undefined, tx);
     return {
@@ -637,12 +639,20 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         ? records.map(({ operatorAdminId, ...record }) => ({
             ...record,
             ...(operatorAdminId ? { operatorAdminId } : {}),
+            evidenceRef:
+              terms.retention?.activeData?.state === "expired"
+                ? null
+                : record.evidenceRef,
             purpose: record.purpose as ConsentPurpose,
             createdAt: record.createdAt.toISOString(),
           }))
         : [],
       careAvailable: true,
-      canCollect: narrator && collection && terms.canRecord,
+      canCollect:
+        narrator &&
+        collection &&
+        terms.canRecord &&
+        terms.retention?.activeData?.state !== "expired",
       canProcessAi: narrator && collection && effective.ai === true,
       canRead:
         collection &&
@@ -1246,15 +1256,34 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         throw new ForbiddenException();
       const state = await this.status(tx, p, subject, user.id);
       if (!state.canRead) throw new ForbiddenException();
+      const active = await this.materialAvailableIn(tx, id, "activeData");
       return {
         ...state,
-        bookTitle: p.order.bookTitle,
-        subjectName: subject.name,
+        bookTitle: active ? p.order.bookTitle : null,
+        subjectName: active ? subject.name : null,
       };
     });
   }
   // Plan callers keep authentication, current purpose/epoch checks and writes
   // under the same Session -> Project -> Subject lock order.
+  async materialAvailableIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    category: string,
+  ) {
+    if (await this.rights.deletedIn(tx, projectId, category)) return false;
+    const terms = await this.terms.read(projectId, undefined, tx),
+      rule = terms.retention?.[category];
+    return !!rule && rule.state !== "expired";
+  }
+  async requireMaterialIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    category: string,
+  ) {
+    if (!(await this.materialAvailableIn(tx, projectId, category)))
+      throw new ForbiddenException("Material retention is unavailable");
+  }
   async withPlanAccess<T>(
     projectId: string,
     authorization: string | undefined,
@@ -1356,7 +1385,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       const p = await this.project(tx, projectId, true);
       await this.rights.requireAvailableIn(tx, projectId);
       if (mode === "record")
-        await this.rights.requireAvailableIn(tx, projectId, "activeData");
+        await this.requireMaterialIn(tx, projectId, "activeData");
       const subject = await this.subject(tx, projectId);
       let method: "self_wechat" | "assisted";
       if (subject.boundUserId === user.id) {
@@ -1439,6 +1468,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       return null;
     const terms = await this.terms.read(p.id, undefined, tx);
     if (
+      terms.retention?.activeData?.state === "expired" ||
       terms.retention?.originalAudio?.state === "expired" ||
       terms.retention?.transcripts?.state === "expired"
     )
@@ -1698,7 +1728,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       contentKind: string;
       versionId: string;
       contentHash: string;
-      evidenceRef: string;
+      evidenceRef: string | null;
     }) => ({
       id: row.id,
       subjectId: row.subjectId,
@@ -1764,7 +1794,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       purpose: string;
       granted: boolean;
       noticeVersion: string;
-      evidenceRef: string;
+      evidenceRef: string | null;
       bindingVersion: number;
       accessEpoch: number;
       createdAt: Date;
@@ -2175,6 +2205,9 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
   }
   async onModuleDestroy() {
     if (this.revocationSweep) clearInterval(this.revocationSweep);
+    await this.sweeping;
+  }
+  async onApplicationShutdown() {
     await this.db.$disconnect();
     await this.terms.close();
   }

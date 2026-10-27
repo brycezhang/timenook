@@ -87,7 +87,7 @@ export const ERASURE_REGISTRY = [
   {
     table: "story_generations",
     category: "activeData",
-    columns: ["preferences"],
+    columns: ["preferences", "resolved_manifest"],
     keys: ["task_id"],
     owner: "r.project_id",
   },
@@ -214,6 +214,7 @@ export const ERASURE_REGISTRY = [
     columns: ["manifest", "recipient_ref", "evidence_ref", "delivery_evidence"],
     keys: ["id"],
     owner: "r.project_id",
+    filter: "privacy_export_has_category(r.manifest,'exportPackages')",
   },
   {
     table: "care_requests",
@@ -312,6 +313,7 @@ export const ERASURE_REGISTRY = [
     columns: ["manifest"],
     keys: ["id"],
     owner: "r.project_id",
+    filter: "privacy_export_has_category(r.manifest,'originalAudio')",
   },
   {
     table: "care_exports",
@@ -319,6 +321,7 @@ export const ERASURE_REGISTRY = [
     columns: ["manifest"],
     keys: ["id"],
     owner: "r.project_id",
+    filter: "privacy_export_has_category(r.manifest,'originalPhotos')",
   },
   {
     table: "care_exports",
@@ -326,6 +329,7 @@ export const ERASURE_REGISTRY = [
     columns: ["manifest"],
     keys: ["id"],
     owner: "r.project_id",
+    filter: "privacy_export_has_category(r.manifest,'derivedPhotos')",
   },
   {
     table: "care_exports",
@@ -333,6 +337,7 @@ export const ERASURE_REGISTRY = [
     columns: ["manifest"],
     keys: ["id"],
     owner: "r.project_id",
+    filter: "privacy_export_has_category(r.manifest,'transcripts')",
   },
   {
     table: "care_exports",
@@ -340,6 +345,7 @@ export const ERASURE_REGISTRY = [
     columns: ["manifest"],
     keys: ["id"],
     owner: "r.project_id",
+    filter: "privacy_export_has_category(r.manifest,'confirmedStories')",
   },
   {
     table: "care_exports",
@@ -347,6 +353,7 @@ export const ERASURE_REGISTRY = [
     columns: ["manifest"],
     keys: ["id"],
     owner: "r.project_id",
+    filter: "privacy_export_has_category(r.manifest,'bookPdf')",
   },
   {
     table: "care_exports",
@@ -354,6 +361,7 @@ export const ERASURE_REGISTRY = [
     columns: ["manifest"],
     keys: ["id"],
     owner: "r.project_id",
+    filter: "privacy_export_has_category(r.manifest,'activeData')",
   },
   {
     table: "photo_assets",
@@ -362,6 +370,34 @@ export const ERASURE_REGISTRY = [
     keys: ["id"],
     owner: "r.project_id",
     filter: "r.kind<>'original'",
+  },
+  {
+    table: "quality_evidence",
+    category: "activeData",
+    columns: ["description"],
+    keys: ["request_id"],
+    owner: "r.project_id",
+  },
+  {
+    table: "quality_requests",
+    category: "activeData",
+    columns: ["assignment_evidence_ref", "review_evidence_ref"],
+    keys: ["id"],
+    owner: "r.project_id",
+  },
+  {
+    table: "followup_generations",
+    category: "activeData",
+    columns: ["input", "result"],
+    keys: ["task_id"],
+    owner: "r.project_id",
+  },
+  {
+    table: "story_revisions",
+    category: "activeData",
+    columns: ["source_manifest"],
+    keys: ["id"],
+    owner: "r.project_id",
   },
 ] as const;
 export type ErasureCategory =

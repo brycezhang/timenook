@@ -201,7 +201,7 @@ export class Followups {
           if (
             !transcript ||
             task?.state !== "succeeded" ||
-            !transcript.text.trim()
+            !transcript.text?.trim()
           )
             throw new ConflictException("Transcript required");
           const question = await tx.actualPlanQuestion.findUniqueOrThrow({

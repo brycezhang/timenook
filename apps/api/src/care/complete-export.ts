@@ -34,6 +34,7 @@ import { BOOK_OBJECTS } from "../books/books";
 import type { ProbeObjects } from "../probe/local-objects";
 import { probeStorageScope } from "../probe/storage-scope";
 import { exportZip, hashBytes, ExportFile } from "./export-zip";
+import { PrivacyRights } from "./privacy-rights";
 import {
   readFile,
   writeFile,
@@ -131,6 +132,7 @@ export class CompleteExports implements OnModuleDestroy {
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     private readonly identity: IdentityAccess,
     private readonly participation: Participation,
+    private readonly rights: PrivacyRights,
     @Inject(BOOK_OBJECTS) private readonly objects: ProbeObjects,
   ) {
     this.database = new PrismaClient({ datasourceUrl: config.databaseUrl });
@@ -583,7 +585,7 @@ export class CompleteExports implements OnModuleDestroy {
           },
         });
         counts.audio++;
-        if (!transcript)
+        if (!transcript || transcript.text === null)
           throw new ConflictException("EXPORT_TRANSCRIPT_PENDING");
         if (
           transcript.inputHash !== asset.sha256 ||
@@ -1056,6 +1058,8 @@ export class CompleteExports implements OnModuleDestroy {
     return removed;
   }
   async cleanupExpired() {
+    await this.rights.assertHealthy();
+    await this.rights.expireExports();
     const rows = await this.database.careExport.findMany({
       where: {
         expiresAt: { lte: new Date() },

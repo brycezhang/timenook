@@ -114,6 +114,8 @@ export class Photos implements OnModuleDestroy {
     interviewId: string,
     id: string,
   ) {
+    await this.participation.requireMaterialIn(tx, projectId, "originalPhotos");
+    await this.participation.requireMaterialIn(tx, projectId, "derivedPhotos");
     const row = await tx.photoIntent.findFirst({
       where: { projectId, interviewId, id, storageScope: this.scope },
     });
@@ -183,6 +185,8 @@ export class Photos implements OnModuleDestroy {
     };
   }
   private async quota(tx: Prisma.TransactionClient, projectId: string) {
+    await this.participation.requireMaterialIn(tx, projectId, "originalPhotos");
+    await this.participation.requireMaterialIn(tx, projectId, "derivedPhotos");
     const p = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
     const order = await tx.paymentOrder.findUniqueOrThrow({
       where: { id: p.orderId! },
@@ -538,7 +542,7 @@ export class Photos implements OnModuleDestroy {
           [
             ...(prior?.entries.map((e) => ({
               photoId: e.photoId,
-              caption: e.caption,
+              caption: e.caption ?? "",
             })) ?? []),
             { photoId: id, caption: "" },
           ],
@@ -672,7 +676,7 @@ export class Photos implements OnModuleDestroy {
           });
           return {
             photoId: e.photoId,
-            caption: e.caption,
+            caption: e.caption ?? "",
             assets: assets
               .sort((a, b) => a.kind.localeCompare(b.kind))
               .map((a) => ({
@@ -864,7 +868,7 @@ export class Photos implements OnModuleDestroy {
           expectedRevision: body.expectedRevision,
           entries: body.entries.map((e) => ({
             photoId: e.photoId,
-            caption: e.caption,
+            caption: e.caption ?? "",
           })),
         };
         await claimRecordingCommand(
@@ -1048,7 +1052,7 @@ export class Photos implements OnModuleDestroy {
           actor.operatorUserId,
           current.entries.map((e) => ({
             photoId: e.photoId,
-            caption: e.caption,
+            caption: e.caption ?? "",
           })),
           {
             photoId: id,

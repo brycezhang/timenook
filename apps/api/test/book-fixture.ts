@@ -576,6 +576,9 @@ export async function storyPhoto(
 
 export async function restartBookApplication() {
   await app.close();
-  app = await createApplication(config, fixtureOptions);
+  app = await createBookApplication(config);
   return app;
+}
+export function createBookApplication(value = config) {
+  return createApplication(value, fixtureOptions);
 }

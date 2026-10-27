@@ -31,7 +31,7 @@ export interface ConsentDecisionView {
   granted: boolean;
   noticeVersion: string;
   method: string;
-  evidenceRef: string;
+  evidenceRef: string | null;
   bindingVersion: number;
   accessEpoch: number;
   createdAt: string;
@@ -45,7 +45,7 @@ export interface CareBindingChangeView {
   supportCaseId: string | null;
   noticeVersion: string;
   method: string;
-  evidenceRef: string;
+  evidenceRef: string | null;
   requestId: string;
   createdAt: string;
 }
@@ -85,8 +85,8 @@ export interface CareCase {
   verification?: {
     operatorAdminId: string;
     createdAt: string;
-    evidenceRef: string;
-    noticeVersion: string;
+    evidenceRef: string | null;
+    noticeVersion: string | null;
     method: string;
     accessEpoch: number | null;
   } | null;
@@ -121,7 +121,7 @@ export interface AssistedSessionView {
   purpose: AssistedPurpose;
   granted: boolean;
   noticeVersion: string;
-  evidenceRef: string;
+  evidenceRef: string | null;
   bindingVersion: number;
   accessEpoch: number;
   createdAt: string;

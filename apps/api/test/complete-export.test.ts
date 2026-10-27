@@ -1009,6 +1009,60 @@ test("an unused derived-photo retention category does not block an otherwise com
       await adminRequest("POST", p.exportBase + "/pack", p.admin, {}),
     );
     assert.equal(packed.state, "ready");
+    await app.get(Deletions).sweep(new Date(end));
+    assert.equal(
+      (await db.careExport.findUniqueOrThrow({ where: { id: p.exp.id } }))
+        .state,
+      "ready",
+    );
+    const next = data(
+      await request(
+        "POST",
+        `/v1/projects/${p.projectId}/exports`,
+        p.narrator.token,
+        {
+          recipient: "self",
+          noticeVersion: "synthetic-d08-v1",
+          evidenceRef: "synthetic:不含已到期照片的新导出",
+        },
+      ),
+    );
+    const current = await state(p, p.narrator.token);
+    data(
+      await adminRequest(
+        "POST",
+        `/v1/admin/care-requests/${next.id}/verify`,
+        p.admin,
+        {
+          expectedBindingVersion: current.bindingVersion,
+          expectedAccessEpoch: current.accessEpoch,
+          noticeVersion: "synthetic-d08-v1",
+          evidenceRef: "synthetic:新独立申请核验",
+        },
+      ),
+    );
+    const nextBase = `/v1/admin/care-requests/${next.id}/export`;
+    data(
+      await adminRequest("POST", nextBase + "/accept", p.admin, {
+        dueAt: new Date(end + 86400000).toISOString(),
+        evidenceRef: "synthetic:按原日历处理新申请",
+      }),
+    );
+    const newPack = data(
+      await adminRequest("POST", nextBase + "/pack", p.admin, {}),
+    );
+    assert.equal(newPack.state, "ready");
+    assert.equal(
+      (
+        await request(
+          "POST",
+          `/v1/projects/${p.projectId}/interviews/${p.interviewId}/photos`,
+          p.narrator.token,
+          { clientPhotoId: randomUUID(), bytes: 100, sha256: "a".repeat(64) },
+        )
+      ).statusCode,
+      403,
+    );
     assert.equal(
       (
         await request(
@@ -1027,6 +1081,7 @@ test("an unused derived-photo retention category does not block an otherwise com
 import http from "node:http";
 import { formUpload, syntheticAudio, state } from "./book-fixture";
 import { ProductionTasks } from "../src/tasks/tasks";
+import { Deletions } from "../src/care/deletions";
 async function largeExportSources(
   projectId: string,
   token: string,

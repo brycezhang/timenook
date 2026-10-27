@@ -13,6 +13,8 @@ import {
   db,
 } from "./book-fixture";
 import { paymentAdmin } from "./payment-admin-fixture";
+import Redis from "ioredis";
+import { Deletions } from "../src/care/deletions";
 before(startBookFixture);
 after(stopBookFixture);
 test("verified deletion immediately denies all private use and exposes separate cleanup layers to current participants", async () => {
@@ -163,7 +165,7 @@ async function eraseProject(p: Awaited<ReturnType<typeof bound>>) {
     ),
   };
 }
-test("all historical payloads and owned files disappear while minimum version and financial shells reject restoration", async () => {
+test("all historical payloads and owned files disappear while minimum version and financial shells reject restoration", async (t) => {
   const p = await readyReservedFirstCopy();
   const photos = await storyPhoto(p, "合成删除照片私人说明");
   data(
@@ -191,7 +193,37 @@ test("all historical payloads and owned files disappear while minimum version an
   const original = await db.planRevision.findFirstOrThrow({
     where: { projectId: p.projectId },
   });
+  const redis = new Redis(config.redisUrl, { maxRetriesPerRequest: 0 });
+  t.after(() => redis.disconnect());
+  const capabilities = async (projectId: string) => {
+    const found: string[] = [];
+    for (const kind of ["recording", "photo"]) {
+      for (const key of await redis.keys(
+        `${config.redisKeyPrefix}:${kind}:upload:*`,
+      )) {
+        const value = await redis.get(key);
+        if (value && JSON.parse(value).projectId === projectId) found.push(key);
+      }
+    }
+    return found;
+  };
+  const targetCaps = await capabilities(p.projectId);
+  assert.ok(targetCaps.some((key) => key.includes(":recording:upload:")));
+  assert.ok(targetCaps.some((key) => key.includes(":photo:upload:")));
+  const lateCapability = await redis.get(targetCaps[0]);
+  assert.ok(lateCapability);
+  const control = await bound(),
+    controlInterview = await interview(control, false);
+  await sealedClip(control, controlInterview.id);
+  const controlCaps = await capabilities(control.projectId);
+  assert.ok(controlCaps.length > 0);
   const { status } = await eraseProject(p);
+  assert.deepEqual(await capabilities(p.projectId), []);
+  assert.deepEqual(await capabilities(control.projectId), controlCaps);
+  await redis.set(targetCaps[0], lateCapability, "EX", 120);
+  await app.get(Deletions).reconcile(p.projectId);
+  assert.deepEqual(await capabilities(p.projectId), []);
+  assert.deepEqual(await capabilities(control.projectId), controlCaps);
   const pending = status.changes
     .flatMap((e: any) => e.items)
     .filter(

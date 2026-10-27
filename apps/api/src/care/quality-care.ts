@@ -1,3 +1,4 @@
+import { PrivacyRights } from "./privacy-rights";
 import {
   Body,
   Controller,
@@ -118,6 +119,7 @@ export class QualityCare implements OnModuleDestroy {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     private readonly identity: IdentityAccess,
+    private readonly rights: PrivacyRights,
     private readonly participation: Participation,
     private readonly books: Books,
     private readonly copies: FirstCopies,
@@ -129,6 +131,7 @@ export class QualityCare implements OnModuleDestroy {
     this.terms = new ProjectServiceTerms(config.databaseUrl);
   }
   private async evidenceTermsIn(tx: Tx, projectId: string) {
+    await this.rights.requireAvailableIn(tx, projectId, "activeData");
     const terms = await this.terms.read(projectId, undefined, tx);
     if (
       !terms.retention?.activeData ||
@@ -187,10 +190,13 @@ export class QualityCare implements OnModuleDestroy {
       pdfHash: attempt.pdfHash,
       addressHash: attempt.addressHash,
       deliveredAt: attempt.deliveredAt?.toISOString() ?? null,
-      tracking: attempt.tracking as unknown as QualityAttemptOption["tracking"],
+      tracking: (await this.rights.deletedIn(tx, attempt.projectId))
+        ? null
+        : (attempt.tracking as unknown as QualityAttemptOption["tracking"]),
     };
   }
   async viewIn(tx: Tx, row: QualityRequest): Promise<QualityRequestView> {
+    const erased = await this.rights.deletedIn(tx, row.projectId);
     const refund = row.refundId
       ? await tx.refund.findUniqueOrThrow({ where: { id: row.refundId } })
       : null;
@@ -237,13 +243,16 @@ export class QualityCare implements OnModuleDestroy {
       reviewedAt: row.reviewedAt?.toISOString() ?? null,
       resolution: row.resolution as QualityRequestView["resolution"],
       reprintMode: row.reprintMode as QualityRequestView["reprintMode"],
-      replacement: await this.copies.qualityReplacementIn(tx, row.id),
-      grant: grant
-        ? {
-            expiresAt: grant.expiresAt.toISOString(),
-            scopes: grant.scopes as QualityScope[],
-          }
-        : null,
+      replacement: erased
+        ? null
+        : await this.copies.qualityReplacementIn(tx, row.id),
+      grant:
+        !erased && grant
+          ? {
+              expiresAt: grant.expiresAt.toISOString(),
+              scopes: grant.scopes as QualityScope[],
+            }
+          : null,
       productionAttemptId: attempt?.id ?? null,
       productionState: attempt?.state ?? null,
       refund: refund ? { id: refund.id, state: refund.state } : null,
@@ -414,6 +423,7 @@ export class QualityCare implements OnModuleDestroy {
     key: string,
   ) {
     const { row, order } = await this.caseIn(tx, caseId);
+    await this.rights.requireAvailableIn(tx, row.projectId, "activeData");
     if (!(await this.command(tx, row, actorId, "assign", key, body)))
       return this.viewIn(tx, row);
     if (row.version !== body.expectedVersion || row.state !== "requested")

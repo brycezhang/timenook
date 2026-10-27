@@ -23,8 +23,10 @@ export function adminRequest(
     ...(payload ? { payload } : {}),
   });
 }
-export async function deliveredQualityOrder() {
-  const p = await readyReservedFirstCopy(),
+export async function deliveredQualityOrder(
+  retention: Record<string, number> = {},
+) {
+  const p = await readyReservedFirstCopy(retention),
     headers = await qualityAdmin(),
     base = `/v1/admin/fulfillment/${p.order.id}`;
   const view = data(
@@ -88,8 +90,9 @@ export async function deliveredQualityOrder() {
 }
 export async function reviewedQualityOrder(
   mode: "original" | "revised" | "refund" = "original",
+  retention: Record<string, number> = {},
 ) {
-  const p = await deliveredQualityOrder(),
+  const p = await deliveredQualityOrder(retention),
     created = data(
       await request("POST", p.qualityBase, p.buyer.token, {
         attemptId: p.attempt.id,

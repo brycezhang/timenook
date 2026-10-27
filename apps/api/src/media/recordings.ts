@@ -86,6 +86,7 @@ export class Recordings implements OnModuleDestroy {
     interviewId: string,
     id: string,
   ) {
+    await this.participation.requireMaterialIn(tx, projectId, "originalAudio");
     const row = await tx.recordingIntent.findFirst({
       where: { projectId, interviewId, id, storageScope: this.scope },
     });
@@ -155,6 +156,7 @@ export class Recordings implements OnModuleDestroy {
     };
   }
   private async quota(tx: Prisma.TransactionClient, projectId: string) {
+    await this.participation.requireMaterialIn(tx, projectId, "originalAudio");
     const p = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
     const order = await tx.paymentOrder.findUniqueOrThrow({
       where: { id: p.orderId! },

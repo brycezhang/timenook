@@ -37,7 +37,7 @@ import {
 } from "class-validator";
 import { Prisma, PrismaClient, Refund, PaymentOrder } from "@prisma/client";
 import type { FastifyRequest } from "fastify";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { REFUND_REASONS, ADMIN_PERMISSIONS } from "@timenook/contracts";
 import type {
   RefundReason,
@@ -627,7 +627,9 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         productionEvidence: (await this.rights.deletedIn(tx, refund.projectId))
           ? null
           : body.evidenceRef,
-        productionEvidenceHash: hash(body.evidenceRef),
+        productionEvidenceHash: createHash("sha256")
+          .update(body.evidenceRef, "utf8")
+          .digest("hex"),
       },
     });
     return this.readIn(tx, id);

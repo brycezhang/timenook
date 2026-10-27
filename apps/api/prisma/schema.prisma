@@ -25,7 +25,7 @@ model CareExport {
  recipient String
  recipientUserId String? @map("recipient_user_id") @db.Uuid
  recipientRef String? @map("recipient_ref")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  state String @default("requested")
  ownerId String? @map("owner_id") @db.Uuid
  requestedAt DateTime @default(now()) @map("requested_at") @db.Timestamptz(3)
@@ -500,7 +500,7 @@ model ConsentRecord {
   granted        Boolean
   noticeVersion  String   @map("notice_version")
   method         String
-  evidenceRef    String   @map("evidence_ref")
+  evidenceRef    String?   @map("evidence_ref")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@index([projectId, bindingVersion])
@@ -552,7 +552,7 @@ model BindingChange {
   supportCaseId        String?  @map("support_case_id") @db.Uuid
   noticeVersion        String   @map("notice_version")
   method               String
-  evidenceRef          String   @map("evidence_ref")
+  evidenceRef          String?   @map("evidence_ref")
   requestId            String   @map("request_id")
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
@@ -569,7 +569,7 @@ model AssistedSession {
  purpose String
  granted Boolean
  noticeVersion String @map("notice_version")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  bindingVersion Int @map("binding_version")
  accessEpoch Int @map("access_epoch")
  idempotencyKey String @map("idempotency_key")
@@ -592,7 +592,7 @@ model AssistedVersionEvidence {
  versionId String @map("version_id") @db.Uuid
  contentHash String @map("content_hash") @db.Char(64)
  noticeVersion String @map("notice_version")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  bindingVersion Int @map("binding_version")
  accessEpoch Int @map("access_epoch")
  idempotencyKey String @map("idempotency_key")
@@ -823,7 +823,7 @@ model PhotoReference {
  interviewId String @map("interview_id") @db.Uuid
  photoId String @map("photo_id") @db.Uuid
  position Int
- caption String
+ caption String?
  originalId String @map("original_id") @db.Uuid
  previewId String @map("preview_id") @db.Uuid
  printId String @map("print_id") @db.Uuid
@@ -883,7 +883,7 @@ model FormalTranscript {
  projectId String @map("project_id") @db.Uuid
  clipId String @unique @map("clip_id") @db.Uuid
  inputHash String @map("input_hash") @db.Char(64)
- text String
+ text String?
  sha256 String @db.Char(64)
  providerRequestId String @map("provider_request_id") @db.Uuid
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1004,8 +1004,8 @@ model StoryRevision {
  version Int
  generationTaskId String @map("generation_task_id") @db.Uuid
  baseRevisionId String? @map("base_revision_id") @db.Uuid
- title String
- theme String
+ title String?
+ theme String?
  paragraphs Json?
  reviewItems Json? @map("review_items")
  sourceManifest Json? @map("source_manifest")
@@ -1077,7 +1077,7 @@ model StoryDecision {
  accessEpoch Int @map("access_epoch")
  method String
  noticeVersion String @map("notice_version")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  confirmed Boolean
  allowInBook Boolean @map("allow_in_book")
  idempotencyKey String @map("idempotency_key")
@@ -1123,7 +1123,7 @@ model StoryCareGrant {
  accessEpoch Int @map("access_epoch")
  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
  noticeVersion String @map("notice_version")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  requestHash String @map("request_hash") @db.Char(64)
  @@unique([projectId,evidenceRef])
  @@map("story_care_grants")
@@ -1189,7 +1189,7 @@ model BookCommand {
 model BookCoverVersion {
  projectId String @map("project_id") @db.Uuid
  version Int
- salutation String
+ salutation String?
  photoAssetId String? @map("photo_asset_id") @db.Uuid
  createdBy String @map("created_by") @db.Uuid
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1221,7 +1221,7 @@ model BookConfirmation {
  method String
  assistedEvidenceId String? @map("assisted_evidence_id") @db.Uuid
  noticeVersion String @map("notice_version")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@unique([projectId,evidenceRef])
  @@index([projectId,role,sequence])
@@ -1312,7 +1312,7 @@ model FulfillmentGrant {
  bindingVersion Int @map("binding_version")
  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
  noticeVersion String @map("notice_version")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@index([attemptId,createdAt])
  @@map("fulfillment_grants")
@@ -1331,7 +1331,7 @@ model FulfillmentDelivery {
  orderId String @id @map("order_id") @db.Uuid
  attemptId String @unique @map("attempt_id") @db.Uuid
  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  operatorAdminId String @map("operator_admin_id") @db.Uuid
  @@map("fulfillment_deliveries")
 }

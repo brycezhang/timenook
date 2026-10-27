@@ -1076,6 +1076,13 @@ export class ProductionTasks implements OnModuleDestroy {
         failure: true,
       },
     });
+    const canReadTranscript =
+      privateContent &&
+      (await this.participation.materialAvailableIn(
+        tx,
+        task.projectId,
+        "transcripts",
+      ));
     return {
       id: task.id,
       projectId: task.projectId,
@@ -1108,7 +1115,7 @@ export class ProductionTasks implements OnModuleDestroy {
       submittedAt: task.submittedAt?.toISOString() ?? null,
       completedAt: task.completedAt?.toISOString() ?? null,
       failedAt: task.failedAt?.toISOString() ?? null,
-      ...(privateContent && task.kind === "transcribe_audio"
+      ...(canReadTranscript && task.kind === "transcribe_audio"
         ? {
             originalTranscript: await tx.formalTranscript.findUnique({
               where: { taskId: task.id },

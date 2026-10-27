@@ -272,7 +272,7 @@ export class ProjectServiceTerms {
       return { policyStatus: "pending", deleteData: false, canRecord: false };
     const erasedRows = await database.$queryRaw<
       { categories: string[] }[]
-    >`SELECT categories FROM privacy_deletions WHERE project_id=${projectId}::uuid`;
+    >`SELECT categories FROM privacy_deletions WHERE project_id=${projectId}::uuid AND scoped_export_id IS NULL`;
     const erased = new Set(erasedRows.flatMap((r) => r.categories));
     const events = await database.projectServiceEvent.findMany({
       where: { projectId, occurredAt: { lte: at } },

@@ -430,7 +430,13 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
         })
       : null;
     const deleted = project
-      ? await this.rights.deletedIn(this.database as never, project.id)
+      ? (await this.rights.deletedIn(
+          this.database,
+          project.id,
+          "activeData",
+        )) ||
+        (await this.terms.read(project.id)).retention?.activeData?.state ===
+          "expired"
       : false;
     const template = order.template as {
       id: string;
