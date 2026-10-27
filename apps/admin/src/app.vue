@@ -17,6 +17,7 @@ import Care from "./views/care.vue";
 import Tasks from "./views/tasks.vue";
 import Fulfillment from "./views/fulfillment.vue";
 const view = ref("runtime");
+const productionTarget = ref("");
 const state = ref<AdminState | null>(null),
   secret = ref(""),
   busy = ref(false),
@@ -59,6 +60,7 @@ const canReadCatalog = computed(
 );
 function clearSession() {
   view.value = "runtime";
+  productionTarget.value = "";
   state.value = null;
   secret.value = "";
   audits.value = null;
@@ -206,6 +208,14 @@ onMounted(() => {
     <Care
       v-else-if="view === 'care' && canManageCare"
       :csrf="state.csrfToken"
+      @production="
+        (orderId) => {
+          if (canManageFulfillment) {
+            productionTarget = orderId;
+            view = 'fulfillment';
+          }
+        }
+      "
       @expired="
         perform(async () => {
           throw { error: { code: 'UNAUTHENTICATED' } };
@@ -215,6 +225,7 @@ onMounted(() => {
     <Fulfillment
       v-else-if="view === 'fulfillment' && canManageFulfillment"
       :csrf="state.csrfToken"
+      :initial-order-id="productionTarget"
       @expired="
         perform(async () => {
           throw { error: { code: 'UNAUTHENTICATED' } };

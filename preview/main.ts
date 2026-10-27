@@ -145,6 +145,12 @@ const wx: any = {
       ((!options.method ||
         options.method === "GET" ||
         options.method === "POST") &&
+        /\/v1\/orders\/[a-f0-9-]{36}\/quality-care(?:\/[a-f0-9-]{36}\/(?:access|refund))?$/.test(
+          url.pathname,
+        )) ||
+      ((!options.method ||
+        options.method === "GET" ||
+        options.method === "POST") &&
         /\/v1\/orders\/[a-f0-9-]{36}\/refunds$/.test(url.pathname)) ||
       ((!options.method || options.method === "GET") &&
         /\/v1\/projects\/[a-f0-9-]{36}\/(?:fulfillment|withdrawal-status)$/.test(

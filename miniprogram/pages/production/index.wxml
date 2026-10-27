@@ -38,4 +38,5 @@
   <view wx:if="{{view && view.current && view.current.state === 'cancelled'}}" class="soft section">上次生产已确认取消，原尝试的版本与地址记录不会被本次更正覆盖。可返回当前书稿与首本确认页，按服务端允许范围更正、重新确认和提交；不会再次付款。</view>
   <button wx:if="{{view && view.current && view.current.state === 'cancelled'}}" class="btn section" bindtap="reviseProduction" disabled="{{busy}}">返回当前书稿与首本确认</button>
   <button class="btn secondary section" bindtap="book" disabled="{{busy}}">返回成书总览</button>
+  <button wx:if="{{view && view.paymentOrderId}}" class="btn secondary section" bindtap="quality" disabled="{{busy}}">质量售后与原单重印</button>
 </view>
