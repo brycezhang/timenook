@@ -31,4 +31,6 @@ activeData 的原截止同时限制公开写入口。协助用途到期后不新
 
 运行中已持有项目锁的流检查仍认证完整独立源和业务 checkpoint 的对应连续前缀，并要求当前项目后缀的每项事件存在匹配 source/id/generation/hash 的已提交 receipt（UUID按数据库大小写等价语义规范化比较）；其它项目正常发布/提交间隙不撤销本项目的既有权限。无 scope 的启动/恢复/请求入口继续全量重放，认证、authority、前缀冲突仍全局拒绝。流的实际业务 scope 检查可能等待 PG 锁，因此返回后必须再次验证 source/fence，避免发布后回滚令旧授权多发一块字节。该检查不启动嵌套重放。
 
+固定PDF持有按bookPdf独立保留的副本，不能因原照片/故事类别的未提交到期投影而终止。其服务端scope只豁免完整认证后、当前epoch下严格识别的其它类别retention_expiry：已知原期限/版本格式、明确类别与媒体/临时/ZIP定位必须均不影响PDF。已有receipt仍先核对hash/generation；all、bookPdf、hold/revoke/故事决定、epoch变更、未知字段/类别/目标或坏格式均不豁免。scope不跳过完整源/authority/连续前缀，也不跳过每块实际权限/版本/hash/期限检查。默认流及无scope启动/恢复保持原全量门闩。
+
 active_database 的目标载荷受不可恢复 SQL 约束，已完成的逐项擦除及其完成时间保持单向；旧异步失败不得覆盖数据库当前 completed receipt。active_files/cache 的迟到副本与 SET 则必须继续重扫，失败仍可回到 pending。核验可以在一次 inline reconcile 的单项失败后返回201，含义是拒绝和待执行项已持久，不等于物理清理已完成。

@@ -80,3 +80,5 @@ pnpm --filter @timenook/api privacy:recover activate
 按类别到期补扫会保留从未成功产包申请的最少受理/失败事实：仅 requested/accepted/failed 且 objectKey、readyAt、sha256、bytes 均为空才属于此情况。已完成事实或 packing 状态仍执行原撤销和精确文件清理，不能因已擦除 locator/manifest 而复活旧包；核验永久删除不采用该例外。ZIP 下载通过最后 guard 后才设置文件响应头，失败返回正常错误正文。
 
 数据库载荷的逐项擦除由单向 SQL 约束保护；新尝试已完成后，旧失败不能把该 active_database receipt 或完成时间降回 pending，条件按数据库当前 layer/state 判断。文件和缓存可有迟到副本/SET，完成后仍重扫，真实重扫失败仍改为 pending；不能套用数据库终态例外。运行中重放错误已使进程关闭私人能力时，仅移除故障不会自动重开；须显式重启，沿原独立源与 authority 重放后再以原命令号继续。
+
+固定PDF流另有服务端bookPdf scope：完整认证后的未投影后缀，只有当前epoch、已知delivery/精确export-ready期限格式、明确其它类别和已核对形状/存储scope的非PDF目标才可暂不要求receipt；默认流仍要求本项目全部receipt。空/混合含bookPdf、未知类别/字段/目标、book_directory、all/hold/revoke/故事决定及epoch变化均保持拒绝。已有receipt的hash/generation矛盾、完整source/authority/prefix错误仍全局拒绝；无scope启动/恢复/请求入口继续全量重放。每块PDF当前主体、许可、版本/hash与自身期限的实际检查和前后fence不变。

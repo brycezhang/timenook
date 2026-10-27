@@ -26,6 +26,7 @@ import {
   type PublishedPrivacyEvent,
 } from "../privacy-journal/privacy-journal";
 import { ERASURE_REGISTRY } from "./erasure-registry";
+import { probeStorageScope } from "../probe/storage-scope";
 export const privacyAuthorityId = (
   databaseUrl: string,
   installation: string,
@@ -157,7 +158,7 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
   }
   /** Integrity/checkpoint check usable inside a caller's project transaction.
    * It never starts replay or waits for another transaction holding that project. */
-  async assertReplayed(projectId?: string) {
+  async assertReplayed(projectId?: string, scope?: "bookPdf") {
     if (!this.journal || this.failed) throw new ServiceUnavailableException();
     let snapshot;
     try {
@@ -207,7 +208,7 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
     if (projectId) {
       // A caller may already hold its project lock. Never start nested replay.
       // A different project's uncommitted PG receipt cannot change this scope;
-      // our own suffix must have authenticated, atomically committed receipts.
+      // our own suffix requires receipts except the explicit fixed-PDF case below.
       const scopeId = projectId.toLowerCase();
       const pending = snapshot.events
         .slice(checkpoint)
@@ -218,12 +219,24 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
           >`SELECT id,hash,generation FROM privacy_events WHERE source_id=${snapshot.sourceId}::uuid AND project_id=${scopeId}::uuid AND generation>${BigInt(checkpoint)}`
         : [];
       const committed = new Map(receipts.map((r) => [r.id, r]));
+      const project =
+        scope === "bookPdf" && pending.some((e) => !committed.has(e.eventId))
+          ? await this.db.project.findUnique({
+              where: { id: scopeId },
+              select: { accessEpoch: true },
+            })
+          : null;
       for (const event of pending) {
         const receipt = committed.get(event.eventId);
-        if (!receipt)
+        if (!receipt) {
+          // A fixed PDF owns its copies under bookPdf. Only a strictly known
+          // other-category expiry may remain pending while that file streams.
+          if (project && this.unrelatedPdfExpiry(event, project.accessEpoch))
+            continue;
           throw new ServiceUnavailableException(
             "Independent source replay is pending",
           );
+        }
         if (
           receipt.hash !== event.hash ||
           Number(receipt.generation) !== event.generation
@@ -239,6 +252,168 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
     throw new ServiceUnavailableException(
       "Independent source replay is pending",
     );
+  }
+  private unrelatedPdfExpiry(
+    event: PublishedPrivacyEvent,
+    epoch: number,
+  ): boolean {
+    const p = event.payload,
+      categories = new Set([
+        "originalAudio",
+        "originalPhotos",
+        "derivedAudio",
+        "derivedPhotos",
+        "transcripts",
+        "confirmedStories",
+        "exportPackages",
+        "activeData",
+        "historicalObjects",
+        "backupCopies",
+        "supplierCopies",
+      ]),
+      fields = new Set([
+        "operation",
+        "requestId",
+        "scopedExportId",
+        "trigger",
+        "categories",
+        "effectiveAt",
+        "accessEpoch",
+        "targets",
+        "taskFences",
+        "targetAttemptId",
+        "rule",
+        "deadlines",
+      ]),
+      iso = (v: unknown) =>
+        typeof v === "string" &&
+        Number.isFinite(Date.parse(v)) &&
+        new Date(v).toISOString() === v,
+      uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+      objectScope = this.config.recording
+        ? createHash("sha256")
+            .update(`product:${probeStorageScope(this.config.recording)}`)
+            .digest("hex")
+        : null;
+    if (
+      event.kind !== "deletion" ||
+      p.operation !== "erase" ||
+      p.trigger !== "retention_expiry" ||
+      Object.keys(p).some((k) => !fields.has(k)) ||
+      p.requestId !== null ||
+      !Number.isSafeInteger(p.accessEpoch) ||
+      p.accessEpoch !== epoch ||
+      !Array.isArray(p.categories) ||
+      !p.categories.length ||
+      p.categories.some((c) => typeof c !== "string" || !categories.has(c)) ||
+      new Set(p.categories).size !== p.categories.length ||
+      !iso(p.effectiveAt) ||
+      Date.parse(String(p.effectiveAt)) > Date.now() ||
+      !Array.isArray(p.taskFences) ||
+      p.taskFences.length ||
+      p.targetAttemptId !== null ||
+      !p.rule ||
+      typeof p.rule !== "object" ||
+      Array.isArray(p.rule) ||
+      !p.deadlines ||
+      typeof p.deadlines !== "object" ||
+      Array.isArray(p.deadlines) ||
+      Object.keys(p.deadlines).sort().join(",") !==
+        "active_database,active_files,cache" ||
+      Object.values(p.deadlines).some((d) => d !== p.effectiveAt) ||
+      !Array.isArray(p.targets)
+    )
+      return false;
+    if (
+      p.scopedExportId !== undefined &&
+      (typeof p.scopedExportId !== "string" ||
+        !new RegExp(`^${uuid}$`, "i").test(p.scopedExportId) ||
+        p.categories.length !== 1 ||
+        p.categories[0] !== "exportPackages")
+    )
+      return false;
+    const rule = p.rule as Record<string, unknown>;
+    if (p.scopedExportId !== undefined) {
+      if (
+        Object.keys(rule).sort().join(",") !== "anchor,expiresAt,startsAt" ||
+        rule.startsAt !== "export_ready" ||
+        !iso(rule.anchor) ||
+        rule.expiresAt !== p.effectiveAt ||
+        Date.parse(String(rule.anchor)) > Date.parse(String(p.effectiveAt))
+      )
+        return false;
+    } else {
+      const duration = rule.duration as Record<string, unknown> | null;
+      if (
+        Object.keys(rule).sort().join(",") !==
+          "anchor,duration,policyVersion,startsAt" ||
+        rule.startsAt !== "delivery_completed" ||
+        !iso(rule.anchor) ||
+        typeof rule.policyVersion !== "string" ||
+        !new RegExp(`^${uuid}$`, "i").test(rule.policyVersion) ||
+        !duration ||
+        typeof duration !== "object" ||
+        Array.isArray(duration) ||
+        Object.keys(duration).sort().join(",") !== "unit,value" ||
+        duration.unit !== "calendar_days" ||
+        !Number.isSafeInteger(duration.value) ||
+        Number(duration.value) <= 0 ||
+        Date.parse(String(p.effectiveAt)) !==
+          Date.parse(String(rule.anchor)) + Number(duration.value) * 86400000
+      )
+        return false;
+    }
+    return p.targets.every((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        return false;
+      const t = value as Record<string, unknown>;
+      if (
+        Object.keys(t).sort().join(",") !== "category,key,kind,scope" ||
+        typeof t.category !== "string" ||
+        !categories.has(t.category) ||
+        typeof t.key !== "string" ||
+        !t.key ||
+        typeof t.scope !== "string" ||
+        !t.scope
+      )
+        return false;
+      if (
+        p.scopedExportId &&
+        (t.kind !== "export" || t.key !== p.scopedExportId)
+      )
+        return false;
+      if (t.kind === "export")
+        return (
+          t.category === "exportPackages" &&
+          t.scope === this.config.books?.storageRoot &&
+          new RegExp(`^${uuid}$`, "i").test(t.key)
+        );
+      if (!(p.categories as string[]).includes(t.category)) return false;
+      if (t.kind === "temporary" || t.kind === "temporary_file")
+        return (
+          t.scope === this.config.recording?.storageRoot &&
+          new RegExp(
+            t.kind === "temporary"
+              ? `^${uuid}$`
+              : `^${uuid}/(input|output/(original\\.bin|preview\\.jpg|print\\.png|photo\\.json))$`,
+            "i",
+          ).test(t.key)
+        );
+      if (t.kind !== "object" || t.scope !== objectScope) return false;
+      if (t.category === "originalAudio")
+        return new RegExp(`^(staging|sealed)/${uuid}\\.mp3$`, "i").test(t.key);
+      if (t.category === "originalPhotos")
+        return new RegExp(
+          `^photos/(staging/${uuid}\\.bin|sealed/${uuid}/original\\.bin)$`,
+          "i",
+        ).test(t.key);
+      if (t.category === "derivedPhotos")
+        return new RegExp(
+          `^photos/(staging/${uuid}\\.(jpg|png)|sealed/${uuid}/(preview\\.jpg|print\\.png))$`,
+          "i",
+        ).test(t.key);
+      return false;
+    });
   }
   async synchronize() {
     if (!this.journal) throw new Error("Privacy journal is not configured");

@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
-import { before, after, test } from "node:test";
+import { before, after, test, type TestContext } from "node:test";
 import { randomUUID, createHash } from "node:crypto";
-import { cp } from "node:fs/promises";
+import { cp, access } from "node:fs/promises";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
+import { PrismaClient } from "@prisma/client";
+import { Books } from "../src/books/books";
+import { ProjectStreams } from "../src/media/project-streams";
+import { PrivacyJournal } from "../src/privacy-journal/privacy-journal";
+import { PrivacyRights } from "../src/care/privacy-rights";
+import { Deletions } from "../src/care/deletions";
 import Redis from "ioredis";
 import { Queue } from "bullmq";
 import { startProductionWorker } from "../src/tasks/worker";
@@ -23,9 +30,253 @@ import {
   readyStory,
   storyPhoto,
   restartBookApplication,
+  state,
 } from "./book-fixture";
+import { readyFirstCopyBook } from "./first-copy-fixture";
+import { paymentAdmin } from "./payment-admin-fixture";
 before(startBookFixture);
-after(stopBookFixture);
+after(async () => {
+  const source = config.privacyJournal!.root,
+    storage = root,
+    connection = new URL(config.databaseUrl),
+    schema = connection.searchParams.get("schema")!;
+  await stopBookFixture();
+  await assert.rejects(access(source), { code: "ENOENT" });
+  await assert.rejects(access(storage), { code: "ENOENT" });
+  connection.searchParams.delete("schema");
+  const control = new PrismaClient({ datasourceUrl: connection.toString() }),
+    redis = new Redis(config.redisUrl, {
+      maxRetriesPerRequest: 0,
+      retryStrategy: () => null,
+    });
+  redis.on("error", () => {});
+  try {
+    assert.equal(
+      (
+        await control.$queryRaw<
+          { present: boolean }[]
+        >`SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=${schema}) present`
+      )[0].present,
+      false,
+    );
+    assert.deepEqual(await redis.keys(`${schema}:*`), []);
+    console.log(
+      "[T26_PDF_FIXTURE_CLEANUP] independentSourceRemoved=true storageRemoved=true schemaRemoved=true namespaceEmpty=true",
+    );
+  } finally {
+    await control.$disconnect();
+    redis.disconnect();
+  }
+});
+async function pdfDuringCategoryPublication(
+  t: TestContext,
+  p: { projectId: string; narrator: { token: string } },
+  bookId: string,
+  cutoff: Date,
+  category: string,
+  denial?: () => Promise<unknown>,
+) {
+  const maintenance = app.get(Deletions),
+    timer = Reflect.get(maintenance, "timer");
+  // Pause only periodic scheduling; the explicit production sweep below and
+  // the original stream timer/guards remain active. Never reset Rights/app.
+  clearInterval(timer);
+  await Reflect.get(maintenance, "running");
+  const locks = new PrismaClient({ datasourceUrl: config.databaseUrl }),
+    books = app.get(Books),
+    streams = app.get(ProjectStreams);
+  let releaseCheckpoint!: () => void,
+    releaseRead!: () => void,
+    locked!: () => void,
+    readBlocked!: () => void,
+    fenceObserved!: () => void,
+    checkpointPid = 0,
+    published = false,
+    reads = 0,
+    postFence: "passed" | "failed" | undefined;
+  const checkpointGate = new Promise<void>((r) => (releaseCheckpoint = r)),
+    readGate = new Promise<void>((r) => (releaseRead = r)),
+    checkpointReady = new Promise<void>((r) => (locked = r)),
+    readReady = new Promise<void>((r) => (readBlocked = r)),
+    observed = new Promise<void>((r) => (fenceObserved = r)),
+    errors: { phase: string; status?: number; message?: string }[] = [];
+  const holding = locks.$transaction(
+    async (tx) => {
+      [{ pid: checkpointPid }] = await tx.$queryRaw<
+        { pid: number }[]
+      >`SELECT pg_backend_pid() pid`;
+      await tx.$queryRaw`SELECT singleton FROM privacy_recovery_state FOR UPDATE`;
+      locked();
+      await checkpointGate;
+    },
+    { timeout: 30000 },
+  );
+  const read = books.read.bind(books),
+    fence = streams.fence.bind(streams),
+    guard = streams.guard.bind(streams),
+    readMock = t.mock.method(
+      books,
+      "read",
+      async (...args: Parameters<Books["read"]>) => {
+        const result = await read(...args);
+        if (args[0] === p.projectId && args[1] === bookId && ++reads >= 2) {
+          readBlocked();
+          await readGate; // Native PG permission transaction already completed.
+        }
+        return result;
+      },
+    ),
+    fenceMock = t.mock.method(
+      streams,
+      "fence",
+      async (...args: Parameters<ProjectStreams["fence"]>) => {
+        const afterPublication = published && args[0] === p.projectId;
+        try {
+          const result = await fence(...args);
+          if (afterPublication) postFence ??= "passed";
+          return result;
+        } catch (error) {
+          const e = error as { getStatus?: () => number; message?: string };
+          if (afterPublication) postFence ??= "failed";
+          errors.push({
+            phase: "fence",
+            status: e.getStatus?.(),
+            message:
+              e.message === "Independent source replay is pending"
+                ? e.message
+                : undefined,
+          });
+          throw error;
+        } finally {
+          if (afterPublication) fenceObserved();
+        }
+      },
+    ),
+    guardMock = t.mock.method(
+      streams,
+      "guard",
+      async (...args: Parameters<ProjectStreams["guard"]>) => {
+        const result = await guard(...args);
+        result.once(
+          "error",
+          (error: { getStatus?: () => number; message?: string }) =>
+            errors.push({
+              phase: "stream",
+              status: error.getStatus?.(),
+              message:
+                error.message === "Independent source replay is pending"
+                  ? error.message
+                  : undefined,
+            }),
+        );
+        return result;
+      },
+    );
+  let downloading:
+      | Promise<
+          { response: Awaited<ReturnType<typeof request>> } | { error: unknown }
+        >
+      | undefined,
+    scanning: Promise<void> | undefined;
+  try {
+    await checkpointReady;
+    downloading = request(
+      "GET",
+      `/v1/projects/${p.projectId}/book/versions/${bookId}/pdf`,
+      p.narrator.token,
+    ).then(
+      (response) => ({ response }),
+      (error) => ({ error }),
+    );
+    await readReady;
+    t.mock.timers.setTime(cutoff.getTime() + 1);
+    scanning = denial ? denial().then(() => {}) : maintenance.sweep(new Date());
+    void scanning.catch(() => {});
+    const deadline = performance.now() + 10000;
+    while (
+      !(
+        await db.$queryRaw<{ waiting: boolean }[]>`
+      SELECT EXISTS(SELECT 1 FROM pg_stat_activity a WHERE ${checkpointPid}=ANY(pg_blocking_pids(a.pid)) AND a.query LIKE '%privacy_recovery_state%') waiting
+    `
+      )[0].waiting
+    )
+      assert.ok(
+        performance.now() < deadline,
+        "category scan did not reach checkpoint barrier",
+      );
+    const event = (
+      await new PrivacyJournal(config.privacyJournal!).snapshot()
+    ).events.find(
+      (e) =>
+        e.projectId === p.projectId &&
+        (category === "withdrawal"
+          ? e.payload.operation === "revoke"
+          : Array.isArray(e.payload.categories) &&
+            e.payload.categories.includes(category)),
+    );
+    assert.ok(event);
+    assert.equal(
+      event.payload.operation,
+      category === "withdrawal" ? "revoke" : "erase",
+    );
+    if (category !== "withdrawal")
+      assert.equal(
+        event.payload.trigger,
+        category === "all" ? "verified_request" : "retention_expiry",
+      );
+    assert.equal(
+      (
+        await db.$queryRaw<
+          { n: bigint }[]
+        >`SELECT count(*) n FROM privacy_events WHERE id=${event.eventId}::uuid`
+      )[0].n,
+      0n,
+    );
+    published = true;
+    const rights = app.get(PrivacyRights);
+    for (const id of [undefined, p.projectId])
+      await assert.rejects(
+        rights.assertReplayed(id),
+        (error: { getStatus(): number }) => error.getStatus() === 503,
+      );
+    releaseRead();
+    await Promise.race([observed, downloading]);
+    if (
+      category === "all" ||
+      category === "bookPdf" ||
+      category === "withdrawal"
+    ) {
+      assert.notEqual(
+        postFence,
+        "passed",
+        "a relevant denial cannot authorize a chunk before its PG commit",
+      );
+      assert.ok(errors.some((e) => e.phase === "fence" && e.status === 503));
+    }
+    releaseCheckpoint();
+    await holding;
+    await scanning;
+    const result = await downloading;
+    t.diagnostic(
+      JSON.stringify({
+        category,
+        window: "authenticated source before PG commit",
+        postFence,
+        errors,
+      }),
+    );
+    return result;
+  } finally {
+    releaseRead();
+    releaseCheckpoint();
+    await Promise.allSettled([holding, scanning, downloading]);
+    readMock.mock.restore();
+    fenceMock.mock.restore();
+    guardMock.mock.restore();
+    await locks.$disconnect();
+    if (timer) maintenance.onModuleInit();
+  }
+}
 test("book context requires real participation and returns an immutable-input token without inventing stories", async () => {
   const p = await bound();
   data((await choose(p, p.narrator.token, "collection", true)).response);
@@ -1211,8 +1462,22 @@ test("a ready PDF remains readable when its raw derived cover expires and report
       200,
     );
   assert.equal((await request("GET", image, p.narrator.token)).statusCode, 200);
-  t.mock.timers.enable({ apis: ["Date"], now: expiresAt.getTime() + 1 });
+  t.mock.timers.enable({ apis: ["Date"], now: expiresAt.getTime() - 1 });
   try {
+    const crossed = await pdfDuringCategoryPublication(
+      t,
+      p,
+      book.id,
+      expiresAt,
+      "derivedPhotos",
+    );
+    assert.ok("response" in crossed);
+    const crossing = crossed.response;
+    assert.equal(crossing.statusCode, 200);
+    assert.equal(
+      createHash("sha256").update(crossing.rawPayload).digest("hex"),
+      before.pdf.sha256,
+    );
     assert.equal(
       (await request("GET", image, p.narrator.token)).statusCode,
       403,
@@ -1323,8 +1588,22 @@ test("a frozen PDF outlives source stories while draft commands expire and curre
     await request("GET", base + `/versions/${book.id}`, p.narrator.token),
     200,
   );
-  t.mock.timers.enable({ apis: ["Date"], now: expiresAt.getTime() + 1 });
+  t.mock.timers.enable({ apis: ["Date"], now: expiresAt.getTime() - 1 });
   try {
+    const crossed = await pdfDuringCategoryPublication(
+      t,
+      p,
+      book.id,
+      expiresAt,
+      "confirmedStories",
+    );
+    assert.ok("response" in crossed);
+    const crossing = crossed.response;
+    assert.equal(crossing.statusCode, 200);
+    assert.equal(
+      createHash("sha256").update(crossing.rawPayload).digest("hex"),
+      before.pdf.sha256,
+    );
     const pdf = await request(
       "GET",
       base + `/versions/${book.id}/pdf`,
@@ -1535,3 +1814,310 @@ test("a queued book remains inspectable but cannot publish or retry after source
     t.mock.timers.reset();
   }
 });
+
+for (const category of ["bookPdf", "all", "withdrawal"] as const)
+  test(`a frozen PDF stream still stops before the ${category} denial commits`, async (t) => {
+    const p = await readyFirstCopyBook(
+        {},
+        {},
+        { bookPdf: category === "bookPdf" ? 1 : 400 },
+      ),
+      cutoff = new Date(Date.now() + 60000);
+    let denial: (() => Promise<unknown>) | undefined;
+    if (category === "bookPdf") {
+      await db.projectServiceEvent.create({
+        data: {
+          projectId: p.projectId,
+          eventId: `synthetic-pdf-cutoff:${randomUUID()}`,
+          kind: "delivery_completed",
+          occurredAt: new Date(cutoff.getTime() - 86400000),
+        },
+      });
+    } else if (category === "withdrawal") {
+      denial = async () =>
+        data((await choose(p, p.narrator.token, "collection", false)).response);
+    } else {
+      const current = await state(p, p.narrator.token),
+        care = data(
+          await request(
+            "POST",
+            `/v1/projects/${p.projectId}/care-requests`,
+            p.narrator.token,
+            {
+              kind: "delete",
+              expectedBindingVersion: current.bindingVersion,
+            },
+          ),
+        ),
+        headers = await paymentAdmin(config, app, ["care:write"]);
+      denial = async () =>
+        data(
+          await app.inject({
+            method: "POST",
+            url: `/v1/admin/care-requests/${care.id}/verify`,
+            headers: { ...headers, "idempotency-key": randomUUID() },
+            payload: {
+              expectedBindingVersion: current.bindingVersion,
+              expectedAccessEpoch: current.accessEpoch,
+              noticeVersion: "synthetic-d08-v1",
+              evidenceRef: "synthetic:固定PDF全项目删除核验",
+            },
+          }),
+        );
+    }
+    t.mock.timers.enable({ apis: ["Date"], now: cutoff.getTime() - 1 });
+    try {
+      const result = await pdfDuringCategoryPublication(
+        t,
+        p,
+        p.book.id,
+        cutoff,
+        category,
+        denial,
+      );
+      if ("response" in result) assert.ok(result.response.statusCode >= 400);
+      else
+        assert.equal(
+          (result.error as { code?: string }).code,
+          "LIGHT_ECONNRESET",
+        );
+      const after = await request(
+        "GET",
+        `/v1/projects/${p.projectId}/book/versions/${p.book.id}/pdf`,
+        p.narrator.token,
+      );
+      if (category === "withdrawal")
+        assert.ok([403, 409].includes(after.statusCode));
+      else assert.equal(after.statusCode, 403);
+    } finally {
+      t.mock.timers.reset();
+    }
+  });
+
+// This is deliberately last: malformed authenticated facts stay fail-closed;
+// the fixture is destroyed afterwards, never reset/restarted to hide a denial.
+test("fixed PDF scope rejects malformed and relevant authenticated suffixes and still closes on source damage", async (t) => {
+  const cases: {
+    name: string;
+    change: Record<string, unknown>;
+    kind?: "revocation";
+  }[] = [
+    { name: "empty categories", change: { categories: [] } },
+    {
+      name: "mixed with PDF",
+      change: { categories: ["derivedPhotos", "bookPdf"] },
+    },
+    {
+      name: "unknown category",
+      change: { categories: ["derivedPhotos", "future-category"] },
+    },
+    { name: "broken category type", change: { categories: "derivedPhotos" } },
+    { name: "all", change: { categories: ["all"] } },
+    { name: "hold", change: { operation: "legacy_hold" } },
+    {
+      name: "revoke",
+      change: { operation: "revoke", purpose: "collection" },
+      kind: "revocation",
+    },
+    {
+      name: "story refusal",
+      change: { operation: "story_decision" },
+      kind: "revocation",
+    },
+    {
+      name: "PDF target",
+      change: {
+        targets: [
+          {
+            kind: "book_directory",
+            category: "bookPdf",
+            scope: config.books!.storageRoot,
+            key: randomUUID(),
+          },
+        ],
+      },
+    },
+    {
+      name: "hidden PDF category",
+      change: {
+        targets: [
+          {
+            kind: "object",
+            category: "bookPdf",
+            scope: "unknown",
+            key: "unknown",
+          },
+        ],
+      },
+    },
+    {
+      name: "unknown target",
+      change: {
+        targets: [
+          {
+            kind: "unknown",
+            category: "derivedPhotos",
+            scope: "unknown",
+            key: "unknown",
+          },
+        ],
+      },
+    },
+    { name: "broken rule", change: { rule: null } },
+    { name: "broken deadline", change: { deadlines: {} } },
+    {
+      name: "unknown payload field",
+      change: { hiddenCopy: { category: "bookPdf" } },
+    },
+  ];
+  const projects: {
+    name: string;
+    change: Record<string, unknown>;
+    kind?: "revocation";
+    p: Awaited<ReturnType<typeof bound>>;
+    epoch: number;
+  }[] = [];
+  for (const c of [...cases, { name: "epoch change", change: {} }]) {
+    const p = await bound(),
+      project = await db.project.findUniqueOrThrow({
+        where: { id: p.projectId },
+      });
+    await app.get(ProjectStreams).fence(p.projectId, true, "bookPdf");
+    projects.push({ ...c, p, epoch: project.accessEpoch });
+  }
+  const locks = new PrismaClient({ datasourceUrl: config.databaseUrl }),
+    locked = deferredPdf(),
+    release = deferredPdf();
+  let pid = 0;
+  const holding = locks.$transaction(
+    async (tx) => {
+      [{ pid }] = await tx.$queryRaw<
+        { pid: number }[]
+      >`SELECT pg_backend_pid() pid`;
+      await tx.$queryRaw`SELECT id FROM projects WHERE id=${projects[0].p.projectId}::uuid FOR UPDATE`;
+      locked.resolve();
+      await release.promise;
+    },
+    { timeout: 30000 },
+  );
+  let replay: Promise<void> | undefined;
+  try {
+    await locked.promise;
+    const snapshot = await new PrivacyJournal(
+        config.privacyJournal!,
+      ).snapshot(),
+      source = new PrivacyJournal({
+        ...config.privacyJournal!,
+        expectedAuthority: snapshot.authority,
+      }),
+      rights = app.get(PrivacyRights),
+      streams = app.get(ProjectStreams),
+      effectiveAt = new Date().toISOString();
+    for (const [index, c] of projects.entries()) {
+      const terms = await db.projectServiceTerms.findUniqueOrThrow({
+          where: { projectId: c.p.projectId },
+        }),
+        duration = (terms.policy as any).d03.retention.derivedPhotos.duration;
+      await source.append({
+        eventId: randomUUID(),
+        projectId: c.p.projectId,
+        kind: c.kind ?? "deletion",
+        occurredAt: effectiveAt,
+        payload: {
+          operation: "erase",
+          requestId: null,
+          trigger: "retention_expiry",
+          categories: ["derivedPhotos"],
+          effectiveAt,
+          accessEpoch: c.name === "epoch change" ? c.epoch + 1 : c.epoch,
+          targets: [],
+          taskFences: [],
+          targetAttemptId: null,
+          rule: {
+            startsAt: "delivery_completed",
+            anchor: new Date(
+              Date.parse(effectiveAt) - duration.value * 86400000,
+            ).toISOString(),
+            duration,
+            policyVersion: terms.packageVersionId,
+          },
+          deadlines: {
+            active_database: effectiveAt,
+            active_files: effectiveAt,
+            cache: effectiveAt,
+          },
+          ...c.change,
+        },
+      });
+      if (index === 0) {
+        replay = rights.assertHealthy();
+        void replay.catch(() => {});
+      }
+    }
+    const deadline = performance.now() + 10000;
+    while (
+      !(
+        await db.$queryRaw<{ waiting: boolean }[]>`
+      SELECT EXISTS(SELECT 1 FROM pg_stat_activity a WHERE ${pid}=ANY(pg_blocking_pids(a.pid)) AND a.query LIKE '%FROM projects%') waiting
+    `
+      )[0].waiting
+    )
+      assert.ok(
+        performance.now() < deadline,
+        "replay did not wait on the controlled project row",
+      );
+    for (const c of projects) {
+      await assert.rejects(
+        streams.fence(c.p.projectId, true, "bookPdf"),
+        (error: { getStatus(): number; message: string }) =>
+          error.getStatus() === 503 &&
+          error.message === "Independent source replay is pending",
+        c.name,
+      );
+      assert.equal(
+        Reflect.get(rights, "failed"),
+        false,
+        "pending shape denial cannot reset or fabricate integrity state",
+      );
+    }
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(join(config.privacyJournal!.root, "head.json"), "{", {
+      mode: 0o600,
+    });
+    await assert.rejects(
+      streams.fence(projects[0].p.projectId, true, "bookPdf"),
+      (error: { getStatus(): number }) => error.getStatus() === 503,
+    );
+    release.resolve();
+    await holding;
+    await assert.rejects(replay!);
+    await assert.rejects(rights.assertHealthy());
+    assert.equal(
+      (
+        await request(
+          "GET",
+          `/v1/projects/${projects[0].p.projectId}/plan`,
+          projects[0].p.narrator.token,
+        )
+      ).statusCode,
+      503,
+    );
+    assert.equal((await request("GET", "/health/live")).statusCode, 200);
+    t.diagnostic(
+      JSON.stringify({
+        deniedAuthenticatedVariants: projects.length,
+        sourceDamageDenied: true,
+        restarted: false,
+      }),
+    );
+  } finally {
+    release.resolve();
+    await Promise.allSettled([holding, replay]);
+    await locks.$disconnect();
+  }
+});
+function deferredPdf() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((yes) => (resolve = yes));
+  return { promise, resolve };
+}
