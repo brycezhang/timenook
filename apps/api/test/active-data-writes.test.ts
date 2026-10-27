@@ -1192,9 +1192,22 @@ test("an expired exact story refusal survives a PostgreSQL failure after indepen
       await db.storyDecision.count({ where: { id: event.eventId } }),
       0,
     );
+    // The real maintenance path must see the authenticated event while its
+    // projection is still unavailable, exactly as the runtime timer can.
+    await assert.rejects(
+      app.get(Deletions).sweep(new Date(cutoff)),
+      (error: { getStatus(): number }) => error.getStatus() === 503,
+    );
     await db.$executeRawUnsafe(
       "DROP TRIGGER reject_t26_story_projection ON privacy_events",
     );
+    // Removing the external fault cannot silently reopen a process whose
+    // recovery gate already failed. A fresh process must replay the same source.
+    assert.equal(
+      (await request("POST", url, p.narrator.token, body, key)).statusCode,
+      503,
+    );
+    await restartBookApplication();
     data(await request("POST", url, p.narrator.token, body, key));
     const projected = await db.storyDecision.findUniqueOrThrow({
       where: { id: event.eventId },
@@ -1203,7 +1216,11 @@ test("an expired exact story refusal survives a PostgreSQL failure after indepen
     assert.equal(projected.confirmed, true);
     assert.equal(projected.allowInBook, false);
     assert.equal(projected.evidenceRef, "journal:" + event.hash);
-    assert.equal((await journal.snapshot()).generation, published.generation);
+    const recovered = await journal.snapshot();
+    assert.equal(recovered.sourceId, published.sourceId);
+    assert.equal(recovered.generation, published.generation);
+    assert.equal(recovered.hash, published.hash);
+    assert.deepEqual(recovered.authority, published.authority);
   } finally {
     await db.$executeRawUnsafe(
       "DROP TRIGGER IF EXISTS reject_t26_story_projection ON privacy_events",

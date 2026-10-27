@@ -28,3 +28,5 @@ activeData 的原截止同时限制公开写入口。协助用途到期后不新
 履约 `tracking` 原先混合物流私人正文与实际发货时间。新增 `FulfillmentAttempt.shippedAt` 保存已经存在的最少实际时间，与 `deliveredAt` 一起保持不可覆写及先后约束；原有 carrier/number/WeChat/回执到期后不再新增。升级只从旧 tracking 中可验证的真实时间回填，缺失或不合法保持 NULL 并显式待核实，不用创建时间、租约或 hash 猜测。交付及重复回执使用独立时间和原稳定 command hash 验证原输入，保留到期后的合法履约和 D07 资金处理能力。质量案的退款判定只处理原案、原窗口和已购政策下的最少资金事实，私有材料访问与新的重印授权仍分别受原期限约束。
 
 运行中已持有项目锁的流检查仍认证完整独立源和业务 checkpoint 的对应连续前缀，并要求当前项目后缀的每项事件存在匹配 source/id/generation/hash 的已提交 receipt（UUID按数据库大小写等价语义规范化比较）；其它项目正常发布/提交间隙不撤销本项目的既有权限。无 scope 的启动/恢复/请求入口继续全量重放，认证、authority、前缀冲突仍全局拒绝。流的实际业务 scope 检查可能等待 PG 锁，因此返回后必须再次验证 source/fence，避免发布后回滚令旧授权多发一块字节。该检查不启动嵌套重放。
+
+active_database 的目标载荷受不可恢复 SQL 约束，已完成的逐项擦除及其完成时间保持单向；旧异步失败不得覆盖数据库当前 completed receipt。active_files/cache 的迟到副本与 SET 则必须继续重扫，失败仍可回到 pending。核验可以在一次 inline reconcile 的单项失败后返回201，含义是拒绝和待执行项已持久，不等于物理清理已完成。

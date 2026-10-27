@@ -1,6 +1,7 @@
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import sharp from "sharp";
 import { ProductionTasks } from "../src/tasks/tasks";
+import { PrivacyRights } from "../src/care/privacy-rights";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -42,6 +43,41 @@ export function setRefundInstant(value?: Date) {
 /** External object-storage pause for authenticated-read race tests only. */
 export function interceptBookObjectRead(gate?: (key: string) => Promise<void>) {
   objectReadGate = gate;
+}
+type BookErasureErrorGate = (input: {
+  table: string;
+  projectId: string;
+  error: unknown;
+}) => Promise<void>;
+let erasureErrorGate: BookErasureErrorGate | undefined;
+const interceptedErasureClients = new WeakSet<PrismaClient>();
+/** Pause delivery only after the real raw erasure I/O has thrown its real error.
+ * The query always executes, and neither its success nor its error is replaced. */
+export function interceptBookErasureError(gate?: BookErasureErrorGate) {
+  erasureErrorGate = gate;
+  if (!gate) return;
+  const client = app.get(PrivacyRights).db;
+  if (interceptedErasureClients.has(client)) return;
+  interceptedErasureClients.add(client);
+  const execute = client.$executeRawUnsafe.bind(client);
+  Object.defineProperty(client, "$executeRawUnsafe", {
+    configurable: true,
+    value: async (query: string, ...values: unknown[]) => {
+      try {
+        return await execute(query, ...values);
+      } catch (error) {
+        const table = /^UPDATE "([a-z_]+)" r SET /.exec(query)?.[1];
+        if (erasureErrorGate && table && typeof values[2] === "string") {
+          try {
+            await erasureErrorGate({ table, projectId: values[2], error });
+          } finally {
+            throw error;
+          }
+        }
+        throw error;
+      }
+    },
+  });
 }
 const packageId = randomUUID();
 let providerGate:
@@ -252,6 +288,7 @@ export async function startBookFixture() {
   app = await createApplication(config, fixtureOptions);
 }
 export async function stopBookFixture() {
+  erasureErrorGate = undefined;
   refundExecutionGate = undefined;
   objectCopyGate = undefined;
   refundInstant = undefined;

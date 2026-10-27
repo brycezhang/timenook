@@ -243,8 +243,11 @@ export class Deletions implements OnModuleDestroy {
         await this.rights.db
           .$executeRaw`UPDATE privacy_deletion_items SET state='completed',completed_at=COALESCE(completed_at,now()),reason=${item.layer === "active_files" && !item.locator.targets?.length ? "NO_PLATFORM_TARGETS" : null} WHERE id=${item.id}::uuid`;
       } catch {
+        // Database payload erasure is irreversible. A delayed older failure
+        // cannot revoke a newer completed receipt; files/cache can gain late
+        // writes and must still return to pending when their resweep fails.
         await this.rights.db
-          .$executeRaw`UPDATE privacy_deletion_items SET state='pending',completed_at=NULL,reason='RETRY_REQUIRED' WHERE id=${item.id}::uuid`;
+          .$executeRaw`UPDATE privacy_deletion_items SET state='pending',completed_at=NULL,reason='RETRY_REQUIRED' WHERE id=${item.id}::uuid AND (layer<>'active_database' OR state<>'completed')`;
       }
     }
   }
