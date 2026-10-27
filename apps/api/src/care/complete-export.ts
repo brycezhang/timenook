@@ -1122,6 +1122,14 @@ export class CompleteExportsController {
       caseId,
       req.headers.authorization,
     );
+    const stream = await this.streams.guard(
+      id,
+      fence.epoch,
+      file.bytes,
+      file.check,
+      req.headers.authorization,
+      fence.sequence,
+    );
     reply
       .header("Content-Length", file.bytes.length)
       .header(
@@ -1130,16 +1138,7 @@ export class CompleteExportsController {
       )
       .header("X-Content-Type-Options", "nosniff")
       .type("application/zip")
-      .send(
-        await this.streams.guard(
-          id,
-          fence.epoch,
-          file.bytes,
-          file.check,
-          req.headers.authorization,
-          fence.sequence,
-        ),
-      );
+      .send(stream);
   }
   @Get() @Header("Cache-Control", "no-store") async read(
     @Param("id", new ParseUUIDPipe()) id: string,

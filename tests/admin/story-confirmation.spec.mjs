@@ -1,3 +1,7 @@
+import {
+  createPrivacyFixtureApplication,
+  closePrivacyFixtureApplication,
+} from "./privacy-fixture.mjs";
 import { test, expect } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
@@ -70,7 +74,6 @@ test.beforeAll(async () => {
   audioBase64 = readFileSync(
     resolve("apps/api/test/fixtures/synthetic-1s.mp3"),
   ).toString("base64");
-  const { createApplication } = apiRequire("./dist-test/src/application.js");
   const { LocalProbeObjects } = apiRequire(
     "./dist-test/src/probe/local-objects.js",
   );
@@ -86,7 +89,7 @@ test.beforeAll(async () => {
   const { paymentConfig, paymentFetch, paid } = apiRequire(
     "./dist-test/test/payment-fixture.js",
   );
-  api = await createApplication(
+  api = await createPrivacyFixtureApplication(
     (config = {
       admin: {
         origin: "https://localhost:5182",
@@ -347,7 +350,7 @@ test.afterAll(async () => {
       preview.kill("SIGTERM");
     });
   await runtime?.close();
-  await api?.close();
+  await closePrivacyFixtureApplication(api);
   if (root) await rm(root, { recursive: true, force: true });
   if (databaseUrl) {
     const db = new PrismaClient({ datasourceUrl: databaseUrl });

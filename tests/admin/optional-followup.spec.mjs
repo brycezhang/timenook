@@ -1,3 +1,7 @@
+import {
+  createPrivacyFixtureApplication,
+  closePrivacyFixtureApplication,
+} from "./privacy-fixture.mjs";
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
@@ -69,11 +73,10 @@ test.beforeAll(async () => {
   audioBase64 = readFileSync(
     resolve("apps/api/test/fixtures/synthetic-1s.mp3"),
   ).toString("base64");
-  const { createApplication } = apiRequire("./dist-test/src/application.js");
   const { paymentConfig, paymentFetch, paid } = apiRequire(
     "./dist-test/test/payment-fixture.js",
   );
-  api = await createApplication(
+  api = await createPrivacyFixtureApplication(
     {
       environment: "test",
       host: "127.0.0.1",
@@ -296,7 +299,7 @@ test.afterAll(async () => {
       preview.kill("SIGTERM");
     });
   await runtime?.close();
-  await api?.close();
+  await closePrivacyFixtureApplication(api);
   if (root) await rm(root, { recursive: true, force: true });
   if (databaseUrl) {
     const db = new PrismaClient({ datasourceUrl: databaseUrl });

@@ -157,7 +157,7 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
   }
   /** Integrity/checkpoint check usable inside a caller's project transaction.
    * It never starts replay or waits for another transaction holding that project. */
-  async assertReplayed() {
+  async assertReplayed(projectId?: string) {
     if (!this.journal || this.failed) throw new ServiceUnavailableException();
     let snapshot;
     try {
@@ -187,23 +187,58 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
         );
       }
     }
+    const checkpoint = Number(state?.checkpoint_generation);
+    const prefix =
+      checkpoint === 0 ? "0".repeat(64) : snapshot.events[checkpoint - 1]?.hash;
     if (
       !state ||
       state.source_id !== snapshot.sourceId ||
-      Number(state.checkpoint_generation) > snapshot.generation
+      !Number.isSafeInteger(checkpoint) ||
+      checkpoint < 0 ||
+      checkpoint > snapshot.generation ||
+      state.checkpoint_hash !== prefix
     ) {
       this.failed = true;
       throw new ServiceUnavailableException(
         "Independent source checkpoint conflicts",
       );
     }
-    if (
-      Number(state.checkpoint_generation) !== snapshot.generation ||
-      state.checkpoint_hash !== snapshot.hash
-    )
-      throw new ServiceUnavailableException(
-        "Independent source replay is pending",
-      );
+    if (checkpoint === snapshot.generation) return;
+    if (projectId) {
+      // A caller may already hold its project lock. Never start nested replay.
+      // A different project's uncommitted PG receipt cannot change this scope;
+      // our own suffix must have authenticated, atomically committed receipts.
+      const scopeId = projectId.toLowerCase();
+      const pending = snapshot.events
+        .slice(checkpoint)
+        .filter((e) => e.projectId.toLowerCase() === scopeId);
+      const receipts = pending.length
+        ? await this.db.$queryRaw<
+            { id: string; hash: string; generation: bigint }[]
+          >`SELECT id,hash,generation FROM privacy_events WHERE source_id=${snapshot.sourceId}::uuid AND project_id=${scopeId}::uuid AND generation>${BigInt(checkpoint)}`
+        : [];
+      const committed = new Map(receipts.map((r) => [r.id, r]));
+      for (const event of pending) {
+        const receipt = committed.get(event.eventId);
+        if (!receipt)
+          throw new ServiceUnavailableException(
+            "Independent source replay is pending",
+          );
+        if (
+          receipt.hash !== event.hash ||
+          Number(receipt.generation) !== event.generation
+        ) {
+          this.failed = true;
+          throw new ServiceUnavailableException(
+            "Independent source receipt conflicts",
+          );
+        }
+      }
+      return;
+    }
+    throw new ServiceUnavailableException(
+      "Independent source replay is pending",
+    );
   }
   async synchronize() {
     if (!this.journal) throw new Error("Privacy journal is not configured");
@@ -568,6 +603,20 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
           where: {
             projectId: event.projectId,
             id: { in: affectedExports },
+            // A request that has never produced a package keeps its minimum
+            // failure/acceptance facts. NULL alone is not proof: a previously
+            // ready package can have its locator/manifest erased later.
+            ...(d.trigger === "retention_expiry"
+              ? {
+                  NOT: {
+                    state: { in: ["requested", "accepted", "failed"] },
+                    objectKey: null,
+                    readyAt: null,
+                    sha256: null,
+                    bytes: null,
+                  },
+                }
+              : {}),
             ...(d.scopedExportId ? { id: d.scopedExportId } : {}),
             state: d.scopedExportId
               ? { in: ["ready", "delivered"] }

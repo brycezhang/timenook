@@ -59,7 +59,7 @@ export class ProjectStreams implements OnModuleDestroy {
     projectId: string,
     usesSharing = true,
   ): Promise<ProjectStreamFence> {
-    await this.rights.assertReplayed();
+    await this.rights.assertReplayed(projectId);
     if (await this.rights.deletedIn(this.db as never, projectId))
       throw new ForbiddenException();
     const project = await this.db.project.findUnique({
@@ -119,12 +119,18 @@ export class ProjectStreams implements OnModuleDestroy {
       : (usesSharingOverride ?? true);
     const sequence =
       capturedSequence ?? (await this.sequence(projectId, usesSharing));
-    const verify = async () => {
-      if (authorization) await this.identity.current(authorization);
+    const currentFence = async () => {
       const fence = await this.fence(projectId, usesSharing);
       if (fence.epoch !== epoch || fence.sequence !== sequence)
         throw new ForbiddenException();
+    };
+    const verify = async () => {
+      if (authorization) await this.identity.current(authorization);
+      await currentFence();
       await check();
+      // A scope read can wait behind a transaction that publishes a denial
+      // and then rolls back. Its old PG grant cannot authorize the next chunk.
+      await currentFence();
     };
     await verify();
     let stream!: Readable;
