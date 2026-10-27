@@ -406,6 +406,7 @@ export class Followups {
     if (
       !(await this.participation.processingGrant(tx, {
         ...task,
+        taskId: task.id,
         processingGrant: undefined,
       }))
     )
@@ -464,6 +465,7 @@ export class Followups {
     for (const clip of clips) {
       const grant = await this.participation.processingGrant(tx, {
         ...task,
+        taskId: task.id,
         processingGrant: undefined,
         sourceAssistedSessionId: clip.assistedSessionId,
       });

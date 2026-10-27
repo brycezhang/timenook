@@ -516,3 +516,22 @@ for (const oldResult of [200, 403]) {
     h.page.onHide();
   });
 }
+
+test("server withdrawal while the printed original is playing clears the local file without another user action", async () => {
+  const h = harness();
+  await shown(h);
+  await playing(h);
+  const before = h.requests.length;
+  h.timers
+    .filter((t) => !t.cleared)
+    .slice(-1)[0]
+    .callback();
+  await tick();
+  assert.equal(h.requests.length, before + 1);
+  h.respond(before, undefined, 403);
+  await tick();
+  assert.equal(h.page.data.entry, null);
+  assert.equal(h.players[0].destroyed, true);
+  assert.ok(h.removed.includes("wxfile://private-t21.mp3"));
+  h.page.onHide();
+});

@@ -1,3 +1,4 @@
+import { participationClient } from "../../services/participation";
 import { type Project, readyToPrint, validAddress } from "../../domain/model";
 import { asset, go, required, save, toast } from "../../services/store";
 import { dataMode } from "../../services/mode";
@@ -37,6 +38,7 @@ Page({
     error: "",
     submitted: false,
   },
+  remoteAccessEpoch: -1,
   projectId: "",
   versionId: "",
   assistedSessionId: "",
@@ -53,6 +55,7 @@ Page({
     if (dataMode() === "live") this.setData({ live: true });
   },
   onHide() {
+    this.remoteAccessEpoch = -1;
     if (!this.data.live) return;
     ++this.generation;
     this.ownerContext = "";
@@ -163,9 +166,10 @@ Page({
     return this.intent.key;
   },
   watch(owner: string) {
+    const generation = this.generation;
     if (this.expiry) clearTimeout(this.expiry);
     this.expiry = setTimeout(
-      () => {
+      async () => {
         if (
           dataMode() !== "live" ||
           owner !== sessionClient.context() ||
@@ -181,6 +185,24 @@ Page({
             status:
               "制作期限已到，请重新查询并按约定申请人工审核；资料不会自动删除。",
           });
+        try {
+          const permission = await participationClient.state(this.projectId);
+          if (generation !== this.generation) return;
+          if (
+            !permission.canRead ||
+            (this.remoteAccessEpoch >= 0 &&
+              permission.accessEpoch !== this.remoteAccessEpoch)
+          )
+            throw Error("authorization changed");
+          this.remoteAccessEpoch = permission.accessEpoch;
+        } catch {
+          if (generation !== this.generation) return;
+          this.onHide();
+          this.setData({
+            status: "当前访问或用途授权已变化，私人内容已清理，请重新查询",
+          });
+          return;
+        }
         this.watch(owner);
       },
       Math.max(

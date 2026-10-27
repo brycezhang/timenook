@@ -26,3 +26,16 @@
   line-height: 1.5;
   padding: 24rpx;
 }
+
+.withdrawal-status {
+  overflow-wrap: anywhere;
+}
+.withdrawal-status .note {
+  font-size: 40rpx;
+  line-height: 1.6;
+}
+.withdrawal-status button {
+  min-width: 48px;
+  min-height: 48px;
+  white-space: normal;
+}
