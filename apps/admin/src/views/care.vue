@@ -6,6 +6,7 @@ import { careApi } from "../api/admin";
 import CompleteExport from "./complete-export.vue";
 import RefundCase from "./refund-case.vue";
 import DeletionCase from "./deletion-case.vue";
+import QualityCase from "./quality-case.vue";
 const correction = ref<StoryView | null>(null),
   correctionTitle = ref(""),
   correctionParagraphs = ref<{ text: string; sourceRefs: string[] }[]>([]),
@@ -25,7 +26,7 @@ function clearCorrection() {
 }
 onUnmounted(clearCorrection);
 const props = defineProps<{ csrf: string }>();
-const emit = defineEmits<{ expired: [] }>();
+const emit = defineEmits<{ expired: []; production: [orderId: string] }>();
 const cases = ref<CareCase[]>([]),
   selected = ref<CareCase | null>(null),
   busy = ref(false),
@@ -37,21 +38,23 @@ const intakeProject = ref(""),
   intakePurpose = ref<"all" | "collection" | "ai" | "sharing">("all"),
   notice = ref("");
 const kindLabel = (kind: string) =>
-  kind === "refund"
-    ? "退款申请"
-    : kind === "production_handoff"
-      ? "生产交接核验"
-      : kind === "first_copy_expiry"
-        ? "制作期限人工审核"
-        : kind === "correction"
-          ? "故事限时校对"
-          : kind === "rebind"
-            ? "账号换绑"
-            : kind === "withdraw"
-              ? "本人撤回申请"
-              : kind === "export"
-                ? "本人资料导出申请"
-                : "本人删除申请";
+  kind === "quality"
+    ? "质量售后申请"
+    : kind === "refund"
+      ? "退款申请"
+      : kind === "production_handoff"
+        ? "生产交接核验"
+        : kind === "first_copy_expiry"
+          ? "制作期限人工审核"
+          : kind === "correction"
+            ? "故事限时校对"
+            : kind === "rebind"
+              ? "账号换绑"
+              : kind === "withdraw"
+                ? "本人撤回申请"
+                : kind === "export"
+                  ? "本人资料导出申请"
+                  : "本人删除申请";
 function currentCorrection(
   care: CareCase,
   generation: number,
@@ -344,9 +347,13 @@ onMounted(refresh);
       <p>目标账号：{{ selected.targetUserId }}</p>
       <p>来源绑定版本：{{ selected.sourceBindingVersion }}</p>
       <Alert
-        v-if="selected.kind === 'refund'"
+        v-if="selected.kind === 'refund' || selected.kind === 'quality'"
         type="info"
-        message="退款状态以本工单的微信核验与原单对账结果为准。"
+        :message="
+          selected.kind === 'quality'
+            ? '按原订单、确定文件和实际生产情况核验质量方案；私人资料须本人限时授权。'
+            : '退款状态以本工单的微信核验与原单对账结果为准。'
+        "
       />
       <Alert
         v-else-if="selected.state === 'completed'"
@@ -436,6 +443,15 @@ onMounted(refresh);
         :csrf="props.csrf"
         @expired="emit('expired')"
         @changed="refresh"
+      />
+      <QualityCase
+        v-if="selected.kind === 'quality'"
+        :key="selected.id"
+        :case-id="selected.id"
+        :csrf="props.csrf"
+        @expired="emit('expired')"
+        @changed="refresh"
+        @production="(orderId) => emit('production', orderId)"
       />
       <section
         v-if="selected.kind === 'correction' && selected.correctionGrant"

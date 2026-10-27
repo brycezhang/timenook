@@ -13,7 +13,7 @@
         <view wx:for="{{context.shipping.terms}}" wx:key="index" class="section"><view>{{item.label}}</view><view class="note">{{item.text}}</view></view>
         <view wx:if="{{context.creation.expiresAt}}" class="note section">约定制作截止时间：{{context.creation.expiresAt}}</view>
       </view>
-      <view wx:if="{{context.canReviseProduction}}" class="soft section">上次生产已确认取消。原生产单及历史版本记录保留；可更正地址或调整书稿，再按当前版本重新确认与提交。仅改地址由发起人重新确认；书稿内容变化须双方重新核对。</view>
+      <view wx:if="{{context.qualityRevisionRequestId}}" class="soft section">本次为原订单质量售后的书稿修订。原已交付文件与首本消费事实保留；新稿须双方重新核对，再由客服创建原单重印尝试，不新增购买或首本权益。</view><view wx:if="{{context.canReviseProduction && !context.qualityRevisionRequestId}}" class="soft section">上次生产已确认取消。原生产单及历史版本记录保留；可更正地址或调整书稿，再按当前版本重新确认与提交。仅改地址由发起人重新确认；书稿内容变化须双方重新核对。</view>
       <view wx:if="{{context.book}}" class="paper section">
         <view class="section-title">{{context.book.snapshot.cover.title}}</view>
         <view class="section">书稿第 {{context.book.version}} 版 · {{context.book.pageCount || '待核对'}} 页</view>
@@ -46,10 +46,10 @@
         <button class="btn section" bindtap="confirmInitiator" disabled="{{busy || addressDirty || versionMismatch || !initiatorChecked || !initiatorEvidence || !context.address.hash || !context.book || context.book.state !== 'ready'}}">保存排版与地址确认</button>
       </view>
       <view wx:if="{{blockerLabels.length && (!context.production || context.canReviseProduction)}}" class="soft section"><view wx:for="{{blockerLabels}}" wx:key="index" class="note section">{{item}}</view></view>
-      <button wx:if="{{context.role === 'initiator' && (!context.production || context.canReviseProduction)}}" class="btn section" bindtap="submit" disabled="{{busy || !canSubmit || addressDirty || versionMismatch}}">使用首本权益提交制作</button>
+      <button wx:if="{{context.role === 'initiator' && !context.qualityRevisionRequestId && (!context.production || context.canReviseProduction)}}" class="btn section" bindtap="submit" disabled="{{busy || !canSubmit || addressDirty || versionMismatch}}">使用首本权益提交制作</button>
       <button wx:if="{{context.expiryReview.available}}" class="btn secondary section" bindtap="requestExpiryReview" disabled="{{busy}}">申请制作期限人工审核</button>
       <view wx:if="{{context.expiryReview.caseId}}" class="soft section">制作期限人工审核工单已记录，等待核验。工单不能替代书稿确认，也不会自动放行制作或删除资料。</view>
-      <view wx:if="{{context.production}}" class="paper section"><view class="section-title">{{context.canReviseProduction ? '上次生产已确认取消' : '首本制作已预留'}}</view><view wx:if="{{!context.canReviseProduction}}" class="section">{{context.production.state === 'approved' ? '已审核' : '等待审核'}} · 制作 {{context.production.copies}} 本 · 本次无需支付</view><view class="note">生产单：{{context.production.id}}</view><view class="note section">{{context.canReviseProduction ? '本次修订尚未重新提交；再次提交后会重新锁定，不能修改旧生产尝试的文件或地址。' : '审核后按约定安排制作与寄送。'}}</view></view>
+      <view wx:if="{{context.production}}" class="paper section"><view class="section-title">{{context.qualityRevisionRequestId ? '原订单质量重印修订' : context.canReviseProduction ? '上次生产已确认取消' : '首本制作已预留'}}</view><view wx:if="{{!context.canReviseProduction}}" class="section">{{context.production.state === 'approved' ? '已审核' : '等待审核'}} · 制作 {{context.production.copies}} 本 · 本次无需支付</view><view class="note">生产单：{{context.production.id}}</view><view class="note section">{{context.qualityRevisionRequestId ? '双方重新确认后，由客服创建原订单的新重印尝试。普通首本提交继续关闭，不新增购买或首本权益。' : context.canReviseProduction ? '本次修订尚未重新提交；再次提交后会重新锁定，不能修改旧生产尝试的文件或地址。' : '审核后按约定安排制作与寄送。'}}</view></view>
     </block>
     <button wx:if="{{context && context.production}}" class="btn section" bindtap="production" disabled="{{busy}}">查看生产与物流</button>
     <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">重新查询确认与制作状态</button>

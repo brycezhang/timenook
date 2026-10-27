@@ -23,6 +23,11 @@ Page({
     const order = this.data.activeOrder;
     if (order?.state === "paid") go("refunds", `orderId=${order.id}`);
   },
+  quality() {
+    const order = this.data.activeOrder;
+    if (order?.state === "paid" && order.project)
+      go("quality", `orderId=${order.id}&projectId=${order.project.id}`);
+  },
   orderGeneration: 0,
   selectedOrderId: "",
   onLoad(q) {

@@ -12,6 +12,7 @@ export function livePageAllowed(page: string): boolean {
     "purchase",
     "order",
     "refunds",
+    "quality",
     "invite",
     "welcome",
     "assisted",

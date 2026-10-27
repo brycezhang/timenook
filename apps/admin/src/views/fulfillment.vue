@@ -10,7 +10,7 @@ import type {
   FulfillmentDeliveryCommand,
 } from "@timenook/contracts";
 import { fulfillmentApi } from "../api/admin";
-const props = defineProps<{ csrf: string }>();
+const props = defineProps<{ csrf: string; initialOrderId?: string }>();
 const emit = defineEmits<{ expired: [] }>();
 const rows = ref<FulfillmentView[]>([]),
   selected = ref<FulfillmentView | null>(null),
@@ -378,8 +378,9 @@ function deliver() {
     evidenceRef: deliveryEvidence.value.trim(),
   });
 }
-onMounted(() => {
-  void refresh();
+onMounted(async () => {
+  await refresh();
+  if (active && props.initialOrderId) await open(props.initialOrderId);
 });
 onUnmounted(() => {
   active = false;

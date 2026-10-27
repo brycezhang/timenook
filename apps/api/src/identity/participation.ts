@@ -563,13 +563,11 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       isDeepStrictEqual(care.exportCollectionStamp, current)
     );
   }
-  private async status(
+  private async currentPurposesIn(
     tx: Prisma.TransactionClient,
     p: Awaited<ReturnType<Participation["project"]>>,
     subject: Awaited<ReturnType<Participation["subject"]>>,
-    userId: string,
-  ): Promise<ParticipationState> {
-    const narrator = subject.boundUserId === userId;
+  ) {
     const records = await tx.consentRecord.findMany({
       where: { projectId: p.id, bindingVersion: subject.bindingVersion },
       orderBy: { sequence: "asc" },
@@ -608,7 +606,18 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         record,
       );
     }
-    const deleted = await this.rights.deletedIn(tx, p.id);
+    return { records, granted, enabled, effective };
+  }
+  private async status(
+    tx: Prisma.TransactionClient,
+    p: Awaited<ReturnType<Participation["project"]>>,
+    subject: Awaited<ReturnType<Participation["subject"]>>,
+    userId: string,
+  ): Promise<ParticipationState> {
+    const narrator = subject.boundUserId === userId;
+    const { records, granted, enabled, effective } =
+      await this.currentPurposesIn(tx, p, subject);
+    const deleted=await this.rights.deletedIn(tx,p.id);
     const collection = !deleted && enabled && effective.collection === true;
     const terms = await this.terms.read(p.id, undefined, tx);
     return {
@@ -962,7 +971,9 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     await tx.$queryRaw`SELECT id FROM care_requests WHERE id=${id}::uuid FOR UPDATE`;
     const care = (await tx.careRequest.findUnique({ where: { id } }))!;
     // Operational review and production cases are not D08 subject-right requests.
-    if (["first_copy_expiry", "production_handoff"].includes(care.kind))
+    if (
+      ["first_copy_expiry", "production_handoff", "quality"].includes(care.kind)
+    )
       throw new ConflictException();
     const hash = digest(JSON.stringify(body));
     const result = () => ({
@@ -1481,6 +1492,54 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     return !!(await this.processingGrant(tx, input));
   }
 
+  // A dedicated care grant names its actual subject decision. Sharing with the
+  // buyer is a separate purpose and cannot stand in for (or negate) this grant.
+  async subjectCareGrantIn(
+    tx: Prisma.TransactionClient,
+    input: {
+      projectId: string;
+      subjectId: string;
+      bindingVersion: number;
+      accessEpoch: number;
+      operatorUserId: string;
+      assistedSessionId?: string | null;
+    },
+  ): Promise<boolean> {
+    this.policy();
+    const project = await this.project(tx, input.projectId, true),
+      subject = await this.subject(tx, input.projectId);
+    if (
+      subject.id !== input.subjectId ||
+      subject.bindingVersion !== input.bindingVersion ||
+      project.accessEpoch !== input.accessEpoch
+    )
+      return false;
+    const { enabled, effective } = await this.currentPurposesIn(
+      tx,
+      project,
+      subject,
+    );
+    if (!enabled || effective.collection !== true) return false;
+    if (subject.boundUserId === input.operatorUserId) return true;
+    if (
+      project.order.buyerId !== input.operatorUserId ||
+      !input.assistedSessionId
+    )
+      return false;
+    try {
+      await this.authorizeAssisted(tx, {
+        projectId: project.id,
+        sessionId: input.assistedSessionId,
+        operatorUserId: input.operatorUserId,
+        purpose: "book_confirmation",
+        requireRecording: false,
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof ForbiddenException) return false;
+      throw error;
+    }
+  }
   /** Book rendering is local material processing, not a new AI submission. */
   async bookGrantIn(
     tx: Prisma.TransactionClient,
@@ -1608,7 +1667,10 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       // Content owners distinguish their actions even for the same version.
       // Omitted only by the existing evidence-only caller contract.
       action?:
-        "story_decision" | "story_care_access" | "production_handoff_access";
+        | "story_decision"
+        | "story_care_access"
+        | "production_handoff_access"
+        | "quality_care_access";
       noticeVersion: string;
       evidenceRef: string;
       idempotencyKey: string;

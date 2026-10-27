@@ -140,3 +140,4 @@ export * from "./fulfillment";
 export * from "./exports";
 export * from "./refunds";
 export * from "./deletion";
+export * from "./quality-care";

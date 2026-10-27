@@ -11,6 +11,7 @@ import type {
   PlanDirectory,
 } from "../../../packages/contracts/src";
 import { bookClient } from "../../services/books";
+import { fulfillmentClient } from "../../services/fulfillment";
 import { ApiFailure } from "../../services/session";
 import { paymentKey } from "../../services/payments";
 import {
@@ -759,6 +760,27 @@ Page({
       return;
     }
     go("story", "id=" + e.currentTarget.dataset.id);
+  },
+  async quality() {
+    if (!this.data.live || this.data.busy || !this.projectId) return;
+    const generation = this.generation,
+      owner = sessionClient.context();
+    this.setData({ busy: true });
+    try {
+      const view = await fulfillmentClient.read(this.projectId);
+      if (!this.current(generation, owner)) return;
+      if (view.paymentOrderId)
+        go(
+          "quality",
+          `orderId=${view.paymentOrderId}&projectId=${this.projectId}`,
+        );
+      else this.setData({ status: "当前还没有原订单的制作记录" });
+    } catch {
+      if (this.current(generation, owner))
+        this.setData({ status: "未能打开原订单售后，请稍后重新查询" });
+    } finally {
+      if (this.current(generation, owner)) this.setData({ busy: false });
+    }
   },
   print() {
     if (this.data.live) {
