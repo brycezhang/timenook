@@ -15,7 +15,7 @@ GitHub：[#11](https://github.com/brycezhang/timenook/issues/11) · 状态以 Gi
 - [ ] 小程序付款成功/取消/超时均查询服务端，失败不发权益；关单竞态保留真实支付事实；未填姓名或书名也可继续。
 - [ ] 按订单冻结的首版 D02/D03 建立独立项目期限，只消费所选规则需要的付款/参与/交付事实；未发生事件保持未起算。暂停/恢复、上限和未开始处理执行已选政策，重放、并发、重启及套餐更新不延长旧期限。
 - [ ] 为 T14/T21/T22/T23/T25/T26 提供同一服务期限判定，测试到期前、恰好到期、到期后及暂停上限；制作到期/退款不直接触发资料删除，未知商业规则保持待定。
-- [ ] 支付通知内部 `/v1/webhooks/wechat-pay/payments`、公网 `/timenook/v1/webhooks/wechat-pay/payments`；生成/核验回调地址不漏或重复前缀，真实商户通知与查单证据分别记录。
+- [ ] 普通商户支付通知内部 `/v1/webhooks/wechat-pay/payments`、公网 `https://timenookapi.threeminreading.com/api/v1/webhooks/wechat-pay/payments`；生成/核验回调地址不漏或重复前缀，真实商户通知与查单证据分别记录。
 
 ## 实现边界
 

@@ -22,7 +22,7 @@
 | `GET` 上述运营入口的 `/download`                | 仅已核验替代交付、工单核验客服、有效包期限                              |
 | `POST /v1/admin/exports/cleanup`                | 受控到期与孤儿包补扫；不清理原始资料                                    |
 
-公网统一添加 `/timenook`，代理只剥离一次，沿用 ADR 0009。预览路由和 `wx.request/downloadFile` 白名单只开放这些确定入口；无 OSS 可分享跳转。
+公网部署目标为 TimeNook 独立域名下的 `/api/v1`，代理只剥离 `/api` 一次，见 [ADR 0015](adr/0015-dedicated-domain-ingress.md)。预览路由和 `wx.request/downloadFile` 白名单按这些确定入口配置并验证；无 OSS 可分享跳转。
 
 ## 固定版本与实际产物
 

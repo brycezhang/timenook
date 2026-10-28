@@ -58,7 +58,7 @@
 
 - 原生微信小程序保留，Vben 采用 web-antd 路线；后端 NestJS/Fastify 模块化单体，API、Worker 和 PDF 渲染分进程。
 - Prisma/PostgreSQL 保存业务事实、约束、版本、Inbox/Outbox；BullMQ/ioredis 负责调度，Redis 丢失可恢复。
-- 阿里云 ECS 与 API 域名复用 legal-agent，TimeNook 以 `/timenook` 路径分流，见 [ADR 0009](../../adr/0009-shared-ecs-api-path.md)。2026-10-25 按 [ADR 0011](../../adr/0011-shared-oss-and-deepseek.md) 进一步共用 deed 的 OSS AccessKey 和 DeepSeek API key，覆盖旧票据对应凭据独立要求；Bucket 按后续 [ADR 0013](../../adr/0013-dedicated-oss-bucket.md) 独立为私有 `timenook`。应用进程、数据库、队列及微信身份继续独立。ASR 为豆包文件识别，追问/整理为 DeepSeek，供应商经服务端适配器接入，无自动跨供应商回退。对象前缀、STS 与清理隔离须独立验证。
+- 阿里云 ECS 复用 legal-agent，TimeNook 使用独立 API 域名 `https://timenookapi.threeminreading.com/api/v1`，管理页面为同域 `/admin/`，见 [ADR 0009](../../adr/0009-shared-ecs-api-path.md) 和 [ADR 0015](../../adr/0015-dedicated-domain-ingress.md)。按 [ADR 0011](../../adr/0011-shared-oss-and-deepseek.md) 共用 deed 的 OSS AccessKey 和 DeepSeek API key；Bucket 按 [ADR 0013](../../adr/0013-dedicated-oss-bucket.md) 独立为私有 `timenook`，数据库按 [ADR 0012](../../adr/0012-cloud-integration-database.md) 分库。应用进程、业务数据、队列及微信身份继续独立。微信支付采用普通商户直连，商户参数来源见[配置清单](../2026-10-26/manual-inputs.md#2026-10-28-普通商户配置决定)。ASR 为豆包文件识别，追问/整理为 DeepSeek，供应商经服务端适配器接入，无自动跨供应商回退。对象前缀、STS 与清理隔离须独立验证。
 - 沿用 T01 已验证的 Node/pnpm 与依赖基线；实际升级时补受影响兼容验证，不重复初始化验收。
 - 登录账号、讲述者 subject 和操作人分别记录；关系、付款、管理员身份都不自动授予私人内容或本人确认权限。
 - 录音先持久保存及封存再转写；原声、原转录和 AI 稿独立，用户等待时可离开、补录和恢复。
@@ -71,7 +71,7 @@
 - Commerce / LifeProject 只执行首版选定政策，按销售快照及幂等起算事件计算独立服务期限；IdentityAccess 提供本人参与及客服换绑，Fulfillment 提供交付事件，Media / Care 执行访问和保留到期。T10/T11/T12/T14/T21/T22/T23/T25/T26/T29 分别承担计算、事件、限制与恢复验收。
 - 客服换绑保持讲述者 subject 不变，使用 D08 核验证据、工单、绑定版本和 access_epoch；旧账号本项目权限立即失效，新账号重新授权，历史确认保留。
 - Book / Care 将适用的 AI 整理和人工校对来源标识随版本写入 PDF、确认稿及导出说明；真实原声不标为合成音频，具体适用方式由 D08 核验。
-- 用户接口内部为 `/v1`，运营接口为 `/v1/admin`，支付/退款通知为 `/v1/webhooks/wechat-pay/payments` 与 `/v1/webhooks/wechat-pay/refunds`；公网统一加 `/timenook`。代理只剥离一次前缀，完整映射以 ADR 0009 为准，通知及部署由 T10/T27/T29 验收。
+- 用户接口内部为 `/v1`，运营接口为 `/v1/admin`，支付/退款通知为 `/v1/webhooks/wechat-pay/payments` 与 `/v1/webhooks/wechat-pay/refunds`；独立 API 域名下公网统一加 `/api`。代理只剥离一次前缀，完整映射以 ADR 0015 为准，通知及部署由 T10/T27/T29 验收。开发阶段直接按当前方案实施，变更约定见根 AGENTS.md。
 
 ### 首版固定政策
 

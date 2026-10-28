@@ -17,7 +17,7 @@
 
 ## 接口与参数
 
-内部前缀 `/v1/probes/audio`；未来公网由ADR0009添加 `/timenook`。模拟上传保留完整API基址，OSS上传用绝对Bucket HTTPS地址。
+内部前缀 `/v1/probes/audio`；受控公网探针目标为独立 API 域名下的 `/api/v1/probes/audio`，见 [ADR 0015](adr/0015-dedicated-domain-ingress.md)。模拟上传保留完整 API 基址，OSS 上传用绝对 Bucket HTTPS 地址。
 
 | 接口                   | 行为                                                                                              |
 | ---------------------- | ------------------------------------------------------------------------------------------------- |

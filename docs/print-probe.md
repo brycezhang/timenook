@@ -47,7 +47,7 @@ PRINT_PROBE_ENABLED=synthetic-local pnpm probe:print photo \
 }
 ```
 
-示例入口 ID 是占位值，必须用 API 返回的随机 ID 替换。`entryBaseUrl` 只接受 localhost/127.0.0.1 HTTP 和上面的 `/timenook` 路径，参数不含身份令牌。当前 API 内部仍使用 `/v1/...`；本地测试显式模拟 [ADR 0009](adr/0009-shared-ecs-api-path.md) 的前缀剥离，没有部署该公网路由。
+示例入口 ID 是占位值，必须用 API 返回的随机 ID 替换。当前探针 CLI 的本地复现参数只接受 localhost/127.0.0.1 HTTP 和示例中的 `/timenook` 路径，参数不含身份令牌；API 内部使用 `/v1/...`。正式目标为 [ADR 0015](adr/0015-dedicated-domain-ingress.md) 的独立域名和 `/api` 前缀，该目标的探针入口配置仍待实现与验证。
 
 ```sh
 PRINT_PROBE_ENABLED=synthetic-local pnpm probe:print book \

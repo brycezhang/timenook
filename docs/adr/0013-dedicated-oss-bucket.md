@@ -9,4 +9,4 @@ date: 2026-10-25
 
 TimeNook 的私有对象保存至 `timenook`，探针保留 `timenook/probe/` 前缀和限时签名。独立 Bucket 不代表 RAM 身份或密钥已经独立；生命周期、CORS 与权限按本项目单独管理。旧 `lawyer-agents` Bucket 继续由 deed 使用，不能为本项目改名或清空。
 
-Bucket 名参与 `storageScope`，有对象或素材记录时须先迁移并核对元数据，不能直接换配置。此次切换前已核实目标 Bucket、旧项目对象前缀及相关素材记录为空；当前运行验证见 [Bucket 切换记录](../delivery/2026-10-25/oss-bucket.md)。
+Bucket 名参与 `storageScope`，配置与素材元数据须使用同一实际 Bucket。开发阶段直接更新目标配置和测试资料，无旧 Bucket 的数据迁移要求。已执行的运行验证见 [Bucket 配置记录](../delivery/2026-10-25/oss-bucket.md)。

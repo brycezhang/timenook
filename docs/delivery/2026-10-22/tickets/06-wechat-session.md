@@ -13,7 +13,7 @@ GitHub：[#7](https://github.com/brycezhang/timenook/issues/7) · 状态以 GitH
 - [x] 签发可撤销不透明会话，仅保存 token 摘要；过期、退出和不同账号访问有可观察的 401/403/404 行为。
 - [x] 小程序请求层使用统一契约，登录状态与本机演示资料分离，服务失败不自动回退到模拟购买成功。
 - [ ] 通过 HTTP 边界测试会话重放、失效、跨账号和无效微信响应；真实双账号登录记录另行验收。
-- [ ] 内部登录使用 `/v1/sessions/wechat`，公网使用 `/timenook/v1/sessions/wechat`；会话查询/撤销保持同一前缀，客户端不重复拼接；正式代理与合法域名在 T29 集中验证。
+- [ ] 内部登录使用 `/v1/sessions/wechat`，公网使用 `https://timenookapi.threeminreading.com/api/v1/sessions/wechat`；会话查询/撤销保持同一前缀，客户端不重复拼接；正式代理与合法域名在 T29 集中验证。
 
 ## 实现边界
 

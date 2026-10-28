@@ -26,7 +26,7 @@ API 测试及浏览器测试自行创建随机 PostgreSQL schema、执行迁移�
 - `GET /v1/orders`、`GET /v1/orders/:id`：只读当前买家、当前 AppID/商户/本地 realm 的订单；按原商户号查询恢复，付款结果与通知共用入账事务。付款不代表讲述者同意。
 - `POST /v1/orders/:id/payment`：准备支付参数；未知结果先查原单。缓存参数过期后，只有查到原单未付才按原参数与原单号重新准备。一次 `ORDER_NOT_EXIST` 不生成替代订单。
 - `POST /v1/orders/:id/close`：关单并核验供应商结果；付款与关单竞态保留已核验付款事实。
-- 通知内部路径 `/v1/webhooks/wechat-pay/payments`，部署约定公网路径 `/timenook/v1/webhooks/wechat-pay/payments`，前缀精确一次。此约定尚无真实公网/商户回调验收。
+- 通知内部路径 `/v1/webhooks/wechat-pay/payments`，普通商户正式部署目标为 `https://timenookapi.threeminreading.com/api/v1/webhooks/wechat-pay/payments`，见 [ADR 0015](adr/0015-dedicated-domain-ingress.md)。本地合成夹具的地址只用于复现当前测试；正式参数读取、通知地址配置和真实公网/商户回调尚待实现与验收。
 
 验签使用原始 HTTP body，按受信 `Wechatpay-Serial` 选公钥；供应商 204 空体也验签。回调先验签、解密、核对应用/商户/订单/总金额/币种/成功事实，持久化 Inbox 后才返回 204。业务激活由有限批次扫描恢复；Inbox 内只保留核验所需事实，恢复不重新套用 HTTP 五分钟签名时窗。单次激活事务按订单→项目→权益锁定，一次提交付款、项目、subject、冻结默认计划、首本权益和服务期限。网络不在事务中。
 

@@ -1,6 +1,6 @@
 # TimeNook 人工输入与验收清单
 
-2026-10-27。本轮推进至 T28 的交付结果在独立工程证据和 GitHub 评论中记录；本页汇总需要负责人提供、配置及真实操作的输入，不变更原验收条件。工程通过、本票验收和正式上线分别判断。
+2026-10-28。本轮推进至 T28 的交付结果在独立工程证据和 GitHub 评论中记录；本页汇总需要负责人提供、配置及真实操作的输入，不变更原验收条件。工程通过、本票验收和正式上线分别判断。
 
 ## 优先准备
 
@@ -42,11 +42,29 @@
 | 本人权利 | 真实本人核验、同机证据形式、无微信三类权利申请和替代交付渠道、争议与回执负责人 | 同一业务用例接入真实告知/证据版本，演练核验、撤权、资料交付和删除分层状态 |
 | 独立台账与恢复 | 台账保存位置及与业务备份的隔离、受限账号/权限、密钥托管、防整源回滚措施、恢复切换负责人；最少事实和台账的保留/处置负责人 | 按 T26 最终机制配置、生成和托管密钥、验证旧业务备份恢复前重放；正式介质、权限、切换与恢复结果由 T29 留证 |
 
-用户 API 基址为 `https://lawyerapi.threeminreading.com/timenook/v1`；支付/退款通知分别为该基址下的 `/webhooks/wechat-pay/payments`、`/webhooks/wechat-pay/refunds`；管理页面为 `/timenook/admin/`。这些是既定目标路径，通知及管理页面仍须在正式环境逐项验收。
+用户 API 基址为 `https://timenookapi.threeminreading.com/api/v1`，依据 [ADR 0015](../../adr/0015-dedicated-domain-ingress.md)。支付/退款通知分别为该基址下的 `/webhooks/wechat-pay/payments`、`/webhooks/wechat-pay/refunds`；管理页面为同域 `/admin/`，管理 API/Cookie Path 为 `/api/v1/admin`。开发阶段直接按这些目标完成配置、实现和公网验证。
+
+### 2026-10-28 普通商户配置决定
+
+用户选择普通商户直连模式。以 `wutong_miniapp` 所调用的 `payment-service` 商户配置作为复用来源；TimeNook 独立对接微信支付，使用自己的身份、订单、通知和入账流程。以下仅记录配置来源与正式装配要求，尚未将真实密钥写入 TimeNook 或启用生产收款。
+
+| 参数 | 配置来源与要求 |
+| --- | --- |
+| 商户号 | 来源 `PAYMENT_WECHAT_MCH_ID`，核验实际商户及 TimeNook AppID 绑定 |
+| APIv3 密钥 | 来源 `PAYMENT_WECHAT_API_V3_KEY`，与所选商户号对应，经受限服务端配置交接 |
+| 商户私钥与 API 证书 | 来源 `PAYMENT_WECHAT_MCH_PRIVATE_KEY_PATH`、`PAYMENT_WECHAT_MCH_PUBLIC_CERT_PATH` 指向的有效材料；验证匹配并提取对应序列号，目标文件路径按 TimeNook 环境独立设置 |
+| 微信支付验签材料 | 使用该商户当前有效的微信支付公钥/ID，或平台证书/序列号；核验材料与标识匹配 |
+| 小程序身份 | 使用 TimeNook 自己的 `TIMENOOK_WECHAT_APP_ID`、`TIMENOOK_WECHAT_APP_SECRET`；OpenID 由该小程序登录获取 |
+| 通知地址 | 使用上文独立域名的 TimeNook 支付与退款接口，并验证公网通知 |
+| 接入模式 | 普通商户，使用 `appid`、`mchid`、`payer.openid`；不配置服务商及子商户参数 |
+
+来源变量名仅用于定位现有 `payment-service` 配置，不是 TimeNook 已支持的环境变量。当前 TimeNook `readConfig` 尚未读取生产支付参数，支付模块仍仅允许 `environment=test` 和 `local-verification` 合成传输；本地 `.env` 也未配置独立微信身份。正式参数读取、普通商户装配、支付/退款回调实现及相关回归须在 T29 发布工作中完成，真实商户绑定、商品准入与收退款证据仍归 T05/T10/T27；这些票据的证据由 T30 复用。
+
+部署顺序：先推进 T29 的工程装配、目标环境发布及恢复验收，再由 T30 衔接真实内部项目、双端、实物及付费试点验收。获授权的受控公网联调可先于两票完整关闭；正式部署验收归 T29，开放付费试点须满足 T30 门槛。配置决定本身不代表 T29/T30 或上游真实验收已完成。
 
 ## 已有资源与正式部署差距
 
-按照 [ADR 0009](../../adr/0009-shared-ecs-api-path.md)、[0012](../../adr/0012-cloud-integration-database.md)、[0013](../../adr/0013-dedicated-oss-bucket.md) 沿用现有资源：deed 共用 ECS/域名，TimeNook 独立服务与路径、业务库 `timenook` 和 Redis 前缀；上海独立私有 Bucket `timenook`，AccessKey 沿用 deed；豆包已有配置，DeepSeek 经 Packy 中转并沿用已定 key。无需重新提出另一套资源方案。
+按照 [ADR 0009](../../adr/0009-shared-ecs-api-path.md)、[0012](../../adr/0012-cloud-integration-database.md)、[0013](../../adr/0013-dedicated-oss-bucket.md) 和 [0015](../../adr/0015-dedicated-domain-ingress.md) 使用现有资源：deed 共用 ECS，TimeNook 使用独立 API 域名、服务、业务库 `timenook` 和 Redis 前缀；上海独立私有 Bucket `timenook`，AccessKey 沿用 deed；豆包已有配置，DeepSeek 经 Packy 中转并沿用已定 key。
 
 2026-10-26 本轮只读检查：公网 `/timenook/health/live`、`/timenook/health/ready`、legal-agent 原 `/v1/health` 均为 HTTPS 200。该观察只说明当前受控服务可达，不证明业务版本、正式准入、云权限、恢复或容量验收。已有实际探针结果见[云端联调](../2026-10-25/cloud-integration.md)与[独立 Bucket](../2026-10-25/oss-bucket.md)。
 

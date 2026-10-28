@@ -1,18 +1,17 @@
 ---
 status: accepted
 date: 2026-10-25
+updated: 2026-10-28
 ---
 
-# 与 deed 共用 OSS 配置和 DeepSeek API key
+# 与 deed 共用 OSS AccessKey 和 DeepSeek 配置
 
-同日后续 [ADR 0013](0013-dedicated-oss-bucket.md) 已覆盖本文的共用 Bucket 决定：当前使用独立私有 Bucket `timenook`；OSS AccessKey 和 DeepSeek 配置继续沿用。下文保留首次配置及联调的历史边界。
+TimeNook 使用 deed（legal-agent）所在 ECS，共用其服务端 OSS AccessKey 和 DeepSeek 配置。OSS 使用独立私有 Bucket `timenook`，见 [ADR 0013](0013-dedicated-oss-bucket.md)；进程、业务库、队列、微信身份和授权记录独立，联调拓扑见 [ADR 0012](0012-cloud-integration-database.md)。
 
-用户确认真实环境继续使用 deed（legal-agent）所在 ECS，OSS 使用同一套配置，DeepSeek 使用同一个 API key。此决定补充 ADR 0009，并覆盖 ADR 0007、0009 及早期规格对 OSS 资源/凭据、DeepSeek 账号/凭据必须独立的要求；TimeNook 的进程、数据库、队列、微信身份和授权记录继续独立。
+DeepSeek 通过 Packy 的 `https://cf.api.fan/v1` Chat Completions 接口调用，沿用 deed 的同一 API key；模型、预算、处理条款及业务准入分别确认。配置来源与真实联调结果见[共用服务配置](../development-shared-services.md)。
 
-共用 OSS Bucket 时，TimeNook 对象使用专属前缀，清理只作用于本项目对象；共用配置不允许修改 deed 的对象或生命周期规则。现有云端探针仍要求短期 STS，不能把长期 AccessKey 当作 STS 或伪造过期时间。前缀适配、STS 获取及权限验证仍需工程和真实环境证据，不能由本决策追认完成。
+TimeNook 探针对象使用 `timenook/probe/` 前缀，清理限定于本项目 Bucket 和相应身份。显式静态凭据模式只在服务端签名，上传与取源 URL 分别限时；STS 为可选模式，静态凭据不伪造 STS 到期时间。权限、CORS 和生命周期按 TimeNook 实际环境验证。
 
-共用资源使配额、费用、密钥轮换和故障相互关联。配置分别保存于服务端私有环境文件，源码只记录变量名和来源；更换共享密钥时须核对两个应用。2026-10-25 仅只读核实服务器并准备本地配置，没有发布 TimeNook 或修改 deed。
+共用资源使配额、费用、密钥轮换和故障相互关联。配置分别保存于服务端私有环境文件，源码只记录变量名和来源；更换共享密钥时核对两个应用。
 
-当前配置来源与限制见[共用服务配置](../development-shared-services.md)。本轮先做阶段性本地测试；真实微信登录、支付、设备采集及供应商调用暂不执行。
-
-后续同日用户确认云端接口/数据库联调，见 [ADR 0012](0012-cloud-integration-database.md)。共享 OSS 前缀及显式静态凭据模式已实现，并以合成样本验证真实上传/封存/读取；旧段落中的 STS 待项描述的是调整前状态。静态模式不会伪造 STS，有效窗口仍由短期签名限制，最新运行结果见[云端验证记录](../delivery/2026-10-25/cloud-integration.md)。
+已执行的合成样本真实 OSS 上传、封存、读取与供应商调用见[云端验证记录](../delivery/2026-10-25/cloud-integration.md)；微信登录、支付、真机、业务准入和正式部署仍分别验收。

@@ -8,8 +8,8 @@
 | ---------- | --------------------------------------------------------------------------- |
 | ECS        | `106.14.11.96`，与 deed 同机                                                |
 | API        | `timenook-api.service`，独立用户 `timenook`，回环 `127.0.0.1:4310`          |
-| 公网 API   | `https://lawyerapi.threeminreading.com/timenook/v1`                         |
-| 健康检查   | 公网 `/timenook/health/live`、`/timenook/health/ready`                      |
+| 公网 API   | `https://timenookapi.threeminreading.com/api/v1`                         |
+| 健康检查   | 公网 `/api/health/live`、`/api/health/ready`                      |
 | 服务器目录 | `/data/server/timenook/{releases,current,runtime,shared}`                   |
 | 服务端凭据 | `/data/server/timenook/shared/.env`，root:timenook、mode 640                |
 | 数据库     | deed 同一 RDS 连接主机、账号、密码；数据库 `timenook`，独立业务表和迁移历史 |
@@ -20,25 +20,27 @@
 
 API 使用 `NODE_ENV=development`，这是受控联调服务；当前正式业务门禁尚不支持跳过微信凭据直接启用生产。公网文档入口被 Nginx 拒绝，探针需要独立短期身份。微信登录、支付暂不执行，未启用合成产品账号或绕过正式业务授权。
 
+2026-10-28 域名配置与线上验证见 [域名配置记录](delivery/2026-10-28/domain-ingress.md)。管理页面 `/admin/`、管理 API/Cookie `/api/v1/admin` 和微信支付通知的实现与验收按 [ADR 0015](adr/0015-dedicated-domain-ingress.md) 执行。
+
 ## 本地客户端启动
 
 根目录 Git 忽略文件 `.env.frontend-local` 只包含公开地址：
 
 ```dotenv
 TIMENOOK_API_BASE_URL=http://127.0.0.1:5173/timenook/v1
-TIMENOOK_PREVIEW_API_TARGET=https://lawyerapi.threeminreading.com/timenook
+TIMENOOK_PREVIEW_API_TARGET=https://timenookapi.threeminreading.com/api
 ```
 
 ```sh
 node --env-file=.env.frontend-local node_modules/vite/bin/vite.js --host 127.0.0.1
 ```
 
-浏览器走本机同源代理。代理向云端转发时设置目标 Host，并保留恰好一次 `/timenook` 前缀；既有本地 fixture target 仍可使用不带该前缀的地址。健康/探针接口已加入代理，私人环境文件及 `.probe-local` 仍拒绝访问。
+浏览器走本机同源代理。浏览器本地路径仍为 `/timenook/...`；代理剥离该前缀并将目标的 `/api` 前缀加到云端请求。既有本地 fixture target 仍可使用不带前缀的地址。健康/探针接口已加入代理，私人环境文件及 `.probe-local` 仍拒绝访问。
 
 小程序在本地构建，公开基址与浏览器代理地址分别传入：
 
 ```sh
-TIMENOOK_API_BASE_URL=https://lawyerapi.threeminreading.com/timenook/v1 \
+TIMENOOK_API_BASE_URL=https://timenookapi.threeminreading.com/api/v1 \
 TIMENOOK_AUDIO_PROBE_BUILD=1 pnpm build:frontend
 pnpm check:native
 ```

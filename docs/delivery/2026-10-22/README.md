@@ -4,7 +4,7 @@
 
 基于已定稿开发方案，已创建 **[1 个规格父 issue](https://github.com/brycezhang/timenook/issues/1) + 30 个子 tickets**，用 GitHub 原生 blocked-by 关系表示依赖，并按 ready-for-agent / ready-for-human 区分实现和外部决策。每票均可从本页打开完整验收条件。
 
-推进方式：主 Agent 按 ready frontier 派发实施 subagent；工程依赖已满足且彼此独立的票，可用独立 worktree/分支并行实施。每票分别完成 TDD、相关检查、独立 Standards / Spec 双轴审查与最终提交的 PR CI；合并串行，每次合并后 main CI 全绿，才进行下一票合并并放行依赖者；独立票实施、PR CI 与审查仍可并行。现有 45 条依赖与真实完成口径不变。外部验收缺失时保留票据未完成；按上游已交付工程产物判断可推进的本地范围，真实验收与上线分别检查。T01 已由 PR #32 合并。部署目标已按 [ADR 0009](../../adr/0009-shared-ecs-api-path.md) 调整为 legal-agent 共用 ECS/域名、`/timenook` 分流。
+推进方式：主 Agent 按 ready frontier 派发实施 subagent；工程依赖已满足且彼此独立的票，可用独立 worktree/分支并行实施。每票分别完成 TDD、相关检查、独立 Standards / Spec 双轴审查与最终提交的 PR CI；合并串行，每次合并后 main CI 全绿，才进行下一票合并并放行依赖者；独立票实施、PR CI 与审查仍可并行。现有 45 条依赖与真实完成口径不变。外部验收缺失时保留票据未完成；按上游已交付工程产物判断可推进的本地范围，真实验收与上线分别检查。T01 已由 PR #32 合并。部署目标按 [ADR 0009](../../adr/0009-shared-ecs-api-path.md) 和 [ADR 0015](../../adr/0015-dedicated-domain-ingress.md)：与 legal-agent 共用 ECS，TimeNook 使用独立 API 域名和 `/api/v1` 基址。
 
 ## 阶段
 
@@ -133,7 +133,7 @@
 
 29. **[T29 在共用 ECS 发布独立服务并完成恢复演练](tickets/29-release-recovery.md)**
    - 阻塞：T17、T26、T28。
-   - 交付：在共用 ECS 上隔离部署 TimeNook，通过同一 API 域名的 `/timenook` 分流，并验证现有 legal-agent 不受影响及故障恢复。
+   - 交付：在共用 ECS 上隔离部署 TimeNook，使用独立域名 `https://timenookapi.threeminreading.com/api/v1`，验证同机 legal-agent 服务及故障恢复。
 
 30. **[T30 完成内部实物闭环与付费试点验收](tickets/30-pilot-acceptance.md)**
    - 阻塞：T29。
@@ -190,7 +190,7 @@ D01 由 T04 冻结；D02–D08 由 T05 冻结；D09 由 T09 冻结；D10 由 T08
 | 探针到生产的复用 | [复用矩阵](spec.md#探针复用与生产集成)；消费者补生产集成，T15 提供共享任务机制 |
 | 人工与系统分工 | [人工运营边界](spec.md#人工运营边界)；共享工单、人工判断、受控执行 |
 | 完成、验收和质量 | [依赖完成规则](spec.md#依赖完成规则)、[证据归属](spec.md#验收复用与唯一归属)、[质量目标](spec.md#质量目标与证据归属) |
-| 路径 | [ADR 0009](../../adr/0009-shared-ecs-api-path.md)；内部 `/v1`，公网 `/timenook` 前缀 |
+| 路径 | [ADR 0015](../../adr/0015-dedicated-domain-ingress.md)；内部 `/v1`，独立 API 域名下公网 `/api` 前缀 |
 
 保留 T01–T30、45 条依赖、全部 A/X/D 责任与已有交付记录；补漏验收已并入各票，不再维护第二份“本次补充”清单。本地票据与 GitHub 正文同步，实时状态以 GitHub 为准，修订不追认验收通过。本轮仅修改文档，业务实现及真实条件仍分别验证。[复杂度复核](mvp-complexity-review.md)保留决策理由，当前执行以父规格为准。
 

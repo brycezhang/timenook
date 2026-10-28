@@ -4,7 +4,7 @@
 
 ## 配置和运行
 
-使用 Node22.23.4 / pnpm10.34.7，真实 PostgreSQL/Redis，先按 T02 配置私有 `.env.probe-local`（Git 忽略、mode600）和独立身份。`pnpm db:generate`、在**专用本地 schema**执行迁移、`pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api build`，再 `pnpm probe:api`。内部前缀 `/v1/probes/ai`；未来公网入口带 `/timenook`，本票未部署。
+使用 Node22.23.4 / pnpm10.34.7，真实 PostgreSQL/Redis，先按 T02 配置私有 `.env.probe-local`（Git 忽略、mode600）和独立身份。`pnpm db:generate`、在**专用本地 schema**执行迁移、`pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api build`，再 `pnpm probe:api`。内部前缀 `/v1/probes/ai`；受控公网探针目标为独立 API 域名下的 `/api/v1/probes/ai`，见 [ADR 0015](adr/0015-dedicated-domain-ingress.md)。
 
 仅在完成账号/样本准入核验后，在私有配置中显式填写以下字段；没有示例密钥、生产默认模型或商业价格。
 
