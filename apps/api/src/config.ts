@@ -16,6 +16,7 @@ export interface ApiConfig {
   payments?: WechatPayConfig;
   // No production D08 approval exists. This mode only exercises isolated tests.
   participation?: { mode: "synthetic-d08" };
+  privacyJournal?: { root: string; key: string };
   books?: {
     mode: "synthetic-local";
     storageRoot: string;
@@ -290,7 +291,23 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
       aiProbe.deepseek.baseUrl,
     );
   }
+  let privacyJournal: ApiConfig["privacyJournal"];
+  if (env.PRIVACY_JOURNAL_ROOT || env.PRIVACY_JOURNAL_KEY) {
+    if (
+      !env.PRIVACY_JOURNAL_ROOT?.startsWith("/") ||
+      !env.PRIVACY_JOURNAL_KEY?.match(/^[A-Za-z0-9+/]{43}=$/) ||
+      Buffer.from(env.PRIVACY_JOURNAL_KEY, "base64").length !== 32
+    )
+      throw new ConfigurationError(
+        "Independent privacy journal requires an absolute root and 32-byte key",
+      );
+    privacyJournal = {
+      root: env.PRIVACY_JOURNAL_ROOT,
+      key: env.PRIVACY_JOURNAL_KEY,
+    };
+  }
   return {
+    privacyJournal,
     aiProbe,
     audioProbe,
     admin,

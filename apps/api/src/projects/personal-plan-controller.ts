@@ -91,8 +91,27 @@ export class PersonalPlans implements OnModuleDestroy {
   ) {
     this.plans = new ProjectPlans(config.databaseUrl);
   }
-  async read(projectId: string, authorization?: string): Promise<PersonalPlan> {
+  private withActivePlanAccess<T>(
+    projectId: string,
+    authorization: string | undefined,
+    decision: Parameters<Participation["withPlanAccess"]>[2],
+    work: (
+      tx: import("@prisma/client").Prisma.TransactionClient,
+      actor: Parameters<Parameters<Participation["withPlanAccess"]>[3]>[1],
+    ) => Promise<T>,
+  ): Promise<T> {
     return this.participation.withPlanAccess(
+      projectId,
+      authorization,
+      decision,
+      async (tx, actor) => {
+        await this.participation.requireMaterialIn(tx, projectId, "activeData");
+        return work(tx, actor);
+      },
+    );
+  }
+  async read(projectId: string, authorization?: string): Promise<PersonalPlan> {
+    return this.withActivePlanAccess(
       projectId,
       authorization,
       undefined,
@@ -111,7 +130,7 @@ export class PersonalPlans implements OnModuleDestroy {
     authorization?: string,
   ): Promise<PersonalPlan> {
     try {
-      return await this.participation.withPlanAccess(
+      return await this.withActivePlanAccess(
         projectId,
         authorization,
         undefined,
@@ -145,7 +164,7 @@ export class PersonalPlans implements OnModuleDestroy {
     authorization?: string,
   ) {
     try {
-      return await this.participation.withPlanAccess(
+      return await this.withActivePlanAccess(
         projectId,
         authorization,
         { assistedSessionId: body.assistedSessionId },

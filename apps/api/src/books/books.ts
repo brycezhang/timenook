@@ -178,7 +178,8 @@ export class Books implements OnModuleDestroy {
     const terms = await this.bookTerms(tx, projectId);
     if (
       !terms.retention?.confirmedStories ||
-      terms.retention.confirmedStories.state === "expired"
+      terms.retention.confirmedStories.state === "expired" ||
+      terms.retention?.activeData?.state === "expired"
     )
       throw new ForbiddenException();
     return terms;
@@ -188,10 +189,14 @@ export class Books implements OnModuleDestroy {
     accessExpiresAt: string | null,
   ) {
     const rule = terms.retention?.confirmedStories,
-      expiresAt = this.expiry(accessExpiresAt, rule?.expiresAt ?? null),
+      expiresAt = this.expiry(
+        this.expiry(accessExpiresAt, rule?.expiresAt ?? null),
+        terms.retention?.activeData?.expiresAt ?? null,
+      ),
       allowed = !!(
         rule &&
         rule.state !== "expired" &&
+        terms.retention?.activeData?.state !== "expired" &&
         (!expiresAt || Date.parse(expiresAt) > Date.now())
       );
     return { allowed, expiresAt: allowed ? expiresAt : null };
@@ -275,6 +280,8 @@ export class Books implements OnModuleDestroy {
         inputHash: string;
         sequence: number;
       }[];
+      if (revision.title === null || revision.paragraphs === null)
+        throw new ForbiddenException();
       eligible.push({
         id: story.id,
         revisionId: revision.id,
@@ -362,7 +369,7 @@ export class Books implements OnModuleDestroy {
     const snapshot: BookSnapshot = {
       schemaVersion: "t20-v1",
       cover: {
-        title: project.bookTitle ?? order.bookTitle,
+        title: project.bookTitle ?? order.bookTitle ?? "资料已删除",
         template: "t20-a5-v3",
         version: cover.version,
         salutation: cover.salutation,
@@ -415,13 +422,17 @@ export class Books implements OnModuleDestroy {
   private async viewIn(
     tx: Prisma.TransactionClient,
     row: BookVersion,
-    currentHash: string,
+    currentHash: string | null,
     accessExpiresAt: string | null,
   ): Promise<BookVersionView> {
     let task = await tx.productionTask.findUniqueOrThrow({
       where: { id: row.taskId },
     });
-    if (row.inputHash !== currentHash && task.state !== "obsolete")
+    if (
+      currentHash !== null &&
+      row.inputHash !== currentHash &&
+      task.state !== "obsolete"
+    )
       task = await tx.productionTask.update({
         where: { id: task.id },
         data: {
@@ -491,6 +502,7 @@ export class Books implements OnModuleDestroy {
       bookId: string;
       subjectId: string;
       bindingVersion: number;
+      accessEpoch?: number;
     },
   ) {
     const book = await tx.bookVersion.findFirst({
@@ -498,6 +510,8 @@ export class Books implements OnModuleDestroy {
     });
     if (!book) throw new ConflictException("Frozen book required");
     const snapshot = book.snapshot as unknown as BookSnapshot;
+    if (!snapshot || digest(snapshot) !== book.snapshotHash)
+      throw new ForbiddenException("Frozen book integrity required");
     for (const story of snapshot.chapters.flatMap(
       (chapter) => chapter.stories,
     )) {
@@ -508,6 +522,9 @@ export class Books implements OnModuleDestroy {
           revisionId: story.revisionId,
           subjectId: input.subjectId,
           bindingVersion: input.bindingVersion,
+          ...(input.accessEpoch === undefined
+            ? {}
+            : { accessEpoch: input.accessEpoch }),
         },
         orderBy: { sequence: "desc" },
       });
@@ -547,51 +564,187 @@ export class Books implements OnModuleDestroy {
     };
   }
   // Transactional Book boundary: caller holds current participation and the project lock.
+  private async retainedInputHashIn(
+    tx: Prisma.TransactionClient,
+    row: BookVersion,
+    metadataVersion: number,
+    accessEpoch: number,
+  ) {
+    const snapshot = row.snapshot as unknown as BookSnapshot;
+    const directory = await tx.planDirectoryVersion.findFirstOrThrow({
+      where: { projectId: row.projectId },
+      orderBy: { version: "desc" },
+      select: { version: true, contentHash: true },
+    });
+    const cover = await tx.bookCoverVersion.findFirst({
+      where: { projectId: row.projectId },
+      orderBy: { version: "desc" },
+      select: { version: true },
+    });
+    const stories = await tx.story.findMany({
+      where: { projectId: row.projectId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, currentRevisionId: true },
+    });
+    const revisions = new Map(
+      stories.map((story) => [story.id, story.currentRevisionId]),
+    );
+    let currentDirectory = {
+      ...snapshot.directory,
+      version: directory.version,
+      contentHash: directory.contentHash,
+    };
+    if (directory.version === 1 && snapshot.directory.version === 1) {
+      const decisions = await tx.storyDecision.findMany({
+        where: {
+          projectId: row.projectId,
+          subjectId: row.subjectId,
+          bindingVersion: row.bindingVersion,
+          accessEpoch,
+        },
+        orderBy: { sequence: "desc" },
+        select: { revisionId: true, confirmed: true, allowInBook: true },
+      });
+      const latest = new Map<string, (typeof decisions)[number]>();
+      for (const decision of decisions)
+        if (!latest.has(decision.revisionId))
+          latest.set(decision.revisionId, decision);
+      const chapters = [
+        {
+          key: "life-stories",
+          title: "我的故事",
+          storyRefs: stories
+            .filter((story) => {
+              const decision =
+                story.currentRevisionId && latest.get(story.currentRevisionId);
+              return decision && decision.confirmed && decision.allowInBook;
+            })
+            .map((story) => story.id),
+        },
+      ];
+      currentDirectory = {
+        ...currentDirectory,
+        chapters,
+        contentHash: digest(chapters),
+      };
+    }
+    // entry locators are added only after the original input hash is computed.
+    // Immutable versions/counters still reveal real changes after payload erasure.
+    return digest({
+      cover: { ...snapshot.cover, version: cover?.version ?? 0 },
+      metadataVersion,
+      directory: currentDirectory,
+      chapters: snapshot.chapters.map((chapter) => ({
+        ...chapter,
+        stories: chapter.stories.map((story) => ({
+          ...story,
+          revisionId: revisions.get(story.id) ?? null,
+          entry: null,
+        })),
+      })),
+      specification: snapshot.specification,
+      provenance: snapshot.provenance,
+      configuration: this.configuration(),
+    });
+  }
+  private async readableInputIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    row: BookVersion | null,
+    accessExpiresAt: string | null,
+  ) {
+    const terms = await this.bookTerms(tx, projectId);
+    accessExpiresAt = this.expiry(
+      accessExpiresAt,
+      terms.retention!.bookPdf.expiresAt,
+    );
+    const draft = this.draftAccess(terms, accessExpiresAt).allowed
+      ? await this.inputIn(tx, projectId)
+      : null;
+    let inputHash = draft?.inputHash ?? null;
+    if (row && !draft) {
+      const subject = await tx.projectSubject.findUniqueOrThrow({
+          where: { projectId },
+        }),
+        project = await tx.project.findUniqueOrThrow({
+          where: { id: projectId },
+        });
+      if (
+        row.subjectId !== subject.id ||
+        row.bindingVersion !== subject.bindingVersion
+      )
+        throw new ForbiddenException();
+      await this.assertFrozenPrintPermissionIn(tx, {
+        projectId,
+        bookId: row.id,
+        subjectId: subject.id,
+        bindingVersion: subject.bindingVersion,
+        accessEpoch: project.accessEpoch,
+      });
+      inputHash = await this.retainedInputHashIn(
+        tx,
+        row,
+        project.metadataVersion,
+        project.accessEpoch,
+      );
+    }
+    return { terms, draft, accessExpiresAt, inputHash };
+  }
   async contextIn(
     tx: Prisma.TransactionClient,
     projectId: string,
     accessExpiresAt: string | null,
   ): Promise<BookContext> {
-    const draft = await this.inputIn(tx, projectId),
-      row = await tx.bookVersion.findFirst({
-        where: { projectId },
-        orderBy: { version: "desc" },
-      });
-    accessExpiresAt = this.expiry(accessExpiresAt, draft.retentionExpiresAt);
-    const draftAccess = this.draftAccess(draft.terms, accessExpiresAt),
+    const row = await tx.bookVersion.findFirst({
+      where: { projectId },
+      orderBy: { version: "desc" },
+    });
+    const readable = await this.readableInputIn(
+        tx,
+        projectId,
+        row,
+        accessExpiresAt,
+      ),
+      draft = readable.draft;
+    accessExpiresAt = readable.accessExpiresAt;
+    const draftAccess = this.draftAccess(readable.terms, accessExpiresAt),
       frozen = row?.snapshot as unknown as BookSnapshot | undefined;
     return {
       projectId,
-      inputHash: draftAccess.allowed ? draft.inputHash : null,
+      inputHash: draftAccess.allowed ? (draft?.inputHash ?? null) : null,
       draftAccess,
-      directory: draftAccess.allowed
-        ? draft.snapshot.directory
-        : (frozen?.directory ?? {
-            version: 1,
-            contentHash: digest([]),
-            chapters: [],
-          }),
-      cover: draftAccess.allowed
-        ? draft.cover
-        : {
-            version: frozen?.cover.version ?? 0,
-            salutation: frozen?.cover.salutation ?? "",
-            photoAssetId: frozen?.cover.photo?.assetId ?? null,
-          },
-      coverPhotoOptions: draftAccess.allowed ? draft.coverPhotoOptions : [],
-      eligibleStories: draftAccess.allowed
-        ? draft.eligible.map(
-            ({ id, revisionId, version, contentHash, title }) => ({
-              id,
-              revisionId,
-              version,
-              contentHash,
-              title,
+      directory:
+        draft && draftAccess.allowed
+          ? draft.snapshot.directory
+          : (frozen?.directory ?? {
+              version: 1,
+              contentHash: digest([]),
+              chapters: [],
             }),
-          )
-        : [],
+      cover:
+        draft && draftAccess.allowed
+          ? draft.cover
+          : {
+              version: frozen?.cover.version ?? 0,
+              salutation: frozen?.cover.salutation ?? "",
+              photoAssetId: frozen?.cover.photo?.assetId ?? null,
+            },
+      coverPhotoOptions:
+        draft && draftAccess.allowed ? draft.coverPhotoOptions : [],
+      eligibleStories:
+        draft && draftAccess.allowed
+          ? draft.eligible.map(
+              ({ id, revisionId, version, contentHash, title }) => ({
+                id,
+                revisionId,
+                version,
+                contentHash,
+                title,
+              }),
+            )
+          : [],
       current: row
-        ? await this.viewIn(tx, row, draft.inputHash, accessExpiresAt)
+        ? await this.viewIn(tx, row, readable.inputHash, accessExpiresAt)
         : null,
       accessExpiresAt,
     };
@@ -910,13 +1063,13 @@ export class Books implements OnModuleDestroy {
           where: { projectId, id },
         });
         if (!row) throw new NotFoundException();
-        const draft = await this.inputIn(tx, projectId);
-        return this.viewIn(
+        const { inputHash, accessExpiresAt } = await this.readableInputIn(
           tx,
+          projectId,
           row,
-          draft.inputHash,
-          this.expiry(actor.accessExpiresAt, draft.retentionExpiresAt),
+          actor.accessExpiresAt,
         );
+        return this.viewIn(tx, row, inputHash, accessExpiresAt);
       },
     );
   }
@@ -931,13 +1084,13 @@ export class Books implements OnModuleDestroy {
             where: { projectId, id },
           });
           if (!row) throw new NotFoundException();
-          const draft = await this.inputIn(tx, projectId),
-            view = await this.viewIn(
+          const { inputHash, accessExpiresAt } = await this.readableInputIn(
               tx,
+              projectId,
               row,
-              draft.inputHash,
               actor.accessExpiresAt,
             ),
+            view = await this.viewIn(tx, row, inputHash, accessExpiresAt),
             output = await tx.bookOutput.findUnique({ where: { bookId: id } });
           if (view.state !== "ready" || !output) throw new ConflictException();
           return output;
@@ -1395,7 +1548,11 @@ export class BooksController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
-    const fence = await this.streams.userFence(id, req.headers.authorization);
+    const fence = await this.streams.userFence(
+      id,
+      req.headers.authorization,
+      "bookPdf",
+    );
     const bytes = await this.books.download(
       id,
       versionId,
@@ -1418,6 +1575,8 @@ export class BooksController {
           () => this.books.read(id, versionId, req.headers.authorization),
           req.headers.authorization,
           fence.sequence,
+          undefined,
+          "bookPdf",
         ),
       );
   }

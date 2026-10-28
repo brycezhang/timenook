@@ -1,3 +1,7 @@
+import {
+  createPrivacyFixtureApplication,
+  closePrivacyFixtureApplication,
+} from "./privacy-fixture.mjs";
 import { test, expect } from "@playwright/test";
 test.use({ timezoneId: "Asia/Shanghai" });
 import { randomBytes, randomUUID } from "node:crypto";
@@ -135,7 +139,6 @@ test.beforeAll(async () => {
     { cwd: apiCwd, env, encoding: "utf8" },
   );
   expect(created.status).toBe(0);
-  const { createApplication } = apiRequire("./dist-test/src/application.js");
   const { readConfig } = apiRequire("./dist-test/src/config.js");
   const { paymentConfig, paymentFetch, paid } = apiRequire(
     "./dist-test/test/payment-fixture.js",
@@ -146,7 +149,7 @@ test.beforeAll(async () => {
     payments: paymentConfig,
     participation: { mode: "synthetic-d08" },
   };
-  api = await createApplication(config, {
+  api = await createPrivacyFixtureApplication(config, {
     paymentFetch,
     wechatFetch: async (input) =>
       new Response(
@@ -306,7 +309,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await stop(preview);
   await stop(vite);
-  await api?.close();
+  await closePrivacyFixtureApplication(api);
   if (databaseUrl) {
     const database = new PrismaClient({ datasourceUrl: databaseUrl });
     const redis = new Redis(process.env.REDIS_URL, {
@@ -567,7 +570,7 @@ test("mini-program invitation and separate choices feed the shared care form, wh
   expect(runtimeErrors).toEqual([]);
 });
 
-test("assisted subject choices and Care manual intake preserve real actors and pending rights fulfillment", async ({
+test("assisted subject choices and Care manual intake preserve real actors, withdrawal and permanent deletion", async ({
   page,
   browser,
 }) => {
@@ -729,24 +732,6 @@ test("assisted subject choices and Care manual intake preserve real actors and p
   await page.getByRole("button", { name: "客服工单", exact: true }).click();
   await expect(page.getByLabel("代录项目编号")).toBeVisible();
   await page.getByLabel("代录项目编号").fill(assistedProjectId);
-  await page.getByLabel("代录申请类型").selectOption("delete");
-  await page.getByRole("button", { name: "代录本人申请", exact: true }).click();
-  await expect(
-    page.getByText("代录申请已记录，等待独立核验。", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "本人删除申请", exact: true }),
-  ).toBeVisible();
-  await page
-    .getByLabel("D08 核验证据引用")
-    .fill("synthetic:browser无微信本人核验");
-  await page.getByRole("button", { name: "核验本人申请", exact: true }).click();
-  await expect(
-    page.getByText(
-      "本人申请已核验，导出交付、删除执行与后续联动仍待对应流程处理。",
-      { exact: true },
-    ),
-  ).toBeVisible();
   await page.getByLabel("代录申请类型").selectOption("withdraw");
   await page.getByRole("button", { name: "代录本人申请", exact: true }).click();
   await expect(
@@ -760,10 +745,9 @@ test("assisted subject choices and Care manual intake preserve real actors and p
     .fill("synthetic:browser独立撤回核验");
   await page.getByRole("button", { name: "核验本人申请", exact: true }).click();
   await expect(
-    page.getByText(
-      "本人申请已核验，导出交付、删除执行与后续联动仍待对应流程处理。",
-      { exact: true },
-    ),
+    page.getByText("本人申请已核验，导出交付与后续联动仍待对应流程处理。", {
+      exact: true,
+    }),
   ).toBeVisible();
   await buyer
     .getByRole("button", { name: "重新查询协助与工单状态", exact: true })
@@ -787,5 +771,30 @@ test("assisted subject choices and Care manual intake preserve real actors and p
       exact: true,
     }),
   ).toBeVisible();
+  // Permanent deletion is the final operation: its tombstone must not be
+  // treated as the old T12 pending placeholder or used to reauthorize a case.
+  await page.getByLabel("代录申请类型").selectOption("delete");
+  await page.getByRole("button", { name: "代录本人申请", exact: true }).click();
+  await expect(
+    page.getByText("代录申请已记录，等待独立核验。", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "本人删除申请", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("D08 核验证据引用")
+    .fill("synthetic:browser无微信本人核验");
+  await page.getByRole("button", { name: "核验本人申请", exact: true }).click();
+  await expect(
+    page.getByText(
+      "本人删除已核验，在线访问立即停止且项目删除不可逆；各层清理按下方独立证据处理。",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  const unavailable = await buyer.request.get(
+    `http://127.0.0.1:3418/v1/projects/${assistedProjectId}/plan`,
+    { headers: { authorization: `Bearer ${productSession.session.token}` } },
+  );
+  expect(unavailable.status()).toBe(403);
   expect(runtimeErrors).toEqual([]);
 });

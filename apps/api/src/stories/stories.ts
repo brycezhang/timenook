@@ -417,6 +417,12 @@ export class Stories {
     operator: { id: string; realm: "product" | "admin" },
     key: string,
   ) {
+    await this.participation.requireMaterialIn(tx, projectId, "activeData");
+    await this.participation.requireMaterialIn(
+      tx,
+      projectId,
+      "confirmedStories",
+    );
     const requestHash = hash(JSON.stringify(body));
     const prior = await tx.storyRevision.findFirst({
       where: {
@@ -508,6 +514,72 @@ export class Stories {
         });
         if (revision.contentHash !== body.contentHash)
           throw new ConflictException();
+        const requestHash = hash(JSON.stringify(body));
+        const prior = await tx.storyDecision.findFirst({
+          where: {
+            projectId,
+            storyId: id,
+            operatorUserId: actor.userId,
+            idempotencyKey: key,
+          },
+        });
+        if (prior) {
+          if (prior.requestHash !== requestHash) throw new ConflictException();
+          return this.view(tx, projectId, id);
+        }
+        if (!body.confirmed && body.allowInBook)
+          throw new BadRequestException();
+        const payloadExpired =
+          await this.participation.activeDataPayloadExpiredIn(tx, projectId);
+        if (payloadExpired) {
+          if (body.confirmed && body.allowInBook)
+            throw new ForbiddenException(
+              "Expired activity cannot acquire new authorization",
+            );
+          const basis = body.confirmed
+            ? await tx.storyDecision.findFirst({
+                where: {
+                  projectId,
+                  revisionId: revision.id,
+                  subjectId: actor.subjectId,
+                  bindingVersion: actor.bindingVersion,
+                  accessEpoch: actor.accessEpoch,
+                },
+                orderBy: { sequence: "desc" },
+              })
+            : null;
+          if (body.confirmed && !basis?.confirmed)
+            throw new ForbiddenException(
+              "A refusal cannot create confirmation",
+            );
+          if (actor.subjectDecision !== "self") {
+            if (!body.assistedSessionId) throw new ForbiddenException();
+            await this.participation.authorizeAssisted(tx, {
+              projectId,
+              sessionId: body.assistedSessionId,
+              operatorUserId: actor.userId,
+              purpose: "story_confirmation",
+            });
+          }
+          await this.participation.recordStoryDenialIn(tx, {
+            id: randomUUID(),
+            projectId,
+            storyId: id,
+            revisionId: revision.id,
+            contentHash: revision.contentHash,
+            subjectId: actor.subjectId,
+            operatorUserId: actor.userId,
+            bindingVersion: actor.bindingVersion,
+            accessEpoch: actor.accessEpoch,
+            method: "journal_denial",
+            noticeVersion: body.noticeVersion,
+            confirmed: body.confirmed,
+            allowInBook: body.allowInBook,
+            idempotencyKey: key,
+            requestHash,
+          });
+          return this.view(tx, projectId, id);
+        }
         if (
           body.confirmed &&
           (revision.reviewItems as string[]).some(
@@ -540,28 +612,13 @@ export class Stories {
             });
           assistedEvidenceId = evidence.id;
         }
-        if (!body.confirmed && body.allowInBook)
-          throw new BadRequestException();
-        const requestHash = hash(JSON.stringify(body));
-        const prior = await tx.storyDecision.findFirst({
-          where: {
-            projectId,
-            storyId: id,
-            operatorUserId: actor.userId,
-            idempotencyKey: key,
-          },
-        });
-        if (prior) {
-          if (prior.requestHash !== requestHash) throw new ConflictException();
-          return this.view(tx, projectId, id);
-        }
         if (
           await tx.storyDecision.findFirst({
             where: { projectId, evidenceRef: body.evidenceRef },
           })
         )
           throw new ConflictException("Fresh decision evidence required");
-        await tx.storyDecision.create({
+        const decision = await tx.storyDecision.create({
           data: {
             id: randomUUID(),
             projectId,
@@ -582,6 +639,10 @@ export class Stories {
             requestHash: hash(JSON.stringify(body)),
           },
         });
+        if (!decision.confirmed || !decision.allowInBook) {
+          const { sequence, createdAt, evidenceRef, ...minimal } = decision;
+          await this.participation.recordStoryDenialIn(tx, minimal);
+        }
         return this.view(tx, projectId, id);
       },
     );
@@ -694,7 +755,7 @@ export class Stories {
         });
       if (
         dependency.state !== "no_speech" &&
-        !(dependency.state === "succeeded" && transcript?.text.trim())
+        !(dependency.state === "succeeded" && transcript?.text?.trim())
       ) {
         waiting = true;
         failed ||= ["failed", "manual_review", "invalidated"].includes(
@@ -703,14 +764,15 @@ export class Stories {
       }
       manifest.push({
         ...source,
-        transcript: transcript
-          ? {
-              taskId: transcript.taskId,
-              text: transcript.text,
-              sha256: transcript.sha256,
-              inputHash: transcript.inputHash,
-            }
-          : null,
+        transcript:
+          transcript && transcript.text !== null
+            ? {
+                taskId: transcript.taskId,
+                text: transcript.text,
+                sha256: transcript.sha256,
+                inputHash: transcript.inputHash,
+              }
+            : null,
         state: dependency.state,
         completedAt: dependency.completedAt?.toISOString() ?? null,
       });
@@ -1014,6 +1076,26 @@ export class Stories {
     taskId?: string,
     privateContent = true,
   ) {
+    if (privateContent)
+      await this.participation.requireMaterialIn(
+        tx,
+        projectId,
+        "confirmedStories",
+      );
+    const canReadQuestions =
+        privateContent &&
+        (await this.participation.materialAvailableIn(
+          tx,
+          projectId,
+          "activeData",
+        )),
+      canReadTranscripts =
+        privateContent &&
+        (await this.participation.materialAvailableIn(
+          tx,
+          projectId,
+          "transcripts",
+        ));
     const story = await tx.story.findFirst({ where: { id, projectId } });
     if (!story) throw new NotFoundException();
     const project = await tx.project.findUniqueOrThrow({
@@ -1041,16 +1123,27 @@ export class Stories {
       ...story,
       decision:
         privateContent && story.currentRevisionId
-          ? await tx.storyDecision.findFirst({
-              where: {
-                projectId,
-                storyId: id,
-                revisionId: story.currentRevisionId,
-                bindingVersion: subject.bindingVersion,
-                accessEpoch: project.accessEpoch,
-              },
-              orderBy: { sequence: "desc" },
-            })
+          ? await tx.storyDecision
+              .findFirst({
+                where: {
+                  projectId,
+                  storyId: id,
+                  revisionId: story.currentRevisionId,
+                  bindingVersion: subject.bindingVersion,
+                  accessEpoch: project.accessEpoch,
+                },
+                orderBy: { sequence: "desc" },
+              })
+              .then((decision) =>
+                decision
+                  ? {
+                      ...decision,
+                      evidenceRef: canReadQuestions
+                        ? decision.evidenceRef
+                        : null,
+                    }
+                  : null,
+              )
           : null,
       usage: {
         organizations: await tx.storyGeneration.count({
@@ -1062,9 +1155,15 @@ export class Stories {
       },
       revision:
         privateContent && story.currentRevisionId
-          ? await tx.storyRevision.findUniqueOrThrow({
-              where: { id: story.currentRevisionId },
-            })
+          ? await tx.storyRevision
+              .findUniqueOrThrow({ where: { id: story.currentRevisionId } })
+              .then((revision) => ({
+                ...revision,
+                sourceManifest:
+                  canReadQuestions && canReadTranscripts
+                    ? revision.sourceManifest
+                    : [],
+              }))
           : null,
       task: task
         ? {
@@ -1113,14 +1212,14 @@ export class Stories {
             sources: await Promise.all(
               sources.map(async (source) => ({
                 ...source,
-                question: privateContent ? source.question : undefined,
+                question: canReadQuestions ? source.question : undefined,
                 state: (
                   await tx.productionTask.findUniqueOrThrow({
                     where: { id: source.transcriptionTaskId },
                     select: { state: true },
                   })
                 ).state,
-                transcript: privateContent
+                transcript: canReadTranscripts
                   ? await tx.formalTranscript.findUnique({
                       where: { taskId: source.transcriptionTaskId },
                       select: {

@@ -1,3 +1,7 @@
+import {
+  createPrivacyFixtureApplication,
+  closePrivacyFixtureApplication,
+} from "./privacy-fixture.mjs";
 import { test, expect } from "@playwright/test";
 test.use({ timezoneId: "Asia/Shanghai" });
 import { randomBytes, randomUUID } from "node:crypto";
@@ -124,7 +128,6 @@ test.beforeAll(async () => {
     { cwd: apiCwd, env, encoding: "utf8" },
   );
   expect(created.status).toBe(0);
-  const { createApplication } = apiRequire("./dist-test/src/application.js");
   const { readConfig } = apiRequire("./dist-test/src/config.js");
   const { paymentConfig, paymentFetch, paid } = apiRequire(
     "./dist-test/test/payment-fixture.js",
@@ -134,7 +137,7 @@ test.beforeAll(async () => {
     wechat: { appId: paymentConfig.appId, secret: "synthetic" },
     payments: paymentConfig,
   };
-  api = await createApplication(config, {
+  api = await createPrivacyFixtureApplication(config, {
     paymentFetch,
     wechatFetch: async () =>
       new Response(
@@ -262,7 +265,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await stop(preview);
   await stop(vite);
-  await api?.close();
+  await closePrivacyFixtureApplication(api);
   if (databaseUrl) {
     const database = new PrismaClient({ datasourceUrl: databaseUrl });
     const redis = new Redis(process.env.REDIS_URL);

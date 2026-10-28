@@ -1,3 +1,7 @@
+import {
+  createPrivacyFixtureApplication,
+  closePrivacyFixtureApplication,
+} from "./privacy-fixture.mjs";
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
@@ -52,11 +56,10 @@ test.beforeAll(async () => {
     },
   );
   expect(migrated.status, "isolated migrations").toBe(0);
-  const { createApplication } = apiRequire("./dist-test/src/application.js");
   const { paymentConfig, paymentFetch, paid } = apiRequire(
     "./dist-test/test/payment-fixture.js",
   );
-  api = await createApplication(
+  api = await createPrivacyFixtureApplication(
     {
       environment: "test",
       host: "127.0.0.1",
@@ -194,7 +197,7 @@ test.afterAll(async () => {
       preview.once("exit", r);
       preview.kill("SIGTERM");
     });
-  await api?.close();
+  await closePrivacyFixtureApplication(api);
   if (databaseUrl) {
     const db = new PrismaClient({ datasourceUrl: databaseUrl });
     const redis = new Redis(process.env.REDIS_URL, {

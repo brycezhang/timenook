@@ -16,6 +16,7 @@ const inFlight = new WeakMap<
 export function sealPhoto(
   objects: ProbeObjects,
   input: {
+    owned?: { root: string; snapshots: Record<string, string> };
     id: string;
     bytes: number;
     sha256: string;
@@ -41,6 +42,7 @@ export function sealPhoto(
 async function verifyPhoto(
   objects: ProbeObjects,
   input: {
+    owned?: { root: string; snapshots: Record<string, string> };
     id: string;
     bytes: number;
     sha256: string;
@@ -54,7 +56,9 @@ async function verifyPhoto(
   );
   if (bytes.length !== input.bytes || photoDigest(bytes) !== input.sha256)
     throw new Error("PHOTO_SOURCE_MISMATCH");
-  const root = await mkdtemp(join(tmpdir(), "timenook-photo-"));
+  const root =
+    input.owned?.root ?? (await mkdtemp(join(tmpdir(), "timenook-photo-")));
+  if (input.owned) await mkdir(root, { recursive: true, mode: 0o700 });
   const snapshots: string[] = [];
   try {
     await writeFile(join(root, "input"), bytes, { mode: 0o600, flag: "wx" });
@@ -92,7 +96,9 @@ async function verifyPhoto(
     ]) {
       if (input.crop && kind === "original") continue;
       const content = await readFile(join(root, "output", file));
-      const snapshot = `photos/staging/${randomUUID()}.${extension}`;
+      const snapshot =
+        input.owned?.snapshots[kind!] ??
+        `photos/staging/${randomUUID()}.${extension}`;
       const objectKey = `photos/sealed/${input.id}/${file}`;
       snapshots.push(snapshot);
       await objects.putSnapshot(snapshot, content);

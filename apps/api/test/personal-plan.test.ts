@@ -1,3 +1,4 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -88,6 +89,7 @@ before(async () => {
       active: true,
     },
   });
+  await bootPrivacyFixture(config);
   app = await createApplication(config, { wechatFetch, paymentFetch });
 });
 after(async () => {
@@ -886,4 +888,8 @@ test("authorized plan edits and subject decisions roll back with their actual ca
   } finally {
     await plans.close();
   }
+});
+
+after(async () => {
+  await closePrivacyFixture(config);
 });

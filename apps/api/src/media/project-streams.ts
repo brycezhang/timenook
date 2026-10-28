@@ -1,3 +1,4 @@
+import { PrivacyRights } from "../care/privacy-rights";
 import {
   Injectable,
   Inject,
@@ -40,6 +41,7 @@ export class ProjectStreams implements OnModuleDestroy {
   constructor(
     @Inject(API_CONFIG) config: ApiConfig,
     private readonly identity: IdentityAccess,
+    private readonly rights: PrivacyRights,
   ) {
     this.db = new PrismaClient({ datasourceUrl: config.databaseUrl });
   }
@@ -49,14 +51,26 @@ export class ProjectStreams implements OnModuleDestroy {
   async epoch(projectId: string) {
     return (await this.fence(projectId)).epoch;
   }
-  async userFence(projectId: string, authorization: string | undefined) {
+  async userFence(
+    projectId: string,
+    authorization: string | undefined,
+    scope?: "bookPdf",
+  ) {
     const user = await this.identity.current(authorization);
-    return this.fence(projectId, await this.usesSharing(projectId, user.id));
+    return this.fence(
+      projectId,
+      await this.usesSharing(projectId, user.id),
+      scope,
+    );
   }
   async fence(
     projectId: string,
     usesSharing = true,
+    scope?: "bookPdf",
   ): Promise<ProjectStreamFence> {
+    await this.rights.assertReplayed(projectId, scope);
+    if (await this.rights.deletedIn(this.db as never, projectId))
+      throw new ForbiddenException();
     const project = await this.db.project.findUnique({
       where: { id: projectId },
       select: { accessEpoch: true },
@@ -105,6 +119,7 @@ export class ProjectStreams implements OnModuleDestroy {
     // Only a content owner with its own current operational grant uses this.
     // Product Authorization always derives purpose from the real user instead.
     usesSharingOverride?: boolean,
+    scope?: "bookPdf",
   ): Promise<Readable> {
     const user = authorization
       ? await this.identity.current(authorization)
@@ -114,12 +129,18 @@ export class ProjectStreams implements OnModuleDestroy {
       : (usesSharingOverride ?? true);
     const sequence =
       capturedSequence ?? (await this.sequence(projectId, usesSharing));
-    const verify = async () => {
-      if (authorization) await this.identity.current(authorization);
-      const fence = await this.fence(projectId, usesSharing);
+    const currentFence = async () => {
+      const fence = await this.fence(projectId, usesSharing, scope);
       if (fence.epoch !== epoch || fence.sequence !== sequence)
         throw new ForbiddenException();
+    };
+    const verify = async () => {
+      if (authorization) await this.identity.current(authorization);
+      await currentFence();
       await check();
+      // A scope read can wait behind a transaction that publishes a denial
+      // and then rolls back. Its old PG grant cannot authorize the next chunk.
+      await currentFence();
     };
     await verify();
     let stream!: Readable;

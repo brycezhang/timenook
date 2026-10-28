@@ -25,7 +25,7 @@ model CareExport {
  recipient String
  recipientUserId String? @map("recipient_user_id") @db.Uuid
  recipientRef String? @map("recipient_ref")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  state String @default("requested")
  ownerId String? @map("owner_id") @db.Uuid
  requestedAt DateTime @default(now()) @map("requested_at") @db.Timestamptz(3)
@@ -85,7 +85,7 @@ model Project {
 model PlanRevision {
   projectId   String    @map("project_id") @db.Uuid
   revision    Int
-  content     Json
+  content     Json?
   contentHash String    @map("content_hash") @db.Char(64)
   createdBy   String    @map("created_by")
   project     Project   @relation("ProjectRevisions", fields: [projectId], references: [id])
@@ -101,7 +101,7 @@ model InterviewPreferences {
   version       Int      @default(1)
   blockedTopics String[] @default([]) @map("blocked_topics")
   updatedBy     String?  @map("updated_by")
-  questionStates Json @default("[]") @map("question_states")
+  questionStates Json? @default("[]") @map("question_states")
   project       Project  @relation(fields: [projectId], references: [id])
 
   @@map("interview_preferences")
@@ -315,11 +315,11 @@ model PaymentOrder {
   mode String
   packageVersionId String @map("package_version_id") @db.Uuid
   packageSnapshot Json @map("package_snapshot")
-  recipient Json
+  recipient Json?
   template Json
   shippingRegionCode String @map("shipping_region_code")
   subjectName String? @map("subject_name")
-  bookTitle String @map("book_title")
+  bookTitle String? @map("book_title")
   state String @default("pending")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   @@unique([buyerId,idempotencyKey])
@@ -343,13 +343,14 @@ model Refund {
  outRefundNo String @unique @map("out_refund_no")
  providerRefundId String? @unique @map("provider_refund_id")
  rule Json?
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  approvedBy String? @map("approved_by") @db.Uuid
  approvedAt DateTime? @map("approved_at") @db.Timestamptz(3)
  dueAt DateTime? @map("due_at") @db.Timestamptz(3)
  submittedAt DateTime? @map("submitted_at") @db.Timestamptz(3)
  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
  productionEvidence String? @map("production_evidence")
+ productionEvidenceHash String? @map("production_evidence_hash") @db.Char(64)
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@unique([orderId,requesterId,requestKey])
  @@unique([orderId,id])
@@ -362,7 +363,7 @@ model RefundCommand {
  action String
  key String
  requestHash String @map("request_hash") @db.Char(64)
- payload Json
+ payload Json?
  @@id([refundId,actorId,action,key])
  @@map("refund_commands")
 }
@@ -499,7 +500,7 @@ model ConsentRecord {
   granted        Boolean
   noticeVersion  String   @map("notice_version")
   method         String
-  evidenceRef    String   @map("evidence_ref")
+  evidenceRef    String?   @map("evidence_ref")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@index([projectId, bindingVersion])
@@ -551,7 +552,7 @@ model BindingChange {
   supportCaseId        String?  @map("support_case_id") @db.Uuid
   noticeVersion        String   @map("notice_version")
   method               String
-  evidenceRef          String   @map("evidence_ref")
+  evidenceRef          String?   @map("evidence_ref")
   requestId            String   @map("request_id")
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
@@ -568,7 +569,7 @@ model AssistedSession {
  purpose String
  granted Boolean
  noticeVersion String @map("notice_version")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  bindingVersion Int @map("binding_version")
  accessEpoch Int @map("access_epoch")
  idempotencyKey String @map("idempotency_key")
@@ -591,7 +592,7 @@ model AssistedVersionEvidence {
  versionId String @map("version_id") @db.Uuid
  contentHash String @map("content_hash") @db.Char(64)
  noticeVersion String @map("notice_version")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  bindingVersion Int @map("binding_version")
  accessEpoch Int @map("access_epoch")
  idempotencyKey String @map("idempotency_key")
@@ -611,7 +612,7 @@ model PlanPreferenceDecision {
   method String
   assistedSessionId String? @map("assisted_session_id") @db.Uuid
   blockedTopics String[] @map("blocked_topics")
-  questionStates Json @map("question_states")
+  questionStates Json? @map("question_states")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   project Project @relation(fields: [projectId], references: [id])
   @@id([projectId, version])
@@ -626,7 +627,7 @@ model ActualPlanQuestion {
   questionKey String? @map("question_key")
   starterKind String? @map("starter_kind")
   source Json?
-  snapshot Json
+  snapshot Json?
   answerRef String? @map("answer_ref")
   revision PlanRevision @relation(fields: [projectId, planRevision], references: [projectId, revision])
   @@index([projectId])
@@ -637,7 +638,7 @@ model ActualPlanQuestion {
 model PlanDirectoryVersion {
   projectId String @map("project_id") @db.Uuid
   version Int
-  chapters Json
+  chapters Json?
   contentHash String @map("content_hash") @db.Char(64)
   createdBy String @map("created_by")
   project Project @relation(fields: [projectId], references: [id])
@@ -794,7 +795,7 @@ model PhotoAsset {
  mime String
  width Int
  height Int
- metadata Json
+ metadata Json?
  @@unique([projectId,id])
  @@unique([projectId,intentId,id])
  @@unique([intentId,kind,processingVersion])
@@ -822,7 +823,7 @@ model PhotoReference {
  interviewId String @map("interview_id") @db.Uuid
  photoId String @map("photo_id") @db.Uuid
  position Int
- caption String
+ caption String?
  originalId String @map("original_id") @db.Uuid
  previewId String @map("preview_id") @db.Uuid
  printId String @map("print_id") @db.Uuid
@@ -843,7 +844,7 @@ model ProductionTask {
  inputHash String @map("input_hash") @db.Char(64)
  kind String @default("transcribe_audio")
  processingGrant Json? @map("processing_grant")
- configuration Json
+ configuration Json?
  configurationHash String @map("configuration_hash") @db.Char(64)
  providerRequestId String @unique @map("provider_request_id") @db.Uuid
  deadline DateTime? @db.Timestamptz(3)
@@ -882,7 +883,7 @@ model FormalTranscript {
  projectId String @map("project_id") @db.Uuid
  clipId String @unique @map("clip_id") @db.Uuid
  inputHash String @map("input_hash") @db.Char(64)
- text String
+ text String?
  sha256 String @db.Char(64)
  providerRequestId String @map("provider_request_id") @db.Uuid
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -897,7 +898,7 @@ model TaskAttempt {
  taskId String @map("task_id") @db.Uuid
  projectId String @map("project_id") @db.Uuid
  number Int
- configuration Json
+ configuration Json?
  configurationHash String @map("configuration_hash") @db.Char(64)
  state String
  submittedAt DateTime @map("submitted_at") @db.Timestamptz(3)
@@ -948,7 +949,7 @@ model StoryGeneration {
  projectId String @map("project_id") @db.Uuid
  storyId String @map("story_id") @db.Uuid
  baseVersion Int @map("base_version")
- preferences Json
+ preferences Json?
  quotaKind String @map("quota_kind")
  userSubmittedAt DateTime @map("user_submitted_at") @db.Timestamptz(3)
  allSavedAt DateTime @map("all_saved_at") @db.Timestamptz(3)
@@ -966,7 +967,7 @@ model StorySource {
  inputHash String @map("input_hash") @db.Char(64)
  transcriptionTaskId String @map("transcription_task_id") @db.Uuid
  actualQuestionId String @map("actual_question_id") @db.Uuid
- question Json
+ question Json?
  sequence Int
  @@id([taskId,clipId])
  @@unique([taskId,sequence])
@@ -987,7 +988,7 @@ model StoryRevision {
  photoInterviewId String? @map("photo_interview_id") @db.Uuid
  photoSnapshot Json? @map("photo_snapshot")
 
- notes Json @default("[]")
+ notes Json? @default("[]")
  audioManifest Json? @map("audio_manifest")
 
  operatorId String? @map("operator_id")
@@ -995,7 +996,7 @@ model StoryRevision {
  commandKey String? @map("command_key")
  requestHash String? @map("request_hash") @db.Char(64)
 
- reviewResolutions Json @default("[]") @map("review_resolutions")
+ reviewResolutions Json? @default("[]") @map("review_resolutions")
 
  id String @id @db.Uuid
  projectId String @map("project_id") @db.Uuid
@@ -1003,11 +1004,11 @@ model StoryRevision {
  version Int
  generationTaskId String @map("generation_task_id") @db.Uuid
  baseRevisionId String? @map("base_revision_id") @db.Uuid
- title String
- theme String
- paragraphs Json
- reviewItems Json @map("review_items")
- sourceManifest Json @map("source_manifest")
+ title String?
+ theme String?
+ paragraphs Json?
+ reviewItems Json? @map("review_items")
+ sourceManifest Json? @map("source_manifest")
  contentHash String @map("content_hash") @db.Char(64)
  origin String
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1027,7 +1028,7 @@ model FollowupGeneration {
  questionVersion Int @map("question_version")
  planRevision Int @map("plan_revision")
  preferenceVersion Int @map("preference_version")
- input Json
+ input Json?
  result Json?
  finishReason String? @map("finish_reason")
  charged Boolean @default(true)
@@ -1076,7 +1077,7 @@ model StoryDecision {
  accessEpoch Int @map("access_epoch")
  method String
  noticeVersion String @map("notice_version")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  confirmed Boolean
  allowInBook Boolean @map("allow_in_book")
  idempotencyKey String @map("idempotency_key")
@@ -1122,7 +1123,7 @@ model StoryCareGrant {
  accessEpoch Int @map("access_epoch")
  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
  noticeVersion String @map("notice_version")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  requestHash String @map("request_hash") @db.Char(64)
  @@unique([projectId,evidenceRef])
  @@map("story_care_grants")
@@ -1138,7 +1139,7 @@ model BookVersion {
  accessEpoch Int @map("access_epoch")
  inputHash String @map("input_hash") @db.Char(64)
  snapshotHash String @map("snapshot_hash") @db.Char(64)
- snapshot Json
+ snapshot Json?
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@unique([projectId,version])
  @@unique([projectId,id])
@@ -1150,8 +1151,8 @@ model BookOutput {
  sha256 String @db.Char(64)
  bytes Int
  pageCount Int @map("page_count")
- manifest Json
- inspection Json
+ manifest Json?
+ inspection Json?
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@map("book_outputs")
 }
@@ -1161,7 +1162,7 @@ model BookAudioEntry {
  storyId String @map("story_id") @db.Uuid
  revisionId String @map("revision_id") @db.Uuid
  contentHash String @map("content_hash") @db.Char(64)
- audio Json
+ audio Json?
  @@unique([projectId,storyId,revisionId])
  @@map("book_audio_entries")
 }
@@ -1188,7 +1189,7 @@ model BookCommand {
 model BookCoverVersion {
  projectId String @map("project_id") @db.Uuid
  version Int
- salutation String
+ salutation String?
  photoAssetId String? @map("photo_asset_id") @db.Uuid
  createdBy String @map("created_by") @db.Uuid
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1200,7 +1201,7 @@ model FirstCopyAddress {
  projectId String @id @map("project_id") @db.Uuid
  version Int
  hash String @db.Char(64)
- value Json
+ value Json?
  @@map("first_copy_addresses")
 }
 model BookConfirmation {
@@ -1220,7 +1221,7 @@ model BookConfirmation {
  method String
  assistedEvidenceId String? @map("assisted_evidence_id") @db.Uuid
  noticeVersion String @map("notice_version")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@unique([projectId,evidenceRef])
  @@index([projectId,role,sequence])
@@ -1236,7 +1237,7 @@ model FirstCopyOrder {
  snapshotHash String @map("snapshot_hash") @db.Char(64)
  pdfHash String @map("pdf_hash") @db.Char(64)
  addressHash String @map("address_hash") @db.Char(64)
- address Json
+ address Json?
  narratorConfirmationId String @map("narrator_confirmation_id") @db.Uuid
  initiatorConfirmationId String @map("initiator_confirmation_id") @db.Uuid
  state String @default("reserved")
@@ -1278,7 +1279,7 @@ model FulfillmentAttempt {
  snapshotHash String @map("snapshot_hash") @db.Char(64)
  pdfHash String @map("pdf_hash") @db.Char(64)
  addressHash String @map("address_hash") @db.Char(64)
- address Json
+ address Json?
  narratorConfirmationId String @map("narrator_confirmation_id") @db.Uuid
  initiatorConfirmationId String @map("initiator_confirmation_id") @db.Uuid
  orderId String @map("order_id") @db.Uuid
@@ -1288,11 +1289,12 @@ model FulfillmentAttempt {
  caseId String @unique @map("case_id") @db.Uuid
  ownerAdminId String @map("owner_admin_id") @db.Uuid
  dueAt DateTime @map("due_at") @db.Timestamptz(3)
- supplierRef String @map("supplier_ref")
+ supplierRef String? @map("supplier_ref")
  state String @default("approved")
  receiptRef String? @map("receipt_ref")
  tracking Json?
  wechat Json?
+ shippedAt DateTime? @map("shipped_at") @db.Timestamptz(3)
  deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(3)
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@unique([orderId,sequence])
@@ -1311,7 +1313,7 @@ model FulfillmentGrant {
  bindingVersion Int @map("binding_version")
  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
  noticeVersion String @map("notice_version")
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@index([attemptId,createdAt])
  @@map("fulfillment_grants")
@@ -1330,7 +1332,7 @@ model FulfillmentDelivery {
  orderId String @id @map("order_id") @db.Uuid
  attemptId String @unique @map("attempt_id") @db.Uuid
  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
- evidenceRef String @map("evidence_ref")
+ evidenceRef String? @map("evidence_ref")
  operatorAdminId String @map("operator_admin_id") @db.Uuid
  @@map("fulfillment_deliveries")
 }
@@ -1338,7 +1340,7 @@ model FulfillmentRecord {
  id String @id @db.Uuid
  attemptId String @map("attempt_id") @db.Uuid
  kind String
- evidence Json
+ evidence Json?
  operatorAdminId String @map("operator_admin_id") @db.Uuid
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@map("fulfillment_records")

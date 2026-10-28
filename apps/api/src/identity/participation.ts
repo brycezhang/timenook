@@ -1,3 +1,4 @@
+import { PrivacyRights } from "../care/privacy-rights";
 import { isDeepStrictEqual } from "node:util";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
@@ -12,6 +13,7 @@ import {
   Inject,
   Injectable,
   OnModuleDestroy,
+  OnApplicationShutdown,
   OnModuleInit,
   ForbiddenException,
   BadRequestException,
@@ -171,14 +173,17 @@ export class RebindDto extends ParticipationNoticeDto {
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
 }
 @Injectable()
-export class Participation implements OnModuleDestroy, OnModuleInit {
+export class Participation
+  implements OnModuleDestroy, OnModuleInit, OnApplicationShutdown
+{
   private revocationSweep: ReturnType<typeof setInterval> | undefined;
-  private sweeping = false;
+  private sweeping?: Promise<void>;
   private readonly db: PrismaClient;
   private readonly terms: ProjectServiceTerms;
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     private readonly identity: IdentityAccess,
+    private readonly rights: PrivacyRights,
   ) {
     this.db = new PrismaClient({ datasourceUrl: config.databaseUrl });
     this.terms = new ProjectServiceTerms(config.databaseUrl);
@@ -187,11 +192,10 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     if (this.config.participation?.mode !== "synthetic-d08") return;
     this.revocationSweep = setInterval(() => {
       if (this.sweeping) return;
-      this.sweeping = true;
-      void this.reconcileRevocations()
+      this.sweeping = this.reconcileRevocations()
         .catch(() => {})
         .finally(() => {
-          this.sweeping = false;
+          this.sweeping = undefined;
         });
     }, 1000);
     this.revocationSweep.unref();
@@ -211,6 +215,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     if (lock)
       await tx.$queryRaw`SELECT id FROM projects WHERE id=${id}::uuid FOR UPDATE`;
     const p = await tx.project.findUnique({ where: { id } });
+    await this.rights.requireAvailableIn(tx, id);
     const order = p?.orderId
       ? await tx.paymentOrder.findUnique({ where: { id: p.orderId } })
       : null;
@@ -451,7 +456,9 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
           operatorRealm: "product",
           noticeVersion: application.noticeVersion,
           method: "initiator_review",
-          evidenceRef: body.evidenceRef,
+          evidenceRef: (await this.activeDataPayloadExpiredIn(tx, p.id))
+            ? null
+            : body.evidenceRef,
           requestId,
         },
       });
@@ -478,15 +485,30 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     subject: Awaited<ReturnType<Participation["subject"]>>,
     record: Pick<
       ConsentRecord,
-      "purpose" | "granted" | "method" | "evidenceRef" | "operatorUserId"
+      | "purpose"
+      | "granted"
+      | "method"
+      | "evidenceRef"
+      | "operatorUserId"
+      | "accessEpoch"
     >,
   ) {
+    const denied = await tx.$queryRaw<
+      { denied: boolean }[]
+    >`SELECT EXISTS(SELECT 1 FROM privacy_events WHERE project_id=${p.id}::uuid AND kind='revocation' AND payload->>'operation'='revoke' AND payload->>'purpose' IN (${record.purpose},'all','binding') AND (payload->>'accessEpoch')::integer>${record.accessEpoch}) AS denied`;
+    if (denied[0].denied) return false;
     if (record.method === "assisted") {
       const session = await this.latestAssisted(
         tx,
         p.id,
         record.purpose as ConsentPurpose,
       );
+      if (session) {
+        const denied = await tx.$queryRaw<
+          { denied: boolean }[]
+        >`SELECT EXISTS(SELECT 1 FROM privacy_events WHERE project_id=${p.id}::uuid AND payload->>'sourceSessionId'=${session.id}) AS denied`;
+        if (denied[0].denied) return false;
+      }
       return (
         record.granted &&
         this.activeAssisted(session, p, subject) &&
@@ -599,7 +621,8 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     const narrator = subject.boundUserId === userId;
     const { records, granted, enabled, effective } =
       await this.currentPurposesIn(tx, p, subject);
-    const collection = enabled && effective.collection === true;
+    const deleted = await this.rights.deletedIn(tx, p.id);
+    const collection = !deleted && enabled && effective.collection === true;
     const terms = await this.terms.read(p.id, undefined, tx);
     return {
       projectId: p.id,
@@ -611,18 +634,27 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       policyStatus: enabled ? "synthetic-only" : "pending",
       choices: CONSENT_PURPOSES.map((purpose) => ({
         purpose,
-        granted: granted[purpose] ?? null,
+        granted:
+          effective[purpose] === false ? false : (granted[purpose] ?? null),
       })),
       consent: narrator
         ? records.map(({ operatorAdminId, ...record }) => ({
             ...record,
             ...(operatorAdminId ? { operatorAdminId } : {}),
+            evidenceRef:
+              terms.retention?.activeData?.state === "expired"
+                ? null
+                : record.evidenceRef,
             purpose: record.purpose as ConsentPurpose,
             createdAt: record.createdAt.toISOString(),
           }))
         : [],
       careAvailable: true,
-      canCollect: narrator && collection && terms.canRecord,
+      canCollect:
+        narrator &&
+        collection &&
+        terms.canRecord &&
+        terms.retention?.activeData?.state !== "expired",
       canProcessAi: narrator && collection && effective.ai === true,
       canRead:
         collection &&
@@ -641,6 +673,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     this.policy();
     const result = await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
+      await this.rights.requireAvailableIn(tx, id);
       const subject = await this.subject(tx, id);
       if (
         subject.boundUserId !== user.id ||
@@ -663,6 +696,11 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       }
       if (p.accessEpoch !== body.expectedAccessEpoch)
         throw new ConflictException();
+      const payloadExpired = await this.activeDataPayloadExpiredIn(tx, id);
+      if (payloadExpired && body.granted)
+        throw new ForbiddenException(
+          "Expired activity cannot acquire new authorization payload",
+        );
       const updated = await tx.project.update({
         where: { id },
         // New positive purpose choices do not revoke existing capabilities.
@@ -681,7 +719,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
           purpose: body.purpose,
           granted: body.granted,
           noticeVersion: body.noticeVersion,
-          evidenceRef: body.evidenceRef,
+          evidenceRef: payloadExpired ? null : body.evidenceRef,
           method: "self_wechat",
         },
       });
@@ -927,6 +965,24 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     this.policy();
     const found = await tx.careRequest.findUnique({ where: { id } });
     if (!found) throw new NotFoundException();
+    if (
+      found.kind === "delete" &&
+      (await this.rights.deletedIn(tx, found.projectId))
+    ) {
+      if (
+        found.state !== "verified" ||
+        found.verificationKey !== key ||
+        found.verificationHash !== digest(JSON.stringify(body)) ||
+        found.verifiedBy !== operatorId
+      )
+        throw new ConflictException();
+      return {
+        id,
+        state: "verified",
+        currentAccessRevoked: true,
+        fulfillment: "deletion-ledger",
+      };
+    }
     const p = await this.project(tx, found.projectId, true);
     const subject = await this.subject(tx, p.id);
     await tx.$queryRaw`SELECT id FROM care_requests WHERE id=${id}::uuid FOR UPDATE`;
@@ -940,8 +996,9 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     const result = () => ({
       id,
       state: "verified",
-      currentAccessRevoked: care.kind === "withdraw",
-      fulfillment: "pending-consumer",
+      currentAccessRevoked: ["withdraw", "delete"].includes(care.kind),
+      fulfillment:
+        care.kind === "delete" ? "deletion-ledger" : "pending-consumer",
     });
     if (care.state === "verified") {
       if (
@@ -962,7 +1019,8 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     )
       throw new ConflictException();
     let epoch: number | null = null;
-    if (care.kind === "withdraw") {
+    const payloadExpired = await this.activeDataPayloadExpiredIn(tx, p.id);
+    if (["withdraw", "delete"].includes(care.kind)) {
       epoch = (
         await tx.project.update({
           where: { id: p.id },
@@ -983,19 +1041,11 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
             purpose,
             granted: false,
             noticeVersion: body.noticeVersion,
-            evidenceRef: body.evidenceRef,
+            evidenceRef: payloadExpired ? null : body.evidenceRef,
             method: "care_verified",
           },
         });
     }
-    if (epoch !== null)
-      await this.recordRevocationIn(
-        tx,
-        p.id,
-        epoch,
-        care.withdrawalPurpose ?? "all",
-        "care_verified",
-      );
     await tx.careRequest.update({
       where: { id },
       data: {
@@ -1004,11 +1054,26 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         verifiedAt: new Date(),
         verificationKey: key,
         verificationHash: hash,
-        verificationEvidence: body.evidenceRef,
-        verificationNotice: body.noticeVersion,
+        verificationEvidence: payloadExpired ? null : body.evidenceRef,
+        verificationNotice: payloadExpired ? null : body.noticeVersion,
         revokedAccessEpoch: epoch,
       },
     });
+    if (epoch !== null && care.kind !== "delete")
+      await this.recordRevocationIn(
+        tx,
+        p.id,
+        epoch,
+        care.withdrawalPurpose ?? "all",
+        "care_verified",
+      );
+    if (care.kind === "delete")
+      await this.rights.deleteVerifiedIn(tx, {
+        projectId: p.id,
+        requestId: id,
+        accessEpoch: epoch!,
+        verification: { key, hash, adminId: operatorId },
+      });
     return result();
   }
   async careCases(id?: string) {
@@ -1022,61 +1087,66 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
           })
         ).map(careView),
       };
-    const row = await this.db.careRequest.findUnique({
-      where: { id },
-      select: {
-        ...CARE_SELECT,
-        verifiedBy: true,
-        verifiedAt: true,
-        verificationEvidence: true,
-        verificationNotice: true,
-        revokedAccessEpoch: true,
-      },
-    });
-    if (!row) throw new NotFoundException();
-    const changes: CareBindingChangeView[] = (
-      await this.db.bindingChange.findMany({
-        where: { supportCaseId: id },
+    return this.db.$transaction(async (tx) => {
+      const row = await tx.careRequest.findUnique({
+        where: { id },
         select: {
-          subjectId: true,
-          sourceBindingVersion: true,
-          bindingVersion: true,
-          accessEpoch: true,
-          operatorId: true,
-          supportCaseId: true,
-          noticeVersion: true,
-          method: true,
-          evidenceRef: true,
-          requestId: true,
-          createdAt: true,
+          ...CARE_SELECT,
+          verifiedBy: true,
+          verifiedAt: true,
+          verificationEvidence: true,
+          verificationNotice: true,
+          revokedAccessEpoch: true,
         },
-      })
-    ).map((change) => ({
-      ...change,
-      createdAt: change.createdAt.toISOString(),
-    }));
-    return {
-      ...careView(row),
-      supportCaseRef: `record:${id}`,
-      correctionGrant: await this.db.storyCareGrant.findUnique({
-        where: { caseId: id },
-        select: { storyId: true, expiresAt: true },
-      }),
-      verification: row.verifiedBy
-        ? {
-            operatorAdminId: row.verifiedBy,
-            createdAt: row.verifiedAt?.toISOString(),
-            evidenceRef: row.verificationEvidence,
-            noticeVersion: row.verificationNotice,
-            method: "care_verified",
-            accessEpoch: row.revokedAccessEpoch,
-          }
-        : null,
-      changes,
-      withdrawal: await this.db.$transaction((tx) =>
-        this.withdrawalStatusIn(tx, row.projectId),
-      ),
-    };
+      });
+      if (!row) throw new NotFoundException();
+      const payloadExpired = await this.activeDataPayloadExpiredIn(
+        tx,
+        row.projectId,
+      );
+      const changes: CareBindingChangeView[] = (
+        await tx.bindingChange.findMany({
+          where: { supportCaseId: id },
+          select: {
+            subjectId: true,
+            sourceBindingVersion: true,
+            bindingVersion: true,
+            accessEpoch: true,
+            operatorId: true,
+            supportCaseId: true,
+            noticeVersion: true,
+            method: true,
+            evidenceRef: true,
+            requestId: true,
+            createdAt: true,
+          },
+        })
+      ).map((change) => ({
+        ...change,
+        evidenceRef: payloadExpired ? null : change.evidenceRef,
+        createdAt: change.createdAt.toISOString(),
+      }));
+      return {
+        ...careView(row),
+        supportCaseRef: `record:${id}`,
+        correctionGrant: await tx.storyCareGrant.findUnique({
+          where: { caseId: id },
+          select: { storyId: true, expiresAt: true },
+        }),
+        verification: row.verifiedBy
+          ? {
+              operatorAdminId: row.verifiedBy,
+              createdAt: row.verifiedAt?.toISOString(),
+              evidenceRef: payloadExpired ? null : row.verificationEvidence,
+              noticeVersion: payloadExpired ? null : row.verificationNotice,
+              method: "care_verified",
+              accessEpoch: row.revokedAccessEpoch,
+            }
+          : null,
+        changes,
+        withdrawal: await this.withdrawalStatusIn(tx, row.projectId),
+      };
+    });
   }
   async rebind(
     tx: Prisma.TransactionClient,
@@ -1138,13 +1208,6 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       where: { id },
       data: { accessEpoch: { increment: 1 } },
     });
-    await this.recordRevocationIn(
-      tx,
-      id,
-      updated.accessEpoch,
-      "binding",
-      "rebind",
-    );
     await tx.invitation.updateMany({
       where: { projectId: id, consumedAt: null },
       data: { consumedAt: new Date() },
@@ -1168,7 +1231,9 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         supportCaseId: caseId,
         noticeVersion: body.noticeVersion,
         method: "care_verified",
-        evidenceRef: body.evidenceRef,
+        evidenceRef: (await this.activeDataPayloadExpiredIn(tx, id))
+          ? null
+          : body.evidenceRef,
         requestId,
       },
     });
@@ -1183,6 +1248,13 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         accessEpoch: updated.accessEpoch,
       },
     });
+    await this.recordRevocationIn(
+      tx,
+      id,
+      updated.accessEpoch,
+      "binding",
+      "rebind",
+    );
     return {
       projectId: id,
       subjectId: subject.id,
@@ -1199,15 +1271,42 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         throw new ForbiddenException();
       const state = await this.status(tx, p, subject, user.id);
       if (!state.canRead) throw new ForbiddenException();
+      const active = await this.materialAvailableIn(tx, id, "activeData");
       return {
         ...state,
-        bookTitle: p.order.bookTitle,
-        subjectName: subject.name,
+        bookTitle: active ? p.order.bookTitle : null,
+        subjectName: active ? subject.name : null,
       };
     });
   }
+  async activeDataPayloadExpiredIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ) {
+    if (await this.rights.deletedIn(tx, projectId, "activeData")) return true;
+    const terms = await this.terms.read(projectId, undefined, tx);
+    return terms.retention?.activeData?.state === "expired";
+  }
   // Plan callers keep authentication, current purpose/epoch checks and writes
   // under the same Session -> Project -> Subject lock order.
+  async materialAvailableIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    category: string,
+  ) {
+    if (await this.rights.deletedIn(tx, projectId, category)) return false;
+    const terms = await this.terms.read(projectId, undefined, tx),
+      rule = terms.retention?.[category];
+    return !!rule && rule.state !== "expired";
+  }
+  async requireMaterialIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    category: string,
+  ) {
+    if (!(await this.materialAvailableIn(tx, projectId, category)))
+      throw new ForbiddenException("Material retention is unavailable");
+  }
   async withPlanAccess<T>(
     projectId: string,
     authorization: string | undefined,
@@ -1307,6 +1406,9 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     return this.db.$transaction(async (tx) => {
       const user = await this.identity.current(authorization, tx);
       const p = await this.project(tx, projectId, true);
+      await this.rights.requireAvailableIn(tx, projectId);
+      if (mode === "record")
+        await this.requireMaterialIn(tx, projectId, "activeData");
       const subject = await this.subject(tx, projectId);
       let method: "self_wechat" | "assisted";
       if (subject.boundUserId === user.id) {
@@ -1371,6 +1473,12 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     },
   ): Promise<Prisma.JsonObject | null> {
     this.policy();
+    if (
+      (await this.rights.deletedIn(tx, input.projectId)) ||
+      (await this.rights.deletedIn(tx, input.projectId, "originalAudio")) ||
+      (await this.rights.deletedIn(tx, input.projectId, "transcripts"))
+    )
+      return null;
     const p = await this.project(tx, input.projectId, true);
     const subject = await this.subject(tx, input.projectId);
     if (
@@ -1383,6 +1491,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       return null;
     const terms = await this.terms.read(p.id, undefined, tx);
     if (
+      terms.retention?.activeData?.state === "expired" ||
       terms.retention?.originalAudio?.state === "expired" ||
       terms.retention?.transcripts?.state === "expired"
     )
@@ -1498,6 +1607,11 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     },
   ): Promise<Prisma.JsonObject | null> {
     this.policy();
+    if (
+      (await this.rights.deletedIn(tx, input.projectId)) ||
+      (await this.rights.deletedIn(tx, input.projectId, "bookPdf"))
+    )
+      return null;
     const project = await this.project(tx, input.projectId, true),
       subject = await this.subject(tx, input.projectId);
     if (
@@ -1570,6 +1684,10 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     const p = await this.project(tx, command.projectId, true);
     const subject = await this.subject(tx, p.id);
     const row = await this.latestAssisted(tx, p.id, command.purpose);
+    const denied = await tx.$queryRaw<
+      { denied: boolean }[]
+    >`SELECT EXISTS(SELECT 1 FROM privacy_events WHERE project_id=${p.id}::uuid AND payload->>'sourceSessionId'=${command.sessionId}) AS denied`;
+    if (denied[0].denied) throw new ForbiddenException();
     if (
       !this.activeAssisted(row, p, subject) ||
       row.id !== command.sessionId ||
@@ -1611,6 +1729,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       idempotencyKey: string;
     },
   ) {
+    await this.requireMaterialIn(tx, command.projectId, "activeData");
     const purpose =
       command.content.kind === "story"
         ? "story_confirmation"
@@ -1633,7 +1752,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       contentKind: string;
       versionId: string;
       contentHash: string;
-      evidenceRef: string;
+      evidenceRef: string | null;
     }) => ({
       id: row.id,
       subjectId: row.subjectId,
@@ -1699,7 +1818,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       purpose: string;
       granted: boolean;
       noticeVersion: string;
-      evidenceRef: string;
+      evidenceRef: string | null;
       bindingVersion: number;
       accessEpoch: number;
       createdAt: Date;
@@ -1708,6 +1827,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
     bindingVersion: number,
     accessEpoch: number,
     latestSessionId: string,
+    payloadExpired: boolean,
   ): AssistedSessionView {
     return {
       id: row.id,
@@ -1717,7 +1837,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       purpose: row.purpose as AssistedPurpose,
       granted: row.granted,
       noticeVersion: row.noticeVersion,
-      evidenceRef: row.evidenceRef,
+      evidenceRef: payloadExpired ? null : row.evidenceRef,
       bindingVersion: row.bindingVersion,
       accessEpoch: row.accessEpoch,
       createdAt: row.createdAt.toISOString(),
@@ -1728,7 +1848,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
             row.bindingVersion !== bindingVersion ||
             row.accessEpoch !== accessEpoch
           ? "revoked"
-          : row.expiresAt.getTime() <= Date.now()
+          : payloadExpired || row.expiresAt.getTime() <= Date.now()
             ? "expired"
             : "active",
     };
@@ -1745,6 +1865,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
       const p = await this.project(tx, id, true);
       if (p.order.buyerId !== user.id) throw new ForbiddenException();
       const subject = await this.subject(tx, id);
+      const payloadExpired = await this.activeDataPayloadExpiredIn(tx, id);
       if (!body) {
         const sessions = await tx.assistedSession.findMany({
           where: { projectId: id, operatorUserId: user.id },
@@ -1760,6 +1881,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
               subject.bindingVersion,
               p.accessEpoch,
               latest.get(row.purpose)!,
+              payloadExpired,
             ),
           ),
         };
@@ -1782,8 +1904,13 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
           subject.bindingVersion,
           p.accessEpoch,
           latest!.id,
+          payloadExpired,
         );
       }
+      if (payloadExpired && body.granted)
+        throw new ForbiddenException(
+          "Expired activity cannot acquire new authorization payload",
+        );
       if (
         (await tx.assistedSession.findFirst({
           where: { projectId: id, evidenceRef: body.evidenceRef },
@@ -1799,6 +1926,23 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         (latest?.id ?? null) !== (body.expectedSessionId ?? null)
       )
         throw new ConflictException();
+      if (
+        !body.granted &&
+        !CONSENT_PURPOSES.includes(body.purpose as ConsentPurpose) &&
+        latest
+      ) {
+        await this.rights.publishIn(tx, {
+          eventId: randomUUID(),
+          projectId: id,
+          kind: "revocation",
+          occurredAt: new Date().toISOString(),
+          payload: {
+            operation: "assisted_session_end",
+            sourceSessionId: latest.id,
+            purpose: body.purpose,
+          },
+        });
+      }
       if (
         !body.granted &&
         CONSENT_PURPOSES.includes(body.purpose as ConsentPurpose)
@@ -1821,7 +1965,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
           purpose: body.purpose,
           granted: body.granted,
           noticeVersion: body.noticeVersion,
-          evidenceRef: body.evidenceRef,
+          evidenceRef: payloadExpired ? null : body.evidenceRef,
           bindingVersion: subject.bindingVersion,
           accessEpoch: p.accessEpoch,
           idempotencyKey: key!,
@@ -1842,7 +1986,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
             purpose: body.purpose,
             granted: body.granted,
             noticeVersion: body.noticeVersion,
-            evidenceRef: body.evidenceRef,
+            evidenceRef: payloadExpired ? null : body.evidenceRef,
             method: "assisted",
           },
         });
@@ -1853,6 +1997,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         subject.bindingVersion,
         p.accessEpoch,
         row.id,
+        payloadExpired,
       );
     });
     if (body && !body.granted) await this.reconcileRevocations(id);
@@ -1896,7 +2041,7 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
           select: { id: true },
         })
       : null;
-    await tx.projectAccessRevocation.create({
+    const revocation = await tx.projectAccessRevocation.create({
       data: {
         id: randomUUID(),
         projectId,
@@ -1907,6 +2052,43 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         sourceSessionId: sourceSessionId ?? null,
         targetAttemptId: attempt?.id ?? null,
       },
+    });
+    const binding =
+      reason === "rebind"
+        ? await tx.projectSubject.findUniqueOrThrow({
+            where: { projectId },
+            select: { id: true, bindingVersion: true, boundUserId: true },
+          })
+        : null;
+    await this.rights.publishIn(tx, {
+      eventId: revocation.id,
+      projectId,
+      kind: "revocation",
+      occurredAt: revocation.createdAt.toISOString(),
+      payload: {
+        operation: "revoke",
+        revocationId: revocation.id,
+        sequence: revocation.sequence,
+        accessEpoch,
+        purpose,
+        reason,
+        taskFences,
+        sourceSessionId: sourceSessionId ?? null,
+        targetAttemptId: attempt?.id ?? null,
+        ...(binding ? { binding } : {}),
+      },
+    });
+  }
+  async recordStoryDenialIn(
+    tx: Prisma.TransactionClient,
+    decision: Omit<Prisma.StoryDecisionUncheckedCreateInput, "evidenceRef">,
+  ) {
+    await this.rights.publishIn(tx, {
+      eventId: decision.id!,
+      projectId: decision.projectId,
+      kind: "revocation",
+      occurredAt: new Date().toISOString(),
+      payload: { operation: "story_decision", decision },
     });
   }
   /** Recoverable follow-up. The denied purpose and exact work targets have already committed. */
@@ -1928,7 +2110,8 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
         change.reason === "assisted",
       );
       await this.db.$transaction(async (tx) => {
-        await this.project(tx, change.projectId, true);
+        await tx.$queryRaw`SELECT id FROM projects WHERE id=${change.projectId}::uuid FOR UPDATE`;
+        await tx.project.findUniqueOrThrow({ where: { id: change.projectId } });
         const current = await tx.projectAccessRevocation.findUniqueOrThrow({
           where: { id: change.id },
         });
@@ -2055,6 +2238,9 @@ export class Participation implements OnModuleDestroy, OnModuleInit {
   }
   async onModuleDestroy() {
     if (this.revocationSweep) clearInterval(this.revocationSweep);
+    await this.sweeping;
+  }
+  async onApplicationShutdown() {
     await this.db.$disconnect();
     await this.terms.close();
   }

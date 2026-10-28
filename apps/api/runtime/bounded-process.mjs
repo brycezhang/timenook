@@ -1,11 +1,14 @@
-import { spawn, execFileSync } from "node:child_process";
-function processSnapshot() {
+import { spawn, execFile } from "node:child_process";
+import { promisify } from "node:util";
+const execFileAsync = promisify(execFile);
+async function processSnapshot() {
   try {
-    const rows = execFileSync("ps", ["-axo", "pid=,ppid=,rss="], {
+    const { stdout } = await execFileAsync("ps", ["-axo", "pid=,ppid=,rss="], {
       encoding: "utf8",
       timeout: 1000,
-      stdio: ["ignore", "pipe", "ignore"],
-    })
+      maxBuffer: 1024 * 1024,
+    });
+    const rows = stdout
       .trim()
       .split("\n")
       .map((line) => line.trim().split(/\s+/).map(Number));
@@ -30,7 +33,7 @@ export async function runBounded({
   timeLimit,
   env = {},
 }) {
-  processSnapshot();
+  await processSnapshot();
   let peakRssKb = 0;
   const startedAt = Date.now();
   await new Promise((fulfill, reject) => {
@@ -45,7 +48,8 @@ export async function runBounded({
     let error = "",
       exceeded = false,
       monitorFailed = false;
-    let descendants = [];
+    let descendants = [],
+      sampling;
     const stop = () => {
       for (const pid of descendants.reverse())
         try {
@@ -60,39 +64,47 @@ export async function runBounded({
     // RSS watchdog includes native/WASM allocations; it is a sampled local safeguard,
     // not an OS hard cgroup limit. Production must use a separate resource-limited worker.
     const monitor = setInterval(() => {
-      try {
-        const rows = processSnapshot();
-        const ids = new Set([child.pid]);
-        for (let changed = true; changed;) {
-          changed = false;
-          for (const [pid, parent] of rows)
-            if (ids.has(parent) && !ids.has(pid)) {
-              ids.add(pid);
-              changed = true;
-            }
-        }
-        descendants = [...ids].filter((pid) => pid !== child.pid);
-        const rssKb = rows.reduce(
-          (total, [pid, , rss]) => total + (ids.has(pid) ? rss : 0),
-          0,
-        );
-        peakRssKb = Math.max(peakRssKb, rssKb);
-        if (rssKb > rssLimit * 1024) {
-          exceeded = true;
+      // A slow real ps must not block private-access checks or the wall timer.
+      // Keep at most one sample in flight and drain it before reporting success.
+      if (sampling) return;
+      sampling = (async () => {
+        try {
+          const rows = await processSnapshot();
+          const ids = new Set([child.pid]);
+          for (let changed = true; changed;) {
+            changed = false;
+            for (const [pid, parent] of rows)
+              if (ids.has(parent) && !ids.has(pid)) {
+                ids.add(pid);
+                changed = true;
+              }
+          }
+          descendants = [...ids].filter((pid) => pid !== child.pid);
+          const rssKb = rows.reduce(
+            (total, [pid, , rss]) => total + (ids.has(pid) ? rss : 0),
+            0,
+          );
+          peakRssKb = Math.max(peakRssKb, rssKb);
+          if (rssKb > rssLimit * 1024) exceeded = true;
+          // The wall timer may have fired while ps was in flight. Apply its
+          // termination intent to descendants learned from this late sample.
+          if (exceeded) stop();
+        } catch {
+          monitorFailed = true;
           stop();
         }
-      } catch {
-        monitorFailed = true;
-        stop();
-      }
+      })().finally(() => {
+        sampling = undefined;
+      });
     }, 50);
     child.stderr.on("data", (chunk) => {
       if (error.length < 1024) error += chunk;
     });
     child.on("error", reject);
-    child.on("close", (code) => {
+    child.on("close", async (code) => {
       clearTimeout(timer);
       clearInterval(monitor);
+      await sampling;
       if (code !== 0 || monitorFailed || exceeded)
         reject(
           Error(

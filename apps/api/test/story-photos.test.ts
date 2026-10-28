@@ -1,3 +1,4 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import sharp from "sharp";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
@@ -43,7 +44,12 @@ const aiFetch: typeof fetch = async (input, init) => {
     { headers: { "X-Api-Status-Code": "20000000" } },
   );
 };
+let photoReadGate: ((key: string) => Promise<void>) | undefined;
 class AsrObjects extends LocalProbeObjects {
+  async read(key: string) {
+    if (key.startsWith("photos/staging/")) await photoReadGate?.(key);
+    return super.read(key);
+  }
   async asrSource(key: string, _seconds: number) {
     await this.read(key);
     return {
@@ -152,6 +158,7 @@ before(async () => {
       active: true,
     },
   });
+  await bootPrivacyFixture(config);
   app = await createApplication(config, fixtureOptions());
 });
 after(async () => {
@@ -1174,11 +1181,46 @@ test("photo decoding gives bounded backpressure while duplicate completions stil
     await upload(p, photo, bytes);
     photos.push(photo);
   }
-  const results = await Promise.all(
-    photos.map((photo) =>
-      request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
-    ),
+  let release!: () => void, enter!: () => void;
+  const held = new Promise<void>((r) => (release = r)),
+    entered = new Promise<void>((r) => (enter = r));
+  let active = 0;
+  photoReadGate = async () => {
+    if (++active === 2) enter();
+    await held;
+  };
+  const pending = photos.map((photo) =>
+    request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
   );
+  let results: Awaited<(typeof pending)[number]>[];
+  try {
+    await entered;
+    await Promise.race([
+      Promise.any(
+        pending.map(async (request) => {
+          const result = await request;
+          if (result.statusCode !== 503)
+            throw Error("Not a backpressure response");
+          return result;
+        }),
+      ),
+      new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              Error(
+                "Two real held decoders did not apply bounded backpressure",
+              ),
+            ),
+          5000,
+        ),
+      ),
+    ]);
+  } finally {
+    release();
+    photoReadGate = undefined;
+    results = await Promise.all(pending);
+  }
   assert.ok(
     results.some((r) => r.statusCode === 503),
     "busy decoder gives recoverable backpressure",
@@ -1354,4 +1396,8 @@ test("photo derivative dimensions describe the actual resized preview rather tha
   const actual = await sharp(r.rawPayload).metadata();
   assert.equal(actual.width, preview.width);
   assert.equal(actual.height, preview.height);
+});
+
+after(async () => {
+  await closePrivacyFixture(config);
 });

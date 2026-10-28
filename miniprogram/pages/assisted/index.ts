@@ -401,6 +401,9 @@ Page({
         });
     });
   },
+  deletion() {
+    if (this.projectId) go("deletion-status", `projectId=${this.projectId}`);
+  },
   plan() {
     go("plan", `projectId=${this.projectId}`);
   },

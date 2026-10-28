@@ -5,6 +5,7 @@ import type { CareCase, StoryView } from "@timenook/contracts";
 import { careApi } from "../api/admin";
 import CompleteExport from "./complete-export.vue";
 import RefundCase from "./refund-case.vue";
+import DeletionCase from "./deletion-case.vue";
 import QualityCase from "./quality-case.vue";
 const correction = ref<StoryView | null>(null),
   correctionTitle = ref(""),
@@ -360,9 +361,11 @@ onMounted(refresh);
         :message="
           selected.kind === 'production_handoff'
             ? '本次生产交接工单已完成，交付或取消结果以生产与物流的具体回执记录为准。'
-            : selected.kind === 'export'
-              ? '本次完整资料交付回执已记录。包下载期限和原始资料保留期限仍分别执行。'
-              : '工单已完成，原账号权限已撤销，新账号须重新授权。'
+            : selected.kind === 'delete'
+              ? '在线访问已停止；各层删除进度请按下方清单核实。'
+              : selected.kind === 'export'
+                ? '本次完整资料交付回执已记录。包下载期限和原始资料保留期限仍分别执行。'
+                : '工单已完成，原账号权限已撤销，新账号须重新授权。'
         "
       />
       <Alert
@@ -371,7 +374,9 @@ onMounted(refresh);
         :message="
           selected.kind === 'correction'
             ? '本次限时故事校对已核验；新版本仍须本人重新确认。'
-            : '本人申请已核验，导出交付、删除执行与后续联动仍待对应流程处理。'
+            : selected.kind === 'delete'
+              ? '本人删除已核验，在线访问立即停止且项目删除不可逆；各层清理按下方独立证据处理。'
+              : '本人申请已核验，导出交付与后续联动仍待对应流程处理。'
         "
       />
       <Alert
@@ -409,7 +414,9 @@ onMounted(refresh);
               ? "核对本人、原账号与目标账号后提交。操作撤销旧授权并保留服务期限。"
               : selected.kind === "withdraw"
                 ? "核验本人真实意愿后撤回所选用途许可；提交后立即拒绝相关访问，任务及生产按撤回范围联动；已交接的文件仍须核对印厂实际取消回执。"
-                : "核验通过仅记录申请，导出交付和删除执行仍须后续流程。"
+                : selected.kind === "delete"
+                  ? "核验通过将立即停止在线访问并永久删除项目，不能撤销。活动资料由系统清理，历史、备份和供应商副本分别核验。"
+                  : "核验通过记录申请，导出交付仍须后续流程。"
           }}
         </p>
         <Button
@@ -422,6 +429,13 @@ onMounted(refresh);
           }}</Button
         ></Form
       >
+      <DeletionCase
+        v-if="selected.kind === 'delete'"
+        :key="selected.id + ':' + selected.state"
+        :case-id="selected.id"
+        :csrf="props.csrf"
+        @expired="emit('expired')"
+      />
       <RefundCase
         v-if="selected.kind === 'refund'"
         :key="selected.id"

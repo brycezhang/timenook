@@ -30,6 +30,8 @@
 
 冻结书稿的 `accessExpiresAt` 使用 `bookPdf` 与当前身份/共享权限的期限。`draftAccess` 另描述确认故事来源的编辑、生成和重试权限；`confirmedStories` 到期后，现有 PDF 仍按自身期限读取，但禁止新稿操作及继续渲染。此时总览 `inputHash` 为 null，可入书故事及封面素材选项为空，目录/书封只返回当前冻结快照或空默认值；当前内容、许可或配置变化仍会使旧稿失效。
 
+固定 PDF 的活动流使用服务端明确的 `bookPdf` 来源 scope。其它类别到期的独立事件即使仍处于源已发布、PG未提交的窗口，只在其现有到期格式、当前epoch、类别与精确文件目标均可确认不影响PDF时继续；每块仍执行当前授权/版本/期限校验及前后完整来源 fence。PDF自身到期、全项目删除、撤回、hold、故事许可否决、epoch变化或未知/损坏载荷仍拒绝。这个scope不来自用户DTO，也不适用于普通编辑、原声、照片或ZIP流。
+
 ## 本地验证
 
 按[本地开发](development.md)准备 PostgreSQL/Redis、固定音频检查工具，按[印刷探针](print-probe.md)安装固定字体与 Chromium。`ApiConfig.books` 仅接受明确的合成测试配置，默认不注册这些路由，production 不允许启用。自动测试不加载共用服务的私人 key，不读云端数据库。

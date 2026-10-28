@@ -1,3 +1,4 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { WechatPay } from "../src/payments/wechat-pay";
 import { paymentAdmin } from "./payment-admin-fixture";
 import { ProjectServiceTerms } from "../src/projects/service-terms";
@@ -97,6 +98,7 @@ before(async () => {
       active: true,
     },
   });
+  await bootPrivacyFixture(config);
   app = await createApplication(config, { wechatFetch, ...{ paymentFetch } });
 });
 after(async () => {
@@ -494,17 +496,30 @@ test("local payment configuration rejects production, default-off reads, real tr
     { wechatFetch },
   );
   try {
-    for (const url of ["/v1/orders", `/v1/orders/${order.id}`])
+    assert.equal(
+      (await disabled.inject({ method: "GET", url: "/health/live" }))
+        .statusCode,
+      200,
+    );
+    for (const [route, url] of [
+      ["/v1/orders", "/v1/orders"],
+      ["/v1/orders/:id", `/v1/orders/${order.id}`],
+    ] as const) {
       assert.equal(
-        (
-          await disabled.inject({
-            method: "GET",
-            url,
-            headers: { authorization: `Bearer ${token}` },
-          })
-        ).statusCode,
-        403,
+        disabled
+          .getHttpAdapter()
+          .getInstance()
+          .hasRoute({ method: "GET", url: route }),
+        false,
       );
+      const response = await disabled.inject({
+        method: "GET",
+        url,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert.equal(response.statusCode, 404);
+      assert.equal(response.json().error.code, "NOT_FOUND");
+    }
   } finally {
     await disabled.close();
   }
@@ -1005,4 +1020,8 @@ test("provider empty 204 and encrypted callback bytes must independently authent
     payload: body,
   });
   assert.equal(response.statusCode, 400);
+});
+
+after(async () => {
+  await closePrivacyFixture(config);
 });

@@ -1,3 +1,5 @@
+import { PrivacyRights } from "../care/privacy-rights";
+import { Deletions } from "../care/deletions";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -9,7 +11,10 @@ import { CompleteExports } from "../care/complete-export";
 export async function startProductionWorker(app: NestFastifyApplication) {
   const config = app.get<ApiConfig>(API_CONFIG),
     tasks = app.get(ProductionTasks),
+    rights = app.get(PrivacyRights),
+    deletions = app.get(Deletions),
     exports = config.books ? app.get(CompleteExports) : null;
+  await rights.assertHealthy();
   const prefix = `${config.redisKeyPrefix ?? "timenook"}:production`;
   const producer = new Redis(config.redisUrl, {
     maxRetriesPerRequest: 0,
@@ -24,6 +29,7 @@ export async function startProductionWorker(app: NestFastifyApplication) {
   const worker = new Worker(
     "tasks",
     async (job) => {
+      await rights.assertHealthy();
       await tasks.run(String(job.data.taskId));
     },
     { connection: consumer, prefix, concurrency: 2 },
@@ -33,6 +39,8 @@ export async function startProductionWorker(app: NestFastifyApplication) {
   return {
     worker,
     async recoverDue() {
+      await rights.assertHealthy();
+      await deletions.sweep();
       await exports?.cleanupExpired();
       const ids = await tasks.due();
       for (const id of ids) {

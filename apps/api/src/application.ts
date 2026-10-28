@@ -1,3 +1,10 @@
+import { PrivacyRights } from "./care/privacy-rights";
+import {
+  Deletions,
+  DeletionController,
+  AdminDeletionController,
+  DELETION_OBJECTS,
+} from "./care/deletions";
 import {
   QualityCare,
   QualityCareController,
@@ -165,16 +172,8 @@ class HealthController {
 
 @Module({
   controllers: [
-    RefundsController,
-    AdminRefundsController,
-    RefundWebhookController,
-    OrdersController,
-    AdminTermsController,
-    PaymentWebhookController,
     HealthController,
     IdentityController,
-    ParticipationController,
-    AdminCareController,
     AdminController,
     CatalogController,
     AdminCatalogController,
@@ -366,6 +365,16 @@ export async function createApplication(
       "Custom WeChat transport is only allowed in test",
     );
   }
+  const productEnabled = !!(
+    config.payments ||
+    config.participation ||
+    config.recording ||
+    config.books
+  );
+  if (productEnabled && !config.privacyJournal)
+    throw new ConfigurationError(
+      "Product private capabilities require an independent privacy journal",
+    );
   const adapter = new FastifyAdapter({
     logger: false,
     // Only the local Nginx hop can supply X-Forwarded-For. It must append or
@@ -401,6 +410,20 @@ export async function createApplication(
   const module = {
     module: AppModule,
     controllers: [
+      ...(productEnabled
+        ? [
+            RefundsController,
+            AdminRefundsController,
+            RefundWebhookController,
+            OrdersController,
+            AdminTermsController,
+            PaymentWebhookController,
+            ParticipationController,
+            AdminCareController,
+            DeletionController,
+            AdminDeletionController,
+          ]
+        : []),
       ...(config.participation
         ? [PersonalPlanController, InterviewsController]
         : []),
@@ -443,6 +466,20 @@ export async function createApplication(
     providers: [
       { provide: API_CONFIG, useValue: config },
       Infrastructure,
+      PrivacyRights,
+      Deletions,
+      ...(config.recording
+        ? [
+            {
+              provide: DELETION_OBJECTS,
+              useValue:
+                options.recordingObjects ??
+                (config.recording.oss
+                  ? new OssProbeObjects(config.recording.oss)
+                  : new LocalProbeObjects(config.recording.storageRoot)),
+            },
+          ]
+        : []),
       ...(config.photos
         ? [
             Photos,
@@ -571,6 +608,24 @@ export async function createApplication(
       jsonDocumentUrl: "openapi.json",
     });
   }
+  try {
+    if (productEnabled) {
+      await app.get(PrivacyRights).initialize();
+      await app.get(Deletions).sweep();
+    }
+  } catch (error) {
+    await app.close();
+    throw error;
+  }
+  adapter.getInstance().addHook("onRequest", async (request) => {
+    if (
+      productEnabled &&
+      !request.url.startsWith("/health/live") &&
+      !request.url.startsWith("/docs") &&
+      !request.url.startsWith("/openapi")
+    )
+      await app.get(PrivacyRights).assertHealthy();
+  });
   await app.init();
   await adapter.getInstance().ready();
   return app;

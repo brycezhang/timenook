@@ -189,7 +189,7 @@ export class BookAudio implements OnModuleDestroy {
             id: entry.storyId,
             revisionId: entry.revisionId,
             version: revision.version,
-            title: revision.title,
+            title: revision.title ?? "原声",
           },
           clips,
           accessEpoch: actor.accessEpoch,

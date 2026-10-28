@@ -32,7 +32,7 @@ export default defineConfig({
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/timenook/, ""),
           },
-          "^/timenook/v1/projects/[a-f0-9-]{36}/(?:fulfillment(?:/grants)?|withdrawal-status)$":
+          "^/timenook/v1/projects/[a-f0-9-]{36}/(?:fulfillment(?:/grants)?|withdrawal-status|deletion-status)$":
             {
               target: process.env.TIMENOOK_PREVIEW_API_TARGET,
               changeOrigin: true,

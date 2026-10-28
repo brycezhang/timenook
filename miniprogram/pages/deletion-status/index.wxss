@@ -1,0 +1,18 @@
+.deletion-page {
+  font-size: 20px;
+  line-height: 1.7;
+  padding-bottom: 48px;
+  overflow-wrap: anywhere;
+}
+.deletion-page .btn {
+  min-width: 48px;
+  min-height: 48px;
+  font-size: 20px;
+  white-space: normal;
+}
+.deletion-page .paper {
+  padding: 20px;
+}
+.deletion-page .section-title {
+  font-size: 22px;
+}

@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
 import { readFileSync } from "node:fs";
-import { rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { rm, writeFile, chmod, stat, access } from "node:fs/promises";
+import { join, dirname } from "node:path";
+import Redis from "ioredis";
 import { paymentAdmin } from "./payment-admin-fixture";
+import type { DeletionStatus } from "@timenook/contracts";
+import { PrismaClient, Prisma } from "@prisma/client";
+import { Deletions } from "../src/care/deletions";
+import { performance } from "node:perf_hooks";
 import { randomUUID, createHash } from "node:crypto";
 import {
   startBookFixture,
@@ -21,6 +26,7 @@ import {
   bound,
   restartBookApplication,
   interceptBookObjectRead,
+  interceptBookErasureError,
   state,
 } from "./book-fixture";
 
@@ -351,17 +357,297 @@ test("withdrawal of the exact historical story permission and deleted recording 
   assert.equal(missing.statusCode, 404, missing.body);
   assert.ok(!missing.body.includes("书中固定的私人故事"));
   await writeFile(object, syntheticAudio());
-  // T26 will own deletion orchestration. This fixture represents its removed entry metadata.
-  await db.bookAudioEntry.delete({ where: { id: available.id } });
-  assert.equal(
-    (await request("GET", other.entry, other.narrator.token)).statusCode,
-    404,
+  const source = syntheticAudio(),
+    uploads = `/v1/projects/${other.projectId}/interviews/${other.interviewId}/clips`,
+    pendingClip = data(
+      await request("POST", uploads, other.narrator.token, {
+        clientClipId: randomUUID(),
+        bytes: source.length,
+        sha256: createHash("sha256").update(source).digest("hex"),
+      }),
+    ),
+    form = data(
+      await request(
+        "POST",
+        `${uploads}/${pendingClip.id}/upload`,
+        other.narrator.token,
+        {},
+      ),
+    ),
+    cacheKey = `${config.redisKeyPrefix}:recording:upload:${createHash("sha256").update(form.fields["x-recording-capability"]).digest("hex")}`;
+  const current = await state(other, other.narrator.token);
+  const care = data(
+    await request(
+      "POST",
+      `/v1/projects/${other.projectId}/care-requests`,
+      other.narrator.token,
+      { kind: "delete", expectedBindingVersion: current.bindingVersion },
+    ),
   );
-  assert.equal(
-    (await request("GET", audioUrl(other, available), other.narrator.token))
-      .statusCode,
-    404,
+  const retainedEntry = await db.bookAudioEntry.findUniqueOrThrow({
+    where: { id: available.id },
+  });
+  await db.$executeRawUnsafe(`CREATE FUNCTION hold_t26_book_audio_erasure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+    IF NEW.project_id='${other.projectId}'::uuid AND NEW.revision_id='${retainedEntry.revisionId}'::uuid AND NEW.audio IS NULL AND OLD.audio IS NOT NULL THEN
+      RAISE EXCEPTION 'synthetic exact audio erasure fault';
+    END IF; RETURN NEW; END $$`);
+  await db.$executeRawUnsafe(
+    "CREATE TRIGGER hold_t26_book_audio_erasure BEFORE UPDATE ON book_audio_entries FOR EACH ROW EXECUTE FUNCTION hold_t26_book_audio_erasure()",
   );
+  const locks = new PrismaClient({ datasourceUrl: config.databaseUrl }),
+    cache = new Redis(config.redisUrl, {
+      maxRetriesPerRequest: 0,
+      retryStrategy: () => null,
+    });
+  cache.on("error", () => {});
+  let releaseError = () => {},
+    heldError: Promise<unknown> | undefined,
+    olderAttempt: Promise<void> | undefined;
+  try {
+    const capability = await cache.get(cacheKey);
+    assert.ok(capability);
+    assert.equal(JSON.parse(capability).projectId, other.projectId);
+    const headers = await paymentAdmin(config, app, [
+      "care:write",
+      "audit:read",
+    ]);
+    data(
+      await app.inject({
+        method: "POST",
+        url: `/v1/admin/care-requests/${care.id}/verify`,
+        headers: { ...headers, "idempotency-key": randomUUID() },
+        payload: {
+          expectedBindingVersion: current.bindingVersion,
+          expectedAccessEpoch: current.accessEpoch,
+          noticeVersion: "synthetic-d08-v1",
+          evidenceRef: "synthetic:原声入口删除核验",
+        },
+      }),
+    );
+    assert.equal(
+      (await request("GET", other.entry, other.narrator.token)).statusCode,
+      403,
+    );
+    assert.equal(
+      (await request("GET", audioUrl(other, available), other.narrator.token))
+        .statusCode,
+      403,
+    );
+    assert.deepEqual(
+      (
+        await db.bookAudioEntry.findUniqueOrThrow({
+          where: { id: available.id },
+        })
+      ).audio,
+      retainedEntry.audio,
+    );
+    const [pending] = await db.$queryRaw<
+      { id: string; state: string; reason: string | null }[]
+    >`
+      SELECT id,state,reason FROM privacy_deletion_items
+      WHERE project_id=${other.projectId}::uuid AND target_table='book_audio_entries' AND target_key->>'id'=${available.id}
+    `;
+    assert.ok(pending);
+    assert.equal(pending.state, "pending");
+    assert.equal(pending.reason, "RETRY_REQUIRED");
+    await db.$executeRawUnsafe(
+      "CREATE TABLE t26_audio_receipt_transitions(audio_was_null boolean NOT NULL)",
+    );
+    await db.$executeRawUnsafe(`CREATE FUNCTION observe_t26_audio_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      IF NEW.id='${pending.id}'::uuid AND OLD.state='completed' AND NEW.state='pending' THEN
+        INSERT INTO t26_audio_receipt_transitions SELECT audio IS NULL FROM book_audio_entries WHERE id=NEW.target_key->>'id';
+      END IF; RETURN NEW; END $$`);
+    await db.$executeRawUnsafe(
+      "CREATE TRIGGER observe_t26_audio_receipt AFTER UPDATE ON privacy_deletion_items FOR EACH ROW EXECUTE FUNCTION observe_t26_audio_receipt()",
+    );
+    let ownerReady!: () => void,
+      errorReady!: () => void,
+      ownerPid = 0,
+      originalError: unknown;
+    const held = new Promise<void>((r) => {
+        releaseError = r;
+      }),
+      owner = new Promise<void>((r) => {
+        ownerReady = r;
+      }),
+      received = new Promise<void>((r) => {
+        errorReady = r;
+      }),
+      key = Number.parseInt(randomUUID().slice(0, 8), 16) % 2147483647;
+    heldError = locks.$transaction(
+      async (tx) => {
+        [{ pid: ownerPid }] = await tx.$queryRaw<
+          { pid: number }[]
+        >`SELECT pg_backend_pid() pid`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${key}::integer)`;
+        ownerReady();
+        await held;
+      },
+      { timeout: 30000 },
+    );
+    await owner;
+    interceptBookErasureError(async ({ table, projectId, error }) => {
+      if (
+        table !== "book_audio_entries" ||
+        projectId !== other.projectId ||
+        originalError
+      )
+        return;
+      originalError = error;
+      errorReady();
+      await locks.$executeRaw`SELECT pg_advisory_xact_lock(${key}::integer)`;
+    });
+    olderAttempt = app.get(Deletions).reconcile(other.projectId);
+    await received;
+    assert.ok(originalError instanceof Prisma.PrismaClientKnownRequestError);
+    assert.equal(originalError.code, "P2010");
+    assert.equal(originalError.meta?.code, "P0001");
+    const deadline = performance.now() + 10000;
+    for (;;) {
+      const [{ waiting }] = await db.$queryRaw<{ waiting: boolean }[]>`
+        SELECT EXISTS(SELECT 1 FROM pg_stat_activity a WHERE ${ownerPid}=ANY(pg_blocking_pids(a.pid)) AND a.query LIKE '%pg_advisory_xact_lock%') waiting
+      `;
+      if (waiting) break;
+      assert.ok(
+        performance.now() < deadline,
+        "real failed erasure did not reach its error-delivery lock",
+      );
+    }
+    await db.$executeRawUnsafe(
+      "DROP TRIGGER hold_t26_book_audio_erasure ON book_audio_entries",
+    );
+    const completed: DeletionStatus = data(
+      await app.inject({
+        method: "POST",
+        url: `/v1/admin/care-requests/${care.id}/deletion/reconcile`,
+        headers: { ...headers, "idempotency-key": randomUUID() },
+        payload: {},
+      }),
+    );
+    assert.equal(completed.onlineAccessStopped, true);
+    assert.equal(completed.permanentProjectDeletion, true);
+    const item = completed.changes
+      .flatMap((change) => change.items)
+      .find((item) => item.id === pending.id);
+    assert.ok(item);
+    assert.equal(item.state, "completed");
+    assert.equal(item.reason, null);
+    assert.deepEqual(
+      await db.bookAudioEntry.findUniqueOrThrow({
+        where: { id: available.id },
+      }),
+      { ...retainedEntry, audio: null },
+      "the stable entry and its identity/version/hash survive actual payload erasure",
+    );
+    releaseError();
+    await heldError;
+    await olderAttempt;
+    interceptBookErasureError();
+    const [{ n, audio_was_null }] = await db.$queryRaw<
+      { n: bigint; audio_was_null: boolean | null }[]
+    >`
+      SELECT count(*) n,bool_and(audio_was_null) audio_was_null FROM t26_audio_receipt_transitions
+    `;
+    assert.equal(
+      n,
+      0n,
+      `a real old failed attempt downgraded an irreversible receipt; payload already NULL=${audio_was_null}`,
+    );
+    const after: DeletionStatus = data(
+      await app.inject({
+        method: "GET",
+        url: `/v1/admin/care-requests/${care.id}/deletion-status`,
+        headers,
+      }),
+      200,
+    );
+    assert.deepEqual(
+      after.changes
+        .flatMap((change) => change.items)
+        .find((value) => value.id === pending.id),
+      item,
+      "an old error cannot replace the completed receipt or its completion time",
+    );
+    const maintain = async (): Promise<DeletionStatus> =>
+      data(
+        await app.inject({
+          method: "POST",
+          url: `/v1/admin/care-requests/${care.id}/deletion/reconcile`,
+          headers: { ...headers, "idempotency-key": randomUUID() },
+          payload: {},
+        }),
+      );
+    const layer = (value: DeletionStatus, name: string) =>
+      value.changes
+        .flatMap((change) => change.items)
+        .find((entry) => entry.layer === name)!;
+    const directory = dirname(object),
+      mode = (await stat(directory)).mode & 0o777;
+    await writeFile(object, syntheticAudio());
+    await chmod(directory, 0o500);
+    try {
+      const unavailable = await maintain();
+      assert.equal(layer(unavailable, "active_files").state, "pending");
+      assert.equal(layer(unavailable, "active_files").reason, "RETRY_REQUIRED");
+      assert.equal(
+        unavailable.changes
+          .flatMap((change) => change.items)
+          .find((entry) => entry.id === pending.id)?.state,
+        "completed",
+      );
+    } finally {
+      await chmod(directory, mode);
+    }
+    assert.equal(layer(await maintain(), "active_files").state, "completed");
+    await assert.rejects(access(object), { code: "ENOENT" });
+    assert.equal(
+      await cache.exists(cacheKey),
+      0,
+      "the actual pre-deletion upload capability was removed",
+    );
+    // Restore the same owned key as a real Redis wrong type: GET must fail,
+    // so even a previously completed cache layer becomes pending again.
+    await cache.lpush(cacheKey, "synthetic:late wrong-type upload capability");
+    try {
+      const unavailable = await maintain();
+      assert.equal(layer(unavailable, "cache").state, "pending");
+      assert.equal(layer(unavailable, "cache").reason, "RETRY_REQUIRED");
+    } finally {
+      await cache.del(cacheKey);
+    }
+    assert.equal(layer(await maintain(), "cache").state, "completed");
+    assert.equal(
+      (await request("GET", other.entry, other.narrator.token)).statusCode,
+      403,
+    );
+    assert.equal(
+      (await request("GET", audioUrl(other, available), other.narrator.token))
+        .statusCode,
+      403,
+    );
+  } finally {
+    interceptBookErasureError();
+    releaseError();
+    await Promise.allSettled([heldError, olderAttempt]);
+    await locks.$disconnect();
+    await cache.del(cacheKey).catch(() => {});
+    cache.disconnect();
+    await db.$executeRawUnsafe(
+      "DROP TRIGGER IF EXISTS observe_t26_audio_receipt ON privacy_deletion_items",
+    );
+    await db.$executeRawUnsafe(
+      "DROP FUNCTION IF EXISTS observe_t26_audio_receipt()",
+    );
+    await db.$executeRawUnsafe(
+      "DROP TABLE IF EXISTS t26_audio_receipt_transitions",
+    );
+    await db.$executeRawUnsafe(
+      "DROP TRIGGER IF EXISTS hold_t26_book_audio_erasure ON book_audio_entries",
+    );
+    await db.$executeRawUnsafe(
+      "DROP FUNCTION IF EXISTS hold_t26_book_audio_erasure()",
+    );
+  }
 });
 
 async function packageWithDurations(values: {

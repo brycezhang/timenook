@@ -1,3 +1,4 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import sharp from "sharp";
 import { ProjectPlans } from "../src/projects/project-plans";
 import { Stories } from "../src/stories/stories";
@@ -207,6 +208,7 @@ before(async () => {
     }
   }
   const aiFetch: typeof fetch = (...args) => providerTransport(...args);
+  await bootPrivacyFixture(config);
   app = await createApplication(config, {
     wechatFetch,
     paymentFetch,
@@ -1663,4 +1665,8 @@ test("OpenAPI describes structured correction paragraphs and independent exact-v
     "/tmp/timenook-t19-openapi.json",
     JSON.stringify(document, null, 2),
   );
+});
+
+after(async () => {
+  await closePrivacyFixture(config);
 });

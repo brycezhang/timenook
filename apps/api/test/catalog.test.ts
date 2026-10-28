@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { createHash, randomUUID, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
@@ -328,7 +329,7 @@ const synthetic = () =>
       "utf8",
     ),
   );
-test("complete synthetic parameters freeze exactly one immutable preview under concurrent replay and remain unavailable for purchase", async () => {
+test("complete synthetic parameters freeze exactly one immutable preview under concurrent replay and remain unavailable for purchase", async (t) => {
   const auth = await authenticate();
   const headers = writeHeaders(auth);
   const saved = await app.inject({
@@ -357,10 +358,16 @@ test("complete synthetic parameters freeze exactly one immutable preview under c
   const version = responses[0].json().data;
   assert.equal(responses[1].json().data.id, version.id);
   assert.equal(version.purpose, "local_preview");
-  const current = await app.inject({
-    method: "GET",
-    url: "/v1/packages/current",
-  });
+  const requestId = "d08a0000-0000-4000-8000-000000000001";
+  const current = await (async () => {
+    const uuid = t.mock.method(crypto, "randomUUID", () => requestId);
+    try {
+      return await app.inject({ method: "GET", url: "/v1/packages/current" });
+    } finally {
+      uuid.mock.restore();
+    }
+  })();
+  assert.equal(current.json().meta.requestId, requestId);
   assert.equal(current.json().data.purchasable, false);
   assert.equal(current.json().data.reason, "PREVIEW_ONLY");
   assert.equal(current.json().data.version.id, version.id);
@@ -385,9 +392,14 @@ test("complete synthetic parameters freeze exactly one immutable preview under c
     "1900000109",
     "supplier",
     "admission",
-    "d08",
   ])
     assert.ok(!current.body.includes(secret), secret);
+  // Hex UUID values can legitimately contain d08; the internal policy field
+  // must be absent throughout the public data object, including nested keys.
+  assert.ok(
+    !JSON.stringify(current.json().data).includes('"d08":'),
+    "d08 field",
+  );
   assert.ok(
     current
       .json()

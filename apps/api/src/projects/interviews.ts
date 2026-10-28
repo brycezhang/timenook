@@ -113,6 +113,7 @@ export class Interviews implements OnModuleDestroy {
     id: string,
     collectionOperatorId?: string,
   ) {
+    await this.participation.requireMaterialIn(tx, projectId, "activeData");
     const row = await tx.interview.findFirst({ where: { id, projectId } });
     if (!row) throw new NotFoundException();
     const state = await this.plans.readPersonalState(projectId, tx);
@@ -475,6 +476,7 @@ export class Interviews implements OnModuleDestroy {
     );
   }
   async listIn(tx: Prisma.TransactionClient, projectId: string) {
+    await this.participation.requireMaterialIn(tx, projectId, "activeData");
     return {
       canRecord: (await this.terms.read(projectId, undefined, tx)).canRecord,
       plan: await this.recordingPlan(projectId, tx),

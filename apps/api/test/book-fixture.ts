@@ -1,5 +1,8 @@
+import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
+import { installPrivacyFailureDiagnostic } from "./privacy-failure-diagnostic";
 import sharp from "sharp";
 import { ProductionTasks } from "../src/tasks/tasks";
+import { PrivacyRights } from "../src/care/privacy-rights";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -19,6 +22,16 @@ export let root: string;
 export let app: Awaited<ReturnType<typeof createApplication>>;
 export let db: PrismaClient;
 let fixtureOptions: Parameters<typeof createApplication>[1];
+let objectCopyGate:
+  | ((
+      source: string,
+      target: string,
+      write: () => Promise<void>,
+    ) => Promise<void>)
+  | undefined;
+export function interceptBookObjectCopy(gate?: typeof objectCopyGate) {
+  objectCopyGate = gate;
+}
 let objectReadGate: ((key: string) => Promise<void>) | undefined;
 let refundExecutionGate: ((id: string) => Promise<void>) | undefined;
 let refundInstant: Date | undefined;
@@ -31,6 +44,41 @@ export function setRefundInstant(value?: Date) {
 /** External object-storage pause for authenticated-read race tests only. */
 export function interceptBookObjectRead(gate?: (key: string) => Promise<void>) {
   objectReadGate = gate;
+}
+type BookErasureErrorGate = (input: {
+  table: string;
+  projectId: string;
+  error: unknown;
+}) => Promise<void>;
+let erasureErrorGate: BookErasureErrorGate | undefined;
+const interceptedErasureClients = new WeakSet<PrismaClient>();
+/** Pause delivery only after the real raw erasure I/O has thrown its real error.
+ * The query always executes, and neither its success nor its error is replaced. */
+export function interceptBookErasureError(gate?: BookErasureErrorGate) {
+  erasureErrorGate = gate;
+  if (!gate) return;
+  const client = app.get(PrivacyRights).db;
+  if (interceptedErasureClients.has(client)) return;
+  interceptedErasureClients.add(client);
+  const execute = client.$executeRawUnsafe.bind(client);
+  Object.defineProperty(client, "$executeRawUnsafe", {
+    configurable: true,
+    value: async (query: string, ...values: unknown[]) => {
+      try {
+        return await execute(query, ...values);
+      } catch (error) {
+        const table = /^UPDATE "([a-z_]+)" r SET /.exec(query)?.[1];
+        if (erasureErrorGate && table && typeof values[2] === "string") {
+          try {
+            await erasureErrorGate({ table, projectId: values[2], error });
+          } finally {
+            throw error;
+          }
+        }
+        throw error;
+      }
+    },
+  });
 }
 const packageId = randomUUID();
 let providerGate:
@@ -100,6 +148,7 @@ const wechatFetch: typeof fetch = async (input) =>
     }),
   );
 export async function startBookFixture() {
+  installPrivacyFailureDiagnostic();
   assert.ok(process.env.DATABASE_URL);
   assert.ok(process.env.REDIS_URL);
   const url = new URL(process.env.DATABASE_URL);
@@ -207,6 +256,11 @@ export async function startBookFixture() {
     },
   });
   class Objects extends LocalProbeObjects {
+    async copy(source: string, target: string) {
+      if (!objectCopyGate) return super.copy(source, target);
+      const bytes = await super.read(source);
+      return objectCopyGate(source, target, () => super.put(target, bytes));
+    }
     async read(key: string) {
       await objectReadGate?.(key);
       return super.read(key);
@@ -232,12 +286,16 @@ export async function startBookFixture() {
       },
     },
   };
+  await bootPrivacyFixture(config);
   app = await createApplication(config, fixtureOptions);
 }
 export async function stopBookFixture() {
+  erasureErrorGate = undefined;
   refundExecutionGate = undefined;
+  objectCopyGate = undefined;
   refundInstant = undefined;
   await app?.close();
+  if (config) await closePrivacyFixture(config);
   if (root) await rm(root, { recursive: true, force: true });
   if (db) {
     await db.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
@@ -557,6 +615,9 @@ export async function storyPhoto(
 
 export async function restartBookApplication() {
   await app.close();
-  app = await createApplication(config, fixtureOptions);
+  app = await createBookApplication(config);
   return app;
+}
+export function createBookApplication(value = config) {
+  return createApplication(value, fixtureOptions);
 }

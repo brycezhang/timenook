@@ -23,7 +23,8 @@
     "pages/service/index",
     "pages/audio-probe/index",
     "pages/original-audio/index",
-    "pages/export/index"
+    "pages/export/index",
+    "pages/deletion-status/index"
   ],
   "window": {
     "navigationBarTitleText": "时光里 · 岁月成书",

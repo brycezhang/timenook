@@ -900,3 +900,31 @@ for (const route of ["welcome", "assisted"])
     assert.equal(page.data.careRequests[0].state, "open");
     page.onHide();
   });
+
+test("本人参与与同机协助从当前项目进入删除进度，不要求私人内容可读", () => {
+  for (const name of ["welcome", "assisted"]) {
+    const h = harness(name);
+    h.page.onLoad({ projectId });
+    h.page.deletion();
+    assert.equal(
+      h.routes[0],
+      `/pages/deletion-status/index?projectId=${projectId}`,
+    );
+    assert.equal(h.requests.length, 0);
+  }
+});
+test("本人可从用途页提交删除申请，核验前不会声称删除完成", async () => {
+  const h = harness("welcome");
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  await completeProjectState(h.requests, current);
+  await showing;
+  const pending = h.page.requestDelete();
+  const sent = h.requests.shift()!;
+  assert.equal(sent.url, `${base}/projects/${projectId}/care-requests`);
+  assert.deepEqual(JSON.parse(JSON.stringify(sent.data)), { kind: "delete", expectedBindingVersion: 1 });
+  respond(sent, { supportCaseRef: "record:synthetic-delete" });
+  await pending;
+  assert.match(h.page.data.status, /待客服核验/);
+  assert.doesNotMatch(h.page.data.status, /已删除/);
+});

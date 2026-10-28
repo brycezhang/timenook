@@ -1,3 +1,4 @@
+import { PrivacyRights } from "./privacy-rights";
 import {
   Body,
   Controller,
@@ -118,6 +119,7 @@ export class QualityCare implements OnModuleDestroy {
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     private readonly identity: IdentityAccess,
+    private readonly rights: PrivacyRights,
     private readonly participation: Participation,
     private readonly books: Books,
     private readonly copies: FirstCopies,
@@ -129,6 +131,7 @@ export class QualityCare implements OnModuleDestroy {
     this.terms = new ProjectServiceTerms(config.databaseUrl);
   }
   private async evidenceTermsIn(tx: Tx, projectId: string) {
+    await this.rights.requireAvailableIn(tx, projectId, "activeData");
     const terms = await this.terms.read(projectId, undefined, tx);
     if (
       !terms.retention?.activeData ||
@@ -187,10 +190,16 @@ export class QualityCare implements OnModuleDestroy {
       pdfHash: attempt.pdfHash,
       addressHash: attempt.addressHash,
       deliveredAt: attempt.deliveredAt?.toISOString() ?? null,
-      tracking: attempt.tracking as unknown as QualityAttemptOption["tracking"],
+      tracking: (await this.participation.activeDataPayloadExpiredIn(
+        tx,
+        attempt.projectId,
+      ))
+        ? null
+        : (attempt.tracking as unknown as QualityAttemptOption["tracking"]),
     };
   }
   async viewIn(tx: Tx, row: QualityRequest): Promise<QualityRequestView> {
+    const erased = await this.rights.deletedIn(tx, row.projectId);
     const refund = row.refundId
       ? await tx.refund.findUniqueOrThrow({ where: { id: row.refundId } })
       : null;
@@ -237,13 +246,16 @@ export class QualityCare implements OnModuleDestroy {
       reviewedAt: row.reviewedAt?.toISOString() ?? null,
       resolution: row.resolution as QualityRequestView["resolution"],
       reprintMode: row.reprintMode as QualityRequestView["reprintMode"],
-      replacement: await this.copies.qualityReplacementIn(tx, row.id),
-      grant: grant
-        ? {
-            expiresAt: grant.expiresAt.toISOString(),
-            scopes: grant.scopes as QualityScope[],
-          }
-        : null,
+      replacement: erased
+        ? null
+        : await this.copies.qualityReplacementIn(tx, row.id),
+      grant:
+        !erased && grant
+          ? {
+              expiresAt: grant.expiresAt.toISOString(),
+              scopes: grant.scopes as QualityScope[],
+            }
+          : null,
       productionAttemptId: attempt?.id ?? null,
       productionState: attempt?.state ?? null,
       refund: refund ? { id: refund.id, state: refund.state } : null,
@@ -414,6 +426,10 @@ export class QualityCare implements OnModuleDestroy {
     key: string,
   ) {
     const { row, order } = await this.caseIn(tx, caseId);
+    const payloadExpired = await this.participation.activeDataPayloadExpiredIn(
+      tx,
+      row.projectId,
+    );
     if (!(await this.command(tx, row, actorId, "assign", key, body)))
       return this.viewIn(tx, row);
     if (row.version !== body.expectedVersion || row.state !== "requested")
@@ -440,7 +456,7 @@ export class QualityCare implements OnModuleDestroy {
           ownerAdminId: actorId,
           assignedAt: new Date(),
           dueAt: new Date(body.dueAt),
-          assignmentEvidenceRef: body.evidenceRef,
+          assignmentEvidenceRef: payloadExpired ? undefined : body.evidenceRef,
         },
       }),
     );
@@ -620,26 +636,37 @@ export class QualityCare implements OnModuleDestroy {
     body: ReviewQualityDto,
     key: string,
   ) {
-    const { row, order, grant } = await this.scopeIn(tx, caseId, actorId);
+    const { row, order } = await this.caseIn(tx, caseId);
+    const payloadExpired = await this.participation.activeDataPayloadExpiredIn(
+      tx,
+      row.projectId,
+    );
+    const minimumRefund = payloadExpired && body.resolution === "refund";
+    const scope = minimumRefund
+      ? null
+      : await this.scopeIn(tx, caseId, actorId);
+    if (row.ownerAdminId !== actorId) throw new ForbiddenException();
     if (!(await this.command(tx, row, actorId, "review", key, body)))
       return this.viewIn(tx, row);
     if (
       row.version !== body.expectedVersion ||
       row.state !== "assigned" ||
-      !grant.scopes.includes("pdf") ||
-      !grant.scopes.includes("evidence")
+      (!minimumRefund &&
+        (!scope!.grant.scopes.includes("pdf") ||
+          !scope!.grant.scopes.includes("evidence")))
     )
       throw new ConflictException();
-    await this.evidenceTermsIn(tx, row.projectId);
+    if (!minimumRefund) await this.evidenceTermsIn(tx, row.projectId);
     const original = await tx.fulfillmentAttempt.findUniqueOrThrow({
       where: { id: row.originalAttemptId },
     });
-    await this.books.frozenOutputIn(
-      tx,
-      row.projectId,
-      original.bookId,
-      original.pdfHash,
-    );
+    if (!minimumRefund)
+      await this.books.frozenOutputIn(
+        tx,
+        row.projectId,
+        original.bookId,
+        original.pdfHash,
+      );
     const d07 = (order.packageSnapshot as any).admission?.d07,
       rule = d07?.[row.reason];
     if (
@@ -703,7 +730,7 @@ export class QualityCare implements OnModuleDestroy {
         resolution: body.resolution,
         reprintMode: body.mode ?? null,
         reviewedAt: new Date(),
-        reviewEvidenceRef: body.evidenceRef,
+        reviewEvidenceRef: payloadExpired ? undefined : body.evidenceRef,
         requestWindowStartedAt: start,
         requestWindowEndsAt: end,
       },
@@ -714,7 +741,7 @@ export class QualityCare implements OnModuleDestroy {
         state: "verified",
         verifiedBy: actorId,
         verifiedAt: updated.reviewedAt,
-        verificationEvidence: body.evidenceRef,
+        verificationEvidence: payloadExpired ? undefined : body.evidenceRef,
       },
     });
     return this.viewIn(tx, updated);
