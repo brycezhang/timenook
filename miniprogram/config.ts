@@ -15,6 +15,6 @@ declare const __TIMENOOK_PAYMENT_VERIFICATION__: boolean | undefined;
 export const PAYMENT_VERIFICATION_BUILD =
   typeof __TIMENOOK_PAYMENT_VERIFICATION__ === "boolean" &&
   __TIMENOOK_PAYMENT_VERIFICATION__ &&
-  /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(?:\/timenook)?\/v1$/.test(
+  /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(?:\/api)?\/v1$/.test(
     API_BASE_URL,
   );

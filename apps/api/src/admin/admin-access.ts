@@ -432,7 +432,8 @@ export class AdminAccess implements OnModuleDestroy {
     if (!readOnly) this.assertCsrf(request);
     const result = await this.database.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM admin_sessions WHERE id = ${session.id}::uuid FOR UPDATE`;
-      await tx.$queryRaw`SELECT id FROM admin_accounts WHERE id = ${session.adminId!}::uuid FOR UPDATE`;
+      // Serialize authority changes while allowing callback foreign-key checks.
+      await tx.$queryRaw`SELECT id FROM admin_accounts WHERE id = ${session.adminId!}::uuid FOR NO KEY UPDATE`;
       const current = await tx.adminSession.findUnique({
         where: { id: session.id },
         include: { account: true },
