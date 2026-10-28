@@ -29,7 +29,7 @@ import { API_CONFIG, ApiConfig } from "../config";
 import { decryptSecret, hashPassword, verifyPassword } from "./secrets";
 
 const COOKIE = "__Secure-timenook_admin";
-const PATH = "/timenook/v1/admin";
+const PATH = "/api/v1/admin";
 const ROUTE_ACTIONS: Record<string, string> = {
   "POST /v1/admin/quality/cases/:caseId/review": "quality.review",
   "POST /v1/admin/quality/cases/:caseId/reprints": "quality.reprint",

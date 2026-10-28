@@ -13,7 +13,7 @@ export default defineConfig(({ command }) => {
     );
   }
   return {
-    base: "/timenook/admin/",
+    base: "/admin/",
     plugins: [vue(), tailwindcss()],
     // The shared workspace contract also serves the CommonJS Nest API.
     optimizeDeps: { include: ["@timenook/contracts"] },
@@ -37,9 +37,9 @@ export default defineConfig(({ command }) => {
             }
           : undefined,
       proxy: {
-        "/timenook/v1": {
+        "/api/v1": {
           target: process.env.ADMIN_API_TARGET ?? "http://127.0.0.1:3417",
-          rewrite: (path) => path.replace(/^\/timenook/, ""),
+          rewrite: (path) => path.replace(/^\/api/, ""),
         },
       },
     },

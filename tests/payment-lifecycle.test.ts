@@ -63,7 +63,13 @@ function harness() {
         payments.push(p),
     },
   });
-  return { client: module.exports.paymentClient, requests, payments, storage };
+  return {
+    client: module.exports.paymentClient,
+    status: module.exports.paymentStatus,
+    requests,
+    payments,
+    storage,
+  };
 }
 function respond(request: WechatMiniprogram.RequestOption, data: unknown) {
   request.success?.({
@@ -75,6 +81,15 @@ function respond(request: WechatMiniprogram.RequestOption, data: unknown) {
   } as unknown as WechatMiniprogram.RequestSuccessCallbackResult);
 }
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+test("real merchant orders retain their mode and payment progress is not labelled synthetic", async () => {
+  const { client, status, requests } = harness();
+  const pending = client.get(id);
+  respond(requests.shift()!, { ...order, mode: "wechat" });
+  const result = await pending;
+  assert.equal(result.mode, "wechat");
+  assert.equal(status(result), "订单待付款核验 · 尚未发放权益");
+  assert.equal(status({ ...result, state: "paid" }), "付款核验完成");
+});
 test("native success, cancellation, failure and timeout all resolve authority by querying the server", async () => {
   for (const outcome of ["success", "cancel", "fail", "timeout"]) {
     const { client, requests, payments } = harness();

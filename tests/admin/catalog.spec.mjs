@@ -131,7 +131,7 @@ test.beforeAll(async () => {
     },
   );
   await waitFor("http://127.0.0.1:3418/health/live");
-  await waitFor("https://localhost:3443/timenook/admin/");
+  await waitFor("https://localhost:3443/admin/");
   preview = start(
     process.execPath,
     ["node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "5174"],
@@ -139,7 +139,7 @@ test.beforeAll(async () => {
       cwd: resolve("."),
       env: {
         ...process.env,
-        TIMENOOK_API_BASE_URL: "http://127.0.0.1:5174/timenook/v1",
+        TIMENOOK_API_BASE_URL: "http://127.0.0.1:5174/api/v1",
         TIMENOOK_PREVIEW_API_TARGET: "http://127.0.0.1:3418",
       },
     },
@@ -309,9 +309,7 @@ test("operator manages relationships and package drafts, freezes a local preview
   await expect(
     consumer.getByRole("button", { name: "暂未开放购买", exact: true }),
   ).toBeDisabled();
-  await consumer.route("**/timenook/v1/packages/current", (route) =>
-    route.abort(),
-  );
+  await consumer.route("**/api/v1/packages/current", (route) => route.abort());
   await consumer.reload();
   await expect(
     consumer.getByText("套餐加载失败，请检查网络后重试", { exact: true }),
@@ -323,7 +321,7 @@ test("operator manages relationships and package drafts, freezes a local preview
     fullPage: false,
     animations: "disabled",
   });
-  await consumer.unroute("**/timenook/v1/packages/current");
+  await consumer.unroute("**/api/v1/packages/current");
   await consumer.getByRole("button", { name: "重新加载", exact: true }).click();
   await expect(consumer.getByText("¥999.00", { exact: true })).toBeVisible();
   expect(
@@ -354,7 +352,7 @@ test("operator manages relationships and package drafts, freezes a local preview
       /^Failed to load resource: the server responded with a status of 422 \(.*\)$/.test(
         error.message,
       )) ||
-      (error.url === "http://127.0.0.1:5174/timenook/v1/packages/current" &&
+      (error.url === "http://127.0.0.1:5174/api/v1/packages/current" &&
         error.message === "Failed to load resource: net::ERR_FAILED"));
   expect(errors.filter(expectedFailure)).toHaveLength(2);
   expect(errors.filter((error) => !expectedFailure(error))).toEqual([]);

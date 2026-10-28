@@ -29,6 +29,7 @@ import {
   HttpException,
   HttpCode,
   RawBodyRequest,
+  ServiceUnavailableException,
   OnModuleInit,
 } from "@nestjs/common";
 import {
@@ -139,17 +140,40 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
     return identity;
   }
   enabled() {
-    if (!this.config.payments || this.config.environment !== "test")
+    if (
+      !this.config.payments ||
+      (this.config.payments.mode === "local-verification"
+        ? this.config.environment !== "test"
+        : this.config.payments.mode !== "ordinary-merchant" ||
+          this.config.environment === "test")
+    )
       throw new ForbiddenException();
     return this.config.payments;
+  }
+  mode() {
+    return this.enabled().mode === "ordinary-merchant"
+      ? "wechat"
+      : "local-verification";
+  }
+  assertScope(order: PaymentOrder) {
+    const cfg = this.enabled();
+    if (
+      order.appId !== cfg.appId ||
+      order.merchantId !== cfg.merchantId ||
+      order.mode !== this.mode()
+    )
+      throw new NotFoundException();
   }
   async create(
     authorization: string | undefined,
     key: string,
     body: CreateOrderDto,
   ) {
-    const buyer = await this.buyer(authorization);
     const cfg = this.enabled();
+    // T05/T09/T30 have not authorized sales or a reviewed production template.
+    // Wiring a live merchant must never turn a local-preview package into a sale.
+    if (cfg.mode === "ordinary-merchant") throw new ForbiddenException();
+    const buyer = await this.buyer(authorization);
     const requestHash = hash(body);
     const order = await this.database.$transaction(async (tx) => {
       // Same actor + create-order operation + order collection + key. The order
@@ -215,7 +239,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
           requestHash,
           amount: 99900,
           currency: "CNY",
-          mode: "local-verification",
+          mode: this.mode(),
           packageVersionId: version.id,
           packageSnapshot: version.snapshot as Prisma.InputJsonValue,
           recipient,
@@ -275,12 +299,12 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
     const age = Date.now() - submission.submittedAt.getTime();
     if (submission.parameters && age < 7200000)
       return {
-        mode: "local-verification",
+        mode: this.mode(),
         status: "prepared",
         parameters: submission.parameters,
       };
     let result: Prisma.InputJsonValue = {
-      mode: "local-verification",
+      mode: this.mode(),
       status: "unknown",
       parameters: null,
     };
@@ -294,7 +318,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
           if (transaction.trade_state === "SUCCESS") {
             await this.applyVerifiedPayment(order, transaction);
             result = {
-              mode: "local-verification",
+              mode: this.mode(),
               status: "paid",
               parameters: null,
             };
@@ -304,13 +328,13 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
               data: { state: "closed" },
             });
             result = {
-              mode: "local-verification",
+              mode: this.mode(),
               status: "closed",
               parameters: null,
             };
           } else if (transaction.trade_state === "NOTPAY") {
             result = {
-              mode: "local-verification",
+              mode: this.mode(),
               status: "pending",
               parameters: null,
             };
@@ -332,7 +356,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
           where: { orderId: id },
           data: { parameters },
         });
-        result = { mode: "local-verification", status: "prepared", parameters };
+        result = { mode: this.mode(), status: "prepared", parameters };
       }
     } catch {
       /* Unknown or unauthenticated results never grant entitlement or replace the order. */
@@ -384,7 +408,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
         buyerId: buyer.userId,
         appId: buyer.appId,
         merchantId: cfg.merchantId,
-        mode: "local-verification",
+        mode: this.mode(),
       },
     });
     if (!order) throw new NotFoundException();
@@ -406,7 +430,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
               buyerId: buyer.userId,
               appId: buyer.appId,
               merchantId: cfg.merchantId,
-              mode: "local-verification",
+              mode: this.mode(),
             },
             orderBy: { createdAt: "desc" },
             take: 50,
@@ -485,6 +509,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
     };
   }
   validateBinding(order: PaymentOrder, transaction: Record<string, unknown>) {
+    this.assertScope(order);
     const amount = transaction.amount as
       { total?: unknown; currency?: unknown } | undefined;
     const payer = transaction.payer as { openid?: unknown } | undefined;
@@ -626,7 +651,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
         outTradeNo: String(notification.transaction.out_trade_no),
         appId: cfg.appId,
         merchantId: cfg.merchantId,
-        mode: "local-verification",
+        mode: this.mode(),
       },
     });
     if (!order) throw new BadRequestException();
@@ -661,11 +686,18 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
     const cfg = this.enabled();
     try {
       await this.rights.assertHealthy();
-      const events = await this.database.paymentInbox.findMany({
-        where: { processedAt: null },
-        orderBy: { verifiedAt: "asc" },
-        take: 50,
-      });
+      const mode = this.mode();
+      const events = await this.database.$queryRaw<
+        {
+          eventId: string;
+          orderId: string;
+          verifiedPayment: Prisma.JsonValue;
+        }[]
+      >`
+        SELECT i.event_id AS "eventId", i.order_id AS "orderId", i.verified_payment AS "verifiedPayment"
+        FROM payment_inbox i JOIN payment_orders o ON o.id=i.order_id
+        WHERE i.processed_at IS NULL AND o.app_id=${cfg.appId} AND o.merchant_id=${cfg.merchantId} AND o.mode=${mode}
+        ORDER BY i.verified_at LIMIT 50`;
       for (const event of events) {
         if (this.stopped) return;
         try {
@@ -674,7 +706,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
               id: event.orderId,
               appId: cfg.appId,
               merchantId: cfg.merchantId,
-              mode: "local-verification",
+              mode: this.mode(),
             },
           });
           if (order)
@@ -702,7 +734,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
         id: project.orderId,
         appId: cfg.appId,
         merchantId: cfg.merchantId,
-        mode: "local-verification",
+        mode: this.mode(),
       },
     });
     if (!order) throw new NotFoundException();
@@ -816,10 +848,14 @@ export class OrdersController {
 @Controller("v1/webhooks/wechat-pay")
 @ApiTags("Wechat Pay")
 export class PaymentWebhookController {
-  constructor(private readonly orders: Orders) {}
+  constructor(
+    private readonly orders: Orders,
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
+  ) {}
   @Post("payments") @HttpCode(204) async notification(
     @Req() request: RawBodyRequest<FastifyRequest>,
   ) {
+    if (!this.config.payments) throw new ServiceUnavailableException();
     if (!request.rawBody) throw new BadRequestException();
     const headers = new Headers();
     for (const [name, value] of Object.entries(request.headers))

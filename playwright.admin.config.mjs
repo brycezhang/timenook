@@ -8,7 +8,7 @@ export default defineConfig({
   fullyParallel: false,
   outputDir: "/tmp/timenook-admin-browser-results",
   use: {
-    baseURL: "https://localhost:3443/timenook/admin/",
+    baseURL: "https://localhost:3443/admin/",
     ignoreHTTPSErrors: true,
     trace: "off",
     screenshot: "off",

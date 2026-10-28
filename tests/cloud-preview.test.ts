@@ -22,7 +22,7 @@ test("local preview forwards cloud health and probe requests with exactly one pu
   assert.ok(previewAddress && typeof previewAddress === "object");
   await new Promise<void>((resolve) => reservation.close(() => resolve()));
   const previous = process.env.TIMENOOK_PREVIEW_API_TARGET;
-  process.env.TIMENOOK_PREVIEW_API_TARGET = `${target}/timenook`;
+  process.env.TIMENOOK_PREVIEW_API_TARGET = `${target}/api`;
   let server: Awaited<ReturnType<typeof createServer>> | undefined;
   try {
     server = await createServer({
@@ -40,22 +40,22 @@ test("local preview forwards cloud health and probe requests with exactly one pu
     const local = server.httpServer!.address();
     assert.ok(local && typeof local === "object");
     for (const path of [
-      "/timenook/health/ready",
-      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/exports",
-      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/exports/44444444-4444-4444-8444-444444444444/download",
-      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/exports/44444444-4444-4444-8444-444444444444/receipt",
-      "/timenook/v1/probes/audio/clips",
-      "/timenook/v1/probes/ai/metrics",
-      "/timenook/v1/users/me",
-      "/timenook/v1/book-audio/abcdefghijklmnopqrstuv",
-      "/timenook/v1/book-audio/abcdefghijklmnopqrstuv/clips/44444444-4444-4444-8444-444444444444/content?epoch=3",
-      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/fulfillment",
-      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/fulfillment/grants",
-      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/first-copy",
-      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/first-copy/address",
-      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/first-copy/confirmations",
-      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/first-copy/submit",
-      "/timenook/v1/projects/33333333-3333-4333-8333-333333333333/first-copy/expiry-review",
+      "/api/health/ready",
+      "/api/v1/projects/33333333-3333-4333-8333-333333333333/exports",
+      "/api/v1/projects/33333333-3333-4333-8333-333333333333/exports/44444444-4444-4444-8444-444444444444/download",
+      "/api/v1/projects/33333333-3333-4333-8333-333333333333/exports/44444444-4444-4444-8444-444444444444/receipt",
+      "/api/v1/probes/audio/clips",
+      "/api/v1/probes/ai/metrics",
+      "/api/v1/users/me",
+      "/api/v1/book-audio/abcdefghijklmnopqrstuv",
+      "/api/v1/book-audio/abcdefghijklmnopqrstuv/clips/44444444-4444-4444-8444-444444444444/content?epoch=3",
+      "/api/v1/projects/33333333-3333-4333-8333-333333333333/fulfillment",
+      "/api/v1/projects/33333333-3333-4333-8333-333333333333/fulfillment/grants",
+      "/api/v1/projects/33333333-3333-4333-8333-333333333333/first-copy",
+      "/api/v1/projects/33333333-3333-4333-8333-333333333333/first-copy/address",
+      "/api/v1/projects/33333333-3333-4333-8333-333333333333/first-copy/confirmations",
+      "/api/v1/projects/33333333-3333-4333-8333-333333333333/first-copy/submit",
+      "/api/v1/projects/33333333-3333-4333-8333-333333333333/first-copy/expiry-review",
     ]) {
       const response: Response = await fetch(
         `http://127.0.0.1:${local.port}${path}`,

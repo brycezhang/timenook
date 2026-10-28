@@ -125,7 +125,7 @@ test.beforeAll(async () => {
     },
   );
   await waitFor("http://127.0.0.1:3418/health/live");
-  await waitFor("https://localhost:3443/timenook/admin/");
+  await waitFor("https://localhost:3443/admin/");
 });
 test.afterAll(async () => {
   await stop(vite);
@@ -177,7 +177,7 @@ test("desktop and mobile operator completes MFA, survives API restart, and logs 
   await expect(page.getByRole("heading", { name: "运行信息" })).toBeVisible();
   await expect(page.getByText("服务可用", { exact: true })).toBeVisible();
   const cookies = await context.cookies(
-    "https://localhost:3443/timenook/v1/admin/runtime",
+    "https://localhost:3443/api/v1/admin/runtime",
   );
   const session = cookies.find(
     (cookie) => cookie.name === "__Secure-timenook_admin",
@@ -186,7 +186,7 @@ test("desktop and mobile operator completes MFA, survives API restart, and logs 
   expect(
     session.httpOnly && session.secure && session.sameSite === "Strict",
   ).toBe(true);
-  expect(session.path).toBe("/timenook/v1/admin");
+  expect(session.path).toBe("/api/v1/admin");
   expect(
     (await context.cookies("https://localhost:3443/v1/health")).some(
       (c) => c.name === session.name,
@@ -200,7 +200,7 @@ test("desktop and mobile operator completes MFA, survives API restart, and logs 
   await page.screenshot({ path: "/tmp/t07-admin-desktop.png", fullPage: true });
   await stop(api);
   api = start(process.execPath, ["dist/main.js"], { cwd: apiCwd, env });
-  await waitFor("https://localhost:3443/timenook/v1/admin/session");
+  await waitFor("https://localhost:3443/api/v1/admin/session");
   await page.reload();
   await expect(page.getByText("服务可用", { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
@@ -239,7 +239,7 @@ test("an expired MFA challenge returns the operator to login and clears enrollme
     cwd: apiCwd,
     env: { ...env, ADMIN_CHALLENGE_TTL_SECONDS: "3" },
   });
-  await waitFor("https://localhost:3443/timenook/v1/admin/session");
+  await waitFor("https://localhost:3443/api/v1/admin/session");
   await page.goto("./");
   await page.getByLabel("管理员账号").fill(account.username);
   await page.getByLabel("密码", { exact: true }).fill(account.password);

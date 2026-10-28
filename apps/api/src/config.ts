@@ -1,4 +1,7 @@
-import type { WechatPayConfig } from "./payments/wechat-pay";
+import {
+  readOrdinaryMerchantConfig,
+  type WechatPayConfig,
+} from "./payments/wechat-pay";
 import type { AiProbeConfig } from "./probe/ai-probe";
 import {
   effectiveDeepSeekBaseUrl,
@@ -119,6 +122,18 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
   if (appId && secret && /\s|YOUR_|PLACEHOLDER|<|>/i.test(appId + secret)) {
     throw new ConfigurationError(
       "TimeNook WeChat credentials must not contain placeholders or whitespace",
+    );
+  }
+  let payments: WechatPayConfig | undefined;
+  try {
+    payments = readOrdinaryMerchantConfig(
+      env,
+      appId && secret ? { appId, secret } : undefined,
+      environment,
+    );
+  } catch {
+    throw new ConfigurationError(
+      "Complete valid ordinary merchant payment configuration and matching server key files are required",
     );
   }
   const sessionTtlSeconds = Number(env.SESSION_TTL_SECONDS ?? "604800");
@@ -307,6 +322,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     };
   }
   return {
+    payments,
     privacyJournal,
     aiProbe,
     audioProbe,

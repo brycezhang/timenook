@@ -34,6 +34,9 @@ async function fixture() {
     "apps/admin/dist/index.html": "<title>TimeNook Admin</title>\n",
     "scripts/print-probe/book-worker.mjs": "// fixed renderer\n",
     "scripts/print-probe/OFL.txt": "font license\n",
+    "ops/systemd/timenook-api.service": "# isolated API\n",
+    "ops/systemd/timenook-worker.service": "# admitted Worker\n",
+    "ops/nginx/timenook-api-domain.conf": "# dedicated ingress\n",
     "scripts/release/package.mjs": await readFile(cli).catch(
       () => "// absent CLI before RED\n",
     ),
@@ -82,6 +85,9 @@ test("candidate release contains the fixed API/Worker/admin/renderer/migrations 
       "apps/api/prisma/migrations/202610260001_test/migration.sql",
       "apps/admin/dist/index.html",
       "scripts/print-probe/book-worker.mjs",
+      "ops/systemd/timenook-api.service",
+      "ops/systemd/timenook-worker.service",
+      "ops/nginx/timenook-api-domain.conf",
       ".cache/print-probe/NotoSansCJKsc-Regular.otf",
     ]) {
       assert.ok(

@@ -28,7 +28,7 @@ export class PaymentOrderDto {
   @ApiProperty() outTradeNo!: string;
   @ApiProperty({ enum: [99900] }) amount!: number;
   @ApiProperty({ enum: ["CNY"] }) currency!: string;
-  @ApiProperty({ enum: ["local-verification"] }) mode!: string;
+  @ApiProperty({ enum: ["local-verification", "wechat"] }) mode!: string;
   @ApiProperty({ enum: ["pending", "paid", "closed"] }) state!: string;
   @ApiProperty({ format: "uuid" }) packageVersionId!: string;
   @ApiProperty({ type: Object }) recipient!: object;
@@ -53,14 +53,14 @@ export class PaymentOrdersResponseDto {
   @ApiProperty({ type: ResponseMeta }) meta!: ResponseMeta;
 }
 class PreparedPaymentDto {
-  @ApiProperty({ enum: ["local-verification"] }) mode!: string;
+  @ApiProperty({ enum: ["local-verification", "wechat"] }) mode!: string;
   @ApiProperty({ enum: ["prepared", "pending", "unknown", "paid", "closed"] })
   status!: string;
   @ApiProperty({
     type: Object,
     nullable: true,
     description:
-      "RSA-signed mini-program contract, synthetic only; never pass to real wx.requestPayment",
+      "RSA-signed mini-program parameters; only mode=wechat may enter wx.requestPayment",
   })
   parameters!: object | null;
 }

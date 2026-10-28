@@ -26,6 +26,7 @@ import {
   paymentRequests,
   callback,
   paymentConfig,
+  paymentFetch,
   supplierOrders,
   interceptRefundQuery,
 } from "./payment-fixture";
@@ -93,6 +94,51 @@ test("unknown refund submission keeps its reservation and reconciles the origina
   assert.equal(order.project.terms.firstCopyAction, "blocked");
 });
 after(stopBookFixture);
+
+test("refund execution cannot send another merchant's persisted order to this merchant transport", async () => {
+  const p = await project();
+  const row = data(await open(p));
+  data(
+    await adminRequest("POST", `/${row.id}/approve`, {
+      amountFen: 99900,
+      evidenceRef: "synthetic:scope-review",
+    }),
+  );
+  const foreign = await createApplication(
+    {
+      ...config,
+      payments: { ...paymentConfig, merchantId: "synthetic-other-merchant" },
+      participation: undefined,
+      recording: undefined,
+      books: undefined,
+      photos: undefined,
+      transcription: undefined,
+      generation: undefined,
+    },
+    { paymentFetch },
+  );
+  const before = paymentRequests.length;
+  try {
+    assert.equal(
+      (
+        await foreign.inject({
+          method: "POST",
+          url: `/v1/admin/refunds/${row.id}/submit`,
+          headers: { ...admin, "idempotency-key": randomUUID() },
+          payload: {},
+        })
+      ).statusCode,
+      404,
+    );
+    assert.equal(paymentRequests.length, before);
+    assert.equal(
+      (await db.refund.findUniqueOrThrow({ where: { id: row.id } })).state,
+      "approved",
+    );
+  } finally {
+    await foreign.close();
+  }
+});
 
 function adminRequest(
   method: "GET" | "POST",
@@ -307,7 +353,7 @@ test("signed refund callbacks reject wrong money and replayed event changes whil
     )!;
   assert.equal(
     sent.body.notify_url,
-    "https://synthetic.invalid/timenook/v1/webhooks/wechat-pay/refunds",
+    "https://synthetic.invalid/api/v1/webhooks/wechat-pay/refunds",
   );
   Object.assign(row, {
     status: "SUCCESS",

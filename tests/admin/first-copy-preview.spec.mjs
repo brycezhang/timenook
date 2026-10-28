@@ -37,7 +37,7 @@ test("preview request adapter forwards first-copy queries and four commands with
 }) => {
   const observed = [];
   await page.route(
-    `${origin}/timenook/v1/projects/${projectId}/first-copy**`,
+    `${origin}/api/v1/projects/${projectId}/first-copy**`,
     async (route) => {
       const request = route.request();
       observed.push({
@@ -78,7 +78,7 @@ test("preview request adapter forwards first-copy queries and four commands with
           }),
         ),
       {
-        url: `${origin}/timenook/v1/projects/${projectId}/first-copy${suffix}`,
+        url: `${origin}/api/v1/projects/${projectId}/first-copy${suffix}`,
         method,
       },
     );
@@ -88,7 +88,7 @@ test("preview request adapter forwards first-copy queries and four commands with
       body: { data: { acknowledged: true }, meta: { requestId: "synthetic" } },
     });
     expect(observed.at(-1)).toEqual({
-      path: `/timenook/v1/projects/${projectId}/first-copy${suffix}`,
+      path: `/api/v1/projects/${projectId}/first-copy${suffix}`,
       method,
       key: "synthetic-first-copy-key",
       body: method === "POST" ? { synthetic: "first-copy" } : null,
@@ -110,7 +110,7 @@ test("preview request adapter forwards first-copy queries and four commands with
           }),
         ),
       {
-        url: `${origin}/timenook/v1/projects/${projectId}/first-copy${suffix}`,
+        url: `${origin}/api/v1/projects/${projectId}/first-copy${suffix}`,
         method,
       },
     );

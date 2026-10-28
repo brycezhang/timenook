@@ -111,7 +111,7 @@ test.beforeAll(async () => {
       cwd: resolve("."),
       env: {
         ...process.env,
-        TIMENOOK_API_BASE_URL: `${origin}/timenook/v1`,
+        TIMENOOK_API_BASE_URL: `${origin}/api/v1`,
         TIMENOOK_PREVIEW_API_TARGET: apiOrigin,
       },
       stdio: "ignore",
@@ -179,7 +179,7 @@ async function openBook(
     ({ origin, session }) => {
       localStorage.setItem("timenook.mode.v1", JSON.stringify("live"));
       localStorage.setItem(
-        `timenook.session.v1:${origin}/timenook/v1`,
+        `timenook.session.v1:${origin}/api/v1`,
         JSON.stringify(session),
       );
     },

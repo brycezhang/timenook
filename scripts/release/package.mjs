@@ -27,6 +27,7 @@ const required = [
   "apps/admin/dist",
   "scripts/print-probe",
   "scripts/release/package.mjs",
+  "ops",
   ".cache/print-probe/NotoSansCJKsc-Regular.otf",
 ];
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");

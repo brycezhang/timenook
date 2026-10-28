@@ -4,7 +4,7 @@ export interface PaymentOrderView {
   outTradeNo: string;
   amount: 99900;
   currency: "CNY";
-  mode: "local-verification";
+  mode: "local-verification" | "wechat";
   state: "pending" | "paid" | "closed";
   packageVersionId: string;
   recipient: { typeCode: string | null; relationshipLabel: string };

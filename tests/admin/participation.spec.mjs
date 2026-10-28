@@ -290,7 +290,7 @@ test.beforeAll(async () => {
     },
   );
   await waitFor("http://127.0.0.1:3418/health/live");
-  await waitFor("https://localhost:3443/timenook/admin/");
+  await waitFor("https://localhost:3443/admin/");
   preview = start(
     process.execPath,
     ["node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "5174"],
@@ -299,7 +299,7 @@ test.beforeAll(async () => {
       env: {
         ...process.env,
         TIMENOOK_PAYMENT_VERIFICATION: "local-verification",
-        TIMENOOK_API_BASE_URL: "http://127.0.0.1:5174/timenook/v1",
+        TIMENOOK_API_BASE_URL: "http://127.0.0.1:5174/api/v1",
         TIMENOOK_PREVIEW_API_TARGET: "http://127.0.0.1:3418",
       },
     },
@@ -361,7 +361,7 @@ async function sessionPage(context, session, route) {
     ({ session }) => {
       localStorage.setItem("timenook.mode.v1", JSON.stringify("live"));
       localStorage.setItem(
-        "timenook.session.v1:http://127.0.0.1:5174/timenook/v1",
+        "timenook.session.v1:http://127.0.0.1:5174/api/v1",
         JSON.stringify(session),
       );
     },

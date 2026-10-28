@@ -12,7 +12,7 @@ import type {
 } from "@timenook/contracts";
 // Same-origin public path; credentials never enter browser storage or JS.
 const client = new RequestClient({
-  baseURL: "/timenook/v1/admin",
+  baseURL: "/api/v1/admin",
   withCredentials: true,
 });
 import type { CompleteExportView } from "@timenook/contracts";
@@ -40,10 +40,10 @@ export const completeExportApi = {
     ).data;
   },
   async download(id: string) {
-    const r = await fetch(
-      `/timenook/v1/admin/care-requests/${id}/export/download`,
-      { credentials: "same-origin", cache: "no-store" },
-    );
+    const r = await fetch(`/api/v1/admin/care-requests/${id}/export/download`, {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
     if (!r.ok)
       throw await r.json().catch(() => ({ error: { code: "UNAVAILABLE" } }));
     return r.arrayBuffer();
@@ -169,7 +169,7 @@ export const qualityApi = {
   },
   async pdf(caseId: string, csrf: string) {
     const response = await fetch(
-      `/timenook/v1/admin/quality/cases/${encodeURIComponent(caseId)}/pdf`,
+      `/api/v1/admin/quality/cases/${encodeURIComponent(caseId)}/pdf`,
       {
         credentials: "same-origin",
         cache: "no-store",
@@ -484,7 +484,7 @@ export const fulfillmentApi = {
   },
   async pdf(orderId: string, attemptId: string, csrf: string) {
     const response = await fetch(
-      `/timenook/v1/admin/fulfillment/${orderId}/attempts/${attemptId}/pdf`,
+      `/api/v1/admin/fulfillment/${orderId}/attempts/${attemptId}/pdf`,
       {
         credentials: "same-origin",
         cache: "no-store",

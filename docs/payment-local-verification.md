@@ -16,9 +16,9 @@ pnpm test:admin-browser
 
 API 测试及浏览器测试自行创建随机 PostgreSQL schema、执行迁移，并在退出时清理 schema 与自己的 Redis 前缀；不迁移 public。浏览器测试 `tests/admin/payment.spec.mjs` 是可执行的完整本地演示夹具：启动真实 API、HTTPS 管理后台和小程序预览，使用合成供应商网络验证付款、项目恢复及客服暂停/恢复。先运行 API 测试以编译它消费的测试夹具。
 
-后端没有可通过环境变量打开的收款开关。`createApplication` 仅在 `environment: test`、显式 `payments.mode: local-verification`、AppID 与身份模块一致、配置合格且注入非全局 fetch 的测试传输时启用。生产环境拒绝这类配置；默认关闭时历史合成订单也不能通过订单、客服、通知或 Inbox 扫描继续处理。不要将测试传输包装真实网络，也不要填入真实商户私钥。
+合成模式仅在 `environment: test`、显式 `payments.mode: local-verification`、AppID 与身份模块一致、配置合格且注入非全局 fetch 的测试传输时启用，生产环境拒绝这类配置。T29 新增独立的 `ordinary-merchant` 服务端配置读取及原生 HTTPS 装配，见 `.env.example` 与 [T29 记录](delivery/2026-10-28/t29-release.md)；没有身份时不启用，商品尚未准入时真实创建订单仍拒绝。真实/合成订单按 mode、AppID、商户隔离，不能互相处理。不要将测试传输包装真实网络，也不要给合成配置填真实密钥。
 
-小程序可选验证入口须同时满足 `TIMENOOK_PAYMENT_VERIFICATION=local-verification` 和 `TIMENOOK_API_BASE_URL` 为 `http://127.0.0.1[:port]/v1` 或 `http://localhost[:port]/timenook/v1` 等本机地址。该入口清楚标注“本地合成付款验证”；页面只执行合成订单流程，不把假签名传给 `wx.requestPayment`。默认构建保留“暂未开放购买”。浏览器夹具已设置这些变量，无需改源码。
+小程序可选验证入口须同时满足 `TIMENOOK_PAYMENT_VERIFICATION=local-verification` 和 `TIMENOOK_API_BASE_URL` 为 `http://127.0.0.1[:port]/v1` 或 `http://localhost[:port]/api/v1` 等本机地址。该入口清楚标注“本地合成付款验证”；页面只执行合成订单流程，不把假签名传给 `wx.requestPayment`。默认构建保留“暂未开放购买”。浏览器夹具已设置这些变量，无需改源码。
 
 ## 公开接口与恢复
 
@@ -26,7 +26,7 @@ API 测试及浏览器测试自行创建随机 PostgreSQL schema、执行迁移�
 - `GET /v1/orders`、`GET /v1/orders/:id`：只读当前买家、当前 AppID/商户/本地 realm 的订单；按原商户号查询恢复，付款结果与通知共用入账事务。付款不代表讲述者同意。
 - `POST /v1/orders/:id/payment`：准备支付参数；未知结果先查原单。缓存参数过期后，只有查到原单未付才按原参数与原单号重新准备。一次 `ORDER_NOT_EXIST` 不生成替代订单。
 - `POST /v1/orders/:id/close`：关单并核验供应商结果；付款与关单竞态保留已核验付款事实。
-- 通知内部路径 `/v1/webhooks/wechat-pay/payments`，普通商户正式部署目标为 `https://timenookapi.threeminreading.com/api/v1/webhooks/wechat-pay/payments`，见 [ADR 0015](adr/0015-dedicated-domain-ingress.md)。本地合成夹具的地址只用于复现当前测试；正式参数读取、通知地址配置和真实公网/商户回调尚待实现与验收。
+- 通知内部路径 `/v1/webhooks/wechat-pay/payments`，普通商户正式部署目标为 `https://timenookapi.threeminreading.com/api/v1/webhooks/wechat-pay/payments`，见 [ADR 0015](adr/0015-dedicated-domain-ingress.md)。本地合成夹具的地址只用于复现当前测试；T29 已接入正式参数读取和新路径；缺配置的公网回调返回 503。真实商户通知与资金验收仍未执行。
 
 验签使用原始 HTTP body，按受信 `Wechatpay-Serial` 选公钥；供应商 204 空体也验签。回调先验签、解密、核对应用/商户/订单/总金额/币种/成功事实，持久化 Inbox 后才返回 204。业务激活由有限批次扫描恢复；Inbox 内只保留核验所需事实，恢复不重新套用 HTTP 五分钟签名时窗。单次激活事务按订单→项目→权益锁定，一次提交付款、项目、subject、冻结默认计划、首本权益和服务期限。网络不在事务中。
 
