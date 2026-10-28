@@ -4,7 +4,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { runBounded } from "../../apps/api/runtime/bounded-process.mjs";
+const execFileAsync = promisify(execFile);
+
+async function running(pid) {
+  try {
+    const { stdout } = await execFileAsync(
+      "/bin/ps",
+      ["-o", "stat=", "-p", String(pid)],
+      { encoding: "utf8" },
+    );
+    return !!stdout.trim() && !stdout.trim().startsWith("Z");
+  } catch (error) {
+    if (error.code === 1) return false;
+    throw error;
+  }
+}
 
 async function fixture(t, mode) {
   const root = await mkdtemp(join(tmpdir(), "timenook-watchdog-"));
@@ -24,7 +41,10 @@ const countFile=root+'/count';
 const count=fs.existsSync(countFile)?Number(fs.readFileSync(countFile,'utf8'))+1:1;
 fs.writeFileSync(countFile,String(count));
 const result=child.spawnSync('/bin/ps',process.argv.slice(2),{encoding:'utf8'});
-if(count>1&&fs.existsSync(root+'/worker-pid')){
+const workerReady=fs.existsSync(root+'/worker-pid');
+const capturedDescendant=${JSON.stringify(mode)}!=='descendant'||(workerReady&&result.stdout.split('\\n').some(line=>{const row=line.trim().split(/\\s+/).map(Number);return row[0]===Number(fs.readFileSync(root+'/descendant-pid','utf8'))&&row[1]===Number(fs.readFileSync(root+'/worker-pid','utf8'));}));
+if(count>1&&workerReady&&capturedDescendant){
+  fs.writeFileSync(root+'/sample',result.stdout||'');
   fs.writeFileSync(root+'/monitor-started','started');
   ${mode === "fail" ? "process.exit(42);" : "while(!fs.existsSync(root+'/release')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,5);"}
   ${mode === "late-fail" ? "process.exit(42);" : ""}
@@ -36,11 +56,23 @@ process.exit(result.status??1);
   );
   await writeFile(
     worker,
-    `import{writeFileSync,existsSync}from'node:fs';writeFileSync(${JSON.stringify(pidFile)},String(process.pid));const safety=setTimeout(()=>clearInterval(timer),2000);const timer=setInterval(()=>{if(existsSync(${JSON.stringify(join(root, "worker-exit"))})){clearTimeout(safety);clearInterval(timer)}},5);`,
+    mode === "descendant"
+      ? `import{spawn}from'node:child_process';import{writeFileSync}from'node:fs';const child=spawn(process.execPath,['-e','setTimeout(()=>{},30000)'],{stdio:'ignore'});writeFileSync(${JSON.stringify(join(root, "descendant-pid"))},String(child.pid));writeFileSync(${JSON.stringify(pidFile)},String(process.pid));setTimeout(()=>{},30000);`
+      : `import{writeFileSync,existsSync}from'node:fs';writeFileSync(${JSON.stringify(pidFile)},String(process.pid));const safety=setTimeout(()=>clearInterval(timer),2000);const timer=setInterval(()=>{if(existsSync(${JSON.stringify(join(root, "worker-exit"))})){clearTimeout(safety);clearInterval(timer)}},5);`,
   );
   process.env.PATH = `${root}:${originalPath}`;
   t.after(async () => {
     process.env.PATH = originalPath;
+    if (mode === "descendant") {
+      for (const name of ["descendant-pid", "worker-pid"]) {
+        try {
+          process.kill(
+            Number(await readFile(join(root, name), "utf8")),
+            "SIGKILL",
+          );
+        } catch {}
+      }
+    }
     await rm(root, { recursive: true, force: true });
   });
   async function waitFor(path) {
@@ -64,6 +96,8 @@ process.exit(result.status??1);
     pidFile,
     countFile: join(root, "count"),
     workerExit: join(root, "worker-exit"),
+    descendantFile: join(root, "descendant-pid"),
+    sample: join(root, "sample"),
     waitFor,
     run: (limits = {}) =>
       runBounded({
@@ -79,6 +113,47 @@ process.exit(result.status??1);
       ),
   };
 }
+
+test(
+  "a deadline also terminates descendants learned from a late real sample",
+  { timeout: 10000 },
+  async (t) => {
+    const f = await fixture(t, "descendant");
+    const pending = f.run({ timeLimit: 300, rssLimit: 4096 });
+    await f.waitFor(f.marker);
+    const worker = Number(await readFile(f.pidFile, "utf8"));
+    const descendant = Number(await readFile(f.descendantFile, "utf8"));
+    const rows = (await readFile(f.sample, "utf8"))
+      .split("\n")
+      .map((line) => line.trim().split(/\s+/).map(Number));
+    assert.equal(
+      rows.find(([pid]) => pid === descendant)?.[1],
+      worker,
+      "original ps captured the real parent before the deadline",
+    );
+    const workerEnd = performance.now() + 1500;
+    while (await running(worker)) {
+      assert.ok(
+        performance.now() < workerEnd,
+        "deadline kills the worker before sample delivery",
+      );
+      await delay(5);
+    }
+    await writeFile(
+      f.release,
+      "deliver original descendant rows after worker death",
+    );
+    assert.match((await pending).error?.message ?? "", /DECODE_RESOURCE_LIMIT/);
+    const descendantEnd = performance.now() + 1500;
+    while (await running(descendant)) {
+      assert.ok(
+        performance.now() < descendantEnd,
+        "late-discovered descendant is terminated before rejection completes",
+      );
+      await delay(5);
+    }
+  },
+);
 
 test(
   "a real pending ps sample leaves the caller event loop available to release it",

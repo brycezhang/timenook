@@ -85,10 +85,10 @@ export async function runBounded({
             0,
           );
           peakRssKb = Math.max(peakRssKb, rssKb);
-          if (rssKb > rssLimit * 1024) {
-            exceeded = true;
-            stop();
-          }
+          if (rssKb > rssLimit * 1024) exceeded = true;
+          // The wall timer may have fired while ps was in flight. Apply its
+          // termination intent to descendants learned from this late sample.
+          if (exceeded) stop();
         } catch {
           monitorFailed = true;
           stop();
