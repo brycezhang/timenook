@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#F8F4ED" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta
+      name="description"
+      content="时光里·岁月成书，用轻松的语音讲述，记录爸妈的经历，把照片、故事和原声留成一本人生书。999元包含一个人生项目与一本实体书。"
+    />
+    <meta
+      property="og:title"
+      content="时光里 · 岁月成书｜把爸妈的故事，留成一本书"
+    />
+    <meta
+      property="og:description"
+      content="从一次轻松的讲述开始，把重要的回忆认真留下。"
+    />
+    <meta
+      property="og:image"
+      content="https://sgl.wootoon.cn/assets/book.jpg"
+    />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="/assets/logo.jpg" type="image/jpeg" />
+    <title>时光里 · 岁月成书｜把爸妈的故事，留成一本书</title>
+    <link rel="stylesheet" href="/src/style.css" />
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#" aria-label="时光里·岁月成书 首页">
+          <img src="/assets/logo.jpg" width="70" height="70" alt="时光里" />
+          <span class="brand-copy"
+            ><strong>时光里</strong><span>岁月成书</span></span
+          >
+        </a>
+        <nav aria-label="主导航">
+          <a href="#sample">看看样书</a><a href="#how">如何成书</a
+          ><a href="#package">套餐与价格</a>
+        </nav>
+        <button class="button small-button" data-order>
+          去微信小程序下单 <span aria-hidden="true">↗</span>
+        </button>
+      </div>
+    </header>
+    <main id="main">
+      <section class="hero container" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <h1 id="hero-title">把爸妈的故事，<br />留成一本书。</h1>
+          <p class="hero-description">
+            那些听过的、还没听过的往事，<br />从一次轻松的讲述开始。
+          </p>
+          <div class="hero-actions">
+            <button class="button" data-order>
+              去微信小程序下单 <span aria-hidden="true">↗</span></button
+            ><a class="button secondary" href="#sample"
+              >先看看样书 <span aria-hidden="true">↓</span></a
+            >
+          </div>
+          <p class="hero-price">
+            <strong>999元</strong
+            ><span aria-hidden="true"> · </span>一个项目，含一本实体书
+          </p>
+        </div>
+        <figure class="hero-media">
+          <img
+            src="/assets/book.jpg"
+            alt="妈妈的一生：人生书封面效果图"
+            width="900"
+            height="900"
+            fetchpriority="high"
+          />
+          <figcaption>效果示意</figcaption>
+        </figure>
+      </section>
+      <section id="sample" class="sample-section section" aria-label="样书节选">
+        <div class="container">
+          <div class="section-heading center">
+            <h2>一本书，装下他们走过的时光。</h2>
+            <p>翻一翻，看看回忆成书的模样。</p>
+          </div>
+          <p class="sample-note">样书节选 · 示例</p>
+          <div class="book-spread" aria-live="polite" aria-atomic="true">
+            <div class="book-page book-left">
+              <p class="chapter-number">我的时光手记</p>
+              <p class="book-chapter" id="book-chapter">童年的小城</p>
+              <div class="book-rule"></div>
+              <p class="book-quote" id="book-quote"></p>
+              <div class="book-contents">
+                <p>人生的每一章，都值得被记得。</p>
+                <span>童年的小城</span><span>青春的选择</span
+                ><span>家的模样</span>
+              </div>
+              <span class="folio">岁月成书</span>
+            </div>
+            <article class="book-page book-right">
+              <h3 id="book-title">老屋门前的那棵桂花树</h3>
+              <div class="book-story" id="book-story"></div>
+              <span class="folio" id="book-folio">01</span>
+            </article>
+          </div>
+          <div class="book-controls">
+            <button
+              class="round-button"
+              id="previous-story"
+              aria-label="上一篇"
+              disabled
+            >
+              <span aria-hidden="true">←</span></button
+            ><span id="book-position" role="status">1 / 3</span
+            ><button class="round-button" id="next-story" aria-label="下一篇">
+              <span aria-hidden="true">→</span>
+            </button>
+          </div>
+          <p class="fine-print center">
+            以上为虚构故事与版式示例，实际书稿以本人确认的内容为准。
+          </p>
+        </div>
+      </section>
+      <section
+        class="features section container"
+        aria-labelledby="feature-title"
+      >
+        <div class="section-heading center">
+          <h2 id="feature-title">只需要说，故事就慢慢成了形。</h2>
+          <p>不用从空白的一页开始，把回忆说给我们听。</p>
+        </div>
+        <div class="feature-list">
+          <article>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="9" y="2" width="6" height="12" rx="3" />
+              <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" />
+            </svg>
+            <h3>轻松讲述</h3>
+            <p>
+              跟着问题慢慢聊，也可以看着老照片讲。爸妈自己说，你也可以在身边协助。
+            </p>
+          </article>
+          <article>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="2" width="16" height="20" rx="2" />
+              <path d="M8 7h8M8 12h8M8 17h5" />
+            </svg>
+            <h3>整理成故事</h3>
+            <p>
+              讲述保存后，整理成可阅读的故事。可以校对、补充，由本人确认，再决定入书。
+            </p>
+          </article>
+          <article>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="m21 15-5-5L5 21" />
+            </svg>
+            <h3>照片与原声，一起珍藏</h3>
+            <p>
+              把照片放进书里，为故事留下原声入口。在授权范围内，再听一遍熟悉的声音。
+            </p>
+          </article>
+        </div>
+        <div class="story-demo" role="region" aria-labelledby="demo-title">
+          <div class="demo-intro">
+            <h3 id="demo-title">从一段讲述，<br />到一篇故事。</h3>
+            <p>留住自己的语气，<br />也留住记忆里的细节。</p>
+            <span class="fine-print">文字示例 · 非真实用户经历</span>
+          </div>
+          <div class="demo-reader">
+            <div class="story-tabs" role="tablist" aria-label="故事示例">
+              <button
+                role="tab"
+                id="narration-tab"
+                aria-selected="true"
+                aria-controls="demo-panel"
+                tabindex="0"
+              >
+                示例讲述</button
+              ><button
+                role="tab"
+                id="story-tab"
+                aria-selected="false"
+                aria-controls="demo-panel"
+                tabindex="-1"
+              >
+                整理后的故事
+              </button>
+            </div>
+            <div
+              id="demo-panel"
+              class="demo-text"
+              role="tabpanel"
+              aria-labelledby="narration-tab"
+            >
+              <p>
+                我小时候住的那个房子，门前有一棵很大的桂花树。一到秋天，院子里就特别香，是甜甜的桂花香。放学回来，我把书包一放，就搬个小板凳坐在树下，看外婆择菜。她一边忙着手里的活，一边问我，今天在学校学了什么。
+                那时候的日子过得慢。傍晚，屋顶升起炊烟，街坊的招呼声从巷子那头传过来。外婆叫我吃饭，我就知道，一天又快过去了。
+                后来我离开了家，去过很多地方。可是，一闻到桂花的香味，心里就又回到了那个小院子。有些记忆，不用特意想起，也从来没有忘记。
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="how" class="how-section section" aria-labelledby="how-title">
+        <div class="container how-layout">
+          <div>
+            <div class="section-heading">
+              <h2 id="how-title">从一句回忆，<br />到一本人生书。</h2>
+              <p>陪他们聊一聊，也重新认识他们。</p>
+            </div>
+            <ol class="steps">
+              <li>
+                <span>01</span>
+                <div>
+                  <h3>送出一份心意</h3>
+                  <p>
+                    在微信小程序选择赠礼对象，购买套餐，为一位重要的人开启人生项目。
+                  </p>
+                </div>
+              </li>
+              <li>
+                <span>02</span>
+                <div>
+                  <h3>慢慢讲，认真确认</h3>
+                  <p>
+                    从一个问题或一张照片开始。录下讲述，整理、校对，再由本人确认故事。
+                  </p>
+                </div>
+              </li>
+              <li>
+                <span>03</span>
+                <div>
+                  <h3>确认书稿，等待成书</h3>
+                  <p>
+                    把故事和照片汇成书稿。确认内容、排版与地址后，安排实体书制作和寄送。
+                  </p>
+                </div>
+              </li>
+            </ol>
+          </div>
+          <figure class="family-media">
+            <img
+              src="/assets/family.jpg"
+              alt="女儿陪伴母亲一起翻看人生书的效果示意"
+              width="825"
+              height="1100"
+              loading="lazy"
+            />
+            <figcaption>效果示意</figcaption>
+          </figure>
+        </div>
+      </section>
+      <section
+        id="package"
+        class="package-section section"
+        aria-labelledby="package-title"
+      >
+        <div class="container package-inner">
+          <h2 id="package-title">
+            送一份礼物，<br class="mobile-break" />也留一份时光。
+          </h2>
+          <p class="package-price"><span>¥</span>999</p>
+          <p class="package-summary">一个人生项目 + 一本实体书</p>
+          <ul class="package-includes">
+            <li>语音讲述与故事整理</li>
+            <li>照片与原声</li>
+            <li>书稿 PDF</li>
+            <li>实体书制作</li>
+          </ul>
+          <p class="package-description">
+            为一位讲述者记录人生，含完整数字资料导出服务。
+          </p>
+          <button class="button light-button" data-order>
+            去微信小程序下单 <span aria-hidden="true">↗</span>
+          </button>
+          <p class="package-note">小程序即将上线，暂未开放下单</p>
+        </div>
+      </section>
+      <section
+        id="faq"
+        class="faq section container"
+        aria-labelledby="faq-title"
+      >
+        <div class="section-heading center">
+          <h2 id="faq-title">你可能还想知道</h2>
+        </div>
+        <div id="faq-list">
+          <details>
+            <summary>爸妈不太会用手机，也能参与吗？</summary>
+            <p>
+              可以。爸妈在场并同意时，你可以当面协助操作，录下他们自己的讲述。故事整理后仍由本人确认，再决定是否入书。
+            </p>
+          </details>
+          <details>
+            <summary>一定要从头讲完一生吗？</summary>
+            <p>
+              不需要。可以从最想分享的一件事、一张照片或一个问题开始。讲述可以分多次进行，章节和问题也可以调整。
+            </p>
+          </details>
+          <details>
+            <summary>整理后的内容可以修改吗？</summary>
+            <p>
+              可以。整理稿可以校对、修改和补充，修改后需要本人重新确认。是否让某个故事入书，也由讲述者决定。
+            </p>
+          </details>
+          <details>
+            <summary>999元包含什么？</summary>
+            <p>
+              包含一个人生项目和一本实体书，以及套餐约定的讲述与整理、照片与原声、书稿PDF和完整数字资料导出服务。服务期限、内容额度、实体书规格与配送范围，以正式购买时公示的套餐说明为准。
+            </p>
+          </details>
+          <details>
+            <summary>原声和故事会公开吗？</summary>
+            <p>
+              项目资料按授权范围使用，书中的原声入口也受授权控制。原声访问、资料保存与导出服务的期限，会在正式购买时明确说明。
+            </p>
+          </details>
+          <details>
+            <summary>也可以送给父母以外的人吗？</summary>
+            <p>
+              可以。你也可以为伴侣、朋友或其他重要的人记录人生。一个项目围绕一位成年讲述者展开，具体赠礼称呼可在小程序中选择或填写。
+            </p>
+          </details>
+        </div>
+      </section>
+    </main>
+    <footer class="site-footer">
+      <a class="brand footer-brand" href="#" aria-label="返回时光里首页"
+        ><img src="/assets/logo.jpg" alt="时光里" width="70" height="70" /><span
+          class="brand-copy"
+          ><strong>时光里</strong><span>岁月成书</span></span
+        ></a
+      >
+      <p>© 2026 千言一语文化传媒有限公司. All rights reserved.</p>
+    </footer>
+    <div class="mobile-order">
+      <span><strong>999元</strong><small>含一本实体书</small></span
+      ><button class="button" data-order>
+        去微信小程序下单 <span aria-hidden="true">↗</span>
+      </button>
+    </div>
+    <dialog
+      id="order-dialog"
+      aria-labelledby="order-title"
+      aria-describedby="order-description"
+    >
+      <button class="dialog-close" aria-label="关闭提示">×</button
+      ><img src="/assets/logo.jpg" alt="" width="96" height="96" />
+      <h2 id="order-title">岁月成书，即将与你见面。</h2>
+      <p id="order-description">
+        微信小程序即将上线，暂未开放下单。<br />你可以先翻翻样书，看看回忆成书的模样。
+      </p>
+      <button class="button" id="dialog-done">知道了</button>
+    </dialog>
+  </body>
+</html>
