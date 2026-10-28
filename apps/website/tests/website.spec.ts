@@ -22,6 +22,8 @@ test("访客能切换讲述与整理稿，键盘也能操作", async ({ page }) 
   const narration = page.getByRole("tab", { name: "示例讲述", exact: true });
   const story = page.getByRole("tab", { name: "整理后的故事", exact: true });
   await expect(narration).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel")).toContainText("街坊的招呼声");
+  await expect(page.getByRole("tabpanel")).toContainText("一闻到桂花的香味");
   await story.click();
   await expect(story).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tabpanel")).toContainText("一闻到桂花的香味");
@@ -106,6 +108,14 @@ test("页面品牌、图片和版面完整，没有脚本错误或横向溢出",
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+  for (const control of await page
+    .getByRole("button")
+    .or(page.getByRole("tab"))
+    .all()) {
+    const box = await control.boundingBox();
+    expect(box?.width).toBeGreaterThanOrEqual(48);
+    expect(box?.height).toBeGreaterThanOrEqual(48);
+  }
   await expect(page.locator("vite-error-overlay")).toHaveCount(0);
   expect(errors).toEqual([]);
   await page.screenshot({

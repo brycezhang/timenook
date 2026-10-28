@@ -185,7 +185,7 @@ nav a:hover {
 }
 .small-button {
   font-size: 13px;
-  min-height: 46px;
+  min-height: 48px;
   padding: 11px 19px;
   gap: 14px;
 }
@@ -372,8 +372,8 @@ h1 {
   margin-block: 28px 18px;
 }
 .round-button {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: transparent;
   border: 1px solid #b89b7e;
@@ -460,7 +460,7 @@ h1 {
   color: var(--muted);
   padding: 0 0 12px;
   position: relative;
-  min-height: 42px;
+  min-height: 48px;
 }
 .story-tabs button[aria-selected="true"] {
   color: var(--brown-dark);
@@ -693,8 +693,8 @@ dialog p {
   position: absolute;
   right: 10px;
   top: 7px;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -762,7 +762,7 @@ dialog .button {
     padding: 10px 14px;
     font-size: 12px;
     gap: 8px;
-    min-height: 44px;
+    min-height: 48px;
   }
   .hero {
     grid-template-columns: 1fr;
@@ -896,7 +896,7 @@ dialog .button {
     color: var(--muted);
   }
   .mobile-order .button {
-    min-height: 46px;
+    min-height: 48px;
     font-size: 13px;
     padding: 11px 20px;
     gap: 14px;
