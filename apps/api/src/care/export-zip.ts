@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { crc32 } from "node:zlib";
 export type ExportFile = {
   path: string;
   bytes: Buffer;
@@ -8,15 +9,6 @@ export type ExportFile = {
 const MAX_BYTES = 134217728;
 export const hashBytes = (bytes: Buffer) =>
   createHash("sha256").update(bytes).digest("hex");
-function crc32(bytes: Buffer) {
-  let crc = 0xffffffff;
-  for (const value of bytes) {
-    crc ^= value;
-    for (let bit = 0; bit < 8; bit++)
-      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
 /** Bounded ZIP STORE, UTF-8 paths; ordinary ZIP readers need no platform service. */
 export function exportZip(files: ExportFile[], metadata: object) {
   if (

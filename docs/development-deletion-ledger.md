@@ -86,3 +86,5 @@ pnpm --filter @timenook/api privacy:recover activate
 CI的book-fixture诊断只包裹原文件/native调用：失败候选可带目录准备、本地排队、native回调、认证work和unlock/close的最少时长/计数。本地slot的观测不等于跨进程native所有权；只有原成功回调后才记录native获取，错误归因仍为unknown。它不增加source/DB读取、重试或重置failed/5秒预算，成功不输出；路径、密钥、载荷和rawstack不进入记录。具体CI失败与未复现的本地测量见本票证据，不能将诊断提交视为根因修复。
 
 每次完整源认证仍持有同一原生EX，event文件按最多4项读取，每项仍认证原字节的HMAC，批次全settled后依原顺序验证链/文件名/head前缀；错误不会令其它在途FD/I/O越过unlock。此有界读取缩短慢FS回调往返在本地FIFO内的累计等待，不缓存源或省略认证，也不延长获取锁的原单一5秒预算。真正超过预算仍拒绝并保留原进程闭锁/显式恢复要求。
+
+打包沿固定Node22的原生CRC-32生成同字节ZIP STORE，避免逐位JavaScript计算长时间占用源I/O所在事件循环。解码/渲染的RSS监控使用非重叠异步ps，保留50ms采样、1秒查询上限、全后代RSS与原总时限/失败终止；worker结束仍须等待在途采样，不能把尚未返回的监控失败当成功。它们不放宽源认证或锁预算，具体可控负载与实际CI尚未证明的边界分别记录在本票证据中。
