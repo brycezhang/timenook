@@ -89,6 +89,15 @@ jobs:
       - run: pnpm check
       - run: pnpm api:openapi
       - run: pnpm test:admin-browser
+      - run: pnpm test:website
+      - name: Package independent website preview
+        run: pnpm package:website "$RUNNER_TEMP/timenook-website-release"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: timenook-website-preview-${{ github.sha }}
+          path: ${{ runner.temp }}/timenook-website-release/
+          if-no-files-found: error
+          retention-days: 7
       - name: Inspect Linux Prisma runtime and package candidate release
         run: |
           pnpm --filter @timenook/api exec prisma -v
