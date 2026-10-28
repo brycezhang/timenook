@@ -278,7 +278,7 @@ test.beforeAll(async () => {
       cwd: resolve("."),
       env: {
         ...process.env,
-        TIMENOOK_API_BASE_URL: `${base}/timenook/v1`,
+        TIMENOOK_API_BASE_URL: `${base}/api/v1`,
         TIMENOOK_PREVIEW_API_TARGET: `http://127.0.0.1:${apiPort}`,
       },
       stdio: "ignore",
@@ -356,7 +356,7 @@ async function openPage(
     ({ session, base, audioBase64 }) => {
       localStorage.setItem("timenook.mode.v1", JSON.stringify("live"));
       localStorage.setItem(
-        `timenook.session.v1:${base}/timenook/v1`,
+        `timenook.session.v1:${base}/api/v1`,
         JSON.stringify(session),
       );
       // Only the native device/file boundary is controlled. Page, HTTP and PG remain real.

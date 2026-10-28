@@ -21,8 +21,7 @@ export const paymentConfig = {
     .export({ type: "spki", format: "pem" })
     .toString(),
   apiV3Key: randomBytes(32).toString("hex").slice(0, 32),
-  notifyUrl:
-    "https://synthetic.invalid/timenook/v1/webhooks/wechat-pay/payments",
+  notifyUrl: "https://synthetic.invalid/api/v1/webhooks/wechat-pay/payments",
 };
 export const supplierOrders = new Map<string, Record<string, unknown>>();
 export const supplierRefunds = new Map<string, Record<string, unknown>>();

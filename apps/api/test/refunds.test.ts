@@ -26,6 +26,7 @@ import {
   paymentRequests,
   callback,
   paymentConfig,
+  paymentFetch,
   supplierOrders,
   interceptRefundQuery,
 } from "./payment-fixture";
@@ -93,6 +94,51 @@ test("unknown refund submission keeps its reservation and reconciles the origina
   assert.equal(order.project.terms.firstCopyAction, "blocked");
 });
 after(stopBookFixture);
+
+test("refund execution cannot send another merchant's persisted order to this merchant transport", async () => {
+  const p = await project();
+  const row = data(await open(p));
+  data(
+    await adminRequest("POST", `/${row.id}/approve`, {
+      amountFen: 99900,
+      evidenceRef: "synthetic:scope-review",
+    }),
+  );
+  const foreign = await createApplication(
+    {
+      ...config,
+      payments: { ...paymentConfig, merchantId: "synthetic-other-merchant" },
+      participation: undefined,
+      recording: undefined,
+      books: undefined,
+      photos: undefined,
+      transcription: undefined,
+      generation: undefined,
+    },
+    { paymentFetch },
+  );
+  const before = paymentRequests.length;
+  try {
+    assert.equal(
+      (
+        await foreign.inject({
+          method: "POST",
+          url: `/v1/admin/refunds/${row.id}/submit`,
+          headers: { ...admin, "idempotency-key": randomUUID() },
+          payload: {},
+        })
+      ).statusCode,
+      404,
+    );
+    assert.equal(paymentRequests.length, before);
+    assert.equal(
+      (await db.refund.findUniqueOrThrow({ where: { id: row.id } })).state,
+      "approved",
+    );
+  } finally {
+    await foreign.close();
+  }
+});
 
 function adminRequest(
   method: "GET" | "POST",
@@ -307,7 +353,7 @@ test("signed refund callbacks reject wrong money and replayed event changes whil
     )!;
   assert.equal(
     sent.body.notify_url,
-    "https://synthetic.invalid/timenook/v1/webhooks/wechat-pay/refunds",
+    "https://synthetic.invalid/api/v1/webhooks/wechat-pay/refunds",
   );
   Object.assign(row, {
     status: "SUCCESS",
@@ -1003,4 +1049,155 @@ test("refund clock and scheduling controls are unavailable outside isolated test
         ),
       /Refund scheduling and clock overrides require isolated tests/,
     );
+});
+
+async function waitingBehind(blockers: number[], excluded: number[] = []) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const waiting = await db.$queryRaw<{ pid: number; blockers: number[] }[]>`
+      SELECT pid, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity
+      WHERE datname=current_database() AND wait_event_type='Lock'`;
+    const match = waiting.find(
+      (row) =>
+        !excluded.includes(row.pid) &&
+        row.blockers.some((pid) => blockers.includes(pid)),
+    );
+    if (match) return match.pid;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Concurrent HTTP request did not reach its PostgreSQL lock");
+}
+
+test("a signed successful refund callback and the approving operator's reconciliation both complete while contending for the original order", async () => {
+  setRefundInstant();
+  const p = await project(),
+    r = data(await open(p));
+  data(
+    await adminRequest("POST", `/${r.id}/approve`, {
+      amountFen: 99900,
+      evidenceRef: "synthetic:concurrent-original-refund",
+    }),
+  );
+  data(await adminRequest("POST", `/${r.id}/submit`, {}));
+  Object.assign(supplierRefunds.get(r.outRefundNo)!, {
+    status: "SUCCESS",
+    success_time: new Date().toISOString(),
+  });
+  let acquired!: (pid: number) => void, release!: () => void;
+  const locked = new Promise<number>((resolve) => {
+    acquired = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  // Only database scheduling is controlled. Callback and command outcomes are HTTP.
+  const blocker = db.$transaction(
+    async (tx) => {
+      const [{ pid }] = await tx.$queryRaw<
+        { pid: number }[]
+      >`SELECT pg_backend_pid() AS pid`;
+      await tx.$queryRaw`SELECT id FROM payment_orders WHERE id=${p.orderId}::uuid FOR UPDATE`;
+      acquired(pid);
+      await gate;
+    },
+    { timeout: 15000 },
+  );
+  let notification: ReturnType<typeof refundCallback> | undefined;
+  let reconciliation:
+    Promise<Awaited<ReturnType<typeof adminRequest>>> | undefined;
+  try {
+    const pid = await locked;
+    notification = refundCallback(supplierRefunds.get(r.outRefundNo)!);
+    const callbackPid = await waitingBehind([pid]);
+    reconciliation = adminRequest("POST", `/${r.id}/reconcile`, {}).then(
+      (response) => response,
+    );
+    await waitingBehind([pid, callbackPid], [callbackPid]);
+    release();
+    const [notice, result] = await Promise.all([notification, reconciliation]);
+    assert.equal(notice.statusCode, 204, notice.body);
+    assert.equal(result.statusCode, 201, result.body);
+    assert.equal(result.json().data.state, "succeeded");
+    const balance = data(
+      await request("GET", `/v1/orders/${p.orderId}/refunds`, p.buyer.token),
+      200,
+    );
+    assert.equal(balance.refundedAmountFen, 99900);
+    assert.equal(balance.reservedAmountFen, 0);
+  } finally {
+    release();
+    await blocker;
+    await Promise.allSettled([notification, reconciliation].filter(Boolean));
+  }
+});
+
+test("queued refund approval rechecks account disablement and permission revocation after acquiring authority", async (t) => {
+  for (const change of ["disable", "revoke"] as const)
+    await t.test(change, async () => {
+      const headers = await paymentAdmin(config, app, ["care:write"]);
+      const p = await project(),
+        r = data(await open(p));
+      const session = data(
+        await app.inject({ method: "GET", url: "/v1/admin/session", headers }),
+        200,
+      );
+      let acquired!: (pid: number) => void, release!: () => void;
+      const locked = new Promise<number>((resolve) => {
+        acquired = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const blocker = db.$transaction(
+        async (tx) => {
+          const [{ pid }] = await tx.$queryRaw<
+            { pid: number }[]
+          >`SELECT pg_backend_pid() AS pid`;
+          await tx.$queryRaw`SELECT id FROM admin_accounts WHERE id=${session.operator.id}::uuid FOR UPDATE`;
+          acquired(pid);
+          await gate;
+          await tx.adminAccount.update({
+            where: { id: session.operator.id },
+            data:
+              change === "disable" ? { disabled: true } : { permissions: [] },
+          });
+        },
+        { timeout: 15000 },
+      );
+      let pending:
+        Promise<Awaited<ReturnType<typeof adminRequest>>> | undefined;
+      try {
+        const pid = await locked;
+        pending = adminRequest(
+          "POST",
+          `/${r.id}/approve`,
+          { amountFen: 99900, evidenceRef: "synthetic:queued-approval" },
+          randomUUID(),
+          headers,
+        ).then((response) => response);
+        await waitingBehind([pid]);
+        release();
+        await blocker;
+        const rejected = await pending;
+        assert.equal(
+          rejected.statusCode,
+          change === "disable" ? 401 : 403,
+          rejected.body,
+        );
+        const balance = data(
+          await request(
+            "GET",
+            `/v1/orders/${p.orderId}/refunds`,
+            p.buyer.token,
+          ),
+          200,
+        );
+        assert.equal(balance.refunds[0].state, "requested");
+        assert.equal(balance.refundedAmountFen, 0);
+        assert.equal(balance.reservedAmountFen, 0);
+      } finally {
+        release();
+        await blocker;
+        await pending;
+      }
+    });
 });

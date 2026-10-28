@@ -536,6 +536,12 @@ async function historicalUpgradeScenario(
       },
     );
     fixture.config.privacyJournal = { root: sourceRoot, key };
+    // The historical application used its real old environment. The upgraded
+    // deployment explicitly adopts ADR 0015's current callback configuration.
+    fixture.config.payments.notifyUrl = new URL(
+      "/api/v1/webhooks/wechat-pay/payments",
+      fixture.config.payments.notifyUrl,
+    ).toString();
     fixture.app = await createApplication(fixture.config, options);
     const journal = new PrivacyJournal(fixture.config.privacyJournal);
     const imported = await journal.snapshot();

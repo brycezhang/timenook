@@ -2,17 +2,17 @@
 
 T07 管理身份独立于小程序账号。只有受控 CLI 可建号，未提供注册 API、默认管理员或默认口令。管理员按实际职责获得明确权限；空权限账号可以登录，但不能执行受限操作。权限白名单以[共享契约](../packages/contracts/src/admin.ts)为准，私人内容仍需适用工单、本人限时授权及当前版本核验。
 
-| 权限 | 允许的业务范围 |
-| --- | --- |
-| `ops:read` | 运行信息 |
-| `audit:read` | 最近 100 条审计 |
-| `catalog:read` | 读取运营关系目录和套餐 |
-| `catalog:write` | 编辑关系目录和套餐草稿 |
-| `catalog:freeze` | 受准入约束的套餐冻结操作 |
-| `care:write` | 共享工单及其受控动作，包括本人权利、校对和退款处理 |
-| `fulfillment:write` | 首本审核、生产尝试、交接与物流 |
-| `service-terms:write` | 已购项目服务期限的受控操作 |
-| `tasks:retry` | 在原预算及授权条件内重试任务 |
+| 权限                  | 允许的业务范围                                     |
+| --------------------- | -------------------------------------------------- |
+| `ops:read`            | 运行信息                                           |
+| `audit:read`          | 最近 100 条审计                                    |
+| `catalog:read`        | 读取运营关系目录和套餐                             |
+| `catalog:write`       | 编辑关系目录和套餐草稿                             |
+| `catalog:freeze`      | 受准入约束的套餐冻结操作                           |
+| `care:write`          | 共享工单及其受控动作，包括本人权利、校对和退款处理 |
+| `fulfillment:write`   | 首本审核、生产尝试、交接与物流                     |
+| `service-terms:write` | 已购项目服务期限的受控操作                         |
+| `tasks:retry`         | 在原预算及授权条件内重试任务                       |
 
 正式建号时选择各负责人需要的权限。`care:write` 当前也覆盖退款审批等资金动作；金额、原订单预留、生产核验和实际微信结果仍由相同业务用例约束。具备业务权限不等于具备所有私人资料的查看权，缺少对应内容授权时仍拒绝。
 
@@ -41,7 +41,7 @@ CLI 拒绝符号链接、非当前用户所有、组/其他用户可读、超过
 - 密码通过仅获得5分钟挑战；首次MFA初始化数据仅在该挑战且账号尚未完成初始化时可读取。完整会话必须再通过六位TOTP。
 - 采用标准30秒TOTP，接受当前及前一时间步；成功时间步以PG锁和事务全局消费，重复、并发或旧验证码拒绝。Redis按账号/IP限速，Redis不可用时不继续尝试密码/MFA。
 - 完整会话绝对有效期8小时，挑战默认5分钟；可通过 `ADMIN_SESSION_TTL_SECONDS` / `ADMIN_CHALLENGE_TTL_SECONDS` 缩短，最大仍为8小时/5分钟。没有静默续期。数据库持久化会话，所以 API 重启保留未到期会话，到期/注销后不可恢复。
-- 专用 `__Secure-timenook_admin` Cookie：Secure、HttpOnly、SameSite=Strict、host-only；正式目标为 TimeNook 独立域名下的 Path=`/api/v1/admin`，见 [ADR 0015](adr/0015-dedicated-domain-ingress.md)。Cookie Path 是浏览器发送范围，身份权限仍由独立账号/会话表验证。当前本地夹具与正式目标的配置接入分别验证。
+- 专用 `__Secure-timenook_admin` Cookie：Secure、HttpOnly、SameSite=Strict、host-only；正式目标为 TimeNook 独立域名下的 Path=`/api/v1/admin`，见 [ADR 0015](adr/0015-dedicated-domain-ingress.md)。Cookie Path 是浏览器发送范围，身份权限仍由独立账号/会话表验证。本地 HTTPS 夹具与目标部署使用同一路径；实际管理员及正式环境证据分别验证。
 - 所有写请求必须携带与当前Cookie绑定的 `X-CSRF-Token`，Origin必须精确匹配配置；跨站请求拒绝。密码/MFA成功会轮换并撤销旧挑战；退出同时撤销服务端会话和清Cookie。前端在完整会话或MFA挑战失效后恢复登录。
 - 若 MFA/密码轮换已先消费旧挑战，并发退出该旧挑战返回401且不清除新Cookie；调用方须用当前会话重新退出，不能把旧挑战的退出失败当作新会话已撤销。该规则只作用于当前会话，不注销其他设备。
 - 会话创建/轮换/注销与成功审计同PG事务，事务提交后才发送Cookie。审计失败导致事务回滚，不会发出新的有效身份。审计只记录operatorId、固定action、服务端生成requestId、result和时间；不记录请求体、密码、验证码、种子、Cookie/CSRF令牌、云key或完整地址。
@@ -51,4 +51,4 @@ CLI 拒绝符号链接、非当前用户所有、组/其他用户可读、超过
 
 `pnpm check` 含既有小程序测试、API真实数据库测试以及管理端类型/构建；`pnpm api:openapi` 导出契约；`pnpm test:admin-browser` 走实际CLI、真实PG/Redis、HTTPS浏览器路径（独立临时schema和前缀，自动清理）。管理端开发与浏览器要求见 [apps/admin/README.md](../apps/admin/README.md)。
 
-本地通过只证明实现和本地合成账号流程。当前正式目标为独立域名下的 `/admin/` 静态页面及 `/api/v1/admin` API/Cookie；其配置接入、真实管理员 MFA 初始化、生产机运行与重启、TLS/Nginx、正式数据库/Redis、密钥保管及同机 legal-agent 回归仍待 T29 验收；本票保持未关闭。
+本地通过只证明实现和本地合成账号流程。当前正式目标为独立域名下的 `/admin/` 静态页面及 `/api/v1/admin` API/Cookie；路径配置已接入；真实管理员 MFA 初始化、生产机运行与重启、TLS/Nginx、正式数据库/Redis、密钥保管及同机 legal-agent 回归由 T29 留证；本票保持未关闭。

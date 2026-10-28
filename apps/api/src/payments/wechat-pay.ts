@@ -5,9 +5,12 @@ import {
   randomBytes,
   sign,
   verify,
+  X509Certificate,
 } from "node:crypto";
+import { readFileSync, statSync } from "node:fs";
+import { isAbsolute } from "node:path";
 export interface WechatPayConfig {
-  mode: "local-verification";
+  mode: "local-verification" | "ordinary-merchant";
   appId: string;
   merchantId: string;
   merchantSerial: string;
@@ -167,10 +170,7 @@ export class WechatPay {
       out_trade_no: order.outTradeNo,
       out_refund_no: refund.outRefundNo,
       reason: "岁月成书售后退款",
-      notify_url: new URL(
-        "/timenook/v1/webhooks/wechat-pay/refunds",
-        this.config.notifyUrl,
-      ).toString(),
+      notify_url: new URL("refunds", this.config.notifyUrl).toString(),
       amount: {
         total: order.amount,
         refund: refund.amount,
@@ -254,7 +254,7 @@ export function validateWechatPayConfig(config: WechatPayConfig) {
     url.password ||
     url.search ||
     url.hash ||
-    url.pathname !== "/timenook/v1/webhooks/wechat-pay/payments" ||
+    url.pathname !== "/api/v1/webhooks/wechat-pay/payments" ||
     Buffer.byteLength(config.apiV3Key) !== 32 ||
     [
       config.appId,
@@ -273,4 +273,76 @@ export function validateWechatPayConfig(config: WechatPayConfig) {
       (key.asymmetricKeyDetails?.modulusLength ?? 0) < 2048
     )
       throw new PaymentProtocolError();
+  if (
+    config.mode === "ordinary-merchant" &&
+    (!/^wx[0-9a-f]{16}$/.test(config.appId) ||
+      !/^\d{6,32}$/.test(config.merchantId) ||
+      !/^[0-9A-F]{1,64}$/.test(config.merchantSerial) ||
+      !/^(?:PUB_KEY_ID_\d{1,80}|[0-9A-F]{1,64})$/.test(config.platformKeyId) ||
+      /synthetic|placeholder|your_|<|>/i.test(config.apiV3Key) ||
+      /\s/.test(config.apiV3Key))
+  )
+    throw new PaymentProtocolError();
+}
+
+/** Real merchant material is read once at startup, never from client input. */
+export function readOrdinaryMerchantConfig(
+  env: NodeJS.ProcessEnv,
+  identity: { appId: string; secret: string } | undefined,
+  environment: string,
+): WechatPayConfig | undefined {
+  if (
+    !Object.keys(env).some(
+      (key) => key.startsWith("TIMENOOK_WECHAT_PAY_") && env[key]?.trim(),
+    )
+  )
+    return;
+  const field = (name: string) => env[`TIMENOOK_WECHAT_PAY_${name}`] ?? "";
+  if (
+    field("MODE") !== "ordinary-merchant" ||
+    environment === "test" ||
+    !identity ||
+    /synthetic|placeholder|your_/i.test(identity.secret)
+  )
+    throw new PaymentProtocolError();
+  const material = (name: string) => {
+    const path = field(name);
+    if (!isAbsolute(path)) throw new PaymentProtocolError();
+    const file = statSync(path);
+    if (!file.isFile() || file.size > 65536 || file.mode & 0o022)
+      throw new PaymentProtocolError();
+    return readFileSync(path, "utf8");
+  };
+  const merchantPrivateKey = material("MERCHANT_PRIVATE_KEY_PATH");
+  const certificate = new X509Certificate(material("MERCHANT_CERT_PATH"));
+  if (
+    !certificate.checkPrivateKey(createPrivateKey(merchantPrivateKey)) ||
+    Date.parse(certificate.validFrom) > Date.now() ||
+    Date.parse(certificate.validTo) <= Date.now()
+  )
+    throw new PaymentProtocolError();
+  const platformPublicKey = material("PLATFORM_PUBLIC_KEY_PATH");
+  const platformKeyId = field("PLATFORM_KEY_ID");
+  if (!platformKeyId.startsWith("PUB_KEY_ID_")) {
+    const platform = new X509Certificate(platformPublicKey);
+    if (
+      platform.serialNumber !== platformKeyId ||
+      Date.parse(platform.validFrom) > Date.now() ||
+      Date.parse(platform.validTo) <= Date.now()
+    )
+      throw new PaymentProtocolError();
+  }
+  const config: WechatPayConfig = {
+    mode: "ordinary-merchant",
+    appId: identity.appId,
+    merchantId: field("MERCHANT_ID"),
+    merchantSerial: certificate.serialNumber,
+    merchantPrivateKey,
+    platformKeyId,
+    platformPublicKey,
+    apiV3Key: field("API_V3_KEY"),
+    notifyUrl: field("NOTIFY_URL"),
+  };
+  validateWechatPayConfig(config);
+  return config;
 }

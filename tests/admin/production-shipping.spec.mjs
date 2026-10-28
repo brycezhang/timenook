@@ -124,7 +124,7 @@ test.beforeAll(async () => {
       cwd: resolve("."),
       env: {
         ...process.env,
-        TIMENOOK_API_BASE_URL: `${origin}/timenook/v1`,
+        TIMENOOK_API_BASE_URL: `${origin}/api/v1`,
         TIMENOOK_PREVIEW_API_TARGET: apiOrigin,
       },
     },
@@ -138,7 +138,7 @@ test.beforeAll(async () => {
       ADMIN_TLS_KEY: key,
     },
   });
-  await Promise.all([ready(origin), ready(`${adminOrigin}/timenook/admin/`)]);
+  await Promise.all([ready(origin), ready(`${adminOrigin}/admin/`)]);
 });
 
 test.afterAll(async () => {
@@ -189,7 +189,7 @@ async function openMini(
     ({ origin, account }) => {
       localStorage.setItem("timenook.mode.v1", JSON.stringify("live"));
       localStorage.setItem(
-        `timenook.session.v1:${origin}/timenook/v1`,
+        `timenook.session.v1:${origin}/api/v1`,
         JSON.stringify(account),
       );
     },
@@ -212,7 +212,7 @@ async function openAdmin(browser) {
       name: adminHeaders.cookie.slice(0, split),
       value: adminHeaders.cookie.slice(split + 1),
       domain: "localhost",
-      path: "/timenook/v1/admin",
+      path: "/api/v1/admin",
       secure: true,
       httpOnly: true,
       sameSite: "Strict",
@@ -220,9 +220,9 @@ async function openAdmin(browser) {
   ]);
   const page = await context.newPage();
   observe(page);
-  await page.goto(`${adminOrigin}/timenook/admin/`);
+  await page.goto(`${adminOrigin}/admin/`);
   await expect(page).toHaveTitle("时光里 · 运营管理");
-  await expect(page).toHaveURL(`${adminOrigin}/timenook/admin/`);
+  await expect(page).toHaveURL(`${adminOrigin}/admin/`);
   await page.getByRole("button", { name: "生产与物流", exact: true }).click();
   return page;
 }

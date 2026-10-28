@@ -505,7 +505,7 @@ test("admin cookies are host-only, scoped, Secure and HttpOnly; logout revokes t
   const auth = await authenticate();
   const header = String(auth.response.headers["set-cookie"]);
   for (const attribute of [
-    "Path=/timenook/v1/admin",
+    "Path=/api/v1/admin",
     "HttpOnly",
     "Secure",
     "SameSite=Strict",

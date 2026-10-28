@@ -16,6 +16,7 @@ import {
   ConflictException,
   HttpCode,
   RawBodyRequest,
+  ServiceUnavailableException,
   OnModuleInit,
 } from "@nestjs/common";
 import {
@@ -159,6 +160,9 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
   async readIn(tx: Tx, id: string) {
     const row = await tx.refund.findUnique({ where: { id } });
     if (!row) throw new NotFoundException();
+    this.orders.assertScope(
+      await tx.paymentOrder.findUniqueOrThrow({ where: { id: row.orderId } }),
+    );
     const attempt = await tx.fulfillmentAttempt.findFirst({
       where: { projectId: row.projectId },
       orderBy: { createdAt: "desc" },
@@ -249,6 +253,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       where: { id: orderId },
     });
     if (!order || order.buyerId !== buyerId) throw new NotFoundException();
+    this.orders.assertScope(order);
     await tx.$queryRaw`SELECT id FROM payment_orders WHERE id=${orderId}::uuid FOR UPDATE`;
     const project = await tx.project.findUnique({ where: { orderId } });
     if (order.state !== "paid" || !project) throw new ConflictException();
@@ -353,12 +358,14 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     if (!refund) throw new NotFoundException();
     await tx.$queryRaw`SELECT id FROM payment_orders WHERE id=${refund.orderId}::uuid FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM projects WHERE id=${refund.projectId}::uuid FOR UPDATE`;
-    return {
+    const result = {
       refund: await tx.refund.findUniqueOrThrow({ where: { id } }),
       order: await tx.paymentOrder.findUniqueOrThrow({
         where: { id: refund.orderId },
       }),
     };
+    this.orders.assertScope(result.order);
+    return result;
   }
   // The order lock must cover both state validation and the final claim. An
   // earlier authorized command is not a reservation once another actor ends it.
@@ -946,6 +953,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         notice.eventType,
       ),
       payloadHash = hash(verified);
+    this.orders.assertScope(order);
     await this.database.$transaction(async (tx) => {
       await tx.refundInbox.createMany({
         data: {
@@ -978,10 +986,16 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
   }
   async recover() {
     await this.rights.assertHealthy();
-    const inbox = await this.database.refundInbox.findMany({
-      where: { processedAt: null },
-      take: 25,
-    });
+    const cfg = this.orders.enabled();
+    const mode = this.orders.mode();
+    // Limit after scoping, so another mode's durable backlog cannot starve this merchant.
+    const inbox = await this.database.$queryRaw<
+      { eventId: string; refundId: string; verifiedRefund: Prisma.JsonValue }[]
+    >`
+      SELECT i.event_id AS "eventId", i.refund_id AS "refundId", i.verified_refund AS "verifiedRefund"
+      FROM refund_inbox i JOIN refunds r ON r.id=i.refund_id JOIN payment_orders o ON o.id=r.order_id
+      WHERE i.processed_at IS NULL AND o.app_id=${cfg.appId} AND o.merchant_id=${cfg.merchantId} AND o.mode=${mode}
+      ORDER BY i.verified_at LIMIT 25`;
     for (const row of inbox)
       try {
         await this.apply(
@@ -990,13 +1004,11 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
           row.eventId,
         );
       } catch {}
-    const rows = await this.database.refund.findMany({
-      where: {
-        state: { in: ["unknown", "processing", "abnormal"] },
-        submittedAt: { lt: new Date(this.runtime.now().getTime() - 10000) },
-      },
-      take: 25,
-    });
+    const rows = await this.database.$queryRaw<{ id: string }[]>`
+      SELECT r.id FROM refunds r JOIN payment_orders o ON o.id=r.order_id
+      WHERE r.state IN ('unknown','processing','abnormal') AND r.submitted_at < ${new Date(this.runtime.now().getTime() - 10000)}
+      AND o.app_id=${cfg.appId} AND o.merchant_id=${cfg.merchantId} AND o.mode=${mode}
+      ORDER BY r.submitted_at LIMIT 25`;
     for (const row of rows)
       try {
         await this.execute(row.id, false);
@@ -1160,10 +1172,14 @@ export class AdminRefundsController {
 @Controller("v1/webhooks/wechat-pay")
 @ApiTags("Wechat Pay refunds")
 export class RefundWebhookController {
-  constructor(private readonly refunds: Refunds) {}
+  constructor(
+    private readonly refunds: Refunds,
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
+  ) {}
   @Post("refunds") @HttpCode(204) async notification(
     @Req() req: RawBodyRequest<FastifyRequest>,
   ) {
+    if (!this.config.payments) throw new ServiceUnavailableException();
     if (!req.rawBody) throw new BadRequestException();
     const headers = new Headers();
     for (const [key, value] of Object.entries(req.headers))

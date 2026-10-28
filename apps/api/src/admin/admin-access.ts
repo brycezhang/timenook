@@ -29,7 +29,7 @@ import { API_CONFIG, ApiConfig } from "../config";
 import { decryptSecret, hashPassword, verifyPassword } from "./secrets";
 
 const COOKIE = "__Secure-timenook_admin";
-const PATH = "/timenook/v1/admin";
+const PATH = "/api/v1/admin";
 const ROUTE_ACTIONS: Record<string, string> = {
   "POST /v1/admin/quality/cases/:caseId/review": "quality.review",
   "POST /v1/admin/quality/cases/:caseId/reprints": "quality.reprint",
@@ -432,7 +432,8 @@ export class AdminAccess implements OnModuleDestroy {
     if (!readOnly) this.assertCsrf(request);
     const result = await this.database.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM admin_sessions WHERE id = ${session.id}::uuid FOR UPDATE`;
-      await tx.$queryRaw`SELECT id FROM admin_accounts WHERE id = ${session.adminId!}::uuid FOR UPDATE`;
+      // Serialize authority changes while allowing callback foreign-key checks.
+      await tx.$queryRaw`SELECT id FROM admin_accounts WHERE id = ${session.adminId!}::uuid FOR NO KEY UPDATE`;
       const current = await tx.adminSession.findUnique({
         where: { id: session.id },
         include: { account: true },

@@ -534,7 +534,7 @@ test("local payment configuration rejects production, default-off reads, real tr
   );
   for (const path of [
     "/v1/webhooks/wechat-pay/payments",
-    "/timenook/timenook/v1/webhooks/wechat-pay/payments",
+    "/timenook/api/v1/webhooks/wechat-pay/payments",
     "/timenook/webhooks/v1/wechat-pay/payments",
   ])
     await assert.rejects(() =>
@@ -554,7 +554,7 @@ test("local payment configuration rejects production, default-off reads, real tr
   )!;
   assert.equal(
     post.body.notify_url,
-    "https://synthetic.invalid/timenook/v1/webhooks/wechat-pay/payments",
+    "https://synthetic.invalid/api/v1/webhooks/wechat-pay/payments",
   );
 });
 test("durable Inbox survives a failed activation transaction and restart without provider access; failed persistence never ACKs", async () => {

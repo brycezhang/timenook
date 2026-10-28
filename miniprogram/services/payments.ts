@@ -17,7 +17,7 @@ function order(value: unknown): value is PaymentOrderView {
     !uuid(value.id) ||
     value.amount !== 99900 ||
     value.currency !== "CNY" ||
-    value.mode !== "local-verification" ||
+    !["local-verification", "wechat"].includes(String(value.mode)) ||
     !["pending", "paid", "closed"].includes(String(value.state)) ||
     !record(value.recipient) ||
     typeof value.recipient.relationshipLabel !== "string" ||
@@ -124,6 +124,12 @@ export const paymentClient = {
   },
 };
 export function paymentStatus(order: PaymentOrderView) {
+  if (order.mode === "wechat")
+    return order.state === "paid"
+      ? "付款核验完成"
+      : order.state === "closed"
+        ? "订单已关闭 · 未发放权益"
+        : "订单待付款核验 · 尚未发放权益";
   return order.state === "paid"
     ? "合成付款核验完成 · 未真实扣款"
     : order.state === "closed"

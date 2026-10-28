@@ -267,7 +267,7 @@ test.beforeAll(async () => {
       cwd: resolve("."),
       env: {
         ...process.env,
-        TIMENOOK_API_BASE_URL: `${base}/timenook/v1`,
+        TIMENOOK_API_BASE_URL: `${base}/api/v1`,
         TIMENOOK_PREVIEW_API_TARGET: "http://127.0.0.1:3426",
       },
       stdio: "ignore",
@@ -350,7 +350,7 @@ async function openPage(
     ({ session, base, audioBase64 }) => {
       localStorage.setItem("timenook.mode.v1", JSON.stringify("live"));
       localStorage.setItem(
-        `timenook.session.v1:${base}/timenook/v1`,
+        `timenook.session.v1:${base}/api/v1`,
         JSON.stringify(session),
       );
       // Only the native device/file boundary is controlled. Page, HTTP and PG remain real.
@@ -504,7 +504,7 @@ test("photo starter saves two originals independently, retries one failure and e
     .first()
     .click();
   await expect(page.locator(".photos-page > img")).toBeVisible();
-  const cacheKey = `timenook.photo-previews.v1:${base}/timenook/v1`;
+  const cacheKey = `timenook.photo-previews.v1:${base}/api/v1`;
   expect(
     await page.evaluate(
       (key) => JSON.parse(localStorage.getItem(key) || "[]").length,
@@ -721,7 +721,7 @@ test("the combined interview clears private task state after an actual status 40
         .flatMap(([, value]) => JSON.parse(value));
       return {
         sessionPresent: !!localStorage.getItem(
-          `timenook.session.v1:${base}/timenook/v1`,
+          `timenook.session.v1:${base}/api/v1`,
         ),
         pending: clips.filter((clip) => !clip.sealed && !!clip.path).length,
       };
@@ -839,7 +839,7 @@ test("an actual download 401 clears private material despite device session-cach
       db.close();
       return {
         sessionPersisted: !!localStorage.getItem(
-          `timenook.session.v1:${base}/timenook/v1`,
+          `timenook.session.v1:${base}/api/v1`,
         ),
         allDeniedPathsRemoved: window.photoCleanup.downloaded.every((path) =>
           window.photoCleanup.removed.includes(path),
@@ -1006,7 +1006,7 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
           const photos = pending("timenook.photos.v1:");
           return {
             session: !!localStorage.getItem(
-              `timenook.session.v1:${base}/timenook/v1`,
+              `timenook.session.v1:${base}/api/v1`,
             ),
             pendingPhotos: photos.length,
             pendingRecordings: pending("timenook.recording.v1:").length,
@@ -1015,7 +1015,7 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
             ),
             previews: JSON.parse(
               localStorage.getItem(
-                `timenook.photo-previews.v1:${base}/timenook/v1`,
+                `timenook.photo-previews.v1:${base}/api/v1`,
               ) || "[]",
             ).length,
           };
@@ -1125,7 +1125,7 @@ test("unsupported photo recovery retains the local original and permission chang
     page.getByText("照片权限已变化，请重新查询", { exact: true }),
   ).toBeVisible();
   await expect(page.locator(".photos-page > img")).toHaveCount(0);
-  const cacheKey = `timenook.photo-previews.v1:${base}/timenook/v1`;
+  const cacheKey = `timenook.photo-previews.v1:${base}/api/v1`;
   await expect
     .poll(() =>
       page.evaluate(

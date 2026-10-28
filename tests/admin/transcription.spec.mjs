@@ -237,7 +237,7 @@ test.beforeAll(async () => {
       cwd: resolve("."),
       env: {
         ...process.env,
-        TIMENOOK_API_BASE_URL: `${base}/timenook/v1`,
+        TIMENOOK_API_BASE_URL: `${base}/api/v1`,
         TIMENOOK_PREVIEW_API_TARGET: "http://127.0.0.1:3425",
       },
       stdio: "ignore",
@@ -311,7 +311,7 @@ async function openPage(
     ({ session, base, audioBase64 }) => {
       localStorage.setItem("timenook.mode.v1", JSON.stringify("live"));
       localStorage.setItem(
-        `timenook.session.v1:${base}/timenook/v1`,
+        `timenook.session.v1:${base}/api/v1`,
         JSON.stringify(session),
       );
       // Only the native device/file boundary is controlled. Page, HTTP and PG remain real.
@@ -590,7 +590,7 @@ test("the operator page lists sanitized task failures and executes an audited re
   for (let n = 0; n < 100; n++) {
     const ready = await new Promise((resolve) => {
       const r = https.get(
-        "https://localhost:5177/timenook/admin/",
+        "https://localhost:5177/admin/",
         { rejectUnauthorized: false },
         (res) => {
           res.resume();
@@ -612,7 +612,7 @@ test("the operator page lists sanitized task failures and executes an audited re
   page.on("console", (m) => {
     if (m.type() === "error") errors.push(m.text());
   });
-  await page.goto("https://localhost:5177/timenook/admin/");
+  await page.goto("https://localhost:5177/admin/");
   await page.getByLabel("管理员账号", { exact: true }).fill(account.username);
   await page.getByLabel("密码", { exact: true }).fill(account.password);
   await page.getByRole("button", { name: "继续验证", exact: true }).click();

@@ -1,0 +1,28 @@
+[Unit]
+Description=TimeNook API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=timenook
+Group=timenook
+WorkingDirectory=/data/server/timenook/current
+Environment=PATH=/data/server/timenook/runtime/audio-8.1.1/bin:/data/server/timenook/runtime/node-v22.23.4-linux-x64/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/data/server/timenook/runtime/node-v22.23.4-linux-x64/bin/node --env-file=/data/server/timenook/shared/.env /data/server/timenook/current/apps/api/dist/main.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/data/server/timenook/shared /var/lib/timenook/privacy-journal
+UMask=0077
+MemoryMax=768M
+CPUQuota=100%
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

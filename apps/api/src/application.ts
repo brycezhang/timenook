@@ -326,21 +326,24 @@ export async function createApplication(
     );
   if (
     config.payments &&
-    (config.environment !== "test" ||
-      !options.paymentFetch ||
-      options.paymentFetch === fetch ||
-      config.payments.mode !== "local-verification" ||
+    ((config.payments.mode === "local-verification"
+      ? config.environment !== "test" ||
+        !options.paymentFetch ||
+        options.paymentFetch === fetch
+      : config.payments.mode !== "ordinary-merchant" ||
+        config.environment === "test" ||
+        !!options.paymentFetch) ||
       config.payments.appId !== config.wechat?.appId)
   )
     throw new ConfigurationError(
-      "Payments require test-only local verification and synthetic transport for this AppID",
+      "Payments require isolated local verification transport or ordinary merchant native transport for this AppID",
     );
   if (config.payments) {
     try {
       validateWechatPayConfig(config.payments);
     } catch {
       throw new ConfigurationError(
-        "Invalid isolated payment protocol configuration or callback path",
+        "Invalid payment protocol configuration or callback path",
       );
     }
   }
@@ -410,14 +413,14 @@ export async function createApplication(
   const module = {
     module: AppModule,
     controllers: [
+      PaymentWebhookController,
+      RefundWebhookController,
       ...(productEnabled
         ? [
             RefundsController,
             AdminRefundsController,
-            RefundWebhookController,
             OrdersController,
             AdminTermsController,
-            PaymentWebhookController,
             ParticipationController,
             AdminCareController,
             DeletionController,

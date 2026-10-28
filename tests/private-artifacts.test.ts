@@ -127,7 +127,7 @@ test("admin development HTTPS refuses workspace probe files without breaking its
     await server.listen();
     const address = server.httpServer?.address();
     assert.ok(address && typeof address === "object");
-    const origin = `https://127.0.0.1:${address.port}/timenook/admin`;
+    const origin = `https://127.0.0.1:${address.port}/admin`;
     const publicPage = await read(origin + "/");
     assert.equal(publicPage.status, 200);
     assert.match(publicPage.body, /<html/i);
