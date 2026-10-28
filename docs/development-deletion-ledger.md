@@ -82,3 +82,5 @@ pnpm --filter @timenook/api privacy:recover activate
 数据库载荷的逐项擦除由单向 SQL 约束保护；新尝试已完成后，旧失败不能把该 active_database receipt 或完成时间降回 pending，条件按数据库当前 layer/state 判断。文件和缓存可有迟到副本/SET，完成后仍重扫，真实重扫失败仍改为 pending；不能套用数据库终态例外。运行中重放错误已使进程关闭私人能力时，仅移除故障不会自动重开；须显式重启，沿原独立源与 authority 重放后再以原命令号继续。
 
 固定PDF流另有服务端bookPdf scope：完整认证后的未投影后缀，只有当前epoch、已知delivery/精确export-ready期限格式、明确其它类别和已核对形状/存储scope的非PDF目标才可暂不要求receipt；默认流仍要求本项目全部receipt。空/混合含bookPdf、未知类别/字段/目标、book_directory、all/hold/revoke/故事决定及epoch变化均保持拒绝。已有receipt的hash/generation矛盾、完整source/authority/prefix错误仍全局拒绝；无scope启动/恢复/请求入口继续全量重放。每块PDF当前主体、许可、版本/hash与自身期限的实际检查和前后fence不变。
+
+CI的book-fixture诊断只包裹原文件/native调用：失败候选可带目录准备、本地排队、native回调、认证work和unlock/close的最少时长/计数。本地slot的观测不等于跨进程native所有权；只有原成功回调后才记录native获取，错误归因仍为unknown。它不增加source/DB读取、重试或重置failed/5秒预算，成功不输出；路径、密钥、载荷和rawstack不进入记录。具体CI失败与未复现的本地测量见本票证据，不能将诊断提交视为根因修复。

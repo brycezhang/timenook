@@ -7,7 +7,10 @@ import { performance } from "node:perf_hooks";
 import { PrismaClient } from "@prisma/client";
 import { Books } from "../src/books/books";
 import { ProjectStreams } from "../src/media/project-streams";
-import { PrivacyJournal } from "../src/privacy-journal/privacy-journal";
+import {
+  PrivacyJournal,
+  type PublishedPrivacyEvent,
+} from "../src/privacy-journal/privacy-journal";
 import { PrivacyRights } from "../src/care/privacy-rights";
 import { Deletions } from "../src/care/deletions";
 import Redis from "ioredis";
@@ -82,35 +85,49 @@ async function pdfDuringCategoryPublication(
   // the original stream timer/guards remain active. Never reset Rights/app.
   clearInterval(timer);
   await Reflect.get(maintenance, "running");
-  const locks = new PrismaClient({ datasourceUrl: config.databaseUrl }),
-    books = app.get(Books),
+  const books = app.get(Books),
     streams = app.get(ProjectStreams);
-  let releaseCheckpoint!: () => void,
+  let releasePublication!: () => void,
     releaseRead!: () => void,
-    locked!: () => void,
     readBlocked!: () => void,
     fenceObserved!: () => void,
-    checkpointPid = 0,
     published = false,
     reads = 0,
     postFence: "passed" | "failed" | undefined;
-  const checkpointGate = new Promise<void>((r) => (releaseCheckpoint = r)),
+  const publicationGate = new Promise<void>((r) => (releasePublication = r)),
     readGate = new Promise<void>((r) => (releaseRead = r)),
-    checkpointReady = new Promise<void>((r) => (locked = r)),
     readReady = new Promise<void>((r) => (readBlocked = r)),
     observed = new Promise<void>((r) => (fenceObserved = r)),
     errors: { phase: string; status?: number; message?: string }[] = [];
-  const holding = locks.$transaction(
-    async (tx) => {
-      [{ pid: checkpointPid }] = await tx.$queryRaw<
-        { pid: number }[]
-      >`SELECT pg_backend_pid() pid`;
-      await tx.$queryRaw`SELECT singleton FROM privacy_recovery_state FOR UPDATE`;
-      locked();
-      await checkpointGate;
-    },
-    { timeout: 30000 },
-  );
+  let publishedTarget!: (event: PublishedPrivacyEvent) => void;
+  const targetPublication = new Promise<PublishedPrivacyEvent>(
+      (resolve) => (publishedTarget = resolve),
+    ),
+    append = PrivacyJournal.prototype.append,
+    appendMock = t.mock.method(
+      PrivacyJournal.prototype,
+      "append",
+      async function (
+        this: PrivacyJournal,
+        ...args: Parameters<PrivacyJournal["append"]>
+      ) {
+        const event = await append.apply(this, args);
+        if (
+          event.projectId === p.projectId &&
+          (category === "withdrawal"
+            ? event.payload.operation === "revoke"
+            : Array.isArray(event.payload.categories) &&
+              event.payload.categories.includes(category))
+        ) {
+          publishedTarget(event);
+          // The original append has authenticated/published the real event and
+          // released its native lock/FD. Pause only result delivery to its
+          // existing PG transaction; unrelated projects can still commit.
+          await publicationGate;
+        }
+        return event;
+      },
+    );
   const read = books.read.bind(books),
     fence = streams.fence.bind(streams),
     guard = streams.guard.bind(streams),
@@ -179,7 +196,6 @@ async function pdfDuringCategoryPublication(
       | undefined,
     scanning: Promise<void> | undefined;
   try {
-    await checkpointReady;
     downloading = request(
       "GET",
       `/v1/projects/${p.projectId}/book/versions/${bookId}/pdf`,
@@ -192,29 +208,31 @@ async function pdfDuringCategoryPublication(
     t.mock.timers.setTime(cutoff.getTime() + 1);
     scanning = denial ? denial().then(() => {}) : maintenance.sweep(new Date());
     void scanning.catch(() => {});
-    const deadline = performance.now() + 10000;
-    while (
-      !(
-        await db.$queryRaw<{ waiting: boolean }[]>`
-      SELECT EXISTS(SELECT 1 FROM pg_stat_activity a WHERE ${checkpointPid}=ANY(pg_blocking_pids(a.pid)) AND a.query LIKE '%privacy_recovery_state%') waiting
-    `
-      )[0].waiting
-    )
-      assert.ok(
-        performance.now() < deadline,
-        "category scan did not reach checkpoint barrier",
-      );
-    const event = (
-      await new PrivacyJournal(config.privacyJournal!).snapshot()
-    ).events.find(
-      (e) =>
-        e.projectId === p.projectId &&
-        (category === "withdrawal"
-          ? e.payload.operation === "revoke"
-          : Array.isArray(e.payload.categories) &&
-            e.payload.categories.includes(category)),
+    // A different project's checkpoint waiter is not proof that this target
+    // was published. Observe the original successful append, without polling
+    // the source or changing its I/O/result. The caller's existing PG project
+    // transaction cannot project/commit this event until append returns.
+    let publicationTimer: NodeJS.Timeout | undefined;
+    const event = await Promise.race([
+      targetPublication,
+      scanning.then(() => {
+        throw new Error(
+          "scan completed without publishing the target category",
+        );
+      }),
+      new Promise<never>((_resolve, reject) => {
+        publicationTimer = setTimeout(
+          () => reject(new Error("target category publication did not arrive")),
+          10000,
+        );
+      }),
+    ]).finally(() => clearTimeout(publicationTimer));
+    assert.ok(
+      (await new PrivacyJournal(config.privacyJournal!).snapshot()).events.some(
+        (stored) =>
+          stored.eventId === event.eventId && stored.hash === event.hash,
+      ),
     );
-    assert.ok(event);
     assert.equal(
       event.payload.operation,
       category === "withdrawal" ? "revoke" : "erase",
@@ -237,7 +255,15 @@ async function pdfDuringCategoryPublication(
     for (const id of [undefined, p.projectId])
       await assert.rejects(
         rights.assertReplayed(id),
-        (error: { getStatus(): number }) => error.getStatus() === 503,
+        (error: { name?: string; code?: string; getStatus?: () => number }) => {
+          const status = error.getStatus?.();
+          assert.equal(
+            status,
+            503,
+            `scope rejection type=${["PrismaClientKnownRequestError", "ServiceUnavailableException"].includes(error.name ?? "") ? error.name : "unknown"} code=${/^P\d{4}$/.test(error.code ?? "") ? error.code : "unknown"}`,
+          );
+          return true;
+        },
       );
     releaseRead();
     await Promise.race([observed, downloading]);
@@ -253,8 +279,7 @@ async function pdfDuringCategoryPublication(
       );
       assert.ok(errors.some((e) => e.phase === "fence" && e.status === 503));
     }
-    releaseCheckpoint();
-    await holding;
+    releasePublication();
     await scanning;
     const result = await downloading;
     t.diagnostic(
@@ -268,12 +293,12 @@ async function pdfDuringCategoryPublication(
     return result;
   } finally {
     releaseRead();
-    releaseCheckpoint();
-    await Promise.allSettled([holding, scanning, downloading]);
+    releasePublication();
+    await Promise.allSettled([scanning, downloading]);
     readMock.mock.restore();
     fenceMock.mock.restore();
     guardMock.mock.restore();
-    await locks.$disconnect();
+    appendMock.mock.restore();
     if (timer) maintenance.onModuleInit();
   }
 }

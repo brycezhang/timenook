@@ -8,6 +8,10 @@ import {
   PrivacyJournal,
   PrivacyJournalError,
 } from "../src/privacy-journal/privacy-journal";
+import {
+  installPrivacyLockDiagnostic,
+  privacyLockFailure,
+} from "./privacy-lock-diagnostic";
 
 type Cause = {
   phase: string;
@@ -16,10 +20,11 @@ type Cause = {
   code?: string;
   sqlState?: string;
   reason?: string;
+  lock?: ReturnType<typeof privacyLockFailure>;
 };
 // null: guard has not returned a Readable yet; absent context is "unknown".
 type Stream = { id: number; closed: boolean | null };
-const gate = new AsyncLocalStorage<{ cause?: Cause }>();
+const gate = new AsyncLocalStorage<{ cause?: Cause; consumer?: string }>();
 const stream = new AsyncLocalStorage<Stream>();
 const generations = new WeakMap<object, number>();
 const instances = new WeakMap<object, number>();
@@ -91,6 +96,7 @@ function cause(error: unknown, phase: string, started: number): Cause {
     ioCode = /^source unavailable \(([A-Z0-9_]+)\)$/.exec(journalReason)?.[1];
   return {
     phase,
+    lock: privacyLockFailure(error),
     elapsedMs: Math.round(performance.now() - started),
     type: typeof type === "string" && types.has(type) ? type : "unknown",
     code: code(field(error, "code") ?? field(error, "errorCode") ?? ioCode),
@@ -152,6 +158,11 @@ export function installPrivacyFailureDiagnostic() {
   )
     return;
   installed = true;
+  installPrivacyLockDiagnostic((journal) => ({
+    consumer: gate.getStore()?.consumer,
+    stream: stream.getStore(),
+    generation: generations.get(journal),
+  }));
   for (const method of ["snapshot", "append", "assertHealthy"]) {
     wrap(PrivacyJournal.prototype, method, async (target, call) => {
       const started = performance.now();
@@ -182,7 +193,7 @@ export function installPrivacyFailureDiagnostic() {
   });
   for (const method of ["assertHealthy", "assertReplayed"]) {
     wrap(PrivacyRights.prototype, method, (target, call) =>
-      gate.run({}, async () => {
+      gate.run({ consumer: method }, async () => {
         const started = performance.now(),
           wasFailed = Reflect.get(target, "failed");
         try {
