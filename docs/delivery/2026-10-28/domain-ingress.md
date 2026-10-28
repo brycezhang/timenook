@@ -2,7 +2,7 @@
 
 按用户决定，两个 DNS A 记录均指向共用 ECS `106.14.11.96`：`timenookapi.threeminreading.com` 和 `sgl.wootoon.cn`，阿里云 DNS 默认线路、TTL 10 分钟。`api.threeminreading.com` 已被其他 CDN 服务使用，本轮未修改其 DNS、CDN 或源站。开发阶段的当前目标入口以 [ADR 0015](../../adr/0015-dedicated-domain-ingress.md) 为准。
 
-服务器 Nginx 分别使用 `/etc/nginx/conf.d/timenook-api-domain.conf` 与 `timenook-website.conf`。两个域名通过已有 Certbot webroot 方式取得独立 Let's Encrypt 证书（到期 2027-01-26 UTC）；既有 `/etc/cron.d/lawyerapi-certbot-renew` 对该证书目录运行 renew，并在更新后 reload Nginx；两个域名的 Certbot 模拟续期均成功。HTTP 入口提供 ACME 验证和跳转 HTTPS；官网 HTTPS 当前返回 503，待官网部署时替换。
+服务器 Nginx 分别使用 `/etc/nginx/conf.d/timenook-api-domain.conf` 与 `timenook-website.conf`。两个域名通过已有 Certbot webroot 方式取得独立 Let's Encrypt 证书（到期 2027-01-26 UTC）；既有 `/etc/cron.d/lawyerapi-certbot-renew` 对该证书目录运行 renew，并在更新后 reload Nginx；两个域名的 Certbot 模拟续期均成功。HTTP 入口提供 ACME 验证和跳转 HTTPS；官网 HTTPS 在初次入口配置时返回 503，随后已部署为展示预览，见[官网发布记录](website-online.md)。
 
 新 API 的 `/api/` 剥离一次后转至 `127.0.0.1:4310/`，源站设置 `Cache-Control: no-store` 并覆盖客户端来源地址的转发头；`/api/docs`、`/api/openapi.json` 拒绝访问。未部署新应用或改动数据库与服务环境。
 

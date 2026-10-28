@@ -38,6 +38,6 @@ shasum -a 256 -c website.tgz.sha256
 
 输出目录必须不存在。输出为 `website.tgz`、SHA-256 校验文件和标记 `previewOnly: true` 的版本清单，压缩包只包含官网静态构建产物。Linux 可使用 `sha256sum -c website.tgz.sha256` 校验。
 
-CI 为官网单独提供 `timenook-website-preview-<commit>` artifact。包可部署到 `sgl.wootoon.cn` 的独立静态发布目录，并用独立 `current` 软链接切换版本和回滚；无需替换 API/Admin 的发布包。具体生产切换沿用 [ADR 0015](../../docs/adr/0015-dedicated-domain-ingress.md) 和正式验收安排，本次未操作服务器。
+CI 为官网单独提供 `timenook-website-preview-<commit>` artifact。包可部署到 `sgl.wootoon.cn` 的独立静态发布目录，并用独立 `current` 软链接切换版本和回滚；无需替换 API/Admin 的发布包。当前已按 [ADR 0015](../../docs/adr/0015-dedicated-domain-ingress.md) 部署线上展示预览，发布路径、校验和回滚方式见[发布记录](../../docs/delivery/2026-10-28/website-online.md)。
 
 对外推广前完成：正式小程序进入方案、真实套餐与购买验收，随后更新下单行为、取消预览的索引限制，并验证目标域名。构建成功或预览可访问不代替这些运行验收。
