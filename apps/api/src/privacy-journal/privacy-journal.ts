@@ -80,6 +80,9 @@ interface StoredEvent extends JournalEvent {
 }
 const EMPTY_HASH = "0".repeat(64);
 const MAX_BYTES = 16 * 1024 * 1024;
+// Bound open descriptors and authenticated byte buffers while avoiding a full
+// source's worth of serial filesystem callback round trips under the EX lock.
+const READ_BATCH = 4;
 type LocalWaiter = {
   deadline: number;
   resolve(release: () => void): void;
@@ -563,50 +566,61 @@ export class PrivacyJournal {
     const events: PublishedPrivacyEvent[] = [];
     const ids = new Set<string>();
     let hash = EMPTY_HASH;
-    for (let index = 0; index < finals.length; index++) {
-      const { body: event, bytes } = await this.authenticated(
-        join(this.root, "events", finals[index]),
+    for (let start = 0; start < finals.length; start += READ_BATCH) {
+      // Even a rejected member must not release EX while another member still
+      // owns a descriptor or has source I/O in flight. Each read authenticates
+      // its original bytes; chain/order checks remain sequential afterwards.
+      const batch = await Promise.allSettled(
+        finals
+          .slice(start, start + READ_BATCH)
+          .map((name) => this.authenticated(join(this.root, "events", name))),
       );
-      if (
-        !keys(event, [
-          "schemaVersion",
-          "sourceId",
-          "generation",
-          "parentHash",
-          "eventId",
-          "projectId",
-          "kind",
-          "occurredAt",
-          "payload",
-        ]) ||
-        event.schemaVersion !== 1 ||
-        event.sourceId !== head.sourceId ||
-        event.generation !== index + 1 ||
-        event.parentHash !== hash
-      )
-        refuse("event chain missing, forked or unknown");
-      const {
-        schemaVersion: _schema,
-        sourceId,
-        generation,
-        parentHash: _parent,
-        ...content
-      } = event;
-      validEvent(content as unknown as JournalEvent);
-      if (ids.has(String(content.eventId)))
-        refuse("duplicate eventId in source");
-      ids.add(String(content.eventId));
-      hash = createHash("sha256").update(bytes).digest("hex");
-      if (finals[index] !== this.eventName(index + 1, hash))
-        refuse("event filename authentication failed");
-      events.push({
-        ...content,
-        sourceId,
-        generation,
-        hash,
-      } as PublishedPrivacyEvent);
-      if (index + 1 === head.generation && hash !== head.hash)
-        refuse("authenticated head does not match event tail");
+      for (let offset = 0; offset < batch.length; offset++) {
+        const index = start + offset,
+          result = batch[offset];
+        if (result.status === "rejected") throw result.reason;
+        const { body: event, bytes } = result.value;
+        if (
+          !keys(event, [
+            "schemaVersion",
+            "sourceId",
+            "generation",
+            "parentHash",
+            "eventId",
+            "projectId",
+            "kind",
+            "occurredAt",
+            "payload",
+          ]) ||
+          event.schemaVersion !== 1 ||
+          event.sourceId !== head.sourceId ||
+          event.generation !== index + 1 ||
+          event.parentHash !== hash
+        )
+          refuse("event chain missing, forked or unknown");
+        const {
+          schemaVersion: _schema,
+          sourceId,
+          generation,
+          parentHash: _parent,
+          ...content
+        } = event;
+        validEvent(content as unknown as JournalEvent);
+        if (ids.has(String(content.eventId)))
+          refuse("duplicate eventId in source");
+        ids.add(String(content.eventId));
+        hash = createHash("sha256").update(bytes).digest("hex");
+        if (finals[index] !== this.eventName(index + 1, hash))
+          refuse("event filename authentication failed");
+        events.push({
+          ...content,
+          sourceId,
+          generation,
+          hash,
+        } as PublishedPrivacyEvent);
+        if (index + 1 === head.generation && hash !== head.hash)
+          refuse("authenticated head does not match event tail");
+      }
     }
     if (head.generation === 0 && head.hash !== EMPTY_HASH)
       refuse("invalid empty head");
