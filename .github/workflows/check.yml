@@ -11,6 +11,8 @@ concurrency:
 env:
   CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
   CHECK_HEAD: ${{ github.sha }}
+  CHECK_EVENT_NAME: ${{ github.event_name }}
+  CHECK_REF: ${{ github.ref }}
   NODE_ENV: test
   DATABASE_URL: postgresql://timenook:local-development-only@127.0.0.1:54329/timenook?connect_timeout=2&pool_timeout=2
   REDIS_URL: redis://127.0.0.1:63791
@@ -28,7 +30,7 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-      - run: node --test tests/ci/check.test.mjs tests/ci/shards.test.mjs tests/ci/audit.test.mjs
+      - run: node --test tests/ci/check.test.mjs tests/ci/shards.test.mjs tests/ci/audit.test.mjs tests/ci/website-package.test.mjs
       - id: route
         run: |
           mode=$(node scripts/ci/check.mjs classify "$CHECK_BASE" "$CHECK_HEAD")
@@ -218,18 +220,25 @@ jobs:
           overwrite: true
   website:
     needs: changes
-    if: needs.changes.outputs.mode == 'full'
+    if: needs.changes.outputs.mode == 'full' || needs.changes.outputs.mode == 'website'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       TIMENOOK_CI_SUITE: website
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
       - uses: ./.github/actions/ci-setup
         with:
           browser: "true"
+      - run: node scripts/ci/run.mjs docs node scripts/ci/check.mjs docs "$CHECK_BASE" "$CHECK_HEAD"
+      - run: node scripts/ci/run.mjs website-typecheck pnpm typecheck:website
+      - run: node scripts/ci/run.mjs website-build pnpm build:website
       - run: node scripts/ci/run.mjs website-tests node scripts/ci/tests.mjs website
       - run: node scripts/ci/run.mjs website-package pnpm package:website "$RUNNER_TEMP/timenook-website-release"
+      - run: node scripts/ci/run.mjs website-verify node scripts/ci/verify-website.mjs "$RUNNER_TEMP/timenook-website-release" "$CHECK_HEAD"
+      - run: node scripts/ci/audit.mjs "$TIMENOOK_CI_REPORT_DIR" website
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ci-website-preview-${{ github.sha }}
@@ -245,6 +254,15 @@ jobs:
             ${{ runner.temp }}/timenook-ci-report/phases.json
             ${{ runner.temp }}/timenook-ci-report/*-plan.json
             ${{ runner.temp }}/timenook-ci-report/*.jsonl
+            ${{ runner.temp }}/timenook-ci-report/summary.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: needs.changes.outputs.mode == 'website'
+        with:
+          name: timenook-website-preview-${{ github.sha }}
+          path: ${{ runner.temp }}/timenook-website-release/
           if-no-files-found: error
           retention-days: 7
           overwrite: true
@@ -309,7 +327,7 @@ jobs:
           retention-days: 7
           overwrite: true
   check:
-    needs: [changes, docs, full]
+    needs: [changes, docs, build, api, browser, website, full]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
