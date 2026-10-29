@@ -30,6 +30,8 @@ export class LocalAudioRecorder {
     actualQuestionId?: string;
   };
   protected clipId = "";
+  private elapsedMs = 0;
+  private segmentBegan = 0;
   private openingQuestionId?: string;
   constructor(
     protected readonly key: string,
@@ -41,6 +43,23 @@ export class LocalAudioRecorder {
         this.manager.stop();
         return;
       }
+      this.elapsedMs = 0;
+      this.segmentBegan = Date.now();
+      this.update("recording", "录音中；尚未保存，请勿强行退出");
+    });
+    this.manager.onPause?.(() => {
+      if (!this.active || !recordingLease.owns(this)) return;
+      if (this.current.stage === "recording")
+        this.elapsedMs += Math.max(0, Date.now() - this.segmentBegan);
+      this.update("paused", "录音已暂停；继续或结束后保存这段声音");
+    });
+    this.manager.onResume?.(() => {
+      if (!this.active || !recordingLease.owns(this)) return;
+      if (this.stopRequested) {
+        this.manager.stop();
+        return;
+      }
+      this.segmentBegan = Date.now();
       this.update("recording", "录音中；尚未保存，请勿强行退出");
     });
     this.manager.onStop((value) => {
@@ -110,10 +129,27 @@ export class LocalAudioRecorder {
       format: "mp3",
     });
   }
+  elapsedRecordingMs() {
+    return this.active
+      ? this.elapsedMs +
+          (this.current.stage === "recording"
+            ? Math.max(0, Date.now() - this.segmentBegan)
+            : 0)
+      : 0;
+  }
+  pause() {
+    this.check();
+    if (this.active && this.current.stage === "recording") this.manager.pause();
+  }
+  resume() {
+    this.check();
+    if (this.active && this.current.stage === "paused") this.manager.resume();
+  }
   stop() {
-    if (this.active) {
+    if (this.active && !this.stopRequested) {
       this.stopRequested = true;
-      if (this.current.stage === "recording") this.manager.stop();
+      if (["recording", "paused"].includes(this.current.stage))
+        this.manager.stop();
     }
   }
   // Each callback commits only its clip against the latest durable manifest.
@@ -201,7 +237,7 @@ export class LocalAudioRecorder {
       };
       this.commitClip(clip);
       this.pending = undefined;
-      this.update("local", "已保存在本机；尚未上传封存");
+      this.update("local", "已保存在这台设备，还未上传");
     } catch {
       this.update("device-error", "还没有保存成功，请先别退出。点击重试保存。");
     } finally {
@@ -235,7 +271,9 @@ export class LocalAudioRecorder {
       clips.length ? "local" : "idle",
       clips.length
         ? "仅恢复实际存在的本机片段；可重试上传"
-        : "没有找到已保存片段；强杀前未保存的声音无法恢复",
+        : Array.isArray(stored) && stored.length
+          ? "此前的本机片段暂时不可用，请重新查询云端保存结果"
+          : "准备好就开始说，结束后先保存到本机",
     );
   }
 }

@@ -1,3 +1,4 @@
+import { prepareRecordingStep } from "./recording-step-helper.mjs";
 import {
   createPrivacyFixtureApplication,
   closePrivacyFixtureApplication,
@@ -947,6 +948,7 @@ test("real project resume keeps the same interview's saved native-file timing an
       .first()
       .click();
     await expect(page).toHaveURL(new RegExp(`interviewId=${interview.id}`));
+    await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "说完了，停止录音", exact: true }),
@@ -959,7 +961,9 @@ test("real project resume keeps the same interview's saved native-file timing an
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
     await expect(
-      page.getByText("本机文件已保存，尚待封存", { exact: true }),
+      page
+        .locator(".local-recording")
+        .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
     await expect(page.locator(".record-timer")).toHaveText("00:01");
     await page.evaluate((url) => {
@@ -975,6 +979,7 @@ test("real project resume keeps the same interview's saved native-file timing an
     await expect(page).toHaveURL(new RegExp(`interviewId=${interview.id}`));
     await expect(page.locator(".record-timer")).toHaveText("00:01");
     expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
+    await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "说完了，停止录音", exact: true }),
@@ -1111,6 +1116,7 @@ test("a collection-only assisted project home starts real recording without expo
     expect(safe.data.interviews).toEqual([]);
     expect(JSON.stringify(safe)).not.toContain(p.story.revision.title);
     await page.getByRole("button", { name: "自由讲述", exact: true }).click();
+    await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "说完了，停止录音", exact: true }),
@@ -1120,7 +1126,9 @@ test("a collection-only assisted project home starts real recording without expo
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
     await expect(
-      page.getByText("本机文件已保存，尚待封存", { exact: true }),
+      page
+        .locator(".local-recording")
+        .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
     expect(errors).toEqual([]);
   } catch (error) {
@@ -1274,6 +1282,7 @@ test("project progress keeps optional follow-up distinct while the same intervie
       .first()
       .click();
     await expect(page).toHaveURL(new RegExp(`interviewId=${p.interview.id}`));
+    await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "说完了，停止录音", exact: true }),
@@ -1283,10 +1292,10 @@ test("project progress keeps optional follow-up distinct while the same intervie
       .click();
     await expect(page.locator(".record-timer")).toHaveText("00:01");
     await page
-      .getByRole("button", { name: "查询并上传原文件", exact: true })
+      .getByRole("button", { name: "提交这段讲述", exact: true })
       .click();
     await expect(
-      page.getByText("封存已确认，本机副本仍保留", { exact: true }),
+      page.getByText("已确认保存，这台设备也保留了一份", { exact: true }),
     ).toBeVisible();
     await expect
       .poll(
@@ -1375,6 +1384,7 @@ test("project progress keeps optional follow-up distinct while the same intervie
     const startResponse = page.waitForResponse((r) =>
       r.url().endsWith(`${path.slice(3)}/recording-start`),
     );
+    await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
     const authorized = await startResponse;
     expect(authorized.status()).toBe(201);

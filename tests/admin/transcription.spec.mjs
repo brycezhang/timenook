@@ -1,3 +1,4 @@
+import { prepareRecordingStep } from "./recording-step-helper.mjs";
 import {
   feishuIdentity,
   feishuLogin,
@@ -354,15 +355,14 @@ test("the real interview page shows processing, retry and restored completion ac
   await page
     .getByRole("button", { name: "就从这个问题开始", exact: true })
     .click();
+  await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
   await page
     .getByRole("button", { name: "说完了，停止录音", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "查询并上传原文件", exact: true })
-    .click();
+  await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByText("本地模拟封存完成；转写状态可查询，真实云端尚待验收", {
+    page.getByText("已在测试环境保存，真实云端保存仍待验证", {
       exact: true,
     }),
   ).toBeVisible();

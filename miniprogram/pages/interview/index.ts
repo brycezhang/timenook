@@ -1,3 +1,4 @@
+import { flowView, savedRecordingStep } from "../../domain/interview-flow";
 import { optionalFollowupClient } from "../../services/optional-followup";
 import { dataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
@@ -39,6 +40,7 @@ function recordingTime(clips: ProbeLocalClip[], currentSegmentMs = 0) {
 Page({
   data: {
     mode: dataMode(),
+    ...flowView("choose"),
     status: "",
     busy: false,
     canRecord: false,
@@ -60,7 +62,9 @@ Page({
     error: "",
     photo: "",
     permission: false,
+    playingId: "",
   },
+  localAudio: null as WechatMiniprogram.InnerAudioContext | null,
   followupPoll: undefined as ReturnType<typeof setTimeout> | undefined,
   followupSequence: 0,
   followupRequest: null as { input: string; id: string; key: string } | null,
@@ -91,7 +95,12 @@ Page({
       this.projectId = q.projectId ?? "";
       this.requestedInterviewId = q.interviewId ?? "";
       this.assistedSessionId = q.assistedSessionId ?? "";
-      this.setData({ mode: "live", question: "", state: "idle" });
+      this.setData({
+        mode: "live",
+        ...flowView("choose"),
+        question: "",
+        state: "idle",
+      });
       return;
     }
 
@@ -116,29 +125,35 @@ Page({
     if (q.photo === "1") this.pickPhoto();
   },
   async onShow() {
+    this.taskVisible = true;
+    if (dataMode() === "live") await this.refresh();
+  },
+  watchSession() {
     this.stopSessionWatch?.();
     this.stopSessionWatch = undefined;
     const ownerContext = sessionClient.context();
     if (dataMode() === "live" && ownerContext)
       this.stopSessionWatch = sessionClient.onInvalidated((context) => {
         if (context !== ownerContext) return;
-        this.onHide();
+        this.clearPrivateView();
         this.setData({
           status: sessionClient.sessionCleanupPending()
             ? "登录已失效；设备会话缓存清理失败，请重试登录"
             : "当前权限已失效，请重新查询或登录；本机原文件仍保留",
         });
       });
-    this.taskVisible = true;
-    if (dataMode() === "live") await this.refresh();
   },
   onHide() {
+    this.taskVisible = false;
+    this.clearPrivateView();
+  },
+  clearPrivateView() {
+    this.closePlayback();
     if (this.collectionWatch) clearTimeout(this.collectionWatch);
     this.collectionWatch = undefined;
     this.clearFollowup();
     this.stopSessionWatch?.();
     this.stopSessionWatch = undefined;
-    this.taskVisible = false;
     if (this.taskPollHandle) clearTimeout(this.taskPollHandle);
     this.taskPollHandle = undefined;
     ++this.taskSequence;
@@ -153,6 +168,7 @@ Page({
       this.storyOwnerContext = "";
       this.selection = null;
       this.setData({
+        ...flowView("choose"),
         question: "",
         interview: null,
         localClips: [],
@@ -183,6 +199,13 @@ Page({
     );
   },
   async refresh() {
+    if (!this.taskVisible || dataMode() !== "live") return;
+    this.watchSession();
+    this.closePlayback();
+    this.liveRecorder?.stop();
+    this.liveRecorder?.unsubscribe();
+    if (this.timerHandle) clearInterval(this.timerHandle);
+    this.timerHandle = undefined;
     this.clearFollowup();
     this.storyOwnerContext = "";
     const generation = ++this.generation,
@@ -219,7 +242,7 @@ Page({
           "想从哪里讲起？可以自由讲述、看照片或自拟问题。",
         status: result.canRecord
           ? "先确定一个问题，再开始说。"
-          : "当前不能新录音；已有文件与封存内容可按授权恢复。",
+          : "当前不能新录音；已有录音可在获得授权后继续使用。",
       });
       const index: unknown = wx.getStorageSync(
         `${recordingPartition(this.projectId)}:index`,
@@ -256,19 +279,9 @@ Page({
       }
     } catch (error) {
       if (generation === this.generation) {
-        this.liveRecorder?.unsubscribe();
+        this.clearPrivateView();
         this.liveRecorder = null;
-        this.context = null;
-        this.storyOwnerContext = "";
         this.setData({
-          question: "",
-          interview: null,
-          localClips: [],
-          interviews: [],
-          pendingInterviews: [],
-          customText: "",
-          customIntent: "",
-          canRecord: false,
           status: error instanceof Error ? error.message : "查询失败，请重试",
         });
       }
@@ -292,6 +305,7 @@ Page({
     this.liveRecorder = device;
     this.storyOwnerContext = context;
     this.setData({
+      ...flowView("prepare"),
       interview: value,
       question: (value.currentQuestion ?? value.actualQuestion).snapshot.text,
       state: "idle",
@@ -303,11 +317,27 @@ Page({
       }
       if (this.current(generation, context)) {
         this.setData({
+          ...flowView(
+            savedRecordingStep(
+              snapshot,
+              value.clips.some((clip) => clip.state === "sealed"),
+            ),
+          ),
           state: snapshot.stage,
           status: snapshot.message,
           localClips: snapshot.clips,
-          timer: recordingTime(snapshot.clips),
+          timer: recordingTime(snapshot.clips, device.elapsedRecordingMs()),
         });
+        if (snapshot.stage === "recording" && !this.timerHandle)
+          this.timerHandle = setInterval(() => {
+            if (this.current(generation, context))
+              this.setData({
+                timer: recordingTime(
+                  this.data.localClips,
+                  device.elapsedRecordingMs(),
+                ),
+              });
+          }, 1000);
         if (snapshot.stage === "sealed") void this.refreshTasks();
       }
     });
@@ -330,7 +360,7 @@ Page({
         this.watchCollection(generation, context, interviewId);
       } catch {
         if (!this.current(generation, context)) return;
-        this.onHide();
+        this.clearPrivateView();
         this.setData({
           status: "采集授权已变化，录音已停止；本机原文件仍保留，请重新查询",
         });
@@ -343,7 +373,7 @@ Page({
     const interview = this.data.interview;
     if (
       !interview ||
-      ["recording", "requesting", "saving"].includes(this.data.state)
+      ["recording", "paused", "requesting", "saving"].includes(this.data.state)
     )
       return;
     wx.navigateTo({
@@ -359,7 +389,7 @@ Page({
       dataMode() === "live" &&
       (!current || current === context)
     ) {
-      this.onHide();
+      this.clearPrivateView();
       this.setData({
         status: sessionClient.sessionCleanupPending()
           ? "登录已失效；设备会话缓存清理失败，请重试登录"
@@ -483,6 +513,7 @@ Page({
       this.data.busy ||
       !this.data.canRecord ||
       this.data.state === "recording" ||
+      this.data.state === "paused" ||
       this.data.state === "requesting" ||
       this.data.state === "saving"
     )
@@ -573,6 +604,7 @@ Page({
     if (
       this.data.busy ||
       this.data.state === "recording" ||
+      this.data.state === "paused" ||
       this.data.state === "requesting" ||
       this.data.state === "saving"
     )
@@ -644,92 +676,245 @@ Page({
       if (generation === this.generation) this.setData({ busy: false });
     }
   },
+  closePlayback() {
+    this.localAudio?.destroy();
+    this.localAudio = null;
+    this.setData({ playingId: "" });
+  },
+  async playLocal(e: E) {
+    const clip = this.data.localClips.find(
+      (value) => value.clientClipId === e.currentTarget.dataset.id,
+    );
+    const context = sessionClient.context(),
+      generation = this.generation;
+    if (
+      !clip ||
+      !this.data.interview ||
+      !context ||
+      context !== this.storyOwnerContext ||
+      this.data.busy ||
+      ["recording", "paused", "requesting", "saving"].includes(this.data.state)
+    )
+      return;
+    if (this.data.playingId === clip.clientClipId) {
+      this.closePlayback();
+      return;
+    }
+    this.closePlayback();
+    this.setData({ busy: true });
+    try {
+      const result = await interviewRecordingClient.authorizeCollection(
+        this.projectId,
+        this.data.interview.id,
+        this.assistedSessionId || undefined,
+      );
+      if (!this.current(generation, context)) return;
+      if (!result.allowed) {
+        this.clearPrivateView();
+        this.setData({
+          status: "当前采集授权已变化，回听已停止；本机原文件仍保留。",
+        });
+        return;
+      }
+      const audio = wx.createInnerAudioContext();
+      this.localAudio = audio;
+      audio.src = clip.path;
+      audio.onEnded(() => {
+        if (this.localAudio === audio) this.closePlayback();
+      });
+      audio.onError(() => {
+        if (this.localAudio === audio) {
+          this.closePlayback();
+          this.setData({ status: "这段声音暂时无法播放，原文件仍保留。" });
+        }
+      });
+      this.setData({ playingId: clip.clientClipId });
+      audio.play();
+    } catch (error) {
+      if (this.taskAuthorizationLost(error, generation, context)) return;
+      if (this.current(generation, context))
+        this.setData({
+          status: error instanceof Error ? error.message : "暂时无法回听",
+        });
+    } finally {
+      if (this.current(generation, context)) this.setData({ busy: false });
+    }
+  },
+  async rerecordLocal(e: E) {
+    const clip = this.data.localClips.find(
+      (value) => value.clientClipId === e.currentTarget.dataset.id,
+    );
+    const context = sessionClient.context(),
+      generation = this.generation;
+    if (
+      !clip ||
+      clip.sealed ||
+      this.data.busy ||
+      !this.data.canRecord ||
+      !context ||
+      context !== this.storyOwnerContext ||
+      ["recording", "paused", "requesting", "saving", "device-error"].includes(
+        this.data.state,
+      )
+    )
+      return;
+    const actual =
+      this.data.interview?.currentQuestion ??
+      this.data.interview?.actualQuestion;
+    if (!actual || clip.actualQuestionId !== actual.id) {
+      this.setData({
+        status: "这段声音属于先前的问题，原录音仍保留；请从对应问题继续讲述。",
+      });
+      return;
+    }
+    const interviewId = this.data.interview!.id;
+    const confirmed = await new Promise<boolean>((resolve) =>
+      wx.showModal({
+        title: "重新录这一段？",
+        content: "新录音会另存，原片段仍留在本机。录好后，请选择要提交的片段。",
+        confirmText: "重新录制",
+        cancelText: "保留这段",
+        success: (value) => resolve(value.confirm),
+        fail: () => resolve(false),
+      }),
+    );
+    if (
+      !confirmed ||
+      !this.current(generation, context) ||
+      this.data.busy ||
+      this.data.interview?.id !== interviewId ||
+      (
+        this.data.interview.currentQuestion ??
+        this.data.interview.actualQuestion
+      ).id !== actual.id
+    )
+      return;
+    await this.record();
+  },
+  prepareCurrent() {
+    if (
+      !this.data.interview ||
+      this.data.busy ||
+      ["recording", "paused", "requesting", "saving", "device-error"].includes(
+        this.data.state,
+      )
+    )
+      return;
+    this.closePlayback();
+    const currentQuestion =
+      this.data.interview.currentQuestion ?? this.data.interview.actualQuestion;
+    this.setData({
+      ...flowView("prepare"),
+      question: currentQuestion.snapshot.text,
+    });
+  },
+  chooseAnother() {
+    if (
+      this.data.busy ||
+      ["recording", "paused", "requesting", "saving", "device-error"].includes(
+        this.data.state,
+      )
+    )
+      return;
+    this.closePlayback();
+    this.setData({
+      ...flowView("choose"),
+      question:
+        this.context?.plan.defaultQuestion?.text ??
+        "想从哪里讲起？可以自由讲述、看照片或自拟问题。",
+    });
+  },
+  showProcessing() {
+    if (
+      this.data.busy ||
+      !this.data.interview ||
+      ["recording", "paused", "requesting", "saving", "device-error"].includes(
+        this.data.state,
+      )
+    )
+      return;
+    this.closePlayback();
+    this.setData(flowView("processing"));
+  },
+  reviewCurrent() {
+    if (
+      this.data.busy ||
+      !this.data.localClips.length ||
+      ["recording", "paused", "requesting", "saving"].includes(this.data.state)
+    )
+      return;
+    this.setData(flowView("review"));
+  },
+  async togglePause() {
+    if (this.data.busy || !this.liveRecorder || dataMode() !== "live") return;
+    if (this.data.state === "paused") await this.authorizeRecording(true);
+    else if (this.data.state === "recording") this.liveRecorder.pause();
+  },
+  async authorizeRecording(resume: boolean) {
+    if (!this.liveRecorder || !this.data.interview) return;
+    this.closePlayback();
+    const generation = this.generation,
+      context = sessionClient.context(),
+      device = this.liveRecorder,
+      interview = this.data.interview!,
+      actualQuestionId = (interview.currentQuestion ?? interview.actualQuestion)
+        .id,
+      questionVersion = interview.questionVersion ?? 1;
+    this.clearFollowup();
+    this.setData({ busy: true });
+    try {
+      const result = await interviewRecordingClient.authorizeStart(
+        this.projectId,
+        interview.id,
+        actualQuestionId,
+        questionVersion,
+        this.assistedSessionId || undefined,
+      );
+      if (
+        !this.current(generation, context) ||
+        this.liveRecorder !== device ||
+        this.data.interview?.id !== interview.id ||
+        (
+          this.data.interview.currentQuestion ??
+          this.data.interview.actualQuestion
+        ).id !== actualQuestionId
+      )
+        return;
+      if (!result.allowed) throw new ApiFailure("FORBIDDEN", 403);
+      if (
+        result.actualQuestionId !== actualQuestionId ||
+        result.questionVersion !== questionVersion
+      )
+        throw new Error("录音问题未确认，请重新查询");
+      if (resume) device.resume();
+      else device.start(actualQuestionId);
+    } catch (error) {
+      if (generation === this.generation && dataMode() === "live") {
+        if (
+          error instanceof ApiFailure &&
+          (error.status === 401 || error.status === 403)
+        ) {
+          this.clearPrivateView();
+          this.liveRecorder = null;
+        }
+        this.setData({
+          status: error instanceof Error ? error.message : "不能开始录音",
+        });
+      }
+    } finally {
+      if (generation === this.generation) this.setData({ busy: false });
+    }
+  },
   async record() {
     if (dataMode() === "live") {
       if (this.data.busy || !this.liveRecorder) return;
-      if (this.data.state === "recording" || this.data.state === "requesting") {
+      if (["recording", "requesting", "paused"].includes(this.data.state)) {
         this.liveRecorder.stop();
         if (this.timerHandle) clearInterval(this.timerHandle);
-      } else {
-        const generation = this.generation,
-          context = sessionClient.context(),
-          device = this.liveRecorder,
-          interview = this.data.interview!,
-          actualQuestionId = (
-            interview.currentQuestion ?? interview.actualQuestion
-          ).id,
-          questionVersion = interview.questionVersion ?? 1;
-        this.clearFollowup();
-        this.setData({ busy: true });
-        try {
-          const result = await interviewRecordingClient.authorizeStart(
-            this.projectId,
-            interview.id,
-            actualQuestionId,
-            questionVersion,
-            this.assistedSessionId || undefined,
-          );
-          if (
-            !this.current(generation, context) ||
-            !result.allowed ||
-            this.liveRecorder !== device ||
-            this.data.interview?.id !== interview.id ||
-            (
-              this.data.interview.currentQuestion ??
-              this.data.interview.actualQuestion
-            ).id !== actualQuestionId
-          )
-            return;
-          if (
-            result.actualQuestionId !== actualQuestionId ||
-            result.questionVersion !== questionVersion
-          )
-            throw new Error("录音问题未确认，请重新查询");
-          device.start(actualQuestionId);
-          const began = Date.now();
-          this.timerHandle = setInterval(() => {
-            if (
-              !this.current(generation, context) ||
-              this.data.state !== "recording"
-            )
-              return;
-            this.setData({
-              timer: recordingTime(this.data.localClips, Date.now() - began),
-            });
-          }, 1000);
-        } catch (error) {
-          if (generation === this.generation && dataMode() === "live") {
-            if (
-              error instanceof ApiFailure &&
-              (error.status === 401 || error.status === 403)
-            ) {
-              this.liveRecorder?.unsubscribe();
-              this.liveRecorder = null;
-              this.context = null;
-              this.storyOwnerContext = "";
-              this.selection = null;
-              this.setData({
-                question: "",
-                interview: null,
-                localClips: [],
-                interviews: [],
-                pendingInterviews: [],
-                customText: "",
-                customIntent: "",
-                canRecord: false,
-              });
-            }
-            this.setData({
-              status: error instanceof Error ? error.message : "不能开始录音",
-            });
-          }
-        } finally {
-          if (generation === this.generation) this.setData({ busy: false });
-        }
-      }
+        this.timerHandle = undefined;
+      } else await this.authorizeRecording(false);
       return;
     }
-
     if (this.data.state === "recording") recorder.stop();
     else if (this.data.state === "idle") recorder.start(this.data.question);
   },
@@ -743,7 +928,9 @@ Page({
   },
   async retry() {
     if (dataMode() === "live") {
-      await this.liveRecorder?.retrySave();
+      if (this.liveRecorder?.snapshot().hasPendingSave)
+        await this.liveRecorder.retrySave();
+      else await this.liveRecorder?.restore();
       return;
     }
     if (recorder.hasPending) void recorder.retry();
@@ -922,7 +1109,7 @@ Page({
       !!this.data.interview &&
       !this.data.busy &&
       this.storyOwnerContext === sessionClient.context() &&
-      !["recording", "requesting", "saving", "device-error"].includes(
+      !["recording", "paused", "requesting", "saving", "device-error"].includes(
         this.data.state,
       )
     );
@@ -1096,7 +1283,7 @@ Page({
       !interview ||
       interview.projectId !== this.projectId ||
       this.data.busy ||
-      ["recording", "requesting", "saving", "device-error"].includes(
+      ["recording", "paused", "requesting", "saving", "device-error"].includes(
         this.data.state,
       )
     )
@@ -1109,6 +1296,17 @@ Page({
   },
   async finish() {
     if (dataMode() === "live") {
+      if (
+        this.data.busy ||
+        [
+          "recording",
+          "paused",
+          "requesting",
+          "saving",
+          "device-error",
+        ].includes(this.data.state)
+      )
+        return;
       if (this.data.interview && !(await this.skipFollowup())) return;
       go("welcome", `projectId=${this.projectId}`);
       return;
