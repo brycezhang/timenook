@@ -8,6 +8,7 @@ import { paymentAdmin } from "./payment-admin-fixture";
 import type { DeletionStatus } from "@timenook/contracts";
 import { PrismaClient, Prisma } from "@prisma/client";
 import { Deletions } from "../src/care/deletions";
+import { ProjectServiceTerms } from "../src/projects/service-terms";
 import { performance } from "node:perf_hooks";
 import { randomUUID, createHash } from "node:crypto";
 import {
@@ -706,6 +707,60 @@ test("old sale playback lasts independently of production, PDF and story retenti
       occurredAt: deliveredAt,
     },
   });
+  // Establish the expired categories through real maintenance before freezing
+  // the playback boundary. An independently published but uncommitted deletion
+  // correctly closes streams; that recovery window is not an active grant.
+  const beforeExpiry = new Date(expiresAt - 1);
+  await app.get(Deletions).sweep(beforeExpiry);
+  const receipts = await db.$queryRaw<{ category: string; state: string }[]>`
+    SELECT i.category,i.state FROM privacy_deletion_items i
+    JOIN privacy_deletions d ON d.id=i.event_id
+    WHERE d.project_id=${p.projectId}::uuid AND d.scoped_export_id IS NULL
+      AND i.layer='active_database' AND i.category IN ('bookPdf','confirmedStories')
+  `;
+  for (const category of ["bookPdf", "confirmedStories"]) {
+    const items = receipts.filter((item) => item.category === category);
+    assert.ok(items.length > 0, `actual ${category} erasure was registered`);
+    assert.ok(items.every((item) => item.state === "completed"));
+  }
+  assert.equal(
+    (await db.bookVersion.findUniqueOrThrow({ where: { id: p.book.id } }))
+      .snapshot,
+    null,
+  );
+  assert.equal(
+    (
+      await db.storyRevision.findUniqueOrThrow({
+        where: { id: p.story.revision.id },
+      })
+    ).paragraphs,
+    null,
+  );
+  assert.deepEqual(
+    (
+      await db.bookAudioEntry.findUniqueOrThrow({
+        where: { id: p.item.entry.id },
+      })
+    ).audio,
+    p.item.audio,
+  );
+  for (const frozen of p.item.audio) {
+    const clip = await db.recordingClip.findUniqueOrThrow({
+      where: { id: frozen.clipId },
+    });
+    assert.deepEqual(
+      readFileSync(join(root, "objects", "sealed", `${clip.intentId}.mp3`)),
+      syntheticAudio(),
+    );
+  }
+  const terms = new ProjectServiceTerms(config.databaseUrl);
+  try {
+    const current = await terms.read(p.projectId, beforeExpiry);
+    assert.equal(current.playback?.state, "active");
+    assert.equal(current.retention?.originalAudio?.state, "active");
+  } finally {
+    await terms.close();
+  }
   const before = data(await request("GET", p.entry, p.narrator.token), 200);
   assert.equal(before.accessExpiresAt, new Date(expiresAt).toISOString());
   assert.equal(
