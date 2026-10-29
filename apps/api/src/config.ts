@@ -16,6 +16,12 @@ export interface ApiConfig {
   databaseUrl: string;
   redisUrl: string;
   wechat?: { appId: string; secret: string };
+  web?: {
+    origin: string;
+    sessionKey: string;
+    loginTtlSeconds: number;
+    sessionTtlSeconds: number;
+  };
   payments?: WechatPayConfig;
   // No production D08 approval exists. This mode only exercises isolated tests.
   participation?: { mode: "synthetic-d08" };
@@ -356,6 +362,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     };
   }
   return {
+    web: readWebConfig(env),
     payments,
     privacyJournal,
     aiProbe,
@@ -370,6 +377,50 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     sessionTtlSeconds,
     redisKeyPrefix: env.REDIS_KEY_PREFIX ?? "timenook",
   };
+}
+
+export function validateWebConfig(web: NonNullable<ApiConfig["web"]>) {
+  let origin: URL;
+  try {
+    origin = new URL(web.origin);
+  } catch {
+    throw new ConfigurationError("Web login requires an HTTPS origin");
+  }
+  if (
+    origin.protocol !== "https:" ||
+    origin.origin !== web.origin ||
+    origin.username ||
+    origin.password ||
+    !/^[A-Za-z0-9+/]{43}=$/.test(web.sessionKey) ||
+    Buffer.from(web.sessionKey, "base64").length !== 32 ||
+    !Number.isInteger(web.loginTtlSeconds) ||
+    web.loginTtlSeconds < 1 ||
+    web.loginTtlSeconds > 900 ||
+    !Number.isInteger(web.sessionTtlSeconds) ||
+    web.sessionTtlSeconds < 1 ||
+    web.sessionTtlSeconds > 43200
+  )
+    throw new ConfigurationError(
+      "Web login requires a 32-byte key and bounded secure session configuration",
+    );
+}
+
+function readWebConfig(env: NodeJS.ProcessEnv): ApiConfig["web"] {
+  if (
+    !env.WEB_ORIGIN &&
+    !env.WEB_SESSION_KEY &&
+    !env.WEB_LOGIN_TTL_SECONDS &&
+    !env.WEB_SESSION_TTL_SECONDS
+  )
+    return undefined;
+  const web = {
+    origin: env.WEB_ORIGIN ?? "",
+    sessionKey: env.WEB_SESSION_KEY ?? "",
+    loginTtlSeconds: Number(env.WEB_LOGIN_TTL_SECONDS ?? "900"),
+    sessionTtlSeconds: Number(env.WEB_SESSION_TTL_SECONDS ?? "43200"),
+  };
+  validateWebConfig(web);
+  return web;
 }
 
 function connectionUrl(

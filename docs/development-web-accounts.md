@@ -1,0 +1,60 @@
+# W01 网页内测账号与会话
+
+对应 [W01 #96](https://github.com/brycezhang/timenook/issues/96)；范围为网页入口所需的账号、一次性登录链接、会话及本人项目列表。共用内部 `User`，不创建虚构微信身份；真实微信绑定、无付款内测项目与内容链路由后续票据接入。
+
+## 配置与运行边界
+
+默认关闭。服务端配置 `WEB_ORIGIN`（HTTPS origin，无路径）、`WEB_SESSION_KEY`（随机 32 字节 base64）、`WEB_LOGIN_TTL_SECONDS`（1–900，默认 900）和 `WEB_SESSION_TTL_SECONDS`（1–43200，默认 43200）。目标 origin 为 `https://sgl.wootoon.cn`。这些字段不打包到浏览器；只有 origin 是公开信息。
+
+启用网页账号要求已正确装配、初始化的独立隐私台账。按[独立台账说明](development-deletion-ledger.md)配置，运行不自动建立或重置台账；台账失效时私人入口拒绝访问。
+
+W01 的 web-only 装配不会启动 `Deletions` 旧期限后台扫描，也不开放未装配的产品模块；显式维护命令和原有主动撤回／删除规则保持自己的边界。非 test 环境拒绝把 W01 网页账号与旧产品装配同时启用。真实内容链路必须由 W02/W04 的受控运行装配及已确认长期服务改造接续验证，不能据本票声称真实库的录音、AI、PDF或正式售卖已启用。
+
+## 受控命令
+
+先编译 API。命令入口为 `apps/api/dist/web/web-cli.js`，可在已加载服务端配置的受控终端运行：
+
+```sh
+node apps/api/dist/web/web-cli.js create --input-file /absolute/private/create.json --output-file /absolute/private/account.json
+node apps/api/dist/web/web-cli.js issue --input-file /absolute/private/issue.json --output-file /absolute/private/link.json
+node apps/api/dist/web/web-cli.js revoke --input-file /absolute/private/revoke.json --output-file /absolute/private/receipt.json
+```
+
+输入必须是当前操作者所有的普通 JSON 文件、权限 600、至多 4096 字节；输出文件必须尚不存在，父目录由当前操作者所有且权限 700。命令拒绝文件符号链接和覆盖已有输出，凭据只写权限 600 的输出文件，标准输出不打印链接。
+
+| 命令 | 输入 | 输出 |
+| --- | --- | --- |
+| `create` | `{}` | `{user:{id}}`，预建没有微信身份的产品账号 |
+| `issue` | `{userId}` | `{ticket:{id,expiresAt},url}`，签发指定内部用户的登录链接 |
+| `revoke` | `{ticketId}` | `{revoked:true}`，撤销尚未消费的链接；不代替已建立会话的退出 |
+
+登录链接形如 `https://sgl.wootoon.cn/app/login#ticket=…`，票据只在签发时写明文，数据库保存摘要。该链接是账号登录凭据，与项目邀请及讲述者本人授权分开；通过私下方式交付给对应内测参与者，不粘贴到公开工单、日志或截图。
+
+## HTTP 契约
+
+下表为服务内部路径；同源公网代理使用 `/api/v1/web/...`。所有响应禁止缓存。
+
+| 方法及路径 | 行为 |
+| --- | --- |
+| `POST /v1/web/session` | 显式提交 `{ticket}`，要求精确 `Origin` 与 `X-Timenook-Web: 1`；原子消费未过期、未撤销且未使用的票据，返回 201 |
+| `GET /v1/web/session` | 从 Cookie 恢复当前账号；匿名、过期、已撤销或密钥已变更时 401 |
+| `DELETE /v1/web/session` | 要求同源及 `X-CSRF-Token`，撤销当前会话并清 Cookie，返回 204 |
+| `GET /v1/web/projects` | 只返回当前创建人／绑定讲述者获准的项目，检查独立拒绝依据、删除和当前共享授权；空列表为 `{projects:[]}` |
+
+登录和恢复的成功 `data` 为 `{user:{id},session:{id,expiresAt},csrfToken}`，不会返回会话令牌。Cookie 为 `__Secure-timenook_web`，使用 HttpOnly、Secure、SameSite=Strict、Path=/api/v1。登录兑换受独立 Redis 来源限流保护；Redis 不可用时拒绝兑换。
+
+已有用户 API 可从该 Cookie 解析到相同内部用户，状态变更要求精确来源、网页意图头及当前会话 CSRF。Cookie 和显式 Authorization 混用被拒绝；管理员、支付通知、探针和微信 code 登录不使用该桥接。既有小程序 Bearer 会话仍按原规则验证，不共享网页 Cookie。
+
+## 工程验证
+
+测试只使用隔离的真实 PostgreSQL schema、Redis 前缀、临时独立台账和合成数据，不访问云端库或真实微信。公开 CLI／HTTP 回归覆盖 10 项：无效链接、签发兑换及恢复、来源校验、Cookie 桥接与退出、链接撤销、并发单次消费及重启、限流、过期、跨账号证明隔离，以及 web-only 启动不触发旧期限清理但显式维护仍有效。
+
+```sh
+pnpm --filter @timenook/api db:generate
+pnpm --filter @timenook/contracts build
+pnpm --filter @timenook/api exec tsc -p tsconfig.test.json
+# 在 apps/api 下执行，.env 必须仍连接可丢弃本地服务
+node --env-file-if-exists=../../.env --test dist-test/test/web-account.test.js dist-test/test/identity.test.js dist-test/test/ai-config.test.js dist-test/test/oss-config.test.js
+```
+
+上述相关回归 25 项通过；API 类型及生产构建通过。W01 实际 HTTPS 浏览器、最终提交 CI 与双轴审查由本票集成记录接续，不以本说明代替目标环境或微信真机验收。
