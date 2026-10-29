@@ -36,4 +36,8 @@ RED→GREEN包含官网声明路径、共享/依赖/迁移/未知拒绝、事件
 
 顺序复验还捕获了期限测试的准备竞态：全局Date推进时，真实后台维护会发布已经到期的bookPdf事件；在其PG回执提交前，无scope音频流按ADR0014的原恢复门闩拒绝，流错误表现为500。受控暂停真实append返回后重现了原始503原因。期限测试改为先等待真实sweep完成，并确认PDF/故事已擦除而原声清单和文件仍在，再原样验证截止前/恰好截止/截止后及full/Range。该调整强化独立期限的前提，不扩大生产scope或绕过未知台账后缀。
 
+修复PR #84的完整Actions确认1038条业务/浏览器用例及67条CI工具回归通过。合并时PR #82先于#84两秒进入main，组合提交8384062另行完整回归，不能复用旧base的总数；较早main的取消不计成功。此次并发未形成逐笔main验绿，属于已发生的流程偏差，后续绿灯不追认该条件；原规则保留，原子串行保护缺口单独归 [#85](https://github.com/brycezhang/timenook/issues/85)。
+
+组合main [40819006406](https://github.com/brycezhang/timenook/actions/runs/40819006406)的API第二片连续三次在FFmpeg源包下载阶段失败（连接重置/120秒超时），均未开始应用测试；其他分片通过也不能据此宣称完整main绿色。停止手工重复后，按 [#86](https://github.com/brycezhang/timenook/issues/86)仅为传输失败增加固定官方镜像回退；版本8.1.1、独立摘要验证及全部原编译/测试范围保留。当前发布签名标签n8.1.1已验证，对应239f2c733de417201d7ad3b3b8b0d9b63285b2b1，固定归档实际获取的SHA256为ec0aa20fb9f6fd3692ffc04dc12ffa43cfffc4a479e388ccd7910ec6cfe188a2，RELEASE确认8.1.1。最终修复PR、main的准确SHA/完整计数及含补跑耗时记录于 [#76](https://github.com/brycezhang/timenook/issues/76)，不将故障补跑混作健康性能样本。
+
 官网快速路径不会放行公共协议、依赖、迁移或未知路径。本文不代表生产部署、微信/资金/实物验收。

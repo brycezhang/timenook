@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-      - run: node --test tests/ci/check.test.mjs tests/ci/shards.test.mjs tests/ci/audit.test.mjs tests/ci/website-package.test.mjs
+      - run: node --test tests/ci/check.test.mjs tests/ci/shards.test.mjs tests/ci/audit.test.mjs tests/ci/website-package.test.mjs tests/ci/audio-tools.test.mjs
       - id: route
         run: |
           mode=$(node scripts/ci/check.mjs classify "$CHECK_BASE" "$CHECK_HEAD")
