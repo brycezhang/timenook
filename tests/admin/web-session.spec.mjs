@@ -9,6 +9,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { get as httpsGet } from "node:https";
+import { createServer, request as forwardRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -17,7 +18,8 @@ const { PrismaClient } = apiRequire("@prisma/client");
 const Redis = apiRequire("ioredis");
 const schema = `w01_browser_${randomUUID().replaceAll("-", "")}`;
 const origin = "https://127.0.0.1:4331";
-let app, server, config, root;
+let app, server, config, root, relay;
+let delayedLogin;
 
 async function cli(command, input) {
   const id = randomUUID();
@@ -102,6 +104,51 @@ test.beforeAll(async () => {
   };
   app = await createPrivacyFixtureApplication(config);
   await app.listen(3451, "127.0.0.1");
+  // Transparent HTTP transport fault injection; application responses are real.
+  relay = createServer((request, response) => {
+    const held =
+      request.method === "POST" && request.url === "/v1/web/session"
+        ? delayedLogin
+        : undefined;
+    if (held) delayedLogin = undefined;
+    const upstream = forwardRequest(
+      {
+        host: "127.0.0.1",
+        port: 3451,
+        path: request.url,
+        method: request.method,
+        headers: request.headers,
+      },
+      (result) => {
+        const chunks = [];
+        let size = 0;
+        result.on("data", (chunk) => {
+          size += chunk.length;
+          if (size > 1048576) result.destroy();
+          else chunks.push(chunk);
+        });
+        result.on("end", async () => {
+          if (held) {
+            held.started();
+            await held.release;
+          }
+          if (!response.destroyed) {
+            response.writeHead(result.statusCode, result.headers);
+            response.end(Buffer.concat(chunks));
+          }
+        });
+        result.on("error", () => response.destroy());
+      },
+    );
+    upstream.on("error", () => {
+      response.writeHead(502);
+      response.end();
+    });
+    request.pipe(upstream);
+  });
+  await new Promise((resolveReady) =>
+    relay.listen(3452, "127.0.0.1", resolveReady),
+  );
   const cert = join(root, "localhost.crt"),
     key = join(root, "localhost.key");
   const certificate = spawnSync(
@@ -148,7 +195,7 @@ test.beforeAll(async () => {
         ...process.env,
         TIMENOOK_WEB_TLS_CERT: cert,
         TIMENOOK_WEB_TLS_KEY: key,
-        TIMENOOK_WEB_API_TARGET: "http://127.0.0.1:3451",
+        TIMENOOK_WEB_API_TARGET: "http://127.0.0.1:3452",
       },
     },
   );
@@ -170,6 +217,10 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => {
   server?.kill();
+  if (relay) {
+    relay.closeAllConnections();
+    await new Promise((resolveClosed) => relay.close(resolveClosed));
+  }
   await closePrivacyFixtureApplication(app);
   if (config) {
     const db = new PrismaClient({ datasourceUrl: config.databaseUrl });
@@ -242,4 +293,94 @@ test("used and revoked login links cannot open an account", async ({
   await expect(page.getByRole("alert")).toHaveText(
     "登录链接无效或已失效，请重新获取。",
   );
+});
+
+for (const separateTab of [false, true])
+  test(`a delayed login cannot replace the newer account in ${separateTab ? "another tab" : "the same tab"}`, async ({
+    page,
+    context,
+  }) => {
+    const first = await loginLink(),
+      second = await loginLink();
+    const activePage = separateTab ? await context.newPage() : page;
+    let release;
+    let started;
+    const began = new Promise((resolve) => {
+      started = resolve;
+    });
+    delayedLogin = {
+      started,
+      release: new Promise((resolve) => {
+        release = resolve;
+      }),
+    };
+    try {
+      await openLink(page, first.url);
+      await page.getByRole("button", { name: "进入我的故事书" }).click();
+      await began;
+      if (separateTab) {
+        await activePage.goto(`${origin}/app/login`);
+        await expect(
+          activePage.getByText("请从内测登录链接进入。"),
+        ).toBeVisible();
+      }
+      await activePage.evaluate((value) => {
+        location.hash = new URL(value).hash;
+      }, second.url);
+      const response = activePage.waitForResponse(
+        (value) =>
+          value.request().method() === "POST" &&
+          value.url().endsWith("/api/v1/web/session"),
+      );
+      await activePage.getByRole("button", { name: "进入我的故事书" }).click();
+      // Fault injection at the HTTP response boundary: allow a second response
+      // to overtake the held first one if exchanges have not been serialized.
+      await Promise.race([
+        response,
+        new Promise((resolve) => setTimeout(resolve, 300)),
+      ]);
+      release();
+      await response;
+      await expect(
+        activePage.getByRole("heading", { name: "我的故事书" }),
+      ).toBeVisible();
+      await activePage.reload();
+      await expect(
+        activePage.getByRole("heading", { name: "我的故事书" }),
+      ).toBeVisible();
+      const correct = await activePage.evaluate(async (userId) => {
+        const result = await (
+          await fetch("/api/v1/web/session", { credentials: "same-origin" })
+        ).json();
+        return result.data.user.id === userId;
+      }, second.userId);
+      expect(correct).toBe(true);
+    } finally {
+      release?.();
+      delayedLogin = undefined;
+      if (separateTab) await activePage.close();
+    }
+  });
+
+test("logout finishes when another tab already revoked the shared session", async ({
+  page,
+  context,
+}) => {
+  const link = await loginLink();
+  await openLink(page, link.url);
+  await page.getByRole("button", { name: "进入我的故事书" }).click();
+  await expect(page.getByRole("heading", { name: "我的故事书" })).toBeVisible();
+  const other = await context.newPage();
+  try {
+    await other.goto(`${origin}/app/projects`);
+    await expect(
+      other.getByRole("heading", { name: "我的故事书" }),
+    ).toBeVisible();
+    await other.getByRole("button", { name: "退出", exact: true }).click();
+    await expect(other.getByText("请从内测登录链接进入。")).toBeVisible();
+    await page.getByRole("button", { name: "退出", exact: true }).click();
+    await expect(page.getByText("请从内测登录链接进入。")).toBeVisible();
+  } finally {
+    await other.close();
+  }
 });

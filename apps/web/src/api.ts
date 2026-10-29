@@ -65,15 +65,31 @@ function session(value: unknown): WebSession {
     throw new WebApiError(0);
   return v;
 }
+async function mutateSession<T>(action: () => Promise<T>): Promise<T> {
+  if (!navigator.locks)
+    return Promise.reject(new Error("请更新浏览器后再打开登录链接。"));
+  // Set-Cookie is applied by the browser before JavaScript can ignore a stale
+  // response. Keep exchanges and logout ordered across this origin's tabs.
+  return await navigator.locks.request("timenook-web-session", action);
+}
 export const webApi = {
   async login(ticket: string) {
-    return session(await request("/web/session", "POST", { ticket }));
+    return mutateSession(async () =>
+      session(await request("/web/session", "POST", { ticket })),
+    );
   },
   async restore() {
     return session(await request("/web/session"));
   },
   async logout(csrfToken: string) {
-    await request("/web/session", "DELETE", undefined, csrfToken);
+    await mutateSession(async () => {
+      try {
+        await request("/web/session", "DELETE", undefined, csrfToken);
+      } catch (error) {
+        if (!(error instanceof WebApiError && error.status === 401))
+          throw error;
+      }
+    });
   },
   async projects(): Promise<ProjectSummary[]> {
     const result = (await request("/web/projects")) as
