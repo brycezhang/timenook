@@ -13,7 +13,7 @@ import { spawnSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
 import { LocalProbeObjects } from "../src/probe/local-objects";
-import { createApplication } from "../src/application";
+import { createAdminApplication as createApplication } from "./admin-feishu-fixture";
 import type { ApiConfig } from "../src/config";
 import { paymentConfig, paymentFetch, paid, callback } from "./payment-fixture";
 const schema = `t20_${randomUUID().replaceAll("-", "")}`;
@@ -170,7 +170,7 @@ export async function startBookFixture() {
     redisKeyPrefix: schema,
     admin: {
       origin: "https://localhost:3443",
-      encryptionKey: randomBytes(32).toString("base64"),
+      sessionKey: randomBytes(32).toString("base64"),
       sessionTtlSeconds: 28800,
       challengeTtlSeconds: 300,
     },

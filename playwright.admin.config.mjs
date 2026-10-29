@@ -1,5 +1,5 @@
 import { defineConfig } from "@playwright/test";
-// Automatic error snapshots can contain password inputs or MFA enrollment seeds.
+// Automatic snapshots and traces can capture transient OAuth codes or cookies.
 process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1";
 export default defineConfig({
   testDir: "./tests/admin",

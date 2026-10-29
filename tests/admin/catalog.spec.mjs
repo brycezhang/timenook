@@ -1,3 +1,8 @@
+import {
+  feishuIdentity,
+  feishuLogin,
+  syntheticFeishuEnv,
+} from "./feishu-fixture.mjs";
 import { test, expect } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
@@ -9,7 +14,6 @@ import https from "node:https";
 import http from "node:http";
 const apiRequire = createRequire(resolve("apps/api/package.json"));
 const { PrismaClient } = apiRequire("@prisma/client");
-const { generate } = apiRequire("otplib");
 const Redis = apiRequire("ioredis");
 const schema = `t08_browser_${randomUUID().replaceAll("-", "")}`;
 let privateDir;
@@ -63,7 +67,8 @@ test.beforeAll(async () => {
     DATABASE_URL: databaseUrl,
     API_PORT: "3418",
     ADMIN_ORIGIN: "https://localhost:3443",
-    ADMIN_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    ADMIN_SESSION_KEY: randomBytes(32).toString("base64"),
+    ...syntheticFeishuEnv,
     REDIS_KEY_PREFIX: schema,
   };
   const cert = join(privateDir, "cert.pem"),
@@ -98,7 +103,7 @@ test.beforeAll(async () => {
   expect(migrated.status).toBe(0);
   account = {
     username: `browser-${randomUUID()}`,
-    password: randomBytes(24).toString("base64url"),
+    ...feishuIdentity(),
     permissions: [
       "ops:read",
       "audit:read",
@@ -116,7 +121,11 @@ test.beforeAll(async () => {
     { cwd: apiCwd, env, encoding: "utf8" },
   );
   expect(created.status).toBe(0);
-  api = start(process.execPath, ["dist/main.js"], { cwd: apiCwd, env });
+  api = start(
+    process.execPath,
+    [resolve("tests/admin/feishu-api-runner.mjs")],
+    { cwd: apiCwd, env },
+  );
   vite = start(
     process.execPath,
     ["node_modules/vite/bin/vite.js", "--host", "localhost"],
@@ -184,12 +193,7 @@ test("operator manages relationships and package drafts, freezes a local preview
       });
   });
   await page.goto("./");
-  await page.getByLabel("管理员账号").fill(account.username);
-  await page.getByLabel("密码", { exact: true }).fill(account.password);
-  await page.getByRole("button", { name: "继续验证" }).click();
-  const secret = await page.getByTestId("enrollment-secret").textContent();
-  await page.getByLabel("六位验证码").fill(await generate({ secret }));
-  await page.getByRole("button", { name: "验证并登录" }).click();
+  await feishuLogin(page, account);
   await page.getByRole("button", { name: "关系与套餐", exact: true }).click();
   await expect(page.getByRole("heading", { name: "赠礼关系" })).toBeVisible();
   await page.getByLabel("关系代码").fill("mentor");

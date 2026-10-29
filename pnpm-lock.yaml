@@ -175,9 +175,6 @@ importers:
       libheif-js:
         specifier: 1.23.5
         version: 1.23.5
-      otplib:
-        specifier: 13.5.0
-        version: 13.5.0
       reflect-metadata:
         specifier: 0.2.2
         version: 0.2.2
@@ -200,6 +197,9 @@ importers:
       nock:
         specifier: 14.0.10
         version: 14.0.10
+      otplib:
+        specifier: 13.5.0
+        version: 13.5.0
       prisma:
         specifier: 6.19.3
         version: 6.19.3(typescript@5.9.3)

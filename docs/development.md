@@ -118,7 +118,7 @@ TIMENOOK_API_BASE_URL=http://127.0.0.1:3417/v1 pnpm build:frontend
 
 按 [ADR 0015](adr/0015-dedicated-domain-ingress.md)，公网联调 API 为 `https://timenookapi.threeminreading.com/api/v1`；Nginx 剥离 `/api` 后转发内部 `/v1`。当前云端 release 和已验证边界见[域名配置记录](delivery/2026-10-28/domain-ingress.md)。真机需独立 AppID、开发权限及微信合法 request 域名配置；管理页面 `/admin/`、管理 API/Cookie `/api/v1/admin` 和支付/退款通知按当前目标完成配置与验证。
 
-T07 独立管理员的配置、受控建号、MFA、会话重启规则和本地 HTTPS 管理端见 [管理端开发](development-admin.md)。
+T07 独立管理员的配置、受控绑定、飞书登录、会话重启规则和本地 HTTPS 管理端见 [管理端开发](development-admin.md)。
 
 T02 非生产录音probe的身份、私有存储模拟、OSS候选适配器、受控页及清理见[音频probe开发](development-audio-probe.md)。本地/契约测试不代表双端及真实OSS验收；[T02证据](delivery/2026-10-22/evidence/T02.md)分开记录。
 

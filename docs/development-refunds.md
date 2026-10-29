@@ -23,7 +23,7 @@ T27 / [#28](https://github.com/brycezhang/timenook/issues/28) 的隔离本地工
 - `POST /v1/orders/:orderId/refunds`：`{ reason, evidenceRef }`，携带 `Idempotency-Key`；当前证据格式仅接受 `synthetic:`，真实凭证未开放。
 - `GET /v1/orders/:orderId/refunds`：原订单的金额汇总与申请进展，匿名/他人不能查询。
 
-内部运营接口均通过既有 MFA、`care:write`、CSRF 和审计：
+内部运营接口均通过既有飞书管理会话、`care:write`、CSRF 和审计：
 
 - `GET /v1/admin/refunds/cases/:caseId`、`GET /v1/admin/refunds/:id`。
 - `POST /v1/admin/refunds/:id/approve`：原政策 `amountFen`、核验证据；平台无法交付还需已核实的 `failureNotifiedAt`。

@@ -14,7 +14,7 @@ T23 消费 T22 的同版双方确认、确定 PDF/hash、地址与首本权益�
 
 首本始终保留同一业务生产单和权益，每个预留版本与生产尝试分别冻结书稿、快照、PDF、地址 hash。每次尝试具有独立交接编号；数据库限制同一生产单同时只有一个尚未确认取消的尝试。新建、资料读取及交接前检查当前确认、授权、权益、冻结与 D02 制作期限。PDF 读取前后都重新核验，拒绝在磁盘读取期间撤权的迟到结果。
 
-用户接口为 `GET /v1/projects/:id/fulfillment` 与 `POST /v1/projects/:id/fulfillment/grants`；后者使用幂等键和独立本人证据。运营接口以 `/v1/admin/fulfillment` 为前缀，`:id` 为首本生产单 ID：列表/详情、`/:id/attempts`、`/:id/attempts/:attemptId/{materials,pdf,handoff,receipt,cancel,shipping,delivery}`。资料与 PDF 为 GET，其他动作是 POST；运营写入沿用 MFA、CSRF、权限和事务审计。限时授权最多 30 分钟，并继续受当次授权和访问期限限制。
+用户接口为 `GET /v1/projects/:id/fulfillment` 与 `POST /v1/projects/:id/fulfillment/grants`；后者使用幂等键和独立本人证据。运营接口以 `/v1/admin/fulfillment` 为前缀，`:id` 为首本生产单 ID：列表/详情、`/:id/attempts`、`/:id/attempts/:attemptId/{materials,pdf,handoff,receipt,cancel,shipping,delivery}`。资料与 PDF 为 GET，其他动作是 POST；运营写入沿用飞书管理会话、CSRF、权限和事务审计。限时授权最多 30 分钟，并继续受当次授权和访问期限限制。
 
 交接开始后，结果未知保持待核实，不能以超时或重试制造新交接，也不释放权益。交接前取消结束本次尝试；交接中请求取消只进入待取消，由运营核对供应商回执后记录明确取消，才允许新尝试。已经离开平台的纸书与文件副本按实际状态人工核实，页面不承诺远程自动撤销。
 

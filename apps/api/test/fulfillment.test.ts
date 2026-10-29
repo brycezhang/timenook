@@ -559,7 +559,7 @@ test("assisted operational access requires fresh book-purpose evidence and a pau
     "approved",
   );
 });
-test("operational commands retain MFA permission CSRF and payload idempotency checks", async () => {
+test("operational commands retain authenticated permission CSRF and payload idempotency checks", async () => {
   const p = await attemptFixture(),
     wrong = await paymentAdmin(config, app, ["care:write"]);
   assert.equal((await admin("GET", p.base, wrong)).statusCode, 403);

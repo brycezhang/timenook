@@ -19,7 +19,6 @@ import Fulfillment from "./views/fulfillment.vue";
 const view = ref("runtime");
 const productionTarget = ref("");
 const state = ref<AdminState | null>(null),
-  secret = ref(""),
   busy = ref(false),
   error = ref(""),
   status = ref<AdminRuntime["status"] | "">("");
@@ -62,15 +61,11 @@ function clearSession() {
   view.value = "runtime";
   productionTarget.value = "";
   state.value = null;
-  secret.value = "";
   audits.value = null;
   status.value = "";
 }
 async function sync() {
   state.value = await adminApi.session();
-  secret.value = "";
-  if (state.value.enrollmentRequired)
-    secret.value = (await adminApi.enrollment()).secret;
   if (state.value.authenticated && canReadRuntime.value)
     status.value = (await adminApi.runtime()).status;
   return state.value;
@@ -85,35 +80,21 @@ async function perform(action: () => Promise<unknown>) {
     const code = (failure as { error?: { code?: string } }).error?.code;
     if (code === "UNAUTHENTICATED") {
       clearSession();
-      const refreshed = await sync().catch(() => null);
-      error.value = refreshed?.mfaRequired
-        ? "验证码无效或已使用，请等待新验证码。"
-        : "登录或验证已到期，请重新登录。";
+      await sync().catch(() => null);
+      error.value = "登录已到期，请重新使用飞书登录。";
     } else
       error.value =
         code === "RATE_LIMITED"
           ? "尝试次数较多，请稍后重试。"
-          : "验证或请求未完成，请检查输入后重试。";
+          : "请求未完成，请稍后重试。";
   } finally {
     busy.value = false;
   }
 }
-function login(username: string, password: string) {
+function login() {
   void perform(async () => {
-    state.value = await adminApi.login(
-      username,
-      password,
-      state.value!.csrfToken,
-    );
-    if (state.value.enrollmentRequired)
-      secret.value = (await adminApi.enrollment()).secret;
-  });
-}
-function mfa(code: string) {
-  void perform(async () => {
-    state.value = await adminApi.mfa(code, state.value!.csrfToken);
-    secret.value = "";
-    if (canReadRuntime.value) status.value = (await adminApi.runtime()).status;
+    const result = await adminApi.feishuLogin(state.value!.csrfToken);
+    window.location.assign(result.authorizationUrl);
   });
 }
 function logout() {
@@ -124,7 +105,20 @@ function logout() {
   });
 }
 onMounted(() => {
-  void perform(sync);
+  const url = new URL(window.location.href);
+  const callback = url.searchParams.get("login_error");
+  if (callback !== null) {
+    url.searchParams.delete("login_error");
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }
+  void perform(async () => {
+    await sync();
+    if (callback !== null && !state.value?.authenticated)
+      error.value =
+        callback === "denied"
+          ? "飞书登录未完成，请重试或联系管理员。"
+          : "飞书登录暂不可用，请稍后重试。";
+  });
 });
 </script>
 <template>
@@ -263,13 +257,10 @@ onMounted(() => {
   </BasicLayout>
   <Auth
     v-else-if="state"
-    :mfa="state.mfaRequired"
-    :secret="secret"
+    :available="state.loginAvailable"
     :busy="busy"
     :error="error"
     @login="login"
-    @verify="mfa"
-    @cancel="logout"
   />
   <main v-else class="auth-page">
     <div>

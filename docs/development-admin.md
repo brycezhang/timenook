@@ -1,54 +1,70 @@
-# 独立管理员与本地管理入口
+# 飞书白名单与独立管理入口
 
-T07 管理身份独立于小程序账号。只有受控 CLI 可建号，未提供注册 API、默认管理员或默认口令。管理员按实际职责获得明确权限；空权限账号可以登录，但不能执行受限操作。权限白名单以[共享契约](../packages/contracts/src/admin.ts)为准，私人内容仍需适用工单、本人限时授权及当前版本核验。
+管理员点击“飞书登录”，经飞书授权后直接返回后台。按 [ADR 0016](adr/0016-feishu-admin-login.md)，不再使用时光里密码、TOTP、身份验证器或 MFA；飞书登录也不被描述为已完成 MFA。管理身份、权限、会话和审计独立于小程序及 wutong。
 
-| 权限                  | 允许的业务范围                                     |
-| --------------------- | -------------------------------------------------- |
-| `ops:read`            | 运行信息                                           |
-| `audit:read`          | 最近 100 条审计                                    |
-| `catalog:read`        | 读取运营关系目录和套餐                             |
-| `catalog:write`       | 编辑关系目录和套餐草稿                             |
-| `catalog:freeze`      | 受准入约束的套餐冻结操作                           |
-| `care:write`          | 共享工单及其受控动作，包括本人权利、校对和退款处理 |
-| `fulfillment:write`   | 首本审核、生产尝试、交接与物流                     |
-| `service-terms:write` | 已购项目服务期限的受控操作                         |
-| `tasks:retry`         | 在原预算及授权条件内重试任务                       |
+## 管理员及权限
 
-正式建号时选择各负责人需要的权限。`care:write` 当前也覆盖退款审批等资金动作；金额、原订单预留、生产核验和实际微信结果仍由相同业务用例约束。具备业务权限不等于具备所有私人资料的查看权，缺少对应内容授权时仍拒绝。
+只有已批准并通过受控 CLI 绑定的飞书身份可以登录。服务端检查当前配置的飞书应用、企业及应用内 open_id；同企业、相同姓名、手机号或飞书授权成功均不自动授予权限。不提供自动注册或申请审批后台。
 
-## 配置与建号
+| 权限                  | 允许的业务范围                     |
+| --------------------- | ---------------------------------- |
+| `ops:read`            | 运行信息及处理任务查看             |
+| `audit:read`          | 最近 100 条审计                    |
+| `catalog:read`        | 读取运营关系目录和套餐             |
+| `catalog:write`       | 编辑关系目录和套餐草稿             |
+| `catalog:freeze`      | 受准入约束的套餐冻结操作           |
+| `care:write`          | 共享工单、本人权利、校对和退款处理 |
+| `fulfillment:write`   | 首本审核、生产尝试、交接与物流     |
+| `service-terms:write` | 已购项目服务期限的受控操作         |
+| `tasks:retry`         | 在原预算及授权条件内重试任务       |
 
-首先执行 `pnpm db:generate`、`pnpm db:migrate`、`pnpm --filter @timenook/api build`。API 使用 `.env` 的独立 PostgreSQL/Redis；管理员另配置 `ADMIN_ORIGIN` 和 `ADMIN_ENCRYPTION_KEY`，生产缺少配置时拒绝启动。本地可放在 `.env.admin-local`（Git 忽略且600），启动 API 时显式加载：
+权限以[共享契约](../packages/contracts/src/admin.ts)为准。零业务权限账号可以登录，但不能执行受限操作。私人内容仍需适用工单、本人限时授权和版本核验；管理员登录或付款不代替本人授权。
+
+## 配置与绑定
+
+先执行 `pnpm db:generate`、`pnpm db:migrate`、`pnpm --filter @timenook/api build`。本地使用 Git 忽略且权限 600 的 `.env.admin-local`；实际服务端使用受限部署环境文件。必需配置如下：
+
+| 配置                      | 要求                                                                      |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `ADMIN_ORIGIN`            | 不带路径的 HTTPS origin；线上为 `https://timenookapi.threeminreading.com` |
+| `ADMIN_SESSION_KEY`       | 独立密码学随机 32 字节的 base64 字符串，仅服务端保管                      |
+| `ADMIN_FEISHU_APP_ID`     | 复用 wutong 现有飞书应用的 App ID                                         |
+| `ADMIN_FEISHU_APP_SECRET` | 对应 App Secret，仅服务端保管                                             |
+| `ADMIN_FEISHU_TENANT_KEY` | 获准访问的企业唯一标识                                                    |
+
+2026-10-29 用户选择复用 wutong 已有飞书应用。在同一应用的安全设置中额外登记回调地址 `https://timenookapi.threeminreading.com/api/v1/admin/feishu/callback`，保留 wutong 原地址；每个系统在授权请求中携带自己的 redirect_uri。返回后只进入时光里固定 `/admin/`，不接受任意下一跳。共享应用不共享后台白名单、角色、会话或用户资料；因应用相同可绑定同一 open_id，但仍须单独批准 TimeNook 权限。
+
+仅使用登录所需身份能力，不为登录增加通讯录、手机号、消息或离线访问权限。开发缺少飞书配置时页面显示登录暂不可用；部分配置、非法配置和生产缺失拒绝启动。正式应用回调和实际人员授权不以填入环境变量代替验收。
+
+以安全编辑器在受限目录创建 mode-600 JSON 文件，字段为 `username`、`realm`、`permissions`、`feishuAppId`、`feishuOpenId`、`tenantKey`。`username` 是后台显示标识，3–64 位小写字母/数字/点/下划线/连字符；`realm` 本地为 `local`，生产为 `production`；身份必须与选定飞书应用及企业一致，权限只接受上表白名单。不同应用的 open_id 不能直接互换，不按姓名或手机号匹配。
 
 ```sh
-node --env-file=.env --env-file=.env.admin-local apps/api/dist/main.js
+pnpm admin:create --input-file /absolute/private/admin-binding.json
 ```
 
-`ADMIN_ORIGIN` 必须是不带路径的 HTTPS origin；本地 `https://localhost:3443`，目标生产 `https://timenookapi.threeminreading.com`。`ADMIN_ENCRYPTION_KEY` 为密码学随机32字节的base64字符串，服务端保管，用于 AES-256-GCM 加密 TOTP 种子与派生 CSRF；不填到 Vite 环境变量、不输出或提交。不复用其他应用密钥。密钥丢失会阻止现有 MFA 验证；正式备份/轮换流程由发布验收另行验证。
+CLI 拒绝符号链接、错误所有者、组/其他用户可读、超过 8KiB 的文件及重复绑定；只输出建号结果，不输出服务端凭据。禁用管理员使用同一受控 CLI 的 `disable` 命令及仅含 `username`、`realm` 的受限输入文件，撤销其活动会话。生产从已发布 API 目录显式加载生产环境运行命令，不读取本地环境文件。生产身份和测试替身不得混用。
 
-以安全编辑器在受限目录创建 mode-600 JSON 文件，字段为 `username`、`password`、`permissions` 和 `realm`。账号格式为3–64位小写字母/数字/点/下划线/连字符；密码16–128字符且使用独立随机强密码；permissions 只接受上述白名单；本地 realm 为 `local`，生产为 `production`。不要把密码放进 shell 命令、argv、聊天、截图或日志。
+旧版本和旧备份中的管理员只保留为停用的历史经办主体，保留生产、售后及审计引用；密码/MFA 字段和旧会话失效，不自动建立飞书绑定。重新使用后台必须单独批准当前飞书身份；数据库约束拒绝启用缺少完整绑定的账号。历史恢复测试所需旧 `otplib` 仅固定在开发依赖中，新版登录不调用它。
 
-```sh
-pnpm admin:create --input-file /absolute/private/admin-create.json
-```
+## 登录与会话
 
-CLI 拒绝符号链接、非当前用户所有、组/其他用户可读、超过8KiB的文件，拒绝同realm重名和realm不匹配；只输出管理员UUID、realm和待MFA初始化状态。完成后移除输入文件中的密码或安全删除该一次性文件。本地账号不在生产realm中查找，不能用于生产登录。
+1. `GET /v1/admin/session` 建立或读取匿名/完整会话，并返回登录是否可用和会话绑定 CSRF。
+2. `POST /v1/admin/feishu/login` 要求同源 Origin、匿名 Cookie 与 CSRF，返回飞书授权 URL；页面随后导航过去。
+3. 服务端回调交换授权码并获取身份，核对企业、应用和白名单，原子消费浏览器绑定的短期 state；采用 PKCE S256。只有该 GET 回调允许跨站顶层导航，其他管理请求保持跨站拒绝。
+4. 完整会话与成功审计在同一 PostgreSQL 事务提交后才签发 Cookie，回调仅跳转固定 `/admin/`；错误仅显示固定安全提示。授权码、飞书访问令牌、Cookie 和 CSRF 不写入日志、浏览器存储或后台跳转 URL，不申请/保存飞书 refresh token。
 
-生产从已发布目录调用 `node --env-file=/private/production.env dist/admin/admin-cli.js create --input-file /private/admin-create.json`，仅加载该生产环境文件。使用独立生产数据库、Redis前缀、加密密钥和强口令，由实际管理员登录后在自己的身份验证器中添加 TimeNook 并完成一次有效TOTP。没有生产账号或MFA种子随源码发布。
+主会话 Cookie 为 `__Secure-timenook_admin`：Secure、HttpOnly、SameSite=Strict、host-only、Path=`/api/v1/admin`。OAuth 回调用独立五分钟 SameSite=Lax Cookie 绑定发起浏览器，防止主 Cookie 因跨站回调未发送而错误放宽整套 Cookie。过期、重放、错浏览器或并发重复回调拒绝。
 
-## 会话规则
+完整会话最长八小时，不静默续期。匿名/OAuth 流程最长五分钟，配置只能缩短期限。每次访问重验账号、身份绑定、权限及会话；停用、绑定改变、到期或退出后拒绝，页面清理旧身份及私人内容。会话存于数据库，API 重启不自动注销未到期会话。退出需要当前 Origin 和 CSRF；若并发登录已消费旧会话，旧退出不能清除新 Cookie 或宣称新会话已经退出。
 
-- 密码通过仅获得5分钟挑战；首次MFA初始化数据仅在该挑战且账号尚未完成初始化时可读取。完整会话必须再通过六位TOTP。
-- 采用标准30秒TOTP，接受当前及前一时间步；成功时间步以PG锁和事务全局消费，重复、并发或旧验证码拒绝。Redis按账号/IP限速，Redis不可用时不继续尝试密码/MFA。
-- 完整会话绝对有效期8小时，挑战默认5分钟；可通过 `ADMIN_SESSION_TTL_SECONDS` / `ADMIN_CHALLENGE_TTL_SECONDS` 缩短，最大仍为8小时/5分钟。没有静默续期。数据库持久化会话，所以 API 重启保留未到期会话，到期/注销后不可恢复。
-- 专用 `__Secure-timenook_admin` Cookie：Secure、HttpOnly、SameSite=Strict、host-only；正式目标为 TimeNook 独立域名下的 Path=`/api/v1/admin`，见 [ADR 0015](adr/0015-dedicated-domain-ingress.md)。Cookie Path 是浏览器发送范围，身份权限仍由独立账号/会话表验证。本地 HTTPS 夹具与目标部署使用同一路径；实际管理员及正式环境证据分别验证。
-- 所有写请求必须携带与当前Cookie绑定的 `X-CSRF-Token`，Origin必须精确匹配配置；跨站请求拒绝。密码/MFA成功会轮换并撤销旧挑战；退出同时撤销服务端会话和清Cookie。前端在完整会话或MFA挑战失效后恢复登录。
-- 若 MFA/密码轮换已先消费旧挑战，并发退出该旧挑战返回401且不清除新Cookie；调用方须用当前会话重新退出，不能把旧挑战的退出失败当作新会话已撤销。该规则只作用于当前会话，不注销其他设备。
-- 会话创建/轮换/注销与成功审计同PG事务，事务提交后才发送Cookie。审计失败导致事务回滚，不会发出新的有效身份。审计只记录operatorId、固定action、服务端生成requestId、result和时间；不记录请求体、密码、验证码、种子、Cookie/CSRF令牌、云key或完整地址。
-- DTO、跨站或会话阶段拒绝也从有效Cookie解析已知操作者，使用固定路由动作；无法识别时记录空操作者。失败审计不可用时保留原安全HTTP错误，不返回原始数据库异常。
+Nginx 模板对准确的 OAuth 回调路径关闭含请求行的访问/错误日志，避免记录授权码和 state；服务端审计仍保留固定动作及结果。部署须使用本轮代理配置，不能只更新前端页面。
 
-## 验证与部署边界
+Redis 提供限流和一次性 OAuth 状态；依赖不可用时不继续登录。成功审计不可用时回滚身份创建；失败审计尽力记录固定动作和安全结果，不影响原有安全响应。审计只记录操作者、动作、服务端 requestId、结果和时间。
 
-`pnpm check` 含既有小程序测试、API真实数据库测试以及管理端类型/构建；`pnpm api:openapi` 导出契约；`pnpm test:admin-browser` 走实际CLI、真实PG/Redis、HTTPS浏览器路径（独立临时schema和前缀，自动清理）。管理端开发与浏览器要求见 [apps/admin/README.md](../apps/admin/README.md)。
+## 验证及部署边界
 
-本地通过只证明实现和本地合成账号流程。当前正式目标为独立域名下的 `/admin/` 静态页面及 `/api/v1/admin` API/Cookie；路径配置已接入；真实管理员 MFA 初始化、生产机运行与重启、TLS/Nginx、正式数据库/Redis、密钥保管及同机 legal-agent 回归由 T29 留证；本票保持未关闭。
+沿用管理 HTTP、真实 PostgreSQL/Redis 和 HTTPS 浏览器验证边界。仅 `environment=test` 的构造入口可替换飞书外部 HTTP；生产及开发不接受替身，也没有环境变量模拟登录。浏览器测试使用实际 CLI、隔离 schema/Redis 前缀和临时 HTTPS，经外部身份替身走完整跳转与真实 Cookie；不读取实际飞书凭据。失败快照、trace 和录屏保持关闭，主动保存的无凭据页面仅位于 `/tmp`。
+
+`pnpm test:admin-browser`、管理端类型/构建及 API 回归提供工程证据；[本轮实施记录](delivery/2026-10-29/admin-feishu-login.md)记录实际结果。真实飞书应用、回调登记、管理员绑定、登录/拒绝/退出、密钥保管、目标环境和进程重启由 T29 留证。已部署的旧版页面及先前 MFA 测试不代表新方案已部署或验收。
+
+官方接口：[获取授权码](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/authen-v1/authorize/get)、[获取 user_access_token](https://open.feishu.cn/document/authentication-management/access-token/get-user-access-token)、[获取用户信息](https://open.feishu.cn/document/server-docs/authentication-management/login-state-management/get)。使用当前 v3 token endpoint，供应商访问令牌只用于本次服务端核对身份。

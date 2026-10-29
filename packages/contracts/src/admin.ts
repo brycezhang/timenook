@@ -19,26 +19,24 @@ export function isAdminPermission(value: unknown): value is AdminPermission {
   );
 }
 
-export interface AdminLoginCommand {
-  username: string;
-  password: string;
-}
-
-export interface AdminMfaCommand {
-  code: string;
+export interface AdminFeishuLogin {
+  authorizationUrl: string;
 }
 
 export type AdminRealm = "local" | "production";
 
-export interface AdminProvisionCommand extends AdminLoginCommand {
+export interface AdminProvisionCommand {
+  username: string;
   realm: AdminRealm;
+  feishuAppId: string;
+  feishuOpenId: string;
+  tenantKey: string;
   permissions: AdminPermission[];
 }
 
 export interface AdminProvisionResult {
   id: string;
   realm: AdminRealm;
-  mfaEnrollmentRequired: true;
 }
 
 export interface AdminOperator {
@@ -49,16 +47,10 @@ export interface AdminOperator {
 
 export interface AdminState {
   authenticated: boolean;
-  mfaRequired: boolean;
-  enrollmentRequired: boolean;
+  loginAvailable: boolean;
   operator: AdminOperator | null;
   csrfToken: string;
   expiresAt: string;
-}
-
-export interface AdminEnrollment {
-  secret: string;
-  uri: string;
 }
 
 export interface AdminRuntime {

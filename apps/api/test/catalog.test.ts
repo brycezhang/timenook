@@ -1,3 +1,9 @@
+import nock from "nock";
+import {
+  createFeishuAccount,
+  beginFeishu,
+  authenticateFeishu,
+} from "./admin-feishu-fixture";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { createHash, randomUUID, randomBytes } from "node:crypto";
@@ -5,11 +11,10 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generate } from "otplib";
 import { after, before, test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
-import { createApplication } from "../src/application";
+import { createAdminApplication as createApplication } from "./admin-feishu-fixture";
 import type { ApiConfig } from "../src/config";
 
 const origin = "https://localhost:3443";
@@ -32,7 +37,7 @@ before(async () => {
     redisKeyPrefix: schema,
     admin: {
       origin,
-      encryptionKey: key,
+      sessionKey: key,
       sessionTtlSeconds: 28800,
       challengeTtlSeconds: 300,
     },
@@ -74,92 +79,12 @@ function createAccount(
     "audit:read",
   ],
 ) {
-  const username = `operator-${randomUUID()}`;
-  const password = randomBytes(24).toString("base64url");
-  const input = join(privateDir, `${randomUUID()}.json`);
-  writeFileSync(
-    input,
-    JSON.stringify({ username, password, permissions, realm: "local" }),
-    { mode: 0o600 },
-  );
-  const result = spawnSync(
-    process.execPath,
-    ["dist-test/src/admin/admin-cli.js", "create", "--input-file", input],
-    {
-      env: {
-        ...process.env,
-        NODE_ENV: "test",
-        DATABASE_URL: config.databaseUrl,
-        ADMIN_ORIGIN: origin,
-        ADMIN_ENCRYPTION_KEY: key,
-      },
-      encoding: "utf8",
-    },
-  );
-  assert.equal(result.status, 0, `CLI failed: ${result.stderr}`);
-  assert.doesNotMatch(result.stdout + result.stderr, new RegExp(password));
-  return { username, password, id: JSON.parse(result.stdout).id };
+  return createFeishuAccount(config, permissions);
 }
-function cookie(response: { headers: Record<string, unknown> }): string {
-  const value = response.headers["set-cookie"];
-  return String(Array.isArray(value) ? value[0] : value).split(";")[0];
-}
-async function begin(account: ReturnType<typeof createAccount>, target = app) {
-  const bootstrap = await target.inject({
-    method: "GET",
-    url: "/v1/admin/session",
-  });
-  assert.equal(bootstrap.statusCode, 200);
-  const response = await target.inject({
-    method: "POST",
-    url: "/v1/admin/login",
-    headers: {
-      origin,
-      cookie: cookie(bootstrap),
-      "x-csrf-token": bootstrap.json().data.csrfToken,
-    },
-    payload: account.username
-      ? { username: account.username, password: account.password }
-      : {},
-  });
-  assert.equal(response.statusCode, 200);
-  return {
-    cookie: cookie(response),
-    csrf: response.json().data.csrfToken,
-    response,
-  };
-}
-async function authenticate(account = createAccount(), target = app) {
-  const challenge = await begin(account, target);
-  const enrollment = await target.inject({
-    method: "GET",
-    url: "/v1/admin/mfa/enrollment",
-    headers: { cookie: challenge.cookie },
-  });
-  assert.equal(enrollment.statusCode, 200);
-  const secret = enrollment.json().data.secret;
-  const code = await generate({ secret });
-  const response = await target.inject({
-    method: "POST",
-    url: "/v1/admin/mfa",
-    headers: {
-      cookie: challenge.cookie,
-      origin,
-      "x-csrf-token": challenge.csrf,
-    },
-    payload: { code },
-  });
-  assert.equal(response.statusCode, 200);
-  return {
-    account,
-    secret,
-    code,
-    cookie: cookie(response),
-    csrf: response.json().data.csrfToken,
-    response,
-    challenge,
-  };
-}
+const begin = (_account: ReturnType<typeof createAccount>, target = app) =>
+  beginFeishu(config, target);
+const authenticate = (account = createAccount(), target = app) =>
+  authenticateFeishu(config, target, account);
 
 const writeHeaders = (auth: Awaited<ReturnType<typeof authenticate>>) => ({
   cookie: auth.cookie,
@@ -811,6 +736,16 @@ test("production cannot read local catalog or preview versions and even its auth
     environment: "production",
   });
   try {
+    const code = Buffer.from(JSON.stringify(account)).toString("base64url");
+    nock("https://accounts.feishu.cn")
+      .post("/oauth/v3/token")
+      .reply(200, { code: 0, access_token: code });
+    nock("https://open.feishu.cn")
+      .get("/open-apis/authen/v1/user_info")
+      .reply(200, {
+        code: 0,
+        data: { open_id: account.feishuOpenId, tenant_key: account.tenantKey },
+      });
     const auth = await authenticate(account, production);
     const headers = writeHeaders(auth);
     assert.deepEqual(

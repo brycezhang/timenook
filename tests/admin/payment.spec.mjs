@@ -1,4 +1,9 @@
 import {
+  feishuIdentity,
+  feishuLogin,
+  syntheticFeishuEnv,
+} from "./feishu-fixture.mjs";
+import {
   createPrivacyFixtureApplication,
   closePrivacyFixtureApplication,
 } from "./privacy-fixture.mjs";
@@ -20,7 +25,6 @@ import https from "node:https";
 import http from "node:http";
 const apiRequire = createRequire(resolve("apps/api/package.json"));
 const { PrismaClient } = apiRequire("@prisma/client");
-const { generate } = apiRequire("otplib");
 const Redis = apiRequire("ioredis");
 const schema = `t10_browser_${randomUUID().replaceAll("-", "")}`;
 let privateDir;
@@ -74,7 +78,8 @@ test.beforeAll(async () => {
     DATABASE_URL: databaseUrl,
     API_PORT: "3418",
     ADMIN_ORIGIN: "https://localhost:3443",
-    ADMIN_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    ADMIN_SESSION_KEY: randomBytes(32).toString("base64"),
+    ...syntheticFeishuEnv,
     REDIS_KEY_PREFIX: schema,
   };
   const cert = join(privateDir, "cert.pem"),
@@ -109,7 +114,7 @@ test.beforeAll(async () => {
   expect(migrated.status).toBe(0);
   account = {
     username: `browser-${randomUUID()}`,
-    password: randomBytes(24).toString("base64url"),
+    ...feishuIdentity(),
     permissions: [
       "ops:read",
       "audit:read",
@@ -293,12 +298,7 @@ test("support uses a minimal shared-case pause form and the mini-program restore
     if (message.type() === "error") errors.push(message.text());
   });
   await page.goto("./");
-  await page.getByLabel("管理员账号").fill(account.username);
-  await page.getByLabel("密码", { exact: true }).fill(account.password);
-  await page.getByRole("button", { name: "继续验证" }).click();
-  const secret = await page.getByTestId("enrollment-secret").textContent();
-  await page.getByLabel("六位验证码").fill(await generate({ secret }));
-  await page.getByRole("button", { name: "验证并登录" }).click();
+  await feishuLogin(page, account);
   await page.getByRole("button", { name: "服务期限", exact: true }).click();
   await page.getByLabel("项目编号").fill(projectId);
   const query = page.waitForResponse(

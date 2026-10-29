@@ -49,7 +49,7 @@ T30 分别记录系统功能与线下运营：系统验证确定 PDF 的生成/�
 | [后续 main CI 40809855516](https://github.com/brycezhang/timenook/actions/runs/40809855516) | `1dde025` 说明文档检查成功 | 后续为说明文档变更，不记作又一次完整回归；实际验收仍固定代码、配置和产物 |
 | T02/T03/T04：[PR #37](https://github.com/brycezhang/timenook/pull/37)、[#41](https://github.com/brycezhang/timenook/pull/41)、[#38](https://github.com/brycezhang/timenook/pull/38) | 录音/私有存储、供应商协议、图片/PDF/入口机制已交付 | 本地工程主要使用合成素材和供应商网络替身；真实设备、口音质量、印厂规格/实物仍缺 |
 | T05/T08/T09：[PR #39](https://github.com/brycezhang/timenook/pull/39)、[#40](https://github.com/brycezhang/timenook/pull/40)、[#34](https://github.com/brycezhang/timenook/pull/34) | 参数完整性校验、动态关系/套餐预览、单套模板复制已交付 | D02–D08 模板仍 pending；D01/D09/D10 未取得正式冻结证据。结构校验不证明真实审核通过 |
-| T06/T07/T10/T11/T12：[PR #35](https://github.com/brycezhang/timenook/pull/35)、[#36](https://github.com/brycezhang/timenook/pull/36)、[#43](https://github.com/brycezhang/timenook/pull/43)、[#46](https://github.com/brycezhang/timenook/pull/46)、[#47](https://github.com/brycezhang/timenook/pull/47) | 会话、运营 MFA、支付/期限、参与和同机本人证据契约已交付 | 微信/资金、真实管理员和 D08 本人核验未完成；付款不替代讲述者授权 |
+| T06/T07/T10/T11/T12：[PR #35](https://github.com/brycezhang/timenook/pull/35)、[#36](https://github.com/brycezhang/timenook/pull/36)、[#43](https://github.com/brycezhang/timenook/pull/43)、[#46](https://github.com/brycezhang/timenook/pull/46)、[#47](https://github.com/brycezhang/timenook/pull/47) | 会话、原运营认证、支付/期限、参与和同机本人证据契约已交付；当前飞书认证调整见 [ADR 0016](../../adr/0016-feishu-admin-login.md)及 [#81](https://github.com/brycezhang/timenook/issues/81) | 微信/资金、真实管理员和 D08 本人核验未完成；付款不替代讲述者授权 |
 | T13–T19：PR #48–#54；下表逐票链接 | 计划、录音/照片、持久转写、可选追问、故事与本人确认已集成 | 真实样本、双端、生产模型/提示词/预算和正式业务装配仍待验；浏览器和 Mac 原生编译不能证明真机通过 |
 | T20–T23：[PR #56](https://github.com/brycezhang/timenook/pull/56)、[#57](https://github.com/brycezhang/timenook/pull/57)、[#58](https://github.com/brycezhang/timenook/pull/58)、[#59](https://github.com/brycezhang/timenook/pull/59) | 固定 PDF/hash、版本原声、双方确认/首本、生产尝试及物流事实已交付 | 合成 PDF/入口/回执不证明正式规格、真实扫码、印厂接收或实物 |
 | T24–T28：[PR #61](https://github.com/brycezhang/timenook/pull/61)、[#62](https://github.com/brycezhang/timenook/pull/62)、[#67](https://github.com/brycezhang/timenook/pull/67)、[#63](https://github.com/brycezhang/timenook/pull/63)、[#65](https://github.com/brycezhang/timenook/pull/65) | 撤回、完整导出、独立删除台账、退款和质量售后已交付 | 实际政策、本人/无微信渠道、真实资金、外部副本/印厂回执和设备仍缺。T26 自身取消的 main CI 不计通过，基线整体回归另见上行 |
@@ -117,7 +117,7 @@ T30 分别记录系统功能与线下运营：系统验证确定 PDF 的生成/�
 
 | 缺口 | 工程可继续做的部分 | 负责人需先明确的输入 |
 | --- | --- | --- |
-| 实际管理员/MFA/托管 | 受控建号、权限、Cookie/CSRF/重启与恢复验证 | 实际人员、职责、本人 MFA 设备、密钥托管与恢复负责人 |
+| 实际管理员/飞书登录/托管 | 受控建号、权限、Cookie/CSRF/重启与恢复验证 | 实际人员、职责、飞书应用、企业与本人身份绑定、密钥托管与恢复负责人 |
 | RDS/Tair 安全与队列条件 | TLS、noeviction、权限、健康和资源验证 | 共享实例调整/独立资源方案及负责人；历史记录为 RDS 无 TLS、Tair 明文/volatile-lru，本轮未修改 |
 | 正式业务及 Worker/渲染装配 | 盘点仍受合成门禁限制的参与、录音、转写、故事、书稿、导出/清理配置；冻结后补真实装配与相关验证 | 真实 D 项、模型/供应商/预算、授权规则；不能只填环境变量或给合成模式改名就开放 |
 | 独立台账及业务恢复 | 在隔离恢复目标重放真实撤回/删除事件、切换 authority、验证 Redis 丢失/重启与期限补扫 | 独立介质、防整体回滚、密钥托管、备份轮换和恢复职责；空库还原不替代业务事件恢复 |

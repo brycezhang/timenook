@@ -1,3 +1,9 @@
+import {
+  feishuIdentity,
+  feishuLogin,
+  installFeishuAuthorization,
+  syntheticFeishuEnv,
+} from "./feishu-fixture.mjs";
 import { test, expect } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
@@ -9,7 +15,6 @@ import https from "node:https";
 import http from "node:http";
 const apiRequire = createRequire(resolve("apps/api/package.json"));
 const { PrismaClient } = apiRequire("@prisma/client");
-const { generate } = apiRequire("otplib");
 const Redis = apiRequire("ioredis");
 const schema = `t07_browser_${randomUUID().replaceAll("-", "")}`;
 let privateDir;
@@ -63,7 +68,8 @@ test.beforeAll(async () => {
     DATABASE_URL: databaseUrl,
     API_PORT: "3418",
     ADMIN_ORIGIN: "https://localhost:3443",
-    ADMIN_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    ADMIN_SESSION_KEY: randomBytes(32).toString("base64"),
+    ...syntheticFeishuEnv,
     REDIS_KEY_PREFIX: schema,
   };
   const cert = join(privateDir, "cert.pem"),
@@ -98,7 +104,7 @@ test.beforeAll(async () => {
   expect(migrated.status).toBe(0);
   account = {
     username: `browser-${randomUUID()}`,
-    password: randomBytes(24).toString("base64url"),
+    ...feishuIdentity(),
     permissions: ["ops:read", "audit:read"],
     realm: "local",
   };
@@ -110,7 +116,11 @@ test.beforeAll(async () => {
     { cwd: apiCwd, env, encoding: "utf8" },
   );
   expect(created.status).toBe(0);
-  api = start(process.execPath, ["dist/main.js"], { cwd: apiCwd, env });
+  api = start(
+    process.execPath,
+    [resolve("tests/admin/feishu-api-runner.mjs")],
+    { cwd: apiCwd, env },
+  );
   vite = start(
     process.execPath,
     ["node_modules/vite/bin/vite.js", "--host", "localhost"],
@@ -146,7 +156,21 @@ test.afterAll(async () => {
   }
   if (privateDir) rmSync(privateDir, { recursive: true, force: true });
 });
-test("desktop and mobile operator completes MFA, survives API restart, and logs out with real Secure cookies", async ({
+test("operator login offers one Feishu action without password or MFA fields", async ({
+  page,
+}) => {
+  await page.goto("./");
+  await expect(page).toHaveTitle("时光里 · 运营管理");
+  await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "飞书登录", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("textbox")).toHaveCount(0);
+  await expect(page.getByTestId("enrollment-secret")).toHaveCount(0);
+});
+
+test("desktop and mobile operator completes one Feishu login, survives API restart, and logs out with real Secure cookies", async ({
   page,
   context,
 }) => {
@@ -167,13 +191,20 @@ test("desktop and mobile operator completes MFA, survives API restart, and logs 
       );
       throw error;
     });
-  await page.getByLabel("管理员账号").fill(account.username);
-  await page.getByLabel("密码", { exact: true }).fill(account.password);
-  await page.getByRole("button", { name: "继续验证" }).click();
-  await expect(page.getByRole("heading", { name: "双重验证" })).toBeVisible();
-  const secret = await page.getByTestId("enrollment-secret").textContent();
-  await page.getByLabel("六位验证码").fill(await generate({ secret }));
-  await page.getByRole("button", { name: "验证并登录" }).click();
+  await page.screenshot({
+    path: "/tmp/timenook-feishu-login-desktop.png",
+    fullPage: true,
+  });
+  const callbackRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/api/v1/admin/feishu/callback",
+  );
+  await feishuLogin(page, account);
+  const callbackHeaders = await (await callbackRequest).allHeaders();
+  expect(callbackHeaders.cookie).toContain("__Secure-timenook_oauth=");
+  expect(callbackHeaders.cookie ?? "").not.toContain(
+    "__Secure-timenook_admin=",
+  );
   await expect(page.getByRole("heading", { name: "运行信息" })).toBeVisible();
   await expect(page.getByText("服务可用", { exact: true })).toBeVisible();
   const cookies = await context.cookies(
@@ -197,9 +228,16 @@ test("desktop and mobile operator completes MFA, survives API restart, and logs 
       document.cookie.includes("__Secure-timenook_admin"),
     ),
   ).toBe(false);
-  await page.screenshot({ path: "/tmp/t07-admin-desktop.png", fullPage: true });
+  await page.screenshot({
+    path: "/tmp/timenook-feishu-admin-desktop.png",
+    fullPage: true,
+  });
   await stop(api);
-  api = start(process.execPath, ["dist/main.js"], { cwd: apiCwd, env });
+  api = start(
+    process.execPath,
+    [resolve("tests/admin/feishu-api-runner.mjs")],
+    { cwd: apiCwd, env },
+  );
   await waitFor("https://localhost:3443/api/v1/admin/session");
   await page.reload();
   await expect(page.getByText("服务可用", { exact: true })).toBeVisible();
@@ -214,7 +252,10 @@ test("desktop and mobile operator completes MFA, survives API restart, and logs 
         .evaluate((el) => Math.round(el.getBoundingClientRect().width)),
     )
     .toBeGreaterThan(340);
-  await page.screenshot({ path: "/tmp/t07-admin-mobile.png", fullPage: true });
+  await page.screenshot({
+    path: "/tmp/timenook-feishu-admin-mobile.png",
+    fullPage: true,
+  });
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -228,31 +269,220 @@ test("desktop and mobile operator completes MFA, survives API restart, and logs 
         cookie.name === session.name && cookie.value === session.value,
     ),
   ).toBe(false);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "/tmp/timenook-feishu-login-mobile.png",
+    fullPage: true,
+  });
   expect(errors).toEqual([]);
 });
 
-test("an expired MFA challenge returns the operator to login and clears enrollment material", async ({
+test("an expired Feishu authorization returns to the single login action", async ({
   page,
 }) => {
   await stop(api);
-  api = start(process.execPath, ["dist/main.js"], {
-    cwd: apiCwd,
-    env: { ...env, ADMIN_CHALLENGE_TTL_SECONDS: "3" },
-  });
+  api = start(
+    process.execPath,
+    [resolve("tests/admin/feishu-api-runner.mjs")],
+    {
+      cwd: apiCwd,
+      env: { ...env, ADMIN_CHALLENGE_TTL_SECONDS: "3" },
+    },
+  );
   await waitFor("https://localhost:3443/api/v1/admin/session");
   await page.goto("./");
-  await page.getByLabel("管理员账号").fill(account.username);
-  await page.getByLabel("密码", { exact: true }).fill(account.password);
-  await page.getByRole("button", { name: "继续验证" }).click();
-  await expect(page.getByRole("heading", { name: "双重验证" })).toBeVisible();
-  await page.waitForTimeout(3200);
-  await page.getByLabel("六位验证码").fill("000000");
-  await page.getByRole("button", { name: "验证并登录" }).click();
+  const remove = await installFeishuAuthorization(page, account);
+  try {
+    await page.getByRole("button", { name: "飞书登录", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "飞书授权（合成测试）" }),
+    ).toBeVisible();
+    await page.waitForTimeout(3200);
+    await page.getByRole("link", { name: "授权并返回", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
+    await expect(
+      page.getByText("飞书登录未完成，请重试或联系管理员。", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("textbox")).toHaveCount(0);
+    await expect(page).toHaveURL("https://localhost:3443/admin/");
+    await page.screenshot({
+      path: "/tmp/timenook-feishu-expired-login.png",
+      fullPage: true,
+    });
+  } finally {
+    await remove();
+    await stop(api);
+    api = start(
+      process.execPath,
+      [resolve("tests/admin/feishu-api-runner.mjs")],
+      { cwd: apiCwd, env },
+    );
+    await waitFor("https://localhost:3443/api/v1/admin/session");
+  }
+});
+
+test("an unapproved Feishu identity cannot enter the console", async ({
+  page,
+}) => {
+  await page.goto("./");
+  await feishuLogin(page, feishuIdentity());
   await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
-  await expect(page.getByText("登录或验证已到期，请重新登录。")).toBeVisible();
-  await expect(page.getByTestId("enrollment-secret")).toHaveCount(0);
+  await expect(page.getByRole("alert")).toContainText(
+    "飞书登录未完成，请重试或联系管理员。",
+  );
+  await expect(page.getByRole("button", { name: "退出登录" })).toHaveCount(0);
+  await expect(page).toHaveURL("https://localhost:3443/admin/");
+});
+
+test("cancelled Feishu authorization restores a usable login page", async ({
+  page,
+}) => {
+  await page.goto("./");
+  const remove = await installFeishuAuthorization(page, account, {
+    cancel: true,
+  });
+  try {
+    await page.getByRole("button", { name: "飞书登录", exact: true }).click();
+    await page.getByRole("link", { name: "取消并返回", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "飞书登录", exact: true }),
+    ).toBeEnabled();
+    await expect(page).toHaveURL("https://localhost:3443/admin/");
+  } finally {
+    await remove();
+  }
+});
+
+test("a revoked operator session clears the console and returns to Feishu login", async ({
+  page,
+}) => {
+  await page.goto("./");
+  await feishuLogin(page, account);
+  await expect(page.getByRole("heading", { name: "运行信息" })).toBeVisible();
+  const db = new PrismaClient({ datasourceUrl: databaseUrl });
+  try {
+    await db.adminAccount.updateMany({
+      where: { username: account.username },
+      data: { disabled: true },
+    });
+    await page.getByRole("button", { name: "刷新状态", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
+    await expect(
+      page.getByText("登录已到期，请重新使用飞书登录。", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "退出登录" })).toHaveCount(0);
+  } finally {
+    await db.adminAccount.updateMany({
+      where: { username: account.username },
+      data: { disabled: false },
+    });
+    await db.$disconnect();
+  }
+});
+
+test("an approved operator with no business permissions sees no restricted controls", async ({
+  page,
+}) => {
+  const db = new PrismaClient({ datasourceUrl: databaseUrl });
+  try {
+    await db.adminAccount.updateMany({
+      where: { username: account.username },
+      data: { permissions: [] },
+    });
+    await page.goto("./");
+    await feishuLogin(page, account);
+    await expect(page.getByRole("button", { name: "退出登录" })).toBeVisible();
+    await expect(
+      page.getByText("当前账号暂无运行信息查看权限，请联系管理员。", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "客服工单", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "生产与物流", exact: true }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "退出登录" }).click();
+  } finally {
+    await db.adminAccount.updateMany({
+      where: { username: account.username },
+      data: { permissions: account.permissions },
+    });
+    await db.$disconnect();
+  }
+});
+
+test("callback failure text is fixed and removed from browser history", async ({
+  page,
+}) => {
+  await page.goto(
+    "./?login_error=" +
+      encodeURIComponent("<script>private-provider-detail</script>"),
+  );
+  await expect(page.getByRole("alert")).toHaveText(
+    /飞书登录暂不可用，请稍后重试。/,
+  );
+  await expect(page).toHaveURL("https://localhost:3443/admin/");
+  expect(await page.locator("body").innerText()).not.toContain(
+    "private-provider-detail",
+  );
+});
+
+test("fresh browser sessions consistently reach the console after Feishu authorization", async ({
+  browser,
+}) => {
+  for (let round = 0; round < 10; round++) {
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    try {
+      const page = await context.newPage();
+      await page.goto("https://localhost:3443/admin/");
+      await feishuLogin(page, account);
+      await expect(
+        page.getByRole("heading", { name: "运行信息", exact: true }),
+      ).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test("an unconfigured Feishu login is clearly unavailable on mobile", async ({
+  page,
+}) => {
+  await stop(api);
+  const unconfigured = { ...env };
+  for (const name of Object.keys(syntheticFeishuEnv)) delete unconfigured[name];
+  api = start(
+    process.execPath,
+    [resolve("tests/admin/feishu-api-runner.mjs")],
+    {
+      cwd: apiCwd,
+      env: unconfigured,
+    },
+  );
+  await waitFor("https://localhost:3443/api/v1/admin/session");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("./");
+  await expect(
+    page.getByText("飞书登录尚未配置，请联系管理员。", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "飞书登录", exact: true }),
+  ).toBeDisabled();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
   await page.screenshot({
-    path: "/tmp/t07-admin-expired-login.png",
+    path: "/tmp/timenook-feishu-unconfigured-mobile.png",
     fullPage: true,
   });
 });

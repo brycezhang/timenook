@@ -2,7 +2,7 @@ import { ApiProperty } from "@nestjs/swagger";
 import { ADMIN_PERMISSIONS } from "@timenook/contracts";
 import type {
   AdminAuditEntry,
-  AdminEnrollment,
+  AdminFeishuLogin,
   AdminOperator,
   AdminRuntime,
   AdminState,
@@ -17,8 +17,7 @@ export class AdminOperatorDto implements AdminOperator {
 }
 export class AdminStateDto implements AdminState {
   @ApiProperty() authenticated!: boolean;
-  @ApiProperty() mfaRequired!: boolean;
-  @ApiProperty() enrollmentRequired!: boolean;
+  @ApiProperty() loginAvailable!: boolean;
   @ApiProperty({ type: () => AdminOperatorDto, nullable: true })
   operator!: AdminOperatorDto | null;
   @ApiProperty({ description: "Session-bound CSRF token, keep in memory only" })
@@ -29,19 +28,16 @@ export class AdminStateResponseDto implements ApiResponse<AdminState> {
   @ApiProperty({ type: AdminStateDto }) data!: AdminStateDto;
   @ApiProperty({ type: RequestMetaDto }) meta!: RequestMetaDto;
 }
-export class AdminEnrollmentDto implements AdminEnrollment {
+export class AdminFeishuLoginDto implements AdminFeishuLogin {
   @ApiProperty({
+    format: "uri",
     description:
-      "Sensitive first-enrollment Base32 seed; never log or store in browser storage",
+      "Fixed Feishu authorization origin with one-time browser-bound state and PKCE",
   })
-  secret!: string;
-  @ApiProperty({
-    description: "Sensitive otpauth URI for the operator authenticator",
-  })
-  uri!: string;
+  authorizationUrl!: string;
 }
-export class AdminEnrollmentResponseDto implements ApiResponse<AdminEnrollment> {
-  @ApiProperty({ type: AdminEnrollmentDto }) data!: AdminEnrollmentDto;
+export class AdminFeishuLoginResponseDto implements ApiResponse<AdminFeishuLogin> {
+  @ApiProperty({ type: AdminFeishuLoginDto }) data!: AdminFeishuLoginDto;
   @ApiProperty({ type: RequestMetaDto }) meta!: RequestMetaDto;
 }
 export class AdminRuntimeDto implements AdminRuntime {

@@ -8,6 +8,7 @@
 
 - 产品范围与验收：[MVP PRD](docs/时光里_岁月成书_MVP_PRD.md)。
 - 营销官网：[首版需求](docs/frontend/marketing-requirements.md)已确认；以 Monorepo 内独立应用 `apps/website` 开发、构建与打包，见[官网说明](apps/website/README.md)，规格/实现票为 #69/#70。单页以成年子女为父母制作人生书为主线，微信分享后的手机访问优先并适配电脑；展示样书节选、讲述与故事示例及 999 元套餐，引导直达微信小程序套餐页。沿用小程序视觉和用户提供的「时光里」Logo，公司版权沿用 deed-fe 的「千言一语文化传媒有限公司」；首版使用明确标注的现有效果图与示例，不设咨询入口。官网已完成本地交互预览与验证；正式小程序跳转及下单验证通过后再对外推广；微信具体接入方式仍待核实。
+- 后台登录：2026-10-29 用户确认采用飞书白名单登录，授权后直接进入后台，无本地密码或 MFA；保留独立管理员权限、受保护会话、CSRF、限流与审计。实施与真实配置分别见 [ADR 0016](docs/adr/0016-feishu-admin-login.md)、[登录说明](docs/development-admin.md)及 [#81](https://github.com/brycezhang/timenook/issues/81)。
 - 技术方案：[技术架构](docs/architecture/技术架构.md)。原生小程序、Vben Admin、NestJS/Fastify、Prisma/PostgreSQL、BullMQ/ioredis；基础设施为阿里云RDS、Tair、私有OSS与ECS。
 - AI服务：文件ASR首选豆包，追问与故事整理首选DeepSeek；模型、服务配置和处理条款经评测与准入核对后锁定。
 - 工程基线：[wutong技术栈对齐](docs/architecture/wutong技术栈对齐.md)，参考wutong-admin的工程组织及ECS/Nginx/systemd发布方式。

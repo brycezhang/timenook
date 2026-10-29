@@ -1,4 +1,9 @@
 import {
+  feishuIdentity,
+  feishuLogin,
+  syntheticFeishuEnv,
+} from "./feishu-fixture.mjs";
+import {
   createPrivacyFixtureApplication,
   closePrivacyFixtureApplication,
 } from "./privacy-fixture.mjs";
@@ -92,7 +97,7 @@ test.beforeAll(async () => {
     (config = {
       admin: {
         origin: "https://localhost:5177",
-        encryptionKey: randomBytes(32).toString("base64"),
+        sessionKey: randomBytes(32).toString("base64"),
         sessionTtlSeconds: 28800,
         challengeTtlSeconds: 300,
       },
@@ -543,7 +548,7 @@ test("the operator page lists sanitized task failures and executes an audited re
   ).toBe(0);
   const account = {
     username: `synthetic-${randomUUID()}`,
-    password: randomBytes(24).toString("base64url"),
+    ...feishuIdentity(),
     realm: "local",
     permissions: ["ops:read", "tasks:retry", "audit:read"],
   };
@@ -559,7 +564,8 @@ test("the operator page lists sanitized task failures and executes an audited re
         NODE_ENV: "test",
         DATABASE_URL: databaseUrl,
         ADMIN_ORIGIN: config.admin.origin,
-        ADMIN_ENCRYPTION_KEY: config.admin.encryptionKey,
+        ADMIN_SESSION_KEY: config.admin.sessionKey,
+        ...syntheticFeishuEnv,
       },
       encoding: "utf8",
     },
@@ -613,15 +619,7 @@ test("the operator page lists sanitized task failures and executes an audited re
     if (m.type() === "error") errors.push(m.text());
   });
   await page.goto("https://localhost:5177/admin/");
-  await page.getByLabel("管理员账号", { exact: true }).fill(account.username);
-  await page.getByLabel("密码", { exact: true }).fill(account.password);
-  await page.getByRole("button", { name: "继续验证", exact: true }).click();
-  const enrollment = await page.getByTestId("enrollment-secret").textContent();
-  const { generate } = apiRequire("otplib");
-  await page
-    .getByLabel("六位验证码", { exact: true })
-    .fill(await generate({ secret: enrollment.trim() }));
-  await page.getByRole("button", { name: "验证并登录", exact: true }).click();
+  await feishuLogin(page, account);
   await expect(
     page.getByRole("button", { name: "处理任务", exact: true }),
   ).toBeVisible();

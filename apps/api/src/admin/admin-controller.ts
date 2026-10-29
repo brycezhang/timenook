@@ -1,8 +1,9 @@
 import {
-  Body,
   Controller,
   Get,
   Header,
+  HttpException,
+  Query,
   HttpCode,
   Post,
   Req,
@@ -13,49 +14,25 @@ import {
   ApiOkResponse,
   ApiNoContentResponse,
   ApiOperation,
-  ApiProperty,
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
-import { IsString, Length, Matches } from "class-validator";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { ADMIN_PERMISSIONS } from "@timenook/contracts";
 import type {
-  AdminLoginCommand,
-  AdminMfaCommand,
+  AdminFeishuLogin,
   AdminRuntime,
   ApiResponse as ApiEnvelope,
 } from "@timenook/contracts";
 import {
   AdminStateResponseDto,
-  AdminEnrollmentResponseDto,
+  AdminFeishuLoginResponseDto,
   AdminRuntimeResponseDto,
   AdminAuditResponseDto,
 } from "./admin-contract";
 import { AdminAccess } from "./admin-access";
 import { Infrastructure } from "../infrastructure";
 import { ErrorResponseDto } from "../health-contract";
-class AdminLoginDto implements AdminLoginCommand {
-  @ApiProperty({ minLength: 3, maxLength: 64 })
-  @IsString()
-  @Matches(/^[a-z0-9][a-z0-9._-]{2,63}$/)
-  username!: string;
-  @ApiProperty({
-    minLength: 16,
-    maxLength: 128,
-    format: "password",
-    writeOnly: true,
-  })
-  @IsString()
-  @Length(16, 128)
-  password!: string;
-}
-class MfaDto implements AdminMfaCommand {
-  @ApiProperty({ pattern: "^[0-9]{6}$", writeOnly: true })
-  @IsString()
-  @Matches(/^\d{6}$/)
-  code!: string;
-}
 @Controller("v1/admin")
 @ApiTags("Administration")
 @ApiCookieAuth("timenook-admin")
@@ -92,51 +69,48 @@ export class AdminController {
       this.access.bootstrap(req, reply),
     );
   }
-  @Post("login")
+  @Post("feishu/login")
   @HttpCode(200)
   @Header("Cache-Control", "no-store")
   @ApiOperation({
     summary:
-      "Verify password only; requires Origin and X-CSRF-Token; does not grant admin access",
+      "Start browser-bound Feishu authorization; requires anonymous session, Origin and CSRF",
   })
-  @ApiOkResponse({ type: AdminStateResponseDto })
+  @ApiOkResponse({ type: AdminFeishuLoginResponseDto })
   login(
-    @Body() body: AdminLoginDto,
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ) {
-    return this.response("admin.password", req, () =>
-      this.access.login(req, reply, body.username, body.password),
+  ): Promise<ApiEnvelope<AdminFeishuLogin>> {
+    return this.response("admin.feishu.login", req, () =>
+      this.access.feishuLogin(req, reply),
     );
   }
-  @Get("mfa/enrollment")
+  @Get("feishu/callback")
   @Header("Cache-Control", "no-store")
+  @Header("Referrer-Policy", "no-referrer")
   @ApiOperation({
     summary:
-      "Password challenge only: retrieve first enrollment secret for the operator authenticator",
+      "Consume a browser-bound one-time OAuth state, verify whitelisted Feishu identity and issue an independent admin session",
   })
-  @ApiOkResponse({ type: AdminEnrollmentResponseDto })
-  enrollment(@Req() req: FastifyRequest) {
-    return this.response("admin.mfa.enrollment", req, () =>
-      this.access.enrollment(req),
-    );
-  }
-  @Post("mfa")
-  @HttpCode(200)
-  @Header("Cache-Control", "no-store")
-  @ApiOperation({
-    summary:
-      "Verify a fresh TOTP and rotate to a full session; requires Origin and X-CSRF-Token",
-  })
-  @ApiOkResponse({ type: AdminStateResponseDto })
-  mfa(
-    @Body() body: MfaDto,
+  async callback(
     @Req() req: FastifyRequest,
-    @Res({ passthrough: true }) reply: FastifyReply,
+    @Res() reply: FastifyReply,
+    @Query() query: { state?: string; code?: string; error?: string },
   ) {
-    return this.response("admin.mfa", req, () =>
-      this.access.mfa(req, reply, body.code),
-    );
+    let destination = "/admin/";
+    try {
+      await this.access.run("admin.feishu.callback", req, () =>
+        this.access.feishuCallback(req, reply, query),
+      );
+    } catch (error) {
+      destination +=
+        "?login_error=" +
+        (error instanceof HttpException && error.getStatus() === 503
+          ? "unavailable"
+          : "denied");
+    }
+    this.access.clearOAuthCookie(reply);
+    return reply.code(303).redirect(destination);
   }
   @Get("runtime")
   @Header("Cache-Control", "no-store")
@@ -169,7 +143,7 @@ export class AdminController {
   @Header("Cache-Control", "no-store")
   @ApiOperation({
     summary:
-      "Revoke current challenge or session and clear cookie; requires Origin and X-CSRF-Token",
+      "Revoke current session and clear cookie; requires Origin and X-CSRF-Token",
   })
   @ApiNoContentResponse()
   async logout(
