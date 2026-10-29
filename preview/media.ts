@@ -75,6 +75,8 @@ export function createRecorder() {
   let recorder: MediaRecorder | null = null,
     stream: MediaStream | null = null,
     startTime = 0,
+    elapsedMs = 0,
+    maxDuration = 0,
     timeout: number | undefined;
   const handlers: Record<string, Function[]> = {};
   const emit = (key: string, ...args: unknown[]) =>
@@ -100,9 +102,24 @@ export function createRecorder() {
           stream?.getTracks().forEach((t) => t.stop());
           emit("Stop", {
             tempFilePath: temporaryFile(blob),
-            duration: Date.now() - startTime,
+            duration:
+              elapsedMs + (startTime ? Math.max(0, Date.now() - startTime) : 0),
             fileSize: blob.size,
           });
+        };
+        recorder.onpause = () => {
+          elapsedMs += Math.max(0, Date.now() - startTime);
+          startTime = 0;
+          clearTimeout(timeout);
+          emit("Pause");
+        };
+        recorder.onresume = () => {
+          startTime = Date.now();
+          timeout = window.setTimeout(
+            () => api.stop(),
+            Math.max(0, maxDuration - elapsedMs),
+          );
+          emit("Resume");
         };
         recorder.onerror = () => {
           stream?.getTracks().forEach((t) => t.stop());
@@ -111,20 +128,40 @@ export function createRecorder() {
         };
         recorder.start();
         startTime = Date.now();
+        elapsedMs = 0;
+        maxDuration = options.duration;
         emit("Start");
-        timeout = window.setTimeout(() => api.stop(), options.duration);
+        timeout = window.setTimeout(() => api.stop(), maxDuration);
       } catch {
         emit("Error", { errMsg: "microphone unavailable" });
       }
     },
+    pause() {
+      if (recorder?.state === "recording") recorder.pause();
+    },
+    resume() {
+      if (recorder?.state === "paused") recorder.resume();
+    },
     stop() {
-      if (recorder?.state === "recording") recorder.stop();
+      if (recorder && ["recording", "paused"].includes(recorder.state))
+        recorder.stop();
     },
   };
-  for (const name of ["Start", "Stop", "Error", "InterruptionBegin"])
+  for (const name of [
+    "Start",
+    "Stop",
+    "Pause",
+    "Resume",
+    "Error",
+    "InterruptionBegin",
+  ])
     api["on" + name] = (fn: Function) => (handlers[name] ??= []).push(fn);
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && recorder?.state === "recording")
+    if (
+      document.hidden &&
+      recorder &&
+      ["recording", "paused"].includes(recorder.state)
+    )
       emit("InterruptionBegin");
   });
   return api;
@@ -175,6 +212,7 @@ export function createAudio() {
   };
   for (const [method, event] of [
     ["onPlay", "play"],
+    ["onEnded", "ended"],
     ["onTimeUpdate", "timeupdate"],
     ["onEnded", "ended"],
     ["onError", "error"],

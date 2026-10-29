@@ -244,7 +244,7 @@ export class InterviewRecorder extends LocalAudioRecorder {
         await sessionClient.uploadRecording(form, local.path);
         this.currentContext();
         sealing = true;
-        this.update("sealing", "暂存上传完成，正在完整校验；尚未封存");
+        this.update("sealing", "录音已上传，正在确认保存，请先别退出");
         result = await sessionClient.request<RecordingClip>(
           `${base}/${remote.id}/seal`,
           { key: paymentKey(), data: body },
@@ -263,8 +263,8 @@ export class InterviewRecorder extends LocalAudioRecorder {
       this.update(
         "sealed",
         result.storage === "oss"
-          ? "云端已保存；可以离开，转写状态可重新查询"
-          : "本地模拟封存完成；转写状态可查询，真实云端尚待验收",
+          ? "已上传到云端，可以离开；文字处理状态可重新查询"
+          : "已在测试环境保存，真实云端保存仍待验证",
       );
     } catch (error) {
       this.update(
