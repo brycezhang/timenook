@@ -22,7 +22,11 @@ const compiled = await build({
   define: { __TIMENOOK_API_BASE_URL__: JSON.stringify(base) },
 });
 function harness(
-  options: { deferSaves?: boolean; clock?: { now: number } } = {},
+  options: {
+    deferSaves?: boolean;
+    deferStops?: boolean;
+    clock?: { now: number };
+  } = {},
 ) {
   const storage = new Map<string, unknown>([
       ["timenook.mode.v1", "live"],
@@ -33,7 +37,11 @@ function harness(
     files = new Set<string>(),
     handlers: Record<string, ((v?: any) => void)[]> = {},
     pendingSaves: any[] = [],
+    pendingStops: (() => void)[] = [],
     navigation: any[] = [],
+    modals: any[] = [],
+    played: string[] = [],
+    playingAudios = new Set<object>(),
     intervals = new Map<number, () => void>();
   let intervalId = 0;
   const clock = options.clock ?? { now: Date.now() };
@@ -45,7 +53,10 @@ function harness(
   let page: any,
     saves = 0,
     failManifest = false,
-    starts = 0;
+    starts = 0,
+    resumes = 0,
+    stops = 0,
+    deviceStage = "inactive";
   const emit = (event: string, v?: any) =>
     handlers[event]?.forEach((fn) => fn(v));
   runInNewContext(compiled.outputFiles[0].text, {
@@ -89,14 +100,32 @@ function harness(
       getRecorderManager: () => ({
         onStart: (f: any) => (handlers.start ??= []).push(f),
         onStop: (f: any) => (handlers.stop ??= []).push(f),
+        onPause: (f: any) => (handlers.pause ??= []).push(f),
+        onResume: (f: any) => (handlers.resume ??= []).push(f),
+        pause: () => {
+          deviceStage = "paused";
+          emit("pause");
+        },
+        resume: () => {
+          resumes++;
+          deviceStage = "recording";
+          emit("resume");
+        },
         onError: (f: any) => (handlers.error ??= []).push(f),
         onInterruptionBegin: (f: any) => (handlers.interrupt ??= []).push(f),
         start: () => {
           starts++;
+          deviceStage = "recording";
           emit("start");
         },
-        stop: () =>
-          emit("stop", { tempFilePath: "native-temp", duration: 1080 }),
+        stop: () => {
+          stops++;
+          deviceStage = "inactive";
+          const finish = () =>
+            emit("stop", { tempFilePath: "native-temp", duration: 1080 });
+          if (options.deferStops) pendingStops.push(finish);
+          else finish();
+        },
       }),
       getFileSystemManager: () => ({
         saveFile: (o: any) => {
@@ -113,6 +142,19 @@ function harness(
           o.success({ size: 6480, digest: "b".repeat(64) }),
         access: (o: any) => (files.has(o.path) ? o.success({}) : o.fail({})),
       }),
+      createInnerAudioContext: () => ({
+        src: "",
+        onEnded() {},
+        onError() {},
+        play() {
+          played.push(this.src);
+          playingAudios.add(this);
+        },
+        destroy() {
+          playingAudios.delete(this);
+        },
+      }),
+      showModal: (options: any) => modals.push(options),
       navigateTo: (options: any) => navigation.push(options),
       reLaunch: () => {},
       showToast: () => {},
@@ -127,7 +169,10 @@ function harness(
     files,
     emit,
     pendingSaves,
+    pendingStops,
     navigation,
+    modals,
+    played,
     expireSession() {
       clock.now = Date.parse(login.session.expiresAt);
     },
@@ -141,6 +186,18 @@ function harness(
     },
     get starts() {
       return starts;
+    },
+    get resumes() {
+      return resumes;
+    },
+    get stops() {
+      return stops;
+    },
+    get deviceStage() {
+      return deviceStage;
+    },
+    get playingAudioCount() {
+      return playingAudios.size;
     },
     fail(value: boolean) {
       failManifest = value;
@@ -230,6 +287,324 @@ async function start(h: ReturnType<typeof harness>) {
   );
   await starting;
 }
+test("denied local playback clears private review immediately while preserving its original file", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const clip = h.page.data.localClips[0];
+  const playing = h.page.playLocal({
+    currentTarget: { dataset: { id: clip.clientClipId } },
+    detail: { value: "" },
+  });
+  respond(h.requests.shift(), { allowed: false }, 201);
+  await playing;
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.interview, null);
+  assert.deepEqual(h.played, []);
+  assert.equal(h.files.has(clip.path), true);
+});
+
+test("step navigation shows the question that will actually be selected or recorded without creating interviews", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  const changed = {
+    ...question,
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    snapshot: { text: "后来还有哪些事？", intent: "补充" },
+  };
+  h.page.data.interview = { ...interview, currentQuestion: changed };
+  h.page.data.question = changed.snapshot.text;
+  h.page.chooseAnother();
+  assert.equal(h.page.data.question, context.plan.defaultQuestion.text);
+  h.page.prepareCurrent();
+  assert.equal(h.page.data.question, changed.snapshot.text);
+  assert.equal(h.requests.length, 0);
+});
+
+test("leaving while paused saves the same recording and clears its private page", async () => {
+  const h = harness();
+  await ready(h);
+  await start(h);
+  await h.page.togglePause();
+  assert.equal(h.page.data.state, "paused");
+  h.page.onHide();
+  await tick();
+  assert.equal(h.saves, 1);
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.uploads.length, 0);
+});
+
+test("a re-record confirmation for an earlier question cannot start a changed question", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const clip = h.page.data.localClips[0];
+  const confirming = h.page.rerecordLocal({
+    currentTarget: { dataset: { id: clip.clientClipId } },
+    detail: { value: "" },
+  });
+  h.page.data.interview = {
+    ...interview,
+    currentQuestion: {
+      ...question,
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    },
+  };
+  h.modals[0].success({ confirm: true });
+  await tick();
+  assert.equal(
+    h.requests.length,
+    0,
+    "a stale confirmation must not request another recording start",
+  );
+  await confirming;
+  assert.equal(h.starts, 1);
+});
+
+test("local review plays the actual saved file after a permission check and re-record asks before capture", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const clip = h.page.data.localClips[0];
+  const event = {
+    currentTarget: { dataset: { id: clip.clientClipId } },
+    detail: { value: "" },
+  };
+  const playing = h.page.playLocal(event);
+  const check = h.requests.shift();
+  assert.match(check.url, /collection-check$/);
+  respond(check, { allowed: true }, 201);
+  await playing;
+  assert.deepEqual(h.played, [clip.path]);
+  assert.equal(h.uploads.length, 0);
+  const replacing = h.page.rerecordLocal(event);
+  assert.equal(h.modals.length, 1);
+  assert.equal(h.starts, 1);
+  h.modals[0].success({ confirm: false });
+  await replacing;
+  assert.equal(h.starts, 1, "cancelling re-record preserves the saved clip");
+  assert.equal(h.page.data.localClips[0].path, clip.path);
+});
+
+test("recording advances from preparation to local review and only explicit submit uploads", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  assert.equal(h.page.data.flowStep, "prepare");
+  await start(h);
+  assert.equal(h.page.data.flowStep, "record");
+  await h.page.record();
+  await tick();
+  assert.equal(h.page.data.flowStep, "review");
+  assert.equal(h.page.data.status, "已保存在这台设备，还未上传");
+  assert.equal(h.uploads.length, 0);
+  assert.equal(h.requests.length, 0, "local review must not submit a clip");
+  h.page.prepareCurrent();
+  assert.equal(h.page.data.flowStep, "prepare");
+  assert.equal(
+    h.starts,
+    1,
+    "returning to preparation does not restart the microphone",
+  );
+  assert.equal(
+    h.requests.length,
+    0,
+    "step navigation does not create another interview",
+  );
+});
+
+test("one recording pauses without counting idle time and resumes only after rechecking the same question", async (t) => {
+  const h = harness({ clock: { now: Date.parse("2026-10-29T01:00:00Z") } });
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  h.advance(2000);
+  await h.page.togglePause();
+  assert.equal(h.page.data.state, "paused");
+  assert.equal(h.page.data.timer, "00:02");
+  h.advance(60000);
+  assert.equal(h.page.data.timer, "00:02");
+  const resuming = h.page.togglePause();
+  const request = h.requests.shift();
+  assert.equal(request.data.actualQuestionId, question.id);
+  respond(
+    request,
+    { allowed: true, actualQuestionId: question.id, questionVersion: 1 },
+    201,
+  );
+  await resuming;
+  h.advance(1000);
+  assert.equal(h.page.data.timer, "00:03");
+  assert.equal(h.starts, 1, "resume must not create a new device recording");
+  await h.page.record();
+  await tick();
+  assert.equal(h.page.data.localClips.length, 1);
+  assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+  assert.equal(h.uploads.length, 0, "stopping does not submit the recording");
+});
+
+for (const denial of [403, "not-allowed"])
+  test(`a denied resume (${denial}) stops the paused microphone, preserves its answer and releases it for the next recording`, async (t) => {
+    const h = harness({ deferSaves: true });
+    t.after(() => h.page.onUnload());
+    await ready(h);
+    await start(h);
+    await h.page.togglePause();
+    assert.equal(h.deviceStage, "paused");
+    const resuming = h.page.togglePause();
+    if (denial === "not-allowed")
+      respond(h.requests.shift(), { allowed: false }, 201);
+    else respond(h.requests.shift(), undefined, 403);
+    await resuming;
+    assert.equal(h.deviceStage, "inactive", "denial must stop the device");
+    assert.equal(h.resumes, 0, "denial must never resume capture");
+    assert.equal(h.stops, 1);
+    assert.equal(h.page.data.question, "");
+    assert.equal(h.page.data.interview, null);
+    assert.equal(h.uploads.length, 0);
+    h.page.onUnload();
+    assert.equal(h.stops, 1, "leaving cannot leave another active recording");
+    h.pendingSaves.shift().finish();
+    await tick();
+    assert.equal(h.files.size, 1);
+    assert.equal(h.page.data.localClips.length, 0, "late save stays private");
+
+    const returning = h.page.onShow();
+    respond(h.requests.shift(), { ...context, interviews: [interview] });
+    await returning;
+    assert.equal(h.page.data.localClips.length, 1);
+    assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+    assert.ok(h.files.has(h.page.data.localClips[0].path));
+    h.page.chooseAnother();
+    const selecting = h.page.selectQuestion();
+    const nextInterviewId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    respond(
+      h.requests.shift(),
+      {
+        ...interview,
+        id: nextInterviewId,
+        actualQuestion: {
+          ...question,
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          answerRef: nextInterviewId,
+        },
+      },
+      201,
+    );
+    await selecting;
+    await start(h);
+    assert.equal(
+      h.starts,
+      2,
+      "the saved recording must release the device lease",
+    );
+    assert.equal(h.deviceStage, "recording");
+  });
+
+for (const sessionLoss of ["401", "expired"])
+  test(`a paused resume after ${sessionLoss} login loss stops capture and retains the original answer`, async (t) => {
+    const h = harness();
+    t.after(() => h.page.onUnload());
+    await ready(h);
+    await start(h);
+    await h.page.togglePause();
+    if (sessionLoss === "expired") h.expireSession();
+    const resuming = h.page.togglePause();
+    if (sessionLoss === "401") respond(h.requests.shift(), undefined, 401);
+    await resuming;
+    await tick();
+    assert.equal(h.deviceStage, "inactive");
+    assert.equal(h.resumes, 0);
+    assert.equal(h.stops, 1);
+    assert.equal(h.page.data.question, "");
+    assert.equal(h.page.data.interview, null);
+    assert.equal(h.files.size, 1);
+    h.page.onUnload();
+    assert.equal(h.stops, 1);
+
+    h.storage.set(`timenook.session.v1:${base}`, {
+      ...login,
+      session: {
+        id: "77777777-7777-4777-8777-777777777777",
+        token: "n".repeat(43),
+        expiresAt: "2099-01-02T00:00:00Z",
+      },
+    });
+    const returning = h.page.onShow();
+    respond(h.requests.shift(), { ...context, interviews: [interview] });
+    await returning;
+    assert.equal(h.page.data.localClips.length, 1);
+    assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+    assert.ok(h.files.has(h.page.data.localClips[0].path));
+  });
+
+for (const exit of ["onHide", "onUnload", "switch-account"])
+  test(`${exit} stops a paused recording and leaves its original file with its original account`, async (t) => {
+    const h = harness();
+    t.after(() => h.page.onUnload());
+    await ready(h);
+    await start(h);
+    await h.page.togglePause();
+    if (exit === "switch-account") {
+      h.storage.set(`timenook.session.v1:${base}`, {
+        user: { id: "88888888-8888-4888-8888-888888888888" },
+        session: {
+          id: "99999999-9999-4999-8999-999999999999",
+          token: "n".repeat(43),
+          expiresAt: "2099-01-01T00:00:00Z",
+        },
+      });
+      const returning = h.page.onShow();
+      respond(h.requests.shift(), context);
+      await returning;
+    } else h.page[exit]();
+    await tick();
+    assert.equal(h.deviceStage, "inactive");
+    assert.equal(h.stops, 1);
+    assert.equal(h.files.size, 1);
+    assert.equal(h.page.data.localClips.length, 0);
+    const manifests = [...h.storage.entries()].filter(
+      ([key, value]) =>
+        key.includes("recording") &&
+        Array.isArray(value) &&
+        value.some(
+          (clip) => clip && typeof clip === "object" && "path" in clip,
+        ),
+    );
+    assert.equal(manifests.length, 1);
+    assert.ok(manifests[0][0].includes(login.user.id));
+  });
+
+test("denied refresh and leaving share one asynchronous stop and save a paused original after the native callback", async (t) => {
+  const h = harness({ deferStops: true });
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.togglePause();
+  const refreshing = h.page.refresh();
+  respond(h.requests.shift(), undefined, 403);
+  await refreshing;
+  h.page.onUnload();
+  assert.equal(h.deviceStage, "inactive");
+  assert.equal(h.stops, 1, "one stop request must wait for its native result");
+  h.pendingStops.shift()!();
+  await tick();
+  assert.equal(h.files.size, 1);
+  assert.equal(h.page.data.localClips.length, 0);
+  assert.equal(h.page.data.interview, null);
+});
+
 test("restoring the same interview derives elapsed time from saved local clips and adds only the current recording segment", async (t) => {
   const h = harness({ clock: { now: Date.parse("2026-10-24T01:00:00Z") } });
   t.after(() => h.page.onUnload());
@@ -316,7 +691,7 @@ test("live recording page saves file and manifest before success and restores th
   await h.page.retry();
   assert.equal(h.saves, 1);
   assert.equal(h.page.data.localClips.length, 1);
-  assert.match(h.page.data.status, /本机/);
+  assert.equal(h.page.data.status, "已保存在这台设备，还未上传");
   h.page.onHide();
   h.storage.set(`timenook.session.v1:${base}`, {
     ...login,
@@ -471,6 +846,8 @@ test("an OSS upload uses the exact granted destination without disclosing the AP
   );
   assert.equal(h.uploads[0].header, undefined);
   assert.equal(h.page.data.localClips[0].sealed, undefined);
+  assert.equal(h.page.data.status, "录音已上传，正在确认保存，请先别退出");
+  assert.doesNotMatch(h.page.data.status, /已上传到云端/);
   respond(
     h.requests.shift(),
     {
@@ -485,6 +862,10 @@ test("an OSS upload uses the exact granted destination without disclosing the AP
   );
   await uploading;
   assert.equal(h.page.data.localClips[0].sealed, true);
+  assert.equal(
+    h.page.data.status,
+    "已上传到云端，可以离开；文字处理状态可重新查询",
+  );
   assert.equal(h.files.size, 1);
   h.page.onUnload();
 });
@@ -605,6 +986,75 @@ test("uploading an older saved answer sends its original question and refuses a 
   assert.equal(h.uploads.length, 0);
   assert.equal(h.files.size, 1);
 });
+
+for (const exit of ["onHide", "onUnload", "switch-account"])
+  test(`${exit} closes private local playback while preserving the original file`, async (t) => {
+    const h = harness();
+    t.after(() => h.page.onUnload());
+    await ready(h);
+    await start(h);
+    await h.page.record();
+    await tick();
+    const clip = h.page.data.localClips[0];
+    const playing = h.page.playLocal({
+      currentTarget: { dataset: { id: clip.clientClipId } },
+      detail: { value: "" },
+    });
+    respond(h.requests.shift(), { allowed: true }, 201);
+    await playing;
+    assert.equal(h.playingAudioCount, 1);
+    if (exit === "switch-account") {
+      h.storage.set(`timenook.session.v1:${base}`, {
+        user: { id: "88888888-8888-4888-8888-888888888888" },
+        session: {
+          id: "99999999-9999-4999-8999-999999999999",
+          token: "n".repeat(43),
+          expiresAt: "2099-01-01T00:00:00Z",
+        },
+      });
+      const returning = h.page.onShow();
+      respond(h.requests.shift(), context);
+      await returning;
+    } else h.page[exit]();
+    assert.equal(h.playingAudioCount, 0);
+    assert.equal(h.page.data.playingId, "");
+    assert.equal(h.page.data.localClips.length, 0);
+    assert.equal(h.files.size, 1);
+  });
+
+for (const deniedStatus of [403, 401])
+  test(`refresh closes local playback before a ${deniedStatus} response clears the review`, async (t) => {
+    const h = harness();
+    t.after(() => h.page.onUnload());
+    await ready(h);
+    await start(h);
+    await h.page.record();
+    await tick();
+    const clip = h.page.data.localClips[0];
+    const playing = h.page.playLocal({
+      currentTarget: { dataset: { id: clip.clientClipId } },
+      detail: { value: "" },
+    });
+    respond(h.requests.shift(), { allowed: true }, 201);
+    await playing;
+    assert.equal(h.playingAudioCount, 1);
+
+    const refreshing = h.page.refresh();
+    assert.equal(
+      h.playingAudioCount,
+      0,
+      "refresh must stop audible private audio",
+    );
+    respond(h.requests.shift(), undefined, deniedStatus);
+    await refreshing;
+    assert.equal(h.page.data.question, "");
+    assert.equal(h.page.data.interview, null);
+    assert.equal(h.page.data.playingId, "");
+    assert.equal(h.page.data.localClips.length, 0);
+    assert.equal(h.files.size, 1, "loss of access keeps the saved original");
+    h.page.onUnload();
+    assert.equal(h.playingAudioCount, 0);
+  });
 
 test("an old local manifest without a question restores only the immutable interview starting question", async (t) => {
   const h = harness();
@@ -975,6 +1425,118 @@ test("the interview page restores transcription state, stops polling in backgrou
   assert.match(h.page.data.taskRows[0].label, /无有效语音.*补录/);
   assert.equal(h.page.taskPollHandle, undefined);
   h.page.onUnload();
+});
+
+test("same-page recovery after a context outage resumes automatic and manual transcription queries", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const earlierStatus = h.page.refreshTasks();
+  const earlierRequest = h.requests.shift();
+  const failing = h.page.refresh();
+  respond(h.requests.shift(), undefined, 503);
+  await failing;
+  assert.equal(h.page.data.interview, null);
+
+  const restored = {
+    ...interview,
+    clips: [{ id: "77777777-7777-4777-8777-777777777777", state: "sealed" }],
+  };
+  const recovering = h.page.refresh();
+  respond(h.requests.shift(), { ...context, interviews: [restored] });
+  await recovering;
+  await tick();
+  const automatic = h.requests.shift();
+  assert.equal(
+    automatic?.url,
+    `${base}/projects/${projectId}/tasks/status`,
+    "successful visible-page recovery must query the sealed recording",
+  );
+  respond(
+    automatic,
+    [
+      {
+        id: "99999999-9999-4999-8999-999999999999",
+        projectId,
+        state: "waiting_provider",
+        retryable: false,
+        nextAction: "leave_and_return",
+      },
+    ],
+    201,
+  );
+  await tick();
+  assert.match(h.page.data.taskRows[0].label, /转写中/);
+  const manual = h.page.refreshTasks();
+  respond(
+    h.requests.shift(),
+    [
+      {
+        id: "99999999-9999-4999-8999-999999999999",
+        projectId,
+        state: "succeeded",
+        retryable: false,
+        nextAction: "none",
+      },
+    ],
+    201,
+  );
+  await manual;
+  assert.match(h.page.data.taskRows[0].label, /转写完成/);
+  respond(earlierRequest, undefined, 401);
+  await earlierStatus;
+  assert.equal(
+    h.page.data.interview,
+    null,
+    "the recovered visible page must observe login invalidation from an older request",
+  );
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.taskRows.length, 0);
+  assert.equal(
+    h.files.size,
+    1,
+    "the original recording remains available for its account",
+  );
+});
+
+test("a hidden page cannot restart context or transcription queries until it is shown again", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  const inFlight = h.page.refresh();
+  const pending = h.requests.shift();
+  h.page.onHide();
+  respond(pending, {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        clips: [
+          { id: "77777777-7777-4777-8777-777777777777", state: "sealed" },
+        ],
+      },
+    ],
+  });
+  await inFlight;
+  assert.equal(
+    h.requests.length,
+    0,
+    "a hidden page ignores the late context response",
+  );
+  const refreshing = h.page.refresh();
+  assert.equal(
+    h.requests.length,
+    0,
+    "a background refresh must remain inactive",
+  );
+  await refreshing;
+  await h.page.refreshTasks();
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.question, "");
 });
 
 const taskId = "99999999-9999-4999-8999-999999999999";
