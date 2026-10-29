@@ -414,3 +414,106 @@ test("narrator requests a complete export, operator verifies and packs it, recip
   expect(errors).toEqual([]);
   await Promise.all([mini.context().close(), admin.context().close()]);
 });
+
+test("alternative delivery records a fresh subject verification before renewing short staff access to the same lifetime ZIP", async ({
+  browser,
+}) => {
+  const previous = process.cwd();
+  let p, packed;
+  try {
+    process.chdir(resolve("apps/api"));
+    const e = apiRequire("./dist-test/test/complete-export-fixture.js");
+    const project = await fixture.project();
+    const collection = fixture.data(
+      await e.assistedExportChoice(project, "collection", true),
+    );
+    fixture.data(await e.assistedExportChoice(project, "ai", true));
+    await e.largeExportSources(
+      project.projectId,
+      project.buyer.token,
+      collection.id,
+    );
+    p = await e.acceptAlternativeCase(project, adminHeaders);
+    packed = fixture.data(
+      await e.adminRequest("POST", p.base + "/pack", adminHeaders, {}),
+    );
+    const subject = await fixture.db.projectSubject.findUniqueOrThrow({
+      where: { projectId: p.projectId },
+    });
+    fixture.data(
+      await e.adminRequest(
+        "POST",
+        p.base + "/access-verification",
+        adminHeaders,
+        {
+          expectedBindingVersion: subject.bindingVersion,
+          expectedAccessEpoch: 0,
+          purpose: "complete_export_delivery",
+          noticeVersion: "synthetic-d08-v1",
+          identityVerified: true,
+          subjectConsented: true,
+          identityProcedureRef: "record:subject-verification",
+          confirmationChannelRef: "record:subject-confirmation",
+          verificationRef: "record:synthetic-short-browser-grant",
+          recipientRef: "synthetic:本人指定的替代接收人和渠道",
+          expiresAt: new Date(Date.now() + 1000).toISOString(),
+        },
+      ),
+    );
+  } finally {
+    process.chdir(previous);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  const admin = await openAdmin(browser);
+  await admin
+    .getByRole("button", { name: `查看 ${p.exp.id}`, exact: true })
+    .click();
+  await expect(
+    admin.getByRole("button", { name: "按核验渠道领取资料包", exact: true }),
+  ).toBeDisabled();
+  await admin
+    .locator("summary")
+    .filter({ hasText: "记录新的本人核验与客服领取授权" })
+    .click();
+  const renew = admin.getByRole("button", {
+    name: "记录本人核验并取得临时领取权限",
+    exact: true,
+  });
+  await expect(renew).toBeDisabled();
+  await admin
+    .getByLabel("临时领取接收人", { exact: true })
+    .fill("synthetic:本人指定的替代接收人和渠道");
+  await admin
+    .getByLabel("临时领取核验记录", { exact: true })
+    .fill("record:synthetic-browser-fresh-verification");
+  await admin
+    .getByLabel("已按指定流程重新核验本人身份", { exact: true })
+    .check();
+  await admin
+    .getByLabel("已告知用途、接收范围、15分钟权限并取得本人本次明确同意", {
+      exact: true,
+    })
+    .check();
+  await command(
+    admin,
+    "记录本人核验并取得临时领取权限",
+    "/access-verification",
+  );
+  await expect(
+    admin.getByRole("button", { name: "按核验渠道领取资料包", exact: true }),
+  ).toBeEnabled();
+  const downloading = admin.waitForEvent("download");
+  await admin
+    .getByRole("button", { name: "按核验渠道领取资料包", exact: true })
+    .click();
+  expect((await downloading).suggestedFilename()).toBe("岁月成书-完整资料.zip");
+  const stored = await fixture.db.careExport.findUniqueOrThrow({
+    where: { id: p.exp.id },
+  });
+  expect(stored.sha256).toBe(packed.sha256);
+  expect(stored.expiresAt).toBeNull();
+  await admin.screenshot({
+    path: "/tmp/timenook-105-staff-access-browser.png",
+  });
+  expect(errors).toEqual([]);
+});

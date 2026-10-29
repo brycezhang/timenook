@@ -26,6 +26,7 @@ import {
   streamExport,
   assistedExportChoice,
   acceptAlternativeCase,
+  recordAlternativeStaffVerification,
 } from "./complete-export-fixture";
 
 before(startBookFixture);
@@ -309,6 +310,7 @@ test("the alternative transport rejects fresh claims under same-epoch refusal an
     403,
   );
   data(await assistedExportChoice(p, "collection", true));
+  await recordAlternativeStaffVerification(p);
   const stream = await pausedZip(p.base + "/download", p.admin);
   try {
     data(
@@ -464,6 +466,8 @@ for (const channel of ["product", "alternative"] as const)
         "EXPORT_CURRENT_AUTHORIZATION_REQUIRED",
       );
       data(await assistedExportChoice(p, "collection", true));
+      if (channel === "alternative")
+        await recordAlternativeStaffVerification(p);
       const restored = await app.inject({
         method: "GET",
         url: p.url,

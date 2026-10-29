@@ -29,6 +29,7 @@ import {
   rebindExport,
   assistedExportChoice,
   pendingStreamExport,
+  recordAlternativeStaffVerification,
 } from "./complete-export-fixture";
 
 before(startBookFixture);
@@ -142,6 +143,7 @@ test("replaying an old assisted revocation leaves the newly authorized same-epoc
     );
     data(await assistedExportChoice(p, "collection", true));
     assert.equal((await state(p, p.buyer.token)).accessEpoch, originalEpoch);
+    await recordAlternativeStaffVerification(p);
     fresh = await pausedZip(p.base + "/download", p.admin);
     await db.$executeRawUnsafe(
       "DROP TRIGGER reject_t25_stream_followup ON project_access_revocations",

@@ -22,6 +22,16 @@ export interface CompleteExportView {
   missingReason: string | null;
   canDownload: boolean;
   deliveredAt: string | null;
+  staffAccess?: {
+    id: string | null;
+    available: boolean;
+    expiresAt: string | null;
+    purpose: string;
+    identityProcedureRef: string;
+    confirmationChannelRef: string;
+    bindingVersion: number;
+    accessEpoch: number;
+  };
 }
 export interface CompleteExportContext {
   projectId: string;

@@ -48,6 +48,34 @@ model CareExport {
  @@map("care_exports")
 }
 
+// Minimal immutable authorization facts; evidence/recipient payloads remain outside this table.
+model ExportStaffGrant {
+ id String @id @db.Uuid
+ sequence BigInt @unique @default(autoincrement())
+ projectId String @map("project_id") @db.Uuid
+ caseId String @map("case_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ adminId String @map("admin_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ accessSequence Int @map("access_sequence")
+ key String
+ requestHash String @map("request_hash") @db.Char(64)
+ source String
+ purpose String
+ noticeVersion String @map("notice_version")
+ identityProcedureRef String @map("identity_procedure_ref")
+ confirmationChannelRef String @map("confirmation_channel_ref")
+ recipientHash String @map("recipient_hash") @db.Char(64)
+ evidenceHash String @map("evidence_hash") @db.Char(64)
+ verifiedAt DateTime @map("verified_at") @db.Timestamptz(3)
+ expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+ @@unique([caseId,key])
+ @@unique([source,evidenceHash])
+ @@index([caseId,sequence])
+ @@map("export_staff_grants")
+}
+
 model OutlineTemplateVersion {
   templateId   String    @map("template_id")
   version      Int

@@ -11,11 +11,14 @@ const value = ref<CompleteExportView | null>(null),
   dueAt = ref(""),
   evidence = ref(""),
   recipientRef = ref("");
+const verificationRef = ref(""),
+  identityVerified = ref(false),
+  subjectConsented = ref(false);
 const contentBlocked = computed(
   () => value.value?.missingReason === "EXPORT_CURRENT_AUTHORIZATION_REQUIRED",
 );
 let generation = 0,
-  intent: { input: string; key: string } | null = null;
+  intent: { input: string; key: string; body?: object } | null = null;
 const stateLabel: Record<string, string> = {
   requested: "待核验",
   accepted: "已受理，等待打包",
@@ -66,6 +69,9 @@ watch(
     evidence.value = "";
     recipientRef.value = "";
     dueAt.value = "";
+    verificationRef.value = "";
+    identityVerified.value = false;
+    subjectConsented.value = false;
     if (props.care.state !== "open") void refresh();
   },
   { immediate: true },
@@ -92,20 +98,85 @@ async function command(action: "accept" | "pack" | "delivery") {
       props.csrf,
     );
     if (id !== props.care.id || g !== generation) return;
-    value.value = row;
+    const current = await completeExportApi.read(id);
+    if (id !== props.care.id || g !== generation) return;
+    value.value = current;
     intent = null;
+  });
+}
+async function verifyAccess() {
+  const row = value.value,
+    scope = row?.staffAccess;
+  if (
+    !scope ||
+    !identityVerified.value ||
+    !subjectConsented.value ||
+    !recipientRef.value ||
+    !/^record:synthetic-[-A-Za-z0-9_:]{3,120}$/.test(verificationRef.value)
+  )
+    return;
+  await perform(async (id, g) => {
+    // Freeze the selected human verification and deadline before the request.
+    const selection = JSON.stringify({
+      id,
+      recipient: recipientRef.value,
+      verification: verificationRef.value,
+    });
+    if (intent?.input !== selection)
+      intent = {
+        input: selection,
+        key: crypto.randomUUID(),
+        body: {
+          expectedBindingVersion: scope.bindingVersion,
+          expectedAccessEpoch: scope.accessEpoch,
+          purpose: "complete_export_delivery",
+          noticeVersion: "synthetic-d08-v1",
+          identityVerified: true,
+          subjectConsented: true,
+          identityProcedureRef: scope.identityProcedureRef,
+          confirmationChannelRef: scope.confirmationChannelRef,
+          recipientRef: recipientRef.value,
+          verificationRef: verificationRef.value,
+          expiresAt: new Date(Date.now() + 15 * 60000).toISOString(),
+        },
+      };
+    await completeExportApi.verifyAccess(
+      id,
+      intent.body!,
+      intent.key,
+      props.csrf,
+    );
+    if (id !== props.care.id || g !== generation) return;
+    const current = await completeExportApi.read(id);
+    if (id !== props.care.id || g !== generation) return;
+    value.value = current;
+    intent = null;
+    identityVerified.value = false;
+    subjectConsented.value = false;
+    verificationRef.value = "";
   });
 }
 async function download() {
   await perform(async (id, g) => {
+    const before = await completeExportApi.read(id);
+    if (
+      !before?.staffAccess?.available ||
+      !before.staffAccess.expiresAt ||
+      Date.parse(before.staffAccess.expiresAt) <= Date.now()
+    )
+      throw { error: { code: "FORBIDDEN" } };
+    if (id !== props.care.id || g !== generation) return;
     const bytes = await completeExportApi.download(id);
     if (id !== props.care.id || g !== generation) return;
     const current = await completeExportApi.read(id);
     if (
       id !== props.care.id ||
       g !== generation ||
-      !current?.expiresAt ||
-      Date.parse(current.expiresAt) <= Date.now()
+      !current?.staffAccess?.available ||
+      current.staffAccess.id !== before.staffAccess.id ||
+      current.sha256 !== before.sha256 ||
+      !current.staffAccess.expiresAt ||
+      Date.parse(current.staffAccess.expiresAt) <= Date.now()
     )
       return;
     const url = URL.createObjectURL(
@@ -195,7 +266,62 @@ async function download() {
           value.recipient === 'verified_alternative' &&
           ['ready', 'delivered'].includes(value.state)
         "
-        ><Button :disabled="busy || contentBlocked" @click="download"
+        ><p>
+          客服私人资料授权截止：{{
+            value.staffAccess?.expiresAt || "尚无本次授权"
+          }}。资料包本身长期有效。
+        </p>
+        <details class="section">
+          <summary>记录新的本人核验与客服领取授权</summary>
+          <p>
+            仅无微信替代交付。本工单原核验客服须重新核验本人身份、具体接收人和渠道，并告知本次完整资料交付用途与15分钟权限；登录和历史工单不能代替本次核验。
+          </p>
+          <p>
+            身份核验流程：{{
+              value.staffAccess?.identityProcedureRef
+            }}；本人确认渠道：{{ value.staffAccess?.confirmationChannelRef }}
+          </p>
+          <label
+            >具体接收人及渠道引用<Input
+              v-model:value="recipientRef"
+              aria-label="临时领取接收人"
+              :disabled="busy"
+          /></label>
+          <label
+            >本次受控核验记录引用<Input
+              v-model:value="verificationRef"
+              aria-label="临时领取核验记录"
+              :disabled="busy"
+          /></label>
+          <label
+            ><input
+              v-model="identityVerified"
+              type="checkbox"
+              :disabled="busy"
+            />已按指定流程重新核验本人身份</label
+          >
+          <label
+            ><input
+              v-model="subjectConsented"
+              type="checkbox"
+              :disabled="busy"
+            />已告知用途、接收范围、15分钟权限并取得本人本次明确同意</label
+          >
+          <Button
+            :disabled="
+              busy ||
+              !identityVerified ||
+              !subjectConsented ||
+              !verificationRef ||
+              !recipientRef
+            "
+            @click="verifyAccess"
+            >记录本人核验并取得临时领取权限</Button
+          >
+        </details>
+        <Button
+          :disabled="busy || contentBlocked || !value.staffAccess?.available"
+          @click="download"
           >按核验渠道领取资料包</Button
         ><label
           >实际交付回执引用<Input

@@ -15,6 +15,15 @@ const client = new RequestClient({
 });
 import type { CompleteExportView } from "@timenook/contracts";
 export const completeExportApi = {
+  async verifyAccess(id: string, body: object, key: string, csrf: string) {
+    return (
+      await client.post<ApiResponse<{ id: string; expiresAt: string }>>(
+        `/care-requests/${id}/export/access-verification`,
+        body,
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
   async read(id: string) {
     return (
       await client.get<ApiResponse<CompleteExportView | null>>(

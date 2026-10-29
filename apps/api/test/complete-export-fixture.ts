@@ -445,3 +445,36 @@ export async function observed(check: () => Promise<boolean>, message: string) {
     assert.ok(performance.now() < deadline, message);
   }
 }
+
+/** A new recorded encounter: never a login refresh or replay of a prior grant. */
+export async function recordAlternativeStaffVerification(p: {
+  projectId: string;
+  exp: { id: string };
+  admin: Record<string, string>;
+  buyer: { token: string };
+}) {
+  const current = await state(p, p.buyer.token);
+  const row = await db.careExport.findUniqueOrThrow({
+    where: { id: p.exp.id },
+  });
+  return data(
+    await adminRequest(
+      "POST",
+      `/v1/admin/care-requests/${p.exp.id}/export/access-verification`,
+      p.admin,
+      {
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+        purpose: "complete_export_delivery",
+        noticeVersion: "synthetic-d08-v1",
+        identityVerified: true,
+        subjectConsented: true,
+        identityProcedureRef: "record:subject-verification",
+        confirmationChannelRef: "record:subject-confirmation",
+        verificationRef: `record:synthetic-fresh-staff-verification-${randomUUID()}`,
+        recipientRef: row.recipientRef,
+        expiresAt: new Date(Date.now() + 15 * 60000).toISOString(),
+      },
+    ),
+  );
+}
