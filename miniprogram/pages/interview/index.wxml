@@ -1,50 +1,81 @@
 <view wx:if="{{mode === 'live'}}" class="live-interview">
-  <view class="title">留下一段讲述</view>
+  <view class="step-progress">第 {{stepNumber}} 步 · 留下一段讲述</view>
+  <view class="title step-title">{{stepTitle}}</view>
   <view class="section" role="status">{{status}}</view>
   <view wx:if="{{question}}" class="interview-question section">{{question}}</view>
-  <view wx:if="{{interview}}" class="section">
-    <button class="btn secondary section" bindtap="photos" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">查看照片或事后补图</button>
-    <view class="record-timer">{{timer}}</view>
-    <button class="btn" bindtap="record" disabled="{{busy || state === 'saving' || (!canRecord && state !== 'recording') || state === 'device-error'}}">{{state === 'recording' || state === 'requesting' ? '说完了，停止录音' : '开始说'}}</button>
-    <button wx:if="{{state === 'device-error'}}" class="btn secondary section" bindtap="retry">重试保存本机文件</button>
-    <view wx:for="{{localClips}}" wx:key="clientClipId" class="soft section">
+
+  <view wx:if="{{flowStep === 'choose'}}" class="section">
+    <view wx:if="{{canRecord}}">
+      <button class="btn" bindtap="selectQuestion" disabled="{{busy}}">就从这个问题开始</button>
+      <button class="btn secondary section" data-kind="free-narration" bindtap="selectQuestion" disabled="{{busy}}">自由讲述</button>
+      <button class="btn secondary section" data-kind="photo" bindtap="selectQuestion" disabled="{{busy}}">看着照片讲一讲</button>
+      <view class="section">也可以写下这次想讲的问题</view>
+      <textarea class="input section" placeholder="想讲的问题" value="{{customText}}" bindinput="customText" maxlength="2000" disabled="{{busy}}"/>
+      <input class="input section" placeholder="想记录什么" value="{{customIntent}}" bindinput="customIntent" maxlength="500" disabled="{{busy}}"/>
+      <button class="btn secondary section" data-kind="custom" bindtap="selectQuestion" disabled="{{busy || !customText || !customIntent}}">从自拟问题开始</button>
+    </view>
+    <button wx:if="{{interview}}" class="btn secondary section" bindtap="prepareCurrent" disabled="{{busy}}">返回这段讲述</button>
+    <button wx:for="{{pendingInterviews}}" wx:key="*this" class="btn secondary section" data-id="{{item}}" bindtap="resumeLocal" disabled="{{busy}}">恢复本机采访 {{index + 1}}</button>
+  </view>
+
+  <view wx:if="{{interview && flowStep !== 'choose'}}" class="record-timer section">{{timer}}</view>
+  <view wx:if="{{interview && flowStep === 'prepare'}}" class="section">
+    <view class="interview-hint">想好再开始。录音时可以暂停，说完后先听一听，再决定提交。</view>
+    <button class="btn secondary section" bindtap="photos" disabled="{{busy}}">查看照片或事后补图</button>
+    <button class="btn section" bindtap="record" disabled="{{busy || !canRecord}}">开始说</button>
+    <button wx:if="{{localClips.length}}" class="btn secondary section" bindtap="reviewCurrent" disabled="{{busy}}">回听已保存片段</button>
+    <button class="link section" bindtap="chooseAnother" disabled="{{busy}}">另选一个问题</button>
+  </view>
+
+  <view wx:if="{{interview && flowStep === 'record'}}" class="section recording-step">
+    <view wx:if="{{state === 'paused'}}" class="interview-hint">已暂停，休息一下再继续。</view>
+    <button wx:if="{{state === 'recording' || state === 'paused'}}" class="btn secondary section" bindtap="togglePause" disabled="{{busy}}">{{state === 'paused' ? '继续说' : '暂停一下'}}</button>
+    <button wx:if="{{state === 'recording' || state === 'paused' || state === 'requesting'}}" class="btn section" bindtap="record" disabled="{{busy}}">说完了，停止录音</button>
+    <button wx:if="{{state === 'device-error'}}" class="btn secondary section" bindtap="retry" disabled="{{busy}}">重试录音或保存</button>
+  </view>
+
+  <view wx:if="{{interview && (flowStep === 'review' || flowStep === 'processing')}}" class="section">
+    <view wx:for="{{localClips}}" wx:key="clientClipId" class="soft section local-recording">
       <view>{{item.sealed ? '封存已确认，本机副本仍保留' : '本机文件已保存，尚待封存'}}</view>
-      <button class="btn secondary section" bindtap="upload" data-id="{{item.clientClipId}}" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">{{item.sealed ? '查询封存结果' : '查询并上传原文件'}}</button>
+      <view class="small muted">片段 {{index + 1}}</view>
+      <button wx:if="{{flowStep === 'review'}}" class="btn secondary section" bindtap="playLocal" data-id="{{item.clientClipId}}" disabled="{{busy}}">{{playingId === item.clientClipId ? '停止回听' : '回听这段录音'}}</button>
+      <button wx:if="{{item.sealed}}" class="btn secondary section" bindtap="upload" data-id="{{item.clientClipId}}" disabled="{{busy}}">重新核对保存结果</button>
+      <button wx:if="{{!item.sealed}}" class="btn section" bindtap="upload" data-id="{{item.clientClipId}}" disabled="{{busy}}">提交这段讲述</button>
+      <button wx:if="{{!item.sealed && flowStep === 'review'}}" class="btn secondary section" bindtap="rerecordLocal" data-id="{{item.clientClipId}}" disabled="{{busy || !canRecord}}">重新录这一段</button>
     </view>
-    <view wx:for="{{interview.clips}}" wx:key="id" class="section">{{item.state === 'sealed' ? '此采访已有封存片段；转写状态可查询' : '此采访有待完成的上传意图'}}</view>
+    <view wx:for="{{interview.clips}}" wx:key="id" class="section">{{item.state === 'sealed' ? '这段讲述已保存，文字处理状态可查询' : '这段讲述还在等待上传完成'}}</view>
+    <button class="btn secondary section" bindtap="photos" disabled="{{busy}}">查看照片或事后补图</button>
+    <button class="btn secondary section" bindtap="prepareCurrent" disabled="{{busy || !canRecord}}">再说一小段</button>
+    <button wx:if="{{flowStep === 'review'}}" class="link section" bindtap="chooseAnother" disabled="{{busy}}">另选一个问题</button>
+    <button wx:if="{{flowStep === 'processing' && localClips.length}}" class="btn secondary section" bindtap="reviewCurrent" disabled="{{busy}}">回听已保存片段</button>
   </view>
-  <view wx:if="{{taskRows.length || taskError}}" class="section" role="status">
-    <view wx:for="{{taskRows}}" wx:key="id" class="soft section">
-      <view>{{item.label}}</view>
-      <button wx:if="{{item.retryable}}" class="btn secondary section" data-id="{{item.id}}" bindtap="retryTranscription" disabled="{{busy}}">重试这段转写</button>
+
+  <view wx:if="{{interview && flowStep === 'processing'}}" class="section processing-step">
+    <view wx:if="{{taskRows.length || taskError}}" class="section" role="status">
+      <view wx:for="{{taskRows}}" wx:key="id" class="soft section">
+        <view>{{item.label}}</view>
+        <button wx:if="{{item.retryable}}" class="btn secondary section" data-id="{{item.id}}" bindtap="retryTranscription" disabled="{{busy}}">重试这段转写</button>
+      </view>
+      <view wx:if="{{taskError}}" class="section">{{taskError}}</view>
     </view>
-    <view wx:if="{{taskError}}" class="section">{{taskError}}</view>
     <button class="btn secondary section" bindtap="refreshTasks" disabled="{{busy}}">重新查询转写状态</button>
-  </view>
-  <view wx:if="{{interview}}" class="section optional-followup">
-    <view class="section" role="status">{{followupStatus || '可选追问可以跳过；等待时仍可继续讲或直接整理。'}}</view>
-    <button class="btn secondary section" bindtap="requestFollowup" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">请求一条可选追问</button>
-    <button class="btn secondary section" bindtap="refreshFollowup" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">查询可选追问</button>
-    <button wx:if="{{followup && followup.task && followup.task.state === 'failed'}}" class="btn secondary section" bindtap="retryFollowup" disabled="{{busy}}">重试本次追问</button>
-    <view wx:if="{{interview && interview.currentQuestion && interview.currentQuestion.source && interview.currentQuestion.source.kind === 'follow-up'}}" class="section">
-      <textarea class="input section" value="{{followupText}}" bindinput="followupText" placeholder="也可以按自己的问法改写这一题" maxlength="2000" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}"/>
-      <button class="btn secondary section" bindtap="rewriteFollowup" disabled="{{busy || !followupText || state === 'recording' || state === 'requesting' || state === 'saving'}}">保存实际改写的问题</button>
+    <view class="section optional-followup">
+      <view class="section" role="status">{{followupStatus || '可选追问可以跳过；等待时仍可继续讲或直接整理。'}}</view>
+      <button class="btn secondary section" bindtap="requestFollowup" disabled="{{busy}}">请求一条可选追问</button>
+      <button class="btn secondary section" bindtap="refreshFollowup" disabled="{{busy}}">查询可选追问</button>
+      <button wx:if="{{followup && followup.task && followup.task.state === 'failed'}}" class="btn secondary section" bindtap="retryFollowup" disabled="{{busy}}">重试本次追问</button>
+      <view wx:if="{{interview.currentQuestion && interview.currentQuestion.source && interview.currentQuestion.source.kind === 'follow-up'}}" class="section">
+        <textarea class="input section" value="{{followupText}}" bindinput="followupText" placeholder="也可以按自己的问法改写这一题" maxlength="2000" disabled="{{busy}}"/>
+        <button class="btn secondary section" bindtap="rewriteFollowup" disabled="{{busy || !followupText}}">保存实际改写的问题</button>
+      </view>
+      <button class="btn secondary section" bindtap="skipFollowup" disabled="{{busy}}">跳过追问，继续原问题或整理</button>
     </view>
-    <button class="btn secondary section" bindtap="skipFollowup" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">跳过追问，继续原问题或整理</button>
+    <button class="btn section" bindtap="openStory" disabled="{{busy || state === 'device-error'}}">整理或查看故事</button>
+    <button class="link section" bindtap="chooseAnother" disabled="{{busy}}">另选一个问题</button>
   </view>
-  <view wx:if="{{canRecord && state !== 'recording' && state !== 'requesting' && state !== 'saving'}}" class="section">
-    <button class="btn secondary" bindtap="selectQuestion" disabled="{{busy}}">{{interview ? '另起一个问题' : '就从这个问题开始'}}</button>
-    <button class="btn secondary section" data-kind="free-narration" bindtap="selectQuestion" disabled="{{busy}}">自由讲述</button>
-    <button class="btn secondary section" data-kind="photo" bindtap="selectQuestion" disabled="{{busy}}">看着照片讲一讲</button>
-    <view class="section">也可以写下这次想讲的问题</view>
-    <textarea class="input section" placeholder="想讲的问题" value="{{customText}}" bindinput="customText" maxlength="2000" disabled="{{busy}}"/>
-    <input class="input section" placeholder="想记录什么" value="{{customIntent}}" bindinput="customIntent" maxlength="500" disabled="{{busy}}"/>
-    <button class="btn secondary section" data-kind="custom" bindtap="selectQuestion" disabled="{{busy || !customText || !customIntent}}">从自拟问题开始</button>
-  </view>
-  <button wx:for="{{pendingInterviews}}" wx:key="*this" class="btn secondary section" data-id="{{item}}" bindtap="resumeLocal" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">恢复本机采访 {{index + 1}}</button>
-  <button class="btn secondary section" bindtap="refresh" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving'}}">重新查询与恢复</button>
-  <button wx:if="{{interview}}" class="btn section" bindtap="openStory" disabled="{{busy || state === 'recording' || state === 'requesting' || state === 'saving' || state === 'device-error'}}">整理或查看故事</button>
-  <button class="link section" bindtap="finish">今天先到这里</button>
+  <button wx:if="{{interview && flowStep !== 'processing' && flowStep !== 'record'}}" class="btn secondary section" bindtap="showProcessing" disabled="{{busy}}">查看处理与追问</button>
+  <button wx:if="{{flowStep !== 'record'}}" class="link section" bindtap="refresh" disabled="{{busy}}">重新查询与恢复</button>
+  <button class="link section" bindtap="finish" disabled="{{busy || state === 'recording' || state === 'paused' || state === 'requesting' || state === 'saving' || state === 'device-error'}}">今天先到这里</button>
 </view>
 <block wx:else="">
 <view class="interview-page"

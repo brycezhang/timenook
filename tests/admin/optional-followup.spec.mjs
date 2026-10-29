@@ -1,4 +1,8 @@
 import {
+  prepareRecordingStep,
+  showProcessingStep,
+} from "./recording-step-helper.mjs";
+import {
   createPrivacyFixtureApplication,
   closePrivacyFixtureApplication,
 } from "./privacy-fixture.mjs";
@@ -395,6 +399,7 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     .getByRole("button", { name: "就从这个问题开始", exact: true })
     .click();
   const record = async () => {
+    await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
     await page
       .getByRole("button", { name: "说完了，停止录音", exact: true })
@@ -403,7 +408,7 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
       page.getByText("本机文件已保存，尚待封存", { exact: true }),
     ).toBeVisible();
     await page
-      .getByRole("button", { name: "查询并上传原文件", exact: true })
+      .getByRole("button", { name: "提交这段讲述", exact: true })
       .click();
     await expect(
       page.getByText("本地模拟封存完成；转写状态可查询，真实云端尚待验收", {
@@ -464,6 +469,7 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     expect(answered.clips.map((c) => c.actualQuestionId).sort()).toEqual(
       [first.actualQuestion.id, edited.currentQuestion.id].sort(),
     );
+    await showProcessingStep(page);
     await page
       .getByRole("button", { name: "跳过追问，继续原问题或整理", exact: true })
       .click();
@@ -499,6 +505,7 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     await page.screenshot({
       path: test.info().outputPath("optional-followup-outer768-content390.png"),
     });
+    await showProcessingStep(page);
     await page
       .getByRole("button", { name: "整理或查看故事", exact: true })
       .click();
@@ -506,6 +513,7 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     await page.goto(
       `${base}/#/interview?projectId=${projectId}&interviewId=${first.id}`,
     );
+    await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
     await page
       .getByRole("button", { name: "说完了，停止录音", exact: true })
@@ -529,6 +537,7 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
         await route.abort("timedout");
       },
     );
+    await showProcessingStep(page);
     await page
       .getByRole("button", { name: "跳过追问，继续原问题或整理", exact: true })
       .click();

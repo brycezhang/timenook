@@ -1,4 +1,8 @@
 import {
+  prepareRecordingStep,
+  showProcessingStep,
+} from "./recording-step-helper.mjs";
+import {
   createPrivacyFixtureApplication,
   closePrivacyFixtureApplication,
 } from "./privacy-fixture.mjs";
@@ -514,6 +518,7 @@ test("real story Page submits, leaves and restores the same task then renders ev
     await expect(
       page.getByRole("button", { name: "整理或查看故事", exact: true }),
     ).toBeVisible({ timeout: 5000 });
+    await showProcessingStep(page);
     await page
       .getByRole("button", { name: "整理或查看故事", exact: true })
       .click();
@@ -563,6 +568,7 @@ test("real story Page submits, leaves and restores the same task then renders ev
         exact: true,
       })
       .click();
+    await showProcessingStep(page);
     await page
       .getByRole("button", { name: "整理或查看故事", exact: true })
       .click();
@@ -841,6 +847,7 @@ test("entering story from the interview keeps an unsealed local recording recove
     await page.goto(
       `${base}/#/interview?projectId=${projectId}&interviewId=${interview.id}`,
     );
+    await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
     await page
       .getByRole("button", { name: "说完了，停止录音", exact: true })
@@ -848,6 +855,7 @@ test("entering story from the interview keeps an unsealed local recording recove
     await expect(
       page.getByText("本机文件已保存，尚待封存", { exact: true }),
     ).toBeVisible();
+    await showProcessingStep(page);
     await page
       .getByRole("button", { name: "整理或查看故事", exact: true })
       .click();
@@ -932,6 +940,7 @@ test("a hidden interview current-session HTTP 401 clears the active story, playi
       `${base}/#/interview?projectId=${projectId}&interviewId=${interview.id}`,
     );
     await statusSeen;
+    await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
     await page
       .getByRole("button", { name: "说完了，停止录音", exact: true })
@@ -949,6 +958,7 @@ test("a hidden interview current-session HTTP 401 clears the active story, playi
           )?.[1],
     );
     expect(original).toHaveLength(1);
+    await showProcessingStep(page);
     await page
       .getByRole("button", { name: "整理或查看故事", exact: true })
       .click();
@@ -1014,6 +1024,7 @@ test("cancelling PhotoPage selection leaves the waiting story intact while actua
     await page.goto(
       `${base}/#/interview?projectId=${projectId}&interviewId=${interview.id}`,
     );
+    await showProcessingStep(page);
     await page
       .getByRole("button", { name: "整理或查看故事", exact: true })
       .click();
@@ -1048,6 +1059,7 @@ test("cancelling PhotoPage selection leaves the waiting story intact while actua
     await page
       .getByRole("button", { name: "返回采访，开始说", exact: true })
       .click();
+    await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "说完了，停止录音", exact: true }),

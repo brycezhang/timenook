@@ -1,4 +1,8 @@
 import {
+  prepareRecordingStep,
+  showProcessingStep,
+} from "./recording-step-helper.mjs";
+import {
   createPrivacyFixtureApplication,
   closePrivacyFixtureApplication,
 } from "./privacy-fixture.mjs";
@@ -546,6 +550,7 @@ test("photo starter saves two originals independently, retries one failure and e
       ),
     )
     .toBe(0);
+  await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
   await page
     .getByRole("button", { name: "说完了，停止录音", exact: true })
@@ -553,9 +558,7 @@ test("photo starter saves two originals independently, retries one failure and e
   await expect(
     page.getByText("本机文件已保存，尚待封存", { exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "查询并上传原文件", exact: true })
-    .click();
+  await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(page.getByText(/本地模拟封存完成/)).toBeVisible();
   const recorded = data(
     await request(
@@ -672,6 +675,7 @@ test("the combined interview clears private task state after an actual status 40
   await expect(
     page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
   ).toBeVisible();
+  await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
   await page
     .getByRole("button", { name: "说完了，停止录音", exact: true })
@@ -679,6 +683,7 @@ test("the combined interview clears private task state after an actual status 40
   await expect(
     page.getByText("本机文件已保存，尚待封存", { exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "另选一个问题", exact: true }).click();
   await page
     .getByPlaceholder("想讲的问题", { exact: true })
     .fill("私人采访草稿");
@@ -686,6 +691,7 @@ test("the combined interview clears private task state after an actual status 40
     (await request("DELETE", `/v1/sessions/${current.session.id}`, current))
       .statusCode,
   ).toBe(204);
+  await showProcessingStep(page);
   const denied = page.waitForResponse(
     (r) => r.url().endsWith("/tasks/status") && r.status() === 401,
   );
@@ -946,6 +952,7 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
         await expect(
           page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
         ).toBeVisible();
+        await prepareRecordingStep(page);
         await page.getByRole("button", { name: "开始说", exact: true }).click();
         await page
           .getByRole("button", { name: "说完了，停止录音", exact: true })
@@ -953,6 +960,9 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
         await expect(
           page.getByText("本机文件已保存，尚待封存", { exact: true }),
         ).toBeVisible();
+        await page
+          .getByRole("button", { name: "另选一个问题", exact: true })
+          .click();
         await page
           .getByPlaceholder("想讲的问题", { exact: true })
           .fill("跨页私人采访草稿");

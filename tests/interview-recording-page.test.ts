@@ -34,6 +34,8 @@ function harness(
     handlers: Record<string, ((v?: any) => void)[]> = {},
     pendingSaves: any[] = [],
     navigation: any[] = [],
+    modals: any[] = [],
+    played: string[] = [],
     intervals = new Map<number, () => void>();
   let intervalId = 0;
   const clock = options.clock ?? { now: Date.now() };
@@ -89,6 +91,10 @@ function harness(
       getRecorderManager: () => ({
         onStart: (f: any) => (handlers.start ??= []).push(f),
         onStop: (f: any) => (handlers.stop ??= []).push(f),
+        onPause: (f: any) => (handlers.pause ??= []).push(f),
+        onResume: (f: any) => (handlers.resume ??= []).push(f),
+        pause: () => emit("pause"),
+        resume: () => emit("resume"),
         onError: (f: any) => (handlers.error ??= []).push(f),
         onInterruptionBegin: (f: any) => (handlers.interrupt ??= []).push(f),
         start: () => {
@@ -113,6 +119,16 @@ function harness(
           o.success({ size: 6480, digest: "b".repeat(64) }),
         access: (o: any) => (files.has(o.path) ? o.success({}) : o.fail({})),
       }),
+      createInnerAudioContext: () => ({
+        src: "",
+        onEnded() {},
+        onError() {},
+        play() {
+          played.push(this.src);
+        },
+        destroy() {},
+      }),
+      showModal: (options: any) => modals.push(options),
       navigateTo: (options: any) => navigation.push(options),
       reLaunch: () => {},
       showToast: () => {},
@@ -128,6 +144,8 @@ function harness(
     emit,
     pendingSaves,
     navigation,
+    modals,
+    played,
     expireSession() {
       clock.now = Date.parse(login.session.expiresAt);
     },
@@ -230,6 +248,172 @@ async function start(h: ReturnType<typeof harness>) {
   );
   await starting;
 }
+test("denied local playback clears private review immediately while preserving its original file", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const clip = h.page.data.localClips[0];
+  const playing = h.page.playLocal({
+    currentTarget: { dataset: { id: clip.clientClipId } },
+    detail: { value: "" },
+  });
+  respond(h.requests.shift(), { allowed: false }, 201);
+  await playing;
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.interview, null);
+  assert.deepEqual(h.played, []);
+  assert.equal(h.files.has(clip.path), true);
+});
+
+test("step navigation shows the question that will actually be selected or recorded without creating interviews", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  const changed = {
+    ...question,
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    snapshot: { text: "后来还有哪些事？", intent: "补充" },
+  };
+  h.page.data.interview = { ...interview, currentQuestion: changed };
+  h.page.data.question = changed.snapshot.text;
+  h.page.chooseAnother();
+  assert.equal(h.page.data.question, context.plan.defaultQuestion.text);
+  h.page.prepareCurrent();
+  assert.equal(h.page.data.question, changed.snapshot.text);
+  assert.equal(h.requests.length, 0);
+});
+
+test("leaving while paused saves the same recording and clears its private page", async () => {
+  const h = harness();
+  await ready(h);
+  await start(h);
+  await h.page.togglePause();
+  assert.equal(h.page.data.state, "paused");
+  h.page.onHide();
+  await tick();
+  assert.equal(h.saves, 1);
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.uploads.length, 0);
+});
+
+test("a re-record confirmation for an earlier question cannot start a changed question", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const clip = h.page.data.localClips[0];
+  const confirming = h.page.rerecordLocal({
+    currentTarget: { dataset: { id: clip.clientClipId } },
+    detail: { value: "" },
+  });
+  h.page.data.interview = {
+    ...interview,
+    currentQuestion: {
+      ...question,
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    },
+  };
+  h.modals[0].success({ confirm: true });
+  await tick();
+  assert.equal(
+    h.requests.length,
+    0,
+    "a stale confirmation must not request another recording start",
+  );
+  await confirming;
+  assert.equal(h.starts, 1);
+});
+
+test("local review plays the actual saved file after a permission check and re-record asks before capture", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const clip = h.page.data.localClips[0];
+  const event = {
+    currentTarget: { dataset: { id: clip.clientClipId } },
+    detail: { value: "" },
+  };
+  const playing = h.page.playLocal(event);
+  const check = h.requests.shift();
+  assert.match(check.url, /collection-check$/);
+  respond(check, { allowed: true }, 201);
+  await playing;
+  assert.deepEqual(h.played, [clip.path]);
+  assert.equal(h.uploads.length, 0);
+  const replacing = h.page.rerecordLocal(event);
+  assert.equal(h.modals.length, 1);
+  assert.equal(h.starts, 1);
+  h.modals[0].success({ confirm: false });
+  await replacing;
+  assert.equal(h.starts, 1, "cancelling re-record preserves the saved clip");
+  assert.equal(h.page.data.localClips[0].path, clip.path);
+});
+
+test("recording advances from preparation to local review and only explicit submit uploads", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  assert.equal(h.page.data.flowStep, "prepare");
+  await start(h);
+  assert.equal(h.page.data.flowStep, "record");
+  await h.page.record();
+  await tick();
+  assert.equal(h.page.data.flowStep, "review");
+  assert.equal(h.uploads.length, 0);
+  assert.equal(h.requests.length, 0, "local review must not submit a clip");
+  h.page.prepareCurrent();
+  assert.equal(h.page.data.flowStep, "prepare");
+  assert.equal(
+    h.starts,
+    1,
+    "returning to preparation does not restart the microphone",
+  );
+  assert.equal(
+    h.requests.length,
+    0,
+    "step navigation does not create another interview",
+  );
+});
+
+test("one recording pauses without counting idle time and resumes only after rechecking the same question", async (t) => {
+  const h = harness({ clock: { now: Date.parse("2026-10-29T01:00:00Z") } });
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  h.advance(2000);
+  await h.page.togglePause();
+  assert.equal(h.page.data.state, "paused");
+  assert.equal(h.page.data.timer, "00:02");
+  h.advance(60000);
+  assert.equal(h.page.data.timer, "00:02");
+  const resuming = h.page.togglePause();
+  const request = h.requests.shift();
+  assert.equal(request.data.actualQuestionId, question.id);
+  respond(
+    request,
+    { allowed: true, actualQuestionId: question.id, questionVersion: 1 },
+    201,
+  );
+  await resuming;
+  h.advance(1000);
+  assert.equal(h.page.data.timer, "00:03");
+  assert.equal(h.starts, 1, "resume must not create a new device recording");
+  await h.page.record();
+  await tick();
+  assert.equal(h.page.data.localClips.length, 1);
+  assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+  assert.equal(h.uploads.length, 0, "stopping does not submit the recording");
+});
+
 test("restoring the same interview derives elapsed time from saved local clips and adds only the current recording segment", async (t) => {
   const h = harness({ clock: { now: Date.parse("2026-10-24T01:00:00Z") } });
   t.after(() => h.page.onUnload());
