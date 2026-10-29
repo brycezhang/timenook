@@ -17,6 +17,7 @@ import { createAdminApplication as createApplication } from "./admin-feishu-fixt
 import type { ApiConfig } from "../src/config";
 import { paymentConfig, paymentFetch, paid, callback } from "./payment-fixture";
 import { startProductionWorker } from "../src/tasks/worker";
+import { Deletions } from "../src/care/deletions";
 const schema = `t16_${randomUUID().replaceAll("-", "")}`;
 let config: ApiConfig;
 let root: string;
@@ -1051,6 +1052,18 @@ test("original-photo retention cannot be bypassed by reading its asset ID", asyn
       occurredAt: new Date(Date.now() - 86400001),
     },
   });
+  // Establish actual original-photo expiry before checking its HTTP boundary.
+  // A published but uncommitted deletion correctly closes private reads with
+  // 503; that recovery window is not the completed-retention state under test.
+  await app.get(Deletions).sweep(new Date());
+  const receipts = await db.$queryRaw<{ state: string }[]>`
+    SELECT i.state FROM privacy_deletion_items i
+    JOIN privacy_deletions d ON d.id=i.event_id
+    WHERE d.project_id=${q.projectId}::uuid AND d.scoped_export_id IS NULL
+      AND i.layer='active_database' AND i.category='originalPhotos'
+  `;
+  assert.ok(receipts.length > 0, "actual original-photo erasure was registered");
+  assert.ok(receipts.every((item) => item.state === "completed"));
   assert.equal(
     (
       await request(
