@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "pnpm run build:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api build && pnpm --filter @timenook/admin build && pnpm run build:website",
-    "typecheck": "pnpm run typecheck:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api typecheck && pnpm --filter @timenook/admin typecheck && pnpm run typecheck:website",
+    "build": "pnpm run build:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api build && pnpm --filter @timenook/admin build && pnpm run build:website && pnpm run build:web",
+    "typecheck": "pnpm run typecheck:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api typecheck && pnpm --filter @timenook/admin typecheck && pnpm run typecheck:website && pnpm run typecheck:web",
     "test": "pnpm run test:frontend && pnpm --filter @timenook/api test && pnpm run test:print && pnpm run test:release",
     "check": "pnpm run typecheck && pnpm test && pnpm run build",
     "check:native": "node scripts/check-native.mjs",
@@ -33,7 +33,11 @@
     "build:website": "pnpm --filter @timenook/website build",
     "typecheck:website": "pnpm --filter @timenook/website typecheck",
     "test:website": "pnpm --filter @timenook/website test",
-    "package:website": "pnpm --filter @timenook/website package"
+    "package:website": "pnpm --filter @timenook/website package",
+    "dev:web": "pnpm --filter @timenook/web dev",
+    "build:web": "pnpm --filter @timenook/web build",
+    "typecheck:web": "pnpm --filter @timenook/web typecheck",
+    "test:web": "pnpm exec playwright test tests/admin/web-entry.spec.mjs tests/admin/web-session.spec.mjs -c playwright.admin.config.mjs"
   },
   "devDependencies": {
     "@napi-rs/canvas": "0.1.100",
