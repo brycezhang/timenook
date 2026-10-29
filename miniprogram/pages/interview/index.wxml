@@ -36,7 +36,7 @@
 
   <view wx:if="{{interview && (flowStep === 'review' || flowStep === 'processing')}}" class="section">
     <view wx:for="{{localClips}}" wx:key="clientClipId" class="soft section local-recording">
-      <view>{{item.sealed ? '封存已确认，本机副本仍保留' : '本机文件已保存，尚待封存'}}</view>
+      <view>{{item.sealed ? '已确认保存，这台设备也保留了一份' : item.serverId ? '已保存在这台设备，上传结果还待确认' : '已保存在这台设备，还未上传'}}</view>
       <view class="small muted">片段 {{index + 1}}</view>
       <button wx:if="{{flowStep === 'review'}}" class="btn secondary section" bindtap="playLocal" data-id="{{item.clientClipId}}" disabled="{{busy}}">{{playingId === item.clientClipId ? '停止回听' : '回听这段录音'}}</button>
       <button wx:if="{{item.sealed}}" class="btn secondary section" bindtap="upload" data-id="{{item.clientClipId}}" disabled="{{busy}}">重新核对保存结果</button>

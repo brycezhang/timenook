@@ -362,7 +362,7 @@ test("the real interview page shows processing, retry and restored completion ac
     .click();
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByText("本地模拟封存完成；转写状态可查询，真实云端尚待验收", {
+    page.getByText("已在测试环境保存，真实云端保存仍待验证", {
       exact: true,
     }),
   ).toBeVisible();

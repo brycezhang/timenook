@@ -368,6 +368,7 @@ test("recording advances from preparation to local review and only explicit subm
   await h.page.record();
   await tick();
   assert.equal(h.page.data.flowStep, "review");
+  assert.equal(h.page.data.status, "已保存在这台设备，还未上传");
   assert.equal(h.uploads.length, 0);
   assert.equal(h.requests.length, 0, "local review must not submit a clip");
   h.page.prepareCurrent();
@@ -500,7 +501,7 @@ test("live recording page saves file and manifest before success and restores th
   await h.page.retry();
   assert.equal(h.saves, 1);
   assert.equal(h.page.data.localClips.length, 1);
-  assert.match(h.page.data.status, /本机/);
+  assert.equal(h.page.data.status, "已保存在这台设备，还未上传");
   h.page.onHide();
   h.storage.set(`timenook.session.v1:${base}`, {
     ...login,
@@ -655,6 +656,8 @@ test("an OSS upload uses the exact granted destination without disclosing the AP
   );
   assert.equal(h.uploads[0].header, undefined);
   assert.equal(h.page.data.localClips[0].sealed, undefined);
+  assert.equal(h.page.data.status, "录音已上传，正在确认保存，请先别退出");
+  assert.doesNotMatch(h.page.data.status, /已上传到云端/);
   respond(
     h.requests.shift(),
     {
@@ -669,6 +672,10 @@ test("an OSS upload uses the exact granted destination without disclosing the AP
   );
   await uploading;
   assert.equal(h.page.data.localClips[0].sealed, true);
+  assert.equal(
+    h.page.data.status,
+    "已上传到云端，可以离开；文字处理状态可重新查询",
+  );
   assert.equal(h.files.size, 1);
   h.page.onUnload();
 });

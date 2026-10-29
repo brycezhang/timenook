@@ -405,13 +405,15 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
     await expect(
-      page.getByText("本机文件已保存，尚待封存", { exact: true }),
+      page
+        .locator(".local-recording")
+        .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
     await page
       .getByRole("button", { name: "提交这段讲述", exact: true })
       .click();
     await expect(
-      page.getByText("本地模拟封存完成；转写状态可查询，真实云端尚待验收", {
+      page.getByText("已在测试环境保存，真实云端保存仍待验证", {
         exact: true,
       }),
     ).toBeVisible();
@@ -519,7 +521,9 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
     await expect(
-      page.getByText("本机文件已保存，尚待封存", { exact: true }),
+      page
+        .locator(".local-recording")
+        .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
     const pending = await page.evaluate(() =>
       Object.entries(localStorage).filter(([key]) => key.includes("recording")),

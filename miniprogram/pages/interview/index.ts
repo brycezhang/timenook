@@ -230,7 +230,7 @@ Page({
           "想从哪里讲起？可以自由讲述、看照片或自拟问题。",
         status: result.canRecord
           ? "先确定一个问题，再开始说。"
-          : "当前不能新录音；已有文件与封存内容可按授权恢复。",
+          : "当前不能新录音；已有录音可在获得授权后继续使用。",
       });
       const index: unknown = wx.getStorageSync(
         `${recordingPartition(this.projectId)}:index`,

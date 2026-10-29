@@ -354,7 +354,9 @@ test("bound project home reaches the actual recording page, seals a file and ret
     .getByRole("button", { name: "说完了，停止录音", exact: true })
     .click();
   await expect(
-    page.getByText("本机文件已保存，尚待封存", { exact: true }),
+    page
+      .locator(".local-recording")
+      .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
   await expect(page.locator(".step-title")).toHaveText(
     "听一听，再留下这段讲述",
@@ -373,7 +375,7 @@ test("bound project home reaches the actual recording page, seals a file and ret
   expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByText("本地模拟封存完成；转写状态可查询，真实云端尚待验收", {
+    page.getByText("已在测试环境保存，真实云端保存仍待验证", {
       exact: true,
     }),
   ).toBeVisible();
@@ -414,7 +416,7 @@ test("bound project home reaches the actual recording page, seals a file and ret
     })
     .click();
   await expect(
-    page.getByText("封存已确认，本机副本仍保留", { exact: true }),
+    page.getByText("已确认保存，这台设备也保留了一份", { exact: true }),
   ).toBeVisible();
   expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
   await page.setViewportSize({ width: 768, height: 1000 });
@@ -455,7 +457,9 @@ test("actual Page and HTTP retain an older answer source after another question 
     .getByRole("button", { name: "说完了，停止录音", exact: true })
     .click();
   await expect(
-    page.getByText("本机文件已保存，尚待封存", { exact: true }),
+    page
+      .locator(".local-recording")
+      .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
   const laterText = "那条路上还有什么让您记得清楚？";
   const displayed = data(
@@ -556,17 +560,21 @@ test("a collection-only assisted participant starts and resumes its own pending 
     .getByRole("button", { name: "说完了，停止录音", exact: true })
     .click();
   await expect(
-    page.getByText("本机文件已保存，尚待封存", { exact: true }),
+    page
+      .locator(".local-recording")
+      .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "重新查询与恢复", exact: true })
     .click();
   await expect(
-    page.getByText("本机文件已保存，尚待封存", { exact: true }),
+    page
+      .locator(".local-recording")
+      .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByText("封存已确认，本机副本仍保留", { exact: true }),
+    page.getByText("已确认保存，这台设备也保留了一份", { exact: true }),
   ).toBeVisible();
   expect(
     (await request("GET", `/v1/projects/${id}/interviews`, buyer)).statusCode,

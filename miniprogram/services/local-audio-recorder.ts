@@ -237,7 +237,7 @@ export class LocalAudioRecorder {
       };
       this.commitClip(clip);
       this.pending = undefined;
-      this.update("local", "已保存在本机；尚未上传封存");
+      this.update("local", "已保存在这台设备，还未上传");
     } catch {
       this.update("device-error", "还没有保存成功，请先别退出。点击重试保存。");
     } finally {

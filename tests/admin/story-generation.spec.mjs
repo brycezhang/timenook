@@ -853,7 +853,9 @@ test("entering story from the interview keeps an unsealed local recording recove
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
     await expect(
-      page.getByText("本机文件已保存，尚待封存", { exact: true }),
+      page
+        .locator(".local-recording")
+        .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
     await showProcessingStep(page);
     await page
@@ -878,7 +880,9 @@ test("entering story from the interview keeps an unsealed local recording recove
       .getByRole("button", { name: "回采访页恢复保存", exact: true })
       .click();
     await expect(
-      page.getByText("本机文件已保存，尚待封存", { exact: true }),
+      page
+        .locator(".local-recording")
+        .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
     expect(errors).toEqual([]);
   } finally {
@@ -946,7 +950,9 @@ test("a hidden interview current-session HTTP 401 clears the active story, playi
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
     await expect(
-      page.getByText("本机文件已保存，尚待封存", { exact: true }),
+      page
+        .locator(".local-recording")
+        .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
     const original = await page.evaluate(
       () =>
@@ -1074,7 +1080,9 @@ test("cancelling PhotoPage selection leaves the waiting story intact while actua
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
     await expect(
-      page.getByText("本机文件已保存，尚待封存", { exact: true }),
+      page
+        .locator(".local-recording")
+        .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
     expect(errors).toEqual([]);
   } finally {

@@ -961,7 +961,9 @@ test("real project resume keeps the same interview's saved native-file timing an
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
     await expect(
-      page.getByText("本机文件已保存，尚待封存", { exact: true }),
+      page
+        .locator(".local-recording")
+        .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
     await expect(page.locator(".record-timer")).toHaveText("00:01");
     await page.evaluate((url) => {
@@ -1124,7 +1126,9 @@ test("a collection-only assisted project home starts real recording without expo
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
     await expect(
-      page.getByText("本机文件已保存，尚待封存", { exact: true }),
+      page
+        .locator(".local-recording")
+        .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
     expect(errors).toEqual([]);
   } catch (error) {
@@ -1291,7 +1295,7 @@ test("project progress keeps optional follow-up distinct while the same intervie
       .getByRole("button", { name: "提交这段讲述", exact: true })
       .click();
     await expect(
-      page.getByText("封存已确认，本机副本仍保留", { exact: true }),
+      page.getByText("已确认保存，这台设备也保留了一份", { exact: true }),
     ).toBeVisible();
     await expect
       .poll(

@@ -556,10 +556,12 @@ test("photo starter saves two originals independently, retries one failure and e
     .getByRole("button", { name: "说完了，停止录音", exact: true })
     .click();
   await expect(
-    page.getByText("本机文件已保存，尚待封存", { exact: true }),
+    page
+      .locator(".local-recording")
+      .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
-  await expect(page.getByText(/本地模拟封存完成/)).toBeVisible();
+  await expect(page.getByText(/已在测试环境保存/)).toBeVisible();
   const recorded = data(
     await request(
       "GET",
@@ -681,7 +683,9 @@ test("the combined interview clears private task state after an actual status 40
     .getByRole("button", { name: "说完了，停止录音", exact: true })
     .click();
   await expect(
-    page.getByText("本机文件已保存，尚待封存", { exact: true }),
+    page
+      .locator(".local-recording")
+      .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "另选一个问题", exact: true }).click();
   await page
@@ -958,7 +962,9 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
           .getByRole("button", { name: "说完了，停止录音", exact: true })
           .click();
         await expect(
-          page.getByText("本机文件已保存，尚待封存", { exact: true }),
+          page
+            .locator(".local-recording")
+            .getByText("已保存在这台设备，还未上传", { exact: true }),
         ).toBeVisible();
         await page
           .getByRole("button", { name: "另选一个问题", exact: true })
