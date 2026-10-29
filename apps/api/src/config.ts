@@ -66,9 +66,10 @@ export interface ApiConfig {
   };
   admin?: {
     origin: string;
-    encryptionKey: string;
+    sessionKey: string;
     sessionTtlSeconds: number;
     challengeTtlSeconds: number;
+    feishu?: { appId: string; appSecret: string; tenantKey: string };
   };
 }
 
@@ -147,7 +148,13 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     );
   }
   let admin: ApiConfig["admin"];
-  if (env.ADMIN_ORIGIN || env.ADMIN_ENCRYPTION_KEY) {
+  if (
+    env.ADMIN_ORIGIN ||
+    env.ADMIN_SESSION_KEY ||
+    env.ADMIN_FEISHU_APP_ID ||
+    env.ADMIN_FEISHU_APP_SECRET ||
+    env.ADMIN_FEISHU_TENANT_KEY
+  ) {
     let origin: URL;
     try {
       origin = new URL(env.ADMIN_ORIGIN ?? "");
@@ -163,13 +170,13 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
       throw new ConfigurationError(
         "ADMIN_ORIGIN must be an HTTPS origin without path",
       );
-    const key = env.ADMIN_ENCRYPTION_KEY ?? "";
+    const key = env.ADMIN_SESSION_KEY ?? "";
     if (
       !/^[A-Za-z0-9+/]{43}=$/.test(key) ||
       Buffer.from(key, "base64").length !== 32
     )
       throw new ConfigurationError(
-        "ADMIN_ENCRYPTION_KEY must be a 32-byte base64 key",
+        "ADMIN_SESSION_KEY must be a 32-byte base64 key",
       );
     const challengeTtlSeconds = Number(
       env.ADMIN_CHALLENGE_TTL_SECONDS ?? "300",
@@ -188,14 +195,41 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
       );
     admin = {
       origin: origin.origin,
-      encryptionKey: key,
+      sessionKey: key,
       sessionTtlSeconds: adminTtlSeconds,
       challengeTtlSeconds,
     };
   }
   if (environment === "production" && !admin)
     throw new ConfigurationError(
-      "Production requires independent admin origin and encryption key",
+      "Production requires independent admin origin and session key",
+    );
+  const feishuValues = [
+    env.ADMIN_FEISHU_APP_ID,
+    env.ADMIN_FEISHU_APP_SECRET,
+    env.ADMIN_FEISHU_TENANT_KEY,
+  ];
+  if (feishuValues.some(Boolean)) {
+    if (
+      !admin ||
+      feishuValues.some(
+        (value) => !value || value.trim() !== value || value.length > 512,
+      ) ||
+      !/^cli_[A-Za-z0-9_]+$/.test(env.ADMIN_FEISHU_APP_ID!) ||
+      !/^[A-Za-z0-9_-]{3,128}$/.test(env.ADMIN_FEISHU_TENANT_KEY!)
+    )
+      throw new ConfigurationError(
+        "Configure valid admin Feishu app ID, secret and tenant key together",
+      );
+    admin.feishu = {
+      appId: env.ADMIN_FEISHU_APP_ID!,
+      appSecret: env.ADMIN_FEISHU_APP_SECRET!,
+      tenantKey: env.ADMIN_FEISHU_TENANT_KEY!,
+    };
+  }
+  if (environment === "production" && !admin?.feishu)
+    throw new ConfigurationError(
+      "Production requires admin Feishu credentials and tenant key",
     );
   let audioProbe: ApiConfig["audioProbe"];
   if (

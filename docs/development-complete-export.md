@@ -18,7 +18,7 @@
 | `GET /v1/projects/:id/exports/:caseId/download` | 固定接收人、当前会话、主体/绑定/epoch、完整来源与包期限重验             |
 | `POST /v1/projects/:id/exports/:caseId/receipt` | 接收人核对具体 ZIP hash 后记录回执                                      |
 | `/v1/admin/care-requests/:caseId/export`        | 在共享工单中查询受理/打包状态                                           |
-| 上述运营入口的 `/accept`、`/pack`、`/delivery`  | 本人/范围核验后受理、实际打包、替代渠道实际回执；沿用管理 MFA/CSRF/审计 |
+| 上述运营入口的 `/accept`、`/pack`、`/delivery`  | 本人/范围核验后受理、实际打包、替代渠道实际回执；沿用管理飞书身份/CSRF/审计 |
 | `GET` 上述运营入口的 `/download`                | 仅已核验替代交付、工单核验客服、有效包期限                              |
 | `POST /v1/admin/exports/cleanup`                | 受控到期与孤儿包补扫；不清理原始资料                                    |
 

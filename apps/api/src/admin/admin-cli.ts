@@ -7,18 +7,21 @@ import {
 } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { generateSecret } from "otplib";
 import { isAdminPermission } from "@timenook/contracts";
 import type {
   AdminProvisionCommand,
   AdminProvisionResult,
 } from "@timenook/contracts";
 import { readConfig } from "../config";
-import { encryptSecret, hashPassword } from "./secrets";
 
 async function main() {
   const [command, flag, path, ...extra] = process.argv.slice(2);
-  if (command !== "create" || flag !== "--input-file" || !path || extra.length)
+  if (
+    !["create", "disable"].includes(command) ||
+    flag !== "--input-file" ||
+    !path ||
+    extra.length
+  )
     throw new Error();
   const config = readConfig(process.env);
   if (!config.admin) throw new Error();
@@ -37,46 +40,77 @@ async function main() {
   } finally {
     closeSync(fd);
   }
+  const allowed =
+    command === "create"
+      ? [
+          "username",
+          "realm",
+          "permissions",
+          "feishuAppId",
+          "feishuOpenId",
+          "tenantKey",
+        ]
+      : ["username", "realm"];
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    Object.keys(input).some((key) => !allowed.includes(key))
+  )
+    throw new Error();
   const realm = config.environment === "production" ? "production" : "local";
   if (
     input.realm !== realm ||
     typeof input.username !== "string" ||
     !/^[a-z0-9][a-z0-9._-]{2,63}$/.test(input.username) ||
-    typeof input.password !== "string" ||
-    input.password.length < 16 ||
-    input.password.length > 128 ||
-    !Array.isArray(input.permissions) ||
-    !input.permissions.every(isAdminPermission)
+    (command === "create" &&
+      (!config.admin.feishu ||
+        input.feishuAppId !== config.admin.feishu.appId ||
+        input.tenantKey !== config.admin.feishu.tenantKey ||
+        typeof input.feishuOpenId !== "string" ||
+        !/^ou_[A-Za-z0-9_-]{1,128}$/.test(input.feishuOpenId) ||
+        !Array.isArray(input.permissions) ||
+        !input.permissions.every(isAdminPermission)))
   )
     throw new Error();
   const commandInput: AdminProvisionCommand = {
     username: input.username,
-    password: input.password,
+    feishuAppId: input.feishuAppId,
+    feishuOpenId: input.feishuOpenId,
+    tenantKey: input.tenantKey,
     realm,
     permissions: input.permissions,
   };
   const database = new PrismaClient({ datasourceUrl: config.databaseUrl });
   try {
-    const id = randomUUID();
+    let id: string = randomUUID();
     await database.$transaction(async (tx) => {
-      await tx.adminAccount.create({
-        data: {
-          id,
-          realm,
-          username: commandInput.username,
-          passwordHash: await hashPassword(commandInput.password),
-          mfaSecret: encryptSecret(
-            generateSecret(),
-            config.admin!.encryptionKey,
-          ),
-          permissions: [...new Set(commandInput.permissions)],
-        },
-      });
+      if (command === "disable") {
+        const account = await tx.adminAccount.findUniqueOrThrow({
+          where: { realm_username: { realm, username: input.username } },
+        });
+        id = account.id;
+        await tx.adminAccount.update({
+          where: { id },
+          data: { disabled: true },
+        });
+      } else
+        await tx.adminAccount.create({
+          data: {
+            id,
+            realm,
+            username: commandInput.username,
+            feishuAppId: commandInput.feishuAppId,
+            feishuOpenId: commandInput.feishuOpenId,
+            tenantKey: commandInput.tenantKey,
+            permissions: [...new Set(commandInput.permissions)],
+          },
+        });
       await tx.adminAudit.create({
         data: {
           id: randomUUID(),
           operatorId: null,
-          action: "admin.provision",
+          action: command === "create" ? "admin.provision" : "admin.disable",
           requestId: randomUUID(),
           result: "success",
         },
@@ -86,7 +120,6 @@ async function main() {
       JSON.stringify({
         id,
         realm,
-        mfaEnrollmentRequired: true,
       } satisfies AdminProvisionResult),
     );
   } finally {

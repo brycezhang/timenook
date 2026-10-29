@@ -20,7 +20,7 @@ import { readFileSync } from "node:fs";
 import { before, after, test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
-import { createApplication } from "../src/application";
+import { createAdminApplication as createApplication } from "./admin-feishu-fixture";
 import type { ApiConfig } from "../src/config";
 const schema = `t10_${randomUUID().replaceAll("-", "")}`;
 let config: ApiConfig;
@@ -49,7 +49,7 @@ before(async () => {
     redisKeyPrefix: schema,
     admin: {
       origin: "https://localhost:3443",
-      encryptionKey: randomBytes(32).toString("base64"),
+      sessionKey: randomBytes(32).toString("base64"),
       sessionTtlSeconds: 28800,
       challengeTtlSeconds: 300,
     },

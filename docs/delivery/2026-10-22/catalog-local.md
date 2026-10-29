@@ -4,7 +4,7 @@
 
 ## 运行与入口
 
-沿用 [本地开发](../../development.md) 与 [管理端说明](../../../apps/admin/README.md) 配置 PostgreSQL、Redis、管理员 HTTPS/MFA；不要打印 `.env` 或密钥。使用 Node 22.23.4 / pnpm 10.34.7。
+沿用 [本地开发](../../development.md) 与 [管理端说明](../../../apps/admin/README.md) 配置 PostgreSQL、Redis、管理员 HTTPS/飞书白名单登录；不要打印 `.env` 或密钥。使用 Node 22.23.4 / pnpm 10.34.7。
 
 ```sh
 export PATH=/tmp/timenook-toolchain/node_modules/.bin:$PATH

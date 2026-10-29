@@ -24,7 +24,7 @@ T22 接入 T10 已核验付款及唯一首本权益、T12 当次协助证据和 
 
 ## 审核与到期
 
-`POST /v1/admin/first-copy/:id/approve` 的 `:id` 是生产单 ID，输入为同一组四项版本/hash 绑定。要求独立管理员、MFA、CSRF、`fulfillment:write` 和幂等键，由 AdminAccess 同事务审计。审核再次执行付款、权益、当前版本、许可、授权、冻结、规格、双方确认与制作期限门禁。返回仅含 `projectId, production, expiryReview`，不返回私人书稿全文或地址，也不授予运营私人内容读取权限。
+`POST /v1/admin/first-copy/:id/approve` 的 `:id` 是生产单 ID，输入为同一组四项版本/hash 绑定。要求独立管理员飞书会话、CSRF、`fulfillment:write` 和幂等键，由 AdminAccess 同事务审计。审核再次执行付款、权益、当前版本、许可、授权、冻结、规格、双方确认与制作期限门禁。返回仅含 `projectId, production, expiryReview`，不返回私人书稿全文或地址，也不授予运营私人内容读取权限。
 
 T22 读取 T10 原销售快照计算的制作时钟。暂停时拒绝提交及审核；恰好到期及之后只执行首版合成固定政策的 `manual_review`：`/submit`、`/expiry-review` 或管理审核均只创建/复用同一 `first_copy_expiry` 工单，不新增生产单、不消费权益、不删除资料。尚未生成书稿也可以通过 `/expiry-review` 进入工单。通用 D08 本人申请核验接口拒绝处理这种运营审核工单；工单存在或已核验都不是越过期限的凭证。本票不实现人工续期，也不擅自发明到期后的放行规则。
 

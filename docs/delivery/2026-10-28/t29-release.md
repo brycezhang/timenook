@@ -1,5 +1,7 @@
 # T29 普通商户装配与受控发布
 
+> 本页保留 2026-10-28 的发布实测。2026-10-29 后台认证方案改为飞书白名单登录，不另设密码/MFA；当前设计和待验条件以 [ADR 0016](../../adr/0016-feishu-admin-login.md)及 [#81](https://github.com/brycezhang/timenook/issues/81) 为准，历史 MFA 记录不作为新的上线要求。
+
 2026-10-28，Refs [T29 #30](https://github.com/brycezhang/timenook/issues/30)。用户授权接入普通商户并部署，随后明确独立小程序尚未申请下来，AppID/Secret 留空。本页将工程装配、目标环境发布和正式验收分别记录；未完成的 T29/T30 条件继续保留。
 
 ## 本轮发布范围

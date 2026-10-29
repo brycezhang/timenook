@@ -3,9 +3,7 @@ import type {
   DeletionStatus,
   StoryView,
   AdminAuditEntry,
-  AdminEnrollment,
-  AdminLoginCommand,
-  AdminMfaCommand,
+  AdminFeishuLogin,
   AdminRuntime,
   AdminState,
   ApiResponse,
@@ -78,24 +76,11 @@ export const adminApi = {
   async session() {
     return (await client.get<ApiResponse<AdminState>>("/session")).data;
   },
-  async login(username: string, password: string, csrf: string) {
+  async feishuLogin(csrf: string) {
     return (
-      await client.post<ApiResponse<AdminState>>(
-        "/login",
-        { username, password } satisfies AdminLoginCommand,
-        { headers: { "X-CSRF-Token": csrf } },
-      )
-    ).data;
-  },
-  async enrollment() {
-    return (await client.get<ApiResponse<AdminEnrollment>>("/mfa/enrollment"))
-      .data;
-  },
-  async mfa(code: string, csrf: string) {
-    return (
-      await client.post<ApiResponse<AdminState>>(
-        "/mfa",
-        { code } satisfies AdminMfaCommand,
+      await client.post<ApiResponse<AdminFeishuLogin>>(
+        "/feishu/login",
+        {},
         { headers: { "X-CSRF-Token": csrf } },
       )
     ).data;

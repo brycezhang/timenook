@@ -1,3 +1,4 @@
+import { syntheticFeishu, syntheticFeishuFetch } from "./feishu-fixture.mjs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
@@ -14,9 +15,13 @@ export async function createPrivacyFixtureApplication(config, options) {
     throw new Error(
       "Browser fixture requires its own fresh test privacy source",
     );
+  if (config.admin) config.admin.feishu ??= { ...syntheticFeishu };
   await bootPrivacyFixture(config);
   try {
-    const app = await createApplication(config, options);
+    const app = await createApplication(config, {
+      feishuFetch: syntheticFeishuFetch,
+      ...options,
+    });
     configurations.set(app, config);
     return app;
   } catch (error) {

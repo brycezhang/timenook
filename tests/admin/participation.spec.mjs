@@ -1,4 +1,9 @@
 import {
+  feishuIdentity,
+  feishuLogin,
+  syntheticFeishuEnv,
+} from "./feishu-fixture.mjs";
+import {
   createPrivacyFixtureApplication,
   closePrivacyFixtureApplication,
 } from "./privacy-fixture.mjs";
@@ -20,7 +25,6 @@ import https from "node:https";
 import http from "node:http";
 const apiRequire = createRequire(resolve("apps/api/package.json"));
 const { PrismaClient } = apiRequire("@prisma/client");
-const { generate } = apiRequire("otplib");
 const Redis = apiRequire("ioredis");
 const schema = `t11_browser_${randomUUID().replaceAll("-", "")}`;
 let privateDir;
@@ -85,7 +89,8 @@ test.beforeAll(async () => {
     DATABASE_URL: databaseUrl,
     API_PORT: "3418",
     ADMIN_ORIGIN: "https://localhost:3443",
-    ADMIN_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    ADMIN_SESSION_KEY: randomBytes(32).toString("base64"),
+    ...syntheticFeishuEnv,
     REDIS_KEY_PREFIX: schema,
   };
   const cert = join(privateDir, "cert.pem"),
@@ -120,7 +125,7 @@ test.beforeAll(async () => {
   expect(migrated.status).toBe(0);
   account = {
     username: `browser-${randomUUID()}`,
-    password: randomBytes(24).toString("base64url"),
+    ...feishuIdentity(),
     permissions: [
       "ops:read",
       "audit:read",
@@ -480,13 +485,7 @@ test("mini-program invitation and separate choices feed the shared care form, wh
   ).toBeVisible();
   await page.goto("./");
   watch(page);
-  await page.getByLabel("管理员账号").fill(account.username);
-  await page.getByLabel("密码", { exact: true }).fill(account.password);
-  await page.getByRole("button", { name: "继续验证" }).click();
-  const secret = await page.getByTestId("enrollment-secret").textContent();
-
-  await page.getByLabel("六位验证码").fill(await generate({ secret }));
-  await page.getByRole("button", { name: "验证并登录" }).click();
+  await feishuLogin(page, account);
   await expect(
     page.getByRole("button", { name: "客服工单", exact: true }),
   ).toBeVisible({ timeout: 5000 });
@@ -722,12 +721,7 @@ test("assisted subject choices and Care manual intake preserve real actors, with
     await page.goto("./");
   } else {
     await page.goto("./");
-    await page.getByLabel("管理员账号").fill(account.username);
-    await page.getByLabel("密码", { exact: true }).fill(account.password);
-    await page.getByRole("button", { name: "继续验证" }).click();
-    const secret = await page.getByTestId("enrollment-secret").textContent();
-    await page.getByLabel("六位验证码").fill(await generate({ secret }));
-    await page.getByRole("button", { name: "验证并登录" }).click();
+    await feishuLogin(page, account);
   }
   await page.getByRole("button", { name: "客服工单", exact: true }).click();
   await expect(page.getByLabel("代录项目编号")).toBeVisible();
