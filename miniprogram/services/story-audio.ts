@@ -3,7 +3,7 @@ import type {
   StorySourceView,
 } from "../../packages/contracts/src";
 import { API_BASE_URL } from "../config";
-import { sessionClient, ApiFailure } from "./session";
+import { sessionClient, ApiFailure, type DownloadedFile } from "./session";
 const cacheKey = `timenook.story-audio.v1:${API_BASE_URL}`;
 const unregistered = new Set<string>();
 function paths(): string[] {
@@ -83,7 +83,7 @@ export async function privateStoryAudio(
 /** Shared verified temporary playback file for story and printed-version audio. */
 export async function privateAudioFile(
   expected: { bytes: number; sha256: string },
-  download: () => Promise<WechatMiniprogram.DownloadFileSuccessCallbackResult>,
+  download: () => Promise<DownloadedFile>,
   current: () => boolean,
 ) {
   const context = sessionClient.context();

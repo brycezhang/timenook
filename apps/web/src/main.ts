@@ -1,14 +1,67 @@
 import "./style.css";
-import { webApi, WebApiError, type WebSession } from "./api";
+import {
+  webApi,
+  withWebSession,
+  onWebSessionChange,
+  WebApiError,
+  type WebSession,
+} from "./api";
 
 const root = document.querySelector<HTMLElement>("#app")!;
-let ticket = new URLSearchParams(location.hash.slice(1)).get("ticket");
-if (location.hash) history.replaceState(null, "", "/app/login");
+const initialFragment = new URLSearchParams(location.hash.slice(1));
+let ticket = initialFragment.get("ticket");
+if (
+  location.hash &&
+  (initialFragment.has("ticket") || !location.hash.startsWith("#/"))
+)
+  history.replaceState(null, "", "/app/login");
 let currentSession: WebSession | undefined;
 let generation = 0;
+let stopProduct: (() => void) | undefined;
+let checkingOwner: WebSession | undefined;
 
 function screen(content: string, className = "") {
+  const stop = stopProduct;
+  stopProduct = undefined;
+  stop?.();
+  document.body.classList.remove("product-body");
   root.innerHTML = `<header class="site-header"><a class="brand" href="/">时光里</a><span>岁月成书</span></header><main class="${className}">${content}</main>`;
+  if (document.hidden && currentSession)
+    root.querySelector<HTMLElement>("main")!.style.visibility = "hidden";
+}
+function sessionChangedScreen() {
+  screen(
+    '<h1>请重新打开项目</h1><p class="description">账号已变化或登录已失效，当前资料已清空。</p><a class="product-home" href="/app/projects">重新打开我的故事书</a><button class="quiet" type="button">退出</button>',
+    "login-screen",
+  );
+  root.querySelector("button")!.onclick = () => void logout();
+}
+async function verifyVisibleSession() {
+  const proof = currentSession,
+    owner = generation;
+  if (!proof || checkingOwner === proof) return;
+  checkingOwner = proof;
+  const main = root.querySelector<HTMLElement>("main")!;
+  main.style.visibility = "hidden";
+  const status = document.createElement("p");
+  status.className = "session-checking";
+  status.setAttribute("role", "status");
+  status.textContent = "正在核对账号…";
+  root.append(status);
+  try {
+    await withWebSession(proof, async () => {});
+    if (currentSession === proof && generation === owner)
+      main.style.visibility = document.hidden ? "hidden" : "";
+  } catch {
+    if (currentSession === proof && generation === owner) {
+      generation++;
+      currentSession = undefined;
+      sessionChangedScreen();
+    }
+  } finally {
+    status.remove();
+    if (checkingOwner === proof) checkingOwner = undefined;
+  }
 }
 function notice(message: string, error = false) {
   const p = document.createElement("p");
@@ -53,7 +106,9 @@ async function projectsScreen(owner: number) {
   );
   root.querySelector("button")!.addEventListener("click", () => void logout());
   try {
-    const projects = await webApi.projects();
+    const proof = currentSession;
+    if (!proof) return;
+    const projects = await webApi.projects(proof);
     if (owner !== generation || !currentSession) return;
     root.querySelector("[role=status]")?.remove();
     if (!projects.length) {
@@ -71,6 +126,11 @@ async function projectsScreen(owner: number) {
       role.textContent =
         project.role === "initiator" ? "我是发起人" : "我是讲述者";
       item.append(title, role);
+      const open = document.createElement("a");
+      open.className = "open-project";
+      open.href = `/app/project/${project.id}`;
+      open.textContent = "打开故事书";
+      item.append(open);
       list.append(item);
     }
     root.querySelector("main")!.append(list);
@@ -88,6 +148,41 @@ async function projectsScreen(owner: number) {
       root.querySelector("main")!.append(retry);
     }
   }
+}
+async function productScreen(owner: number, projectId: string) {
+  if (!currentSession) return;
+  screen(
+    '<a class="product-home" href="/app/projects">我的故事书</a><section id="phone"><header id="native-header"><div class="navbar"><button id="back" aria-label="返回">‹</button><span id="nav-title">岁月成书</span></div></header><div id="page"></div><div id="overlay"></div></section>',
+    "product-shell",
+  );
+  document.body.classList.add("product-body");
+  document.body.style.setProperty(
+    "--site-header-height",
+    `${root.querySelector(".site-header")!.getBoundingClientRect().height}px`,
+  );
+  const [{ installCookieProductSession }, { mountMiniProgram }] =
+    await Promise.all([
+      import("./product-session"),
+      import("../../../preview/runtime"),
+    ]);
+  if (owner !== generation || !currentSession) return;
+  const client = installCookieProductSession(currentSession);
+  const stopRuntime = mountMiniProgram({
+    product: true,
+    initialPage: `project?projectId=${projectId}`,
+    onExit: () => location.assign("/app/projects"),
+  });
+  const stopOwner = client.onInvalidated(() => {
+    if (owner !== generation) return;
+    generation++;
+    currentSession = undefined;
+    sessionChangedScreen();
+  });
+  stopProduct = () => {
+    stopOwner();
+    stopRuntime();
+    client.closeCookieSession();
+  };
 }
 async function logout() {
   const previous = currentSession;
@@ -132,8 +227,14 @@ async function start() {
     const result = await webApi.restore();
     if (owner !== generation) return;
     currentSession = result;
-    history.replaceState(null, "", "/app/projects");
-    await projectsScreen(owner);
+    const project = /^\/app\/project\/([a-f0-9-]{36})\/?$/.exec(
+      location.pathname,
+    );
+    if (project) await productScreen(owner, project[1]);
+    else {
+      history.replaceState(null, "", "/app/projects");
+      await projectsScreen(owner);
+    }
   } catch (error) {
     if (owner !== generation) return;
     loginScreen(
@@ -149,7 +250,7 @@ window.addEventListener("pagehide", () => {
   screen("<h1>打开你的故事书</h1>", "login-screen");
 });
 window.addEventListener("pageshow", (event) => {
-  if (event.persisted) void start();
+  if (event.persisted) location.reload();
 });
 window.addEventListener("hashchange", () => {
   const next = new URLSearchParams(location.hash.slice(1)).get("ticket");
@@ -159,5 +260,12 @@ window.addEventListener("hashchange", () => {
   ticket = next;
   history.replaceState(null, "", "/app/login");
   void start();
+});
+onWebSessionChange(() => void verifyVisibleSession());
+window.addEventListener("focus", () => void verifyVisibleSession());
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && currentSession)
+    root.querySelector<HTMLElement>("main")!.style.visibility = "hidden";
+  else void verifyVisibleSession();
 });
 void start();

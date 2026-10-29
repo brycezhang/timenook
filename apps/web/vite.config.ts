@@ -20,6 +20,9 @@ const proxy = process.env.TIMENOOK_WEB_API_TARGET
 
 export default defineConfig({
   base: "/app/",
+  define: {
+    __TIMENOOK_COOKIE_WEB__: "true",
+  },
   server: {
     host: "127.0.0.1",
     port: 4330,

@@ -37,7 +37,7 @@
     "dev:web": "pnpm --filter @timenook/web dev",
     "build:web": "pnpm --filter @timenook/web build",
     "typecheck:web": "pnpm --filter @timenook/web typecheck",
-    "test:web": "pnpm exec playwright test tests/admin/web-entry.spec.mjs tests/admin/web-session.spec.mjs -c playwright.admin.config.mjs"
+    "test:web": "pnpm exec playwright test tests/admin/web-entry.spec.mjs tests/admin/web-session.spec.mjs tests/admin/web-product-session.spec.mjs -c playwright.admin.config.mjs"
   },
   "devDependencies": {
     "@napi-rs/canvas": "0.1.100",
