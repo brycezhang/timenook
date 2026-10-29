@@ -194,6 +194,11 @@ Page({
     );
   },
   async refresh() {
+    this.closePlayback();
+    this.liveRecorder?.stop();
+    this.liveRecorder?.unsubscribe();
+    if (this.timerHandle) clearInterval(this.timerHandle);
+    this.timerHandle = undefined;
     this.clearFollowup();
     this.storyOwnerContext = "";
     const generation = ++this.generation,
@@ -267,19 +272,9 @@ Page({
       }
     } catch (error) {
       if (generation === this.generation) {
-        this.liveRecorder?.unsubscribe();
+        this.onHide();
         this.liveRecorder = null;
-        this.context = null;
-        this.storyOwnerContext = "";
         this.setData({
-          question: "",
-          interview: null,
-          localClips: [],
-          interviews: [],
-          pendingInterviews: [],
-          customText: "",
-          customIntent: "",
-          canRecord: false,
           status: error instanceof Error ? error.message : "查询失败，请重试",
         });
       }
@@ -870,7 +865,6 @@ Page({
       );
       if (
         !this.current(generation, context) ||
-        !result.allowed ||
         this.liveRecorder !== device ||
         this.data.interview?.id !== interview.id ||
         (
@@ -879,6 +873,7 @@ Page({
         ).id !== actualQuestionId
       )
         return;
+      if (!result.allowed) throw new ApiFailure("FORBIDDEN", 403);
       if (
         result.actualQuestionId !== actualQuestionId ||
         result.questionVersion !== questionVersion
@@ -892,21 +887,8 @@ Page({
           error instanceof ApiFailure &&
           (error.status === 401 || error.status === 403)
         ) {
-          this.liveRecorder?.unsubscribe();
+          this.onHide();
           this.liveRecorder = null;
-          this.context = null;
-          this.storyOwnerContext = "";
-          this.selection = null;
-          this.setData({
-            question: "",
-            interview: null,
-            localClips: [],
-            interviews: [],
-            pendingInterviews: [],
-            customText: "",
-            customIntent: "",
-            canRecord: false,
-          });
         }
         this.setData({
           status: error instanceof Error ? error.message : "不能开始录音",

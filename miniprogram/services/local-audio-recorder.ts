@@ -146,7 +146,7 @@ export class LocalAudioRecorder {
     if (this.active && this.current.stage === "paused") this.manager.resume();
   }
   stop() {
-    if (this.active) {
+    if (this.active && !this.stopRequested) {
       this.stopRequested = true;
       if (["recording", "paused"].includes(this.current.stage))
         this.manager.stop();

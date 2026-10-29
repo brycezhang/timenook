@@ -22,7 +22,11 @@ const compiled = await build({
   define: { __TIMENOOK_API_BASE_URL__: JSON.stringify(base) },
 });
 function harness(
-  options: { deferSaves?: boolean; clock?: { now: number } } = {},
+  options: {
+    deferSaves?: boolean;
+    deferStops?: boolean;
+    clock?: { now: number };
+  } = {},
 ) {
   const storage = new Map<string, unknown>([
       ["timenook.mode.v1", "live"],
@@ -33,9 +37,11 @@ function harness(
     files = new Set<string>(),
     handlers: Record<string, ((v?: any) => void)[]> = {},
     pendingSaves: any[] = [],
+    pendingStops: (() => void)[] = [],
     navigation: any[] = [],
     modals: any[] = [],
     played: string[] = [],
+    playingAudios = new Set<object>(),
     intervals = new Map<number, () => void>();
   let intervalId = 0;
   const clock = options.clock ?? { now: Date.now() };
@@ -47,7 +53,10 @@ function harness(
   let page: any,
     saves = 0,
     failManifest = false,
-    starts = 0;
+    starts = 0,
+    resumes = 0,
+    stops = 0,
+    deviceStage = "inactive";
   const emit = (event: string, v?: any) =>
     handlers[event]?.forEach((fn) => fn(v));
   runInNewContext(compiled.outputFiles[0].text, {
@@ -93,16 +102,30 @@ function harness(
         onStop: (f: any) => (handlers.stop ??= []).push(f),
         onPause: (f: any) => (handlers.pause ??= []).push(f),
         onResume: (f: any) => (handlers.resume ??= []).push(f),
-        pause: () => emit("pause"),
-        resume: () => emit("resume"),
+        pause: () => {
+          deviceStage = "paused";
+          emit("pause");
+        },
+        resume: () => {
+          resumes++;
+          deviceStage = "recording";
+          emit("resume");
+        },
         onError: (f: any) => (handlers.error ??= []).push(f),
         onInterruptionBegin: (f: any) => (handlers.interrupt ??= []).push(f),
         start: () => {
           starts++;
+          deviceStage = "recording";
           emit("start");
         },
-        stop: () =>
-          emit("stop", { tempFilePath: "native-temp", duration: 1080 }),
+        stop: () => {
+          stops++;
+          deviceStage = "inactive";
+          const finish = () =>
+            emit("stop", { tempFilePath: "native-temp", duration: 1080 });
+          if (options.deferStops) pendingStops.push(finish);
+          else finish();
+        },
       }),
       getFileSystemManager: () => ({
         saveFile: (o: any) => {
@@ -125,8 +148,11 @@ function harness(
         onError() {},
         play() {
           played.push(this.src);
+          playingAudios.add(this);
         },
-        destroy() {},
+        destroy() {
+          playingAudios.delete(this);
+        },
       }),
       showModal: (options: any) => modals.push(options),
       navigateTo: (options: any) => navigation.push(options),
@@ -143,6 +169,7 @@ function harness(
     files,
     emit,
     pendingSaves,
+    pendingStops,
     navigation,
     modals,
     played,
@@ -159,6 +186,18 @@ function harness(
     },
     get starts() {
       return starts;
+    },
+    get resumes() {
+      return resumes;
+    },
+    get stops() {
+      return stops;
+    },
+    get deviceStage() {
+      return deviceStage;
+    },
+    get playingAudioCount() {
+      return playingAudios.size;
     },
     fail(value: boolean) {
       failManifest = value;
@@ -413,6 +452,157 @@ test("one recording pauses without counting idle time and resumes only after rec
   assert.equal(h.page.data.localClips.length, 1);
   assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
   assert.equal(h.uploads.length, 0, "stopping does not submit the recording");
+});
+
+for (const denial of [403, "not-allowed"])
+  test(`a denied resume (${denial}) stops the paused microphone, preserves its answer and releases it for the next recording`, async (t) => {
+    const h = harness({ deferSaves: true });
+    t.after(() => h.page.onUnload());
+    await ready(h);
+    await start(h);
+    await h.page.togglePause();
+    assert.equal(h.deviceStage, "paused");
+    const resuming = h.page.togglePause();
+    if (denial === "not-allowed")
+      respond(h.requests.shift(), { allowed: false }, 201);
+    else respond(h.requests.shift(), undefined, 403);
+    await resuming;
+    assert.equal(h.deviceStage, "inactive", "denial must stop the device");
+    assert.equal(h.resumes, 0, "denial must never resume capture");
+    assert.equal(h.stops, 1);
+    assert.equal(h.page.data.question, "");
+    assert.equal(h.page.data.interview, null);
+    assert.equal(h.uploads.length, 0);
+    h.page.onUnload();
+    assert.equal(h.stops, 1, "leaving cannot leave another active recording");
+    h.pendingSaves.shift().finish();
+    await tick();
+    assert.equal(h.files.size, 1);
+    assert.equal(h.page.data.localClips.length, 0, "late save stays private");
+
+    const returning = h.page.onShow();
+    respond(h.requests.shift(), { ...context, interviews: [interview] });
+    await returning;
+    assert.equal(h.page.data.localClips.length, 1);
+    assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+    assert.ok(h.files.has(h.page.data.localClips[0].path));
+    h.page.chooseAnother();
+    const selecting = h.page.selectQuestion();
+    const nextInterviewId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    respond(
+      h.requests.shift(),
+      {
+        ...interview,
+        id: nextInterviewId,
+        actualQuestion: {
+          ...question,
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          answerRef: nextInterviewId,
+        },
+      },
+      201,
+    );
+    await selecting;
+    await start(h);
+    assert.equal(
+      h.starts,
+      2,
+      "the saved recording must release the device lease",
+    );
+    assert.equal(h.deviceStage, "recording");
+  });
+
+for (const sessionLoss of ["401", "expired"])
+  test(`a paused resume after ${sessionLoss} login loss stops capture and retains the original answer`, async (t) => {
+    const h = harness();
+    t.after(() => h.page.onUnload());
+    await ready(h);
+    await start(h);
+    await h.page.togglePause();
+    if (sessionLoss === "expired") h.expireSession();
+    const resuming = h.page.togglePause();
+    if (sessionLoss === "401") respond(h.requests.shift(), undefined, 401);
+    await resuming;
+    await tick();
+    assert.equal(h.deviceStage, "inactive");
+    assert.equal(h.resumes, 0);
+    assert.equal(h.stops, 1);
+    assert.equal(h.page.data.question, "");
+    assert.equal(h.page.data.interview, null);
+    assert.equal(h.files.size, 1);
+    h.page.onUnload();
+    assert.equal(h.stops, 1);
+
+    h.storage.set(`timenook.session.v1:${base}`, {
+      ...login,
+      session: {
+        id: "77777777-7777-4777-8777-777777777777",
+        token: "n".repeat(43),
+        expiresAt: "2099-01-02T00:00:00Z",
+      },
+    });
+    const returning = h.page.onShow();
+    respond(h.requests.shift(), { ...context, interviews: [interview] });
+    await returning;
+    assert.equal(h.page.data.localClips.length, 1);
+    assert.equal(h.page.data.localClips[0].actualQuestionId, question.id);
+    assert.ok(h.files.has(h.page.data.localClips[0].path));
+  });
+
+for (const exit of ["onHide", "onUnload", "switch-account"])
+  test(`${exit} stops a paused recording and leaves its original file with its original account`, async (t) => {
+    const h = harness();
+    t.after(() => h.page.onUnload());
+    await ready(h);
+    await start(h);
+    await h.page.togglePause();
+    if (exit === "switch-account") {
+      h.storage.set(`timenook.session.v1:${base}`, {
+        user: { id: "88888888-8888-4888-8888-888888888888" },
+        session: {
+          id: "99999999-9999-4999-8999-999999999999",
+          token: "n".repeat(43),
+          expiresAt: "2099-01-01T00:00:00Z",
+        },
+      });
+      const returning = h.page.onShow();
+      respond(h.requests.shift(), context);
+      await returning;
+    } else h.page[exit]();
+    await tick();
+    assert.equal(h.deviceStage, "inactive");
+    assert.equal(h.stops, 1);
+    assert.equal(h.files.size, 1);
+    assert.equal(h.page.data.localClips.length, 0);
+    const manifests = [...h.storage.entries()].filter(
+      ([key, value]) =>
+        key.includes("recording") &&
+        Array.isArray(value) &&
+        value.some(
+          (clip) => clip && typeof clip === "object" && "path" in clip,
+        ),
+    );
+    assert.equal(manifests.length, 1);
+    assert.ok(manifests[0][0].includes(login.user.id));
+  });
+
+test("denied refresh and leaving share one asynchronous stop and save a paused original after the native callback", async (t) => {
+  const h = harness({ deferStops: true });
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.togglePause();
+  const refreshing = h.page.refresh();
+  respond(h.requests.shift(), undefined, 403);
+  await refreshing;
+  h.page.onUnload();
+  assert.equal(h.deviceStage, "inactive");
+  assert.equal(h.stops, 1, "one stop request must wait for its native result");
+  h.pendingStops.shift()!();
+  await tick();
+  assert.equal(h.files.size, 1);
+  assert.equal(h.page.data.localClips.length, 0);
+  assert.equal(h.page.data.interview, null);
 });
 
 test("restoring the same interview derives elapsed time from saved local clips and adds only the current recording segment", async (t) => {
@@ -796,6 +986,75 @@ test("uploading an older saved answer sends its original question and refuses a 
   assert.equal(h.uploads.length, 0);
   assert.equal(h.files.size, 1);
 });
+
+for (const exit of ["onHide", "onUnload", "switch-account"])
+  test(`${exit} closes private local playback while preserving the original file`, async (t) => {
+    const h = harness();
+    t.after(() => h.page.onUnload());
+    await ready(h);
+    await start(h);
+    await h.page.record();
+    await tick();
+    const clip = h.page.data.localClips[0];
+    const playing = h.page.playLocal({
+      currentTarget: { dataset: { id: clip.clientClipId } },
+      detail: { value: "" },
+    });
+    respond(h.requests.shift(), { allowed: true }, 201);
+    await playing;
+    assert.equal(h.playingAudioCount, 1);
+    if (exit === "switch-account") {
+      h.storage.set(`timenook.session.v1:${base}`, {
+        user: { id: "88888888-8888-4888-8888-888888888888" },
+        session: {
+          id: "99999999-9999-4999-8999-999999999999",
+          token: "n".repeat(43),
+          expiresAt: "2099-01-01T00:00:00Z",
+        },
+      });
+      const returning = h.page.onShow();
+      respond(h.requests.shift(), context);
+      await returning;
+    } else h.page[exit]();
+    assert.equal(h.playingAudioCount, 0);
+    assert.equal(h.page.data.playingId, "");
+    assert.equal(h.page.data.localClips.length, 0);
+    assert.equal(h.files.size, 1);
+  });
+
+for (const deniedStatus of [403, 401])
+  test(`refresh closes local playback before a ${deniedStatus} response clears the review`, async (t) => {
+    const h = harness();
+    t.after(() => h.page.onUnload());
+    await ready(h);
+    await start(h);
+    await h.page.record();
+    await tick();
+    const clip = h.page.data.localClips[0];
+    const playing = h.page.playLocal({
+      currentTarget: { dataset: { id: clip.clientClipId } },
+      detail: { value: "" },
+    });
+    respond(h.requests.shift(), { allowed: true }, 201);
+    await playing;
+    assert.equal(h.playingAudioCount, 1);
+
+    const refreshing = h.page.refresh();
+    assert.equal(
+      h.playingAudioCount,
+      0,
+      "refresh must stop audible private audio",
+    );
+    respond(h.requests.shift(), undefined, deniedStatus);
+    await refreshing;
+    assert.equal(h.page.data.question, "");
+    assert.equal(h.page.data.interview, null);
+    assert.equal(h.page.data.playingId, "");
+    assert.equal(h.page.data.localClips.length, 0);
+    assert.equal(h.files.size, 1, "loss of access keeps the saved original");
+    h.page.onUnload();
+    assert.equal(h.playingAudioCount, 0);
+  });
 
 test("an old local manifest without a question restores only the immutable interview starting question", async (t) => {
   const h = harness();
