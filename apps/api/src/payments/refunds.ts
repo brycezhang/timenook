@@ -117,11 +117,11 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
   beforeExecution(id: string) {
     return this.runtime.beforeExecution(id);
   }
-  private async payloadExpiredIn(tx: Tx, projectId: string) {
+  private async payloadDeletedIn(tx: Tx, projectId: string) {
     if (await this.rights.deletedIn(tx, projectId, "activeData")) return true;
-    // The sold cutoff takes effect even while physical cleanup awaits a scan.
-    const terms = await this.terms.read(projectId, undefined, tx);
-    return terms.retention?.activeData?.state === "expired";
+    // A verified deletion stops private payload access before physical cleanup.
+    const terms = await this.terms.read(projectId, tx);
+    return terms.retention?.activeData?.state === "deleted";
   }
   private view(row: Refund, materialsDeleted = false): RefundView {
     return {
@@ -180,7 +180,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         /* Unfrozen or unsupported policies remain visibly unavailable. */
       }
     return {
-      ...this.view(row, await this.payloadExpiredIn(tx, row.projectId)),
+      ...this.view(row, await this.payloadDeletedIn(tx, row.projectId)),
       rule,
       productionAttemptId: attempt?.id ?? null,
       productionReviewRequired:
@@ -269,7 +269,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     });
     if (prior) {
       if (prior.requestHash !== hash(body)) throw conflict();
-      return this.view(prior, await this.payloadExpiredIn(tx, project.id));
+      return this.view(prior, await this.payloadDeletedIn(tx, project.id));
     }
     const subject = await tx.projectSubject.findUniqueOrThrow({
         where: { projectId: project.id },
@@ -292,7 +292,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         createdAt: requestedAt,
       },
     });
-    const materialsDeleted = await this.payloadExpiredIn(tx, project.id);
+    const materialsDeleted = await this.payloadDeletedIn(tx, project.id);
     return this.view(
       await tx.refund.create({
         data: {
@@ -425,7 +425,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       where: { id: refundId },
       select: { projectId: true },
     });
-    const erased = await this.payloadExpiredIn(tx, refund.projectId);
+    const erased = await this.payloadDeletedIn(tx, refund.projectId);
     await tx.refundCommand.create({
       data: {
         refundId,
@@ -564,7 +564,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         state: "verified",
         verifiedBy: actorId,
         verifiedAt: now,
-        verificationEvidence: (await this.payloadExpiredIn(
+        verificationEvidence: (await this.payloadDeletedIn(
           tx,
           refund.projectId,
         ))
@@ -640,7 +640,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     await tx.refund.update({
       where: { id },
       data: {
-        productionEvidence: (await this.payloadExpiredIn(tx, refund.projectId))
+        productionEvidence: (await this.payloadDeletedIn(tx, refund.projectId))
           ? null
           : body.evidenceRef,
         productionEvidenceHash: createHash("sha256")

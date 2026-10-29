@@ -156,23 +156,7 @@ export function validateSalesAdmission(input: unknown): AdmissionReport {
     reference(`${decision}.review.decisionRef`);
     date(`${decision}.review.decidedAt`);
   }
-  quantity("d02.duration", "calendar_days");
-  choice("d02.startsAt", ["payment_verified", "subject_participation"]);
-  quantity("d02.notStarted.maxWait", "calendar_days");
-  exact("d02.notStarted.startsAt", "payment_verified");
-  choice("d02.notStarted.resolution", [
-    "contact_and_offer_refund",
-    "expire_creation",
-  ]);
-  reference("d02.notStarted.noticeRef");
-  choice("d02.pause.clock", ["continues", "stops"]);
-  quantity("d02.pause.maxTotal", "calendar_days", 0);
-  choice("d02.pause.atLimit", ["resume_clock", "manual_review"]);
-  reference("d02.pause.policyRef");
-  exact("d02.expiration.newRecording", "blocked");
-  choice("d02.expiration.firstCopy", ["blocked", "manual_review"]);
-  exact("d02.expiration.existingData", "per_d03");
-  reference("d02.expiration.noticeRef");
+  exact("d02.service", "lifetime");
   const serviceTerm = (
     path: string,
     starts: readonly string[],
@@ -182,15 +166,10 @@ export function validateSalesAdmission(input: unknown): AdmissionReport {
     quantity(`${path}.duration`, "calendar_days");
     choice(`${path}.startsAt`, starts);
   };
-  const serviceStarts = [
-    "payment_verified",
-    "subject_participation",
-    "creation_expired",
-    "delivery_completed",
-  ];
-  serviceTerm("d03.onlinePlayback", serviceStarts, ["expires"]);
-  exact("d03.onlinePlayback.expires", "stop_access");
-  serviceTerm("d03.exportRequests", serviceStarts, ["channelRef"]);
+  shape("d03.onlinePlayback", ["service"]);
+  exact("d03.onlinePlayback.service", "lifetime");
+  shape("d03.exportRequests", ["service", "channelRef"]);
+  exact("d03.exportRequests.service", "lifetime");
   reference("d03.exportRequests.channelRef");
   for (const kind of [
     "originalAudio",
@@ -200,13 +179,15 @@ export function validateSalesAdmission(input: unknown): AdmissionReport {
     "transcripts",
     "confirmedStories",
     "bookPdf",
+    "exportPackages",
     "activeData",
     "historicalObjects",
     "backupCopies",
   ]) {
-    serviceTerm(`d03.retention.${kind}`, [...serviceStarts, "asset_created"]);
+    shape(`d03.retention.${kind}`, ["service"]);
+    exact(`d03.retention.${kind}.service`, "lifetime");
   }
-  serviceTerm("d03.retention.exportPackages", ["export_ready"]);
+  // Supplier processing copies are temporary; necessary project sources remain lifetime.
   serviceTerm("d03.retention.supplierCopies", ["processing_completed"]);
   for (const kind of [
     "activeData",
@@ -218,11 +199,7 @@ export function validateSalesAdmission(input: unknown): AdmissionReport {
     exact(`d03.deletion.${kind}.startsAt`, "verified_deletion_request");
     reference(`d03.deletion.${kind}.procedureRef`);
   }
-  quantity("d03.expiryNotice.advance", "calendar_days", 0);
-  reference("d03.expiryNotice.channelRef");
-  reference("d03.expiryNotice.policyRef");
   exact("d03.copyStatusSeparately", true);
-  exact("d03.restoreAppliesDeletionLedger", true);
   for (const [kind, unit] of [
     ["recordingPerClip", "seconds"],
     ["recordingTotal", "seconds"],
@@ -549,31 +526,14 @@ export function validateSalesAdmission(input: unknown): AdmissionReport {
       }
     }
   }
-  shape("d02", [
-    "review",
-    "duration",
-    "startsAt",
-    "notStarted",
-    "pause",
-    "expiration",
-  ]);
-  shape("d02.notStarted", ["maxWait", "startsAt", "resolution", "noticeRef"]);
-  shape("d02.pause", ["clock", "maxTotal", "atLimit", "policyRef"]);
-  shape("d02.expiration", [
-    "newRecording",
-    "firstCopy",
-    "existingData",
-    "noticeRef",
-  ]);
+  shape("d02", ["review", "service"]);
   shape("d03", [
     "review",
     "onlinePlayback",
     "exportRequests",
     "retention",
     "deletion",
-    "expiryNotice",
     "copyStatusSeparately",
-    "restoreAppliesDeletionLedger",
   ]);
   shape("d03.retention", [
     "originalAudio",
@@ -602,7 +562,6 @@ export function validateSalesAdmission(input: unknown): AdmissionReport {
     "supplierCopies",
   ])
     shape(`d03.deletion.${kind}`, ["within", "startsAt", "procedureRef"]);
-  shape("d03.expiryNotice", ["advance", "channelRef", "policyRef"]);
   shape("d04", [
     "review",
     "userQuotas",

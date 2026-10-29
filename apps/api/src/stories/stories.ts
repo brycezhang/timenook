@@ -529,12 +529,12 @@ export class Stories {
         }
         if (!body.confirmed && body.allowInBook)
           throw new BadRequestException();
-        const payloadExpired =
-          await this.participation.activeDataPayloadExpiredIn(tx, projectId);
-        if (payloadExpired) {
+        const payloadDeleted =
+          await this.participation.activeDataDeletedIn(tx, projectId);
+        if (payloadDeleted) {
           if (body.confirmed && body.allowInBook)
             throw new ForbiddenException(
-              "Expired activity cannot acquire new authorization",
+              "Deleted activity cannot acquire new authorization",
             );
           const basis = body.confirmed
             ? await tx.storyDecision.findFirst({

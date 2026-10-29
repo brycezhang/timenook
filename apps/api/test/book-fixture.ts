@@ -193,7 +193,6 @@ export async function startBookFixture() {
   const snapshot = JSON.parse(
     readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
   );
-  snapshot.admission.d02.duration.value = 1;
   const draftId = randomUUID();
   await db.packageDraft.create({
     data: { id: draftId, realm: "local", ...snapshot },

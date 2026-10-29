@@ -65,9 +65,8 @@ BEGIN RAISE EXCEPTION 'Project service terms are immutable'; END $$;
 CREATE TRIGGER immutable_service_terms BEFORE UPDATE ON project_service_terms FOR EACH ROW EXECUTE FUNCTION protect_service_terms();
 CREATE TABLE project_service_events (
  project_id UUID NOT NULL REFERENCES project_service_terms(project_id),
- event_id TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('subject_participation','delivery_completed','pause','resume')),
- occurred_at TIMESTAMPTZ(3) NOT NULL, support_case_ref TEXT, operator_id UUID,
- PRIMARY KEY(project_id,event_id)
+ event_id TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('subject_participation','delivery_completed')),
+ occurred_at TIMESTAMPTZ(3) NOT NULL, PRIMARY KEY(project_id,event_id)
 );
 CREATE UNIQUE INDEX project_service_fact_once ON project_service_events(project_id,kind) WHERE kind IN ('subject_participation','delivery_completed');
 CREATE INDEX project_service_event_time ON project_service_events(project_id,occurred_at);

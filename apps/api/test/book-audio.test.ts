@@ -651,191 +651,29 @@ test("withdrawal of the exact historical story permission and deleted recording 
   }
 });
 
-async function packageWithDurations(values: {
-  playback: number;
-  audio: number;
-  pdf: number;
-  stories: number;
-}) {
-  const snapshot = JSON.parse(
-    readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
-  );
-  snapshot.admission.d02.duration.value = 1;
-  snapshot.admission.d03.onlinePlayback.duration.value = values.playback;
-  snapshot.admission.d03.retention.originalAudio.duration.value = values.audio;
-  snapshot.admission.d03.retention.bookPdf.duration.value = values.pdf;
-  snapshot.admission.d03.retention.confirmedStories.duration.value =
-    values.stories;
-  const draftId = randomUUID(),
-    versionId = randomUUID();
-  await db.packageDraft.create({
-    data: { id: draftId, realm: "local", ...snapshot },
+test("original audio and Range playback remain available beyond 2099 with a current security session", async (t) => {
+  const p = await frozenEntry();
+  await db.session.updateMany({
+    where: { userId: p.narrator.id },
+    data: { expiresAt: new Date("2200-01-01T00:00:00Z") },
   });
-  await db.packageVersion.create({
-    data: {
-      id: versionId,
-      realm: "local",
-      purpose: "local_preview",
-      draftId,
-      draftRevision: 1,
-      snapshot,
-      publicOffer: {
-        title: "合成独立回听期限套餐",
-        price: { value: 99900, unit: "fen", currency: "CNY" },
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: Date.parse("2100-01-01T00:00:00Z"),
+  });
+  try {
+    const view = data(await request("GET", p.entry, p.narrator.token), 200);
+    assert.equal(view.accessExpiresAt, null);
+    const range = await app.inject({
+      method: "GET",
+      url: audioUrl(p, view),
+      headers: {
+        authorization: `Bearer ${p.narrator.token}`,
+        range: "bytes=0-9",
       },
-    },
-  });
-  return versionId;
-}
-
-test("old sale playback lasts independently of production, PDF and story retention, then blocks exactly at its own deadline including Range", async (t) => {
-  const versionId = await packageWithDurations({
-    playback: 365,
-    audio: 400,
-    pdf: 1,
-    stories: 1,
-  });
-  const p = await frozenEntry(await bound(versionId)),
-    expiresAt = Date.now() + 60000;
-  // Controlled historical delivery fixture; real delivery facts remain T23.
-  const deliveredAt = new Date(expiresAt - 365 * 86400000);
-  await db.projectServiceEvent.create({
-    data: {
-      projectId: p.projectId,
-      eventId: `synthetic-delivery:${randomUUID()}`,
-      kind: "delivery_completed",
-      occurredAt: deliveredAt,
-    },
-  });
-  // Establish the expired categories through real maintenance before freezing
-  // the playback boundary. An independently published but uncommitted deletion
-  // correctly closes streams; that recovery window is not an active grant.
-  const beforeExpiry = new Date(expiresAt - 1);
-  await app.get(Deletions).sweep(beforeExpiry);
-  const receipts = await db.$queryRaw<{ category: string; state: string }[]>`
-    SELECT i.category,i.state FROM privacy_deletion_items i
-    JOIN privacy_deletions d ON d.id=i.event_id
-    WHERE d.project_id=${p.projectId}::uuid AND d.scoped_export_id IS NULL
-      AND i.layer='active_database' AND i.category IN ('bookPdf','confirmedStories')
-  `;
-  for (const category of ["bookPdf", "confirmedStories"]) {
-    const items = receipts.filter((item) => item.category === category);
-    assert.ok(items.length > 0, `actual ${category} erasure was registered`);
-    assert.ok(items.every((item) => item.state === "completed"));
-  }
-  assert.equal(
-    (await db.bookVersion.findUniqueOrThrow({ where: { id: p.book.id } }))
-      .snapshot,
-    null,
-  );
-  assert.equal(
-    (
-      await db.storyRevision.findUniqueOrThrow({
-        where: { id: p.story.revision.id },
-      })
-    ).paragraphs,
-    null,
-  );
-  assert.deepEqual(
-    (
-      await db.bookAudioEntry.findUniqueOrThrow({
-        where: { id: p.item.entry.id },
-      })
-    ).audio,
-    p.item.audio,
-  );
-  for (const frozen of p.item.audio) {
-    const clip = await db.recordingClip.findUniqueOrThrow({
-      where: { id: frozen.clipId },
     });
-    assert.deepEqual(
-      readFileSync(join(root, "objects", "sealed", `${clip.intentId}.mp3`)),
-      syntheticAudio(),
-    );
-  }
-  const terms = new ProjectServiceTerms(config.databaseUrl);
-  try {
-    const current = await terms.read(p.projectId, beforeExpiry);
-    assert.equal(current.playback?.state, "active");
-    assert.equal(current.retention?.originalAudio?.state, "active");
-  } finally {
-    await terms.close();
-  }
-  const before = data(await request("GET", p.entry, p.narrator.token), 200);
-  assert.equal(before.accessExpiresAt, new Date(expiresAt).toISOString());
-  assert.equal(
-    (await request("GET", `/v1/projects/${p.projectId}/book`, p.narrator.token))
-      .statusCode,
-    403,
-  );
-  // A later available offer uses a different playback period; the old sale stays fixed.
-  await packageWithDurations({
-    playback: 1,
-    audio: 400,
-    pdf: 400,
-    stories: 400,
-  });
-  for (const offset of [-1, 0, 1]) {
-    t.mock.timers.enable({ apis: ["Date"], now: expiresAt + offset });
-    try {
-      const expected = offset < 0 ? 200 : 403;
-      assert.equal(
-        (await request("GET", p.entry, p.narrator.token)).statusCode,
-        expected,
-      );
-      assert.equal(
-        (await request("GET", audioUrl(p, before), p.narrator.token))
-          .statusCode,
-        expected,
-      );
-      const range = await app.inject({
-        method: "GET",
-        url: audioUrl(p, before),
-        headers: {
-          authorization: `Bearer ${p.narrator.token}`,
-          range: "bytes=0-9",
-        },
-      });
-      assert.equal(range.statusCode, offset < 0 ? 206 : 403);
-      if (offset >= 0) assert.ok(!/deleted|已删除/.test(range.body));
-    } finally {
-      t.mock.timers.reset();
-    }
-  }
-});
-
-test("original-audio retention can end earlier than the online playback contract", async (t) => {
-  const p = await frozenEntry(
-    await bound(
-      await packageWithDurations({
-        playback: 365,
-        audio: 1,
-        pdf: 400,
-        stories: 400,
-      }),
-    ),
-  );
-  const expiresAt = Date.now() + 60000;
-  await db.projectServiceEvent.create({
-    data: {
-      projectId: p.projectId,
-      eventId: `synthetic-delivery:${randomUUID()}`,
-      kind: "delivery_completed",
-      occurredAt: new Date(expiresAt - 86400000),
-    },
-  });
-  const before = data(await request("GET", p.entry, p.narrator.token), 200);
-  assert.equal(before.accessExpiresAt, new Date(expiresAt).toISOString());
-  t.mock.timers.enable({ apis: ["Date"], now: expiresAt });
-  try {
-    assert.equal(
-      (await request("GET", p.entry, p.narrator.token)).statusCode,
-      403,
-    );
-    assert.equal(
-      (await request("GET", audioUrl(p, before), p.narrator.token)).statusCode,
-      403,
-    );
+    assert.equal(range.statusCode, 206);
+    assert.equal(range.rawPayload.length, 10);
   } finally {
     t.mock.timers.reset();
   }
@@ -897,20 +735,11 @@ test("rebinding the narrator immediately denies the old account and stale epoch 
   );
 });
 
-test("slow private storage reads cannot outlive sharing, session, independent playback deadline or storage configuration", async (t) => {
-  for (const change of ["sharing", "session", "deadline", "scope"] as const) {
+test("slow private storage reads cannot outlive sharing, session or storage configuration", async (t) => {
+  for (const change of ["sharing", "session", "scope"] as const) {
     await t.test(change, async () => {
       const p = await frozenEntry();
       const expiresAt = Date.now() + 60000;
-      if (change === "deadline")
-        await db.projectServiceEvent.create({
-          data: {
-            projectId: p.projectId,
-            eventId: `synthetic-delivery:${randomUUID()}`,
-            kind: "delivery_completed",
-            occurredAt: new Date(expiresAt - 365 * 86400000),
-          },
-        });
       const before = data(await request("GET", p.entry, p.buyer.token), 200);
       const clip = await db.recordingClip.findUniqueOrThrow({
         where: { id: before.clips[0].clipId },
@@ -953,8 +782,6 @@ test("slow private storage reads cannot outlive sharing, session, independent pl
           });
           assert.equal(revoked.statusCode, 204, revoked.body);
         }
-        if (change === "deadline")
-          t.mock.timers.enable({ apis: ["Date"], now: expiresAt });
         if (change === "scope")
           config.recording!.storageRoot = originalRoot + "-changed";
         release();
@@ -971,7 +798,6 @@ test("slow private storage reads cannot outlive sharing, session, independent pl
         clearTimeout(deadline);
         interceptBookObjectRead();
         config.recording!.storageRoot = originalRoot;
-        if (change === "deadline") t.mock.timers.reset();
         await downloading;
       }
     });

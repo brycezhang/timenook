@@ -1,6 +1,6 @@
 # 双方确认与首本制作本地验证
 
-T22 接入 T10 已核验付款及唯一首本权益、T12 当次协助证据和 T20/T21 确定书稿。当前仍由 `books.mode=synthetic-local` 与 `environment=test` 隔离，只在既有 Book 合成应用中注册路由；默认配置和生产不能启用。本票不冻结 D01/D02/D05/D06，不付款、不联系印厂，也不执行 T23 的交接。
+T22 接入 T10 已核验付款及唯一首本权益、T12 当次协助证据和 T20/T21 确定书稿。当前仍由 `books.mode=synthetic-local` 与 `environment=test` 隔离，只在既有 Book 合成应用中注册路由；默认配置和生产不能启用。本票不冻结 D01/D05/D06，不付款、不联系印厂，也不执行 T23 的交接。
 
 ## 用户接口
 
@@ -8,11 +8,10 @@ T22 接入 T10 已核验付款及唯一首本权益、T12 当次协助证据和 
 
 | 路径             | 方法 | 输入与结果                                                                                                                           |
 | ---------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `/`              | GET  | 当前书稿、双方有效确认、地址版本/hash、已付金额、制作一本/本次零付款、原订单配送/生产/物流约定、期限和拒绝原因                       |
+| `/`              | GET  | 当前书稿、双方有效确认、地址版本/hash、已付金额、制作一本/本次零付款、原订单配送/生产/物流约定、长期制作状态和拒绝原因               |
 | `/address`       | POST | 发起人提交 `expectedVersion, recipientName, phone, regionCode, detail`；地区必须在原销售快照包含范围内且不在排除范围                 |
 | `/confirmations` | POST | `role, bookVersionId, snapshotHash, pdfHash, noticeVersion, evidenceRef`；发起人另传 `addressHash`，当次协助另传 `assistedSessionId` |
 | `/submit`        | POST | 发起人提交 `bookVersionId, snapshotHash, pdfHash, addressHash`；唯一预留首本，返回原生产单或冲突                                     |
-| `/expiry-review` | POST | 空对象；制作到期时申请共享人工审核工单，无需先准备 PDF、地址或双方确认                                                               |
 
 `noticeVersion=synthetic-d08-v1`，证据引用必须明确以 `synthetic:` 开头。讲述者只看到地址版本及 hash，不返回私人收货字段。讲述者确认内容；发起人确认同一完整 PDF 与当前地址。发起人代操作讲述者确认时，必须有独立、当前有效的 `book_confirmation` 会话，另写本次确定版本证据；录音或故事确认会话不能替代。
 
@@ -22,11 +21,11 @@ T22 接入 T10 已核验付款及唯一首本权益、T12 当次协助证据和 
 
 成功预留在同一事务内写唯一首本单、权益 `reserved`、审计事件和持久 Outbox。一个项目、付款订单和权益分别唯一；同键同载荷及不同键并发返回同一生产单，同键异载荷或已预留单不同内容返回 409。Outbox 仅保存交接事实，T22 没有新增队列或自动向印厂提交。
 
-## 审核与到期
+## 审核与长期资格
 
-`POST /v1/admin/first-copy/:id/approve` 的 `:id` 是生产单 ID，输入为同一组四项版本/hash 绑定。要求独立管理员飞书会话、CSRF、`fulfillment:write` 和幂等键，由 AdminAccess 同事务审计。审核再次执行付款、权益、当前版本、许可、授权、冻结、规格、双方确认与制作期限门禁。返回仅含 `projectId, production, expiryReview`，不返回私人书稿全文或地址，也不授予运营私人内容读取权限。
+`POST /v1/admin/first-copy/:id/approve` 的 `:id` 是生产单 ID，输入为同一组四项版本/hash 绑定。要求独立管理员飞书会话、CSRF、`fulfillment:write` 和幂等键，由 AdminAccess 同事务审计。审核再次执行付款、权益、当前版本、许可、授权、冻结、规格与双方确认。返回仅含 `projectId, production`，不返回私人正文或地址，也不授予运营私人内容读取权限。
 
-T22 读取 T10 原销售快照计算的制作时钟。暂停时拒绝提交及审核；恰好到期及之后只执行首版合成固定政策的 `manual_review`：`/submit`、`/expiry-review` 或管理审核均只创建/复用同一 `first_copy_expiry` 工单，不新增生产单、不消费权益、不删除资料。尚未生成书稿也可以通过 `/expiry-review` 进入工单。通用 D08 本人申请核验接口拒绝处理这种运营审核工单；工单存在或已核验都不是越过期限的凭证。本票不实现人工续期，也不擅自发明到期后的放行规则。
+按 [ADR0017](adr/0017-lifetime-service-and-retention.md)，制作资格长期有效；`creation.expiresAt=null`，不计算起算、暂停或到期。`/expiry-review`、期限管理接口和对应权限已移除。退款导致的 suspended/terminated、唯一首本权益、当前授权及主动删除继续阻止不合法提交；长期服务不增加首本数量，也不免除版本确认。
 
 ## 复现
 

@@ -37,21 +37,18 @@ node apps/api/dist/commerce/admission-cli.js --file docs/delivery/2026-10-22/com
 - 每个 D02–D08 的 `review` 均需 `state: frozen`、实际负责人的 `ownerRef`、记录该组决定的 `decisionRef` 和 `decidedAt`。时间为真实存在的 UTC `YYYY-MM-DDTHH:mm:ssZ`，不填示例时间。负责人必须在受限库内可追溯到具体责任人，不能仅有无人承接的角色名。
 - 引用采用 `record:` 加受限库记录 ID；后缀 3–120 个 ASCII 字母、数字、点、下划线、斜线或短横线，以字母/数字开头。引用不携带 URL 参数、凭据或私人内容。程序只验证引用格式；运营仍须打开材料确认其存在、版本、适用范围和有效性。
 - 数量使用整数及明确单位：人民币 `fen`、录音 `seconds`、次数/照片 `count`、自然日 `calendar_days`、SLA 工作日 `business_days`。不接受数字字符串、小数、负值、未知单位或未支持字段。
-- 正数是有期限/额度字段的当前表达方式；暂停总天数、到期提前通知天数、系统重试预算和退款金额支持明确的 0。退款金额为 0–99900 分。不要借 0 或极大整数表达“未知”“永久”或规避责任。
+- 正数是有期限/额度字段的当前表达方式；系统重试预算和退款金额支持明确的 0。退款金额为 0–99900 分。不要借 0 或极大整数表达“未知”“永久”或规避责任。
 - 下述枚举是当前检查器能表达的方案，**不是替运营选定的政策**。若真实决定无法准确表达，保持 pending，先审核并调整版本与测试；不得用相近枚举或随意加字段绕过核验。技术试验的 5 分钟、300 DPI、临时 URL TTL 等不回填为销售承诺。
 
 ## D02 制作权益
 
-`duration` 为制作权益自然日，`startsAt` 支持 `payment_verified` 或 `subject_participation`。`notStarted` 单独填写从 `payment_verified` 起的最大等待自然日，以及 `contact_and_offer_refund / expire_creation` 和用户告知引用。
-
-`pause` 明确 `clock: continues / stops`、暂停累计上限、`atLimit: resume_clock / manual_review` 和政策引用。上限为 0 表示没有暂停额度，仍需填写相应处理规则。`expiration` 的新录音为 `blocked`；首本为 `blocked / manual_review`；已有资料必须 `per_d03`，不能把制作到期当作删除。
+按 [ADR0017](../../adr/0017-lifetime-service-and-retention.md)，`service` 固定为 `lifetime`，不再填写制作天数、起算、未开始等待、暂停或到期动作。商业 review 的实际负责人及证据仍需冻结；长期有效不替代付款、唯一首本权益、双方版本确认或退款后资格判断。
 
 ## D03 资料服务
 
-- `onlinePlayback` 与 `exportRequests` 各有独立期限和起算点，支持付款核验、本人参与、制作到期、交付完成四个事件（`payment_verified / subject_participation / creation_expired / delivery_completed`）。回听到期为 `stop_access`，导出还要受理渠道引用。
-- `retention` 分别表达采集原声、原图、必要衍生音频/图片、转录、确认故事、PDF，以及活动数据、历史对象、备份的保留期限；这些项除上述事件外支持 `asset_created`。导出包从 `export_ready` 起算，供应商副本从 `processing_completed` 起算。文件类别与存储副本层级都要填写，运营须核对共同适用的条款，程序不证明存储系统已执行。
-- `deletion` 的活动数据、历史对象、备份和供应商副本分别填写从 `verified_deletion_request` 起的处理自然日及执行流程引用；备份待轮换、外部副本待确认不能写成活动数据已删就全部完成。
-- `expiryNotice` 填提前自然日、通知渠道及到期说明。`copyStatusSeparately` 与 `restoreAppliesDeletionLedger` 必须为 true，分别表示按副本层级报告进度及恢复前应用删除台账的已审流程。
+`onlinePlayback.service`、`exportRequests.service` 及必要原声/照片/衍生文件/转录/确认稿/PDF/已完成导出包/活动资料/历史对象/必要备份的 `retention.*.service` 固定为 `lifetime`。导出受理渠道引用继续填写；用户资料不允许业务期限和倒计时。若底层必填日期使用2099占位，也不能参与服务拒绝或删除。
+
+供应商临时副本单独填写 `supplierCopies` 的 processing_completed 保留时限；主动删除的 activeData/historicalObjects/backupCopies/supplierCopies 各自填写核验请求后的执行时限和流程。`copyStatusSeparately=true`，仅实际证据能确认对应层完成；不再配置用户资料到期告知或旧备份恢复字段。安全授权、D06人工时限、D07售后窗口继续分别校验。
 
 ## D04 用户额度与供应商成本
 

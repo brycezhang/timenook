@@ -330,7 +330,7 @@ test("complete synthetic parameters freeze exactly one immutable preview under c
       .json()
       .data.version.terms.some(
         (term: { label: string; text: string }) =>
-          term.label === "制作期限" && term.text.includes("180"),
+          term.label === "制作服务" && term.text.includes("长期有效"),
       ),
   );
   const versions = await app.inject({

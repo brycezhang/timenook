@@ -24,35 +24,7 @@
       "decisionRef": null,
       "decidedAt": null
     },
-    "duration": {
-      "value": null,
-      "unit": "calendar_days"
-    },
-    "startsAt": null,
-    "notStarted": {
-      "maxWait": {
-        "value": null,
-        "unit": "calendar_days"
-      },
-      "startsAt": null,
-      "resolution": null,
-      "noticeRef": null
-    },
-    "pause": {
-      "clock": null,
-      "maxTotal": {
-        "value": null,
-        "unit": "calendar_days"
-      },
-      "atLimit": null,
-      "policyRef": null
-    },
-    "expiration": {
-      "newRecording": null,
-      "firstCopy": null,
-      "existingData": null,
-      "noticeRef": null
-    }
+    "service": "lifetime"
   },
   "d03": {
     "review": {
@@ -62,98 +34,45 @@
       "decidedAt": null
     },
     "onlinePlayback": {
-      "duration": {
-        "value": null,
-        "unit": "calendar_days"
-      },
-      "startsAt": null,
-      "expires": null
+      "service": "lifetime"
     },
     "exportRequests": {
-      "duration": {
-        "value": null,
-        "unit": "calendar_days"
-      },
-      "startsAt": null,
+      "service": "lifetime",
       "channelRef": null
     },
     "retention": {
       "originalAudio": {
-        "duration": {
-          "value": null,
-          "unit": "calendar_days"
-        },
-        "startsAt": null
+        "service": "lifetime"
       },
       "originalPhotos": {
-        "duration": {
-          "value": null,
-          "unit": "calendar_days"
-        },
-        "startsAt": null
+        "service": "lifetime"
       },
       "derivedAudio": {
-        "duration": {
-          "value": null,
-          "unit": "calendar_days"
-        },
-        "startsAt": null
+        "service": "lifetime"
       },
       "derivedPhotos": {
-        "duration": {
-          "value": null,
-          "unit": "calendar_days"
-        },
-        "startsAt": null
+        "service": "lifetime"
       },
       "transcripts": {
-        "duration": {
-          "value": null,
-          "unit": "calendar_days"
-        },
-        "startsAt": null
+        "service": "lifetime"
       },
       "confirmedStories": {
-        "duration": {
-          "value": null,
-          "unit": "calendar_days"
-        },
-        "startsAt": null
+        "service": "lifetime"
       },
       "bookPdf": {
-        "duration": {
-          "value": null,
-          "unit": "calendar_days"
-        },
-        "startsAt": null
+        "service": "lifetime"
       },
       "exportPackages": {
-        "duration": {
-          "value": null,
-          "unit": "calendar_days"
-        },
-        "startsAt": null
+        "service": "lifetime"
       },
       "activeData": {
-        "duration": {
-          "value": null,
-          "unit": "calendar_days"
-        },
-        "startsAt": null
+        "service": "lifetime"
       },
       "historicalObjects": {
-        "duration": {
-          "value": null,
-          "unit": "calendar_days"
-        },
-        "startsAt": null
+        "service": "lifetime"
       },
       "backupCopies": {
-        "duration": {
-          "value": null,
-          "unit": "calendar_days"
-        },
-        "startsAt": null
+        "service": "lifetime"
       },
       "supplierCopies": {
         "duration": {
@@ -197,16 +116,7 @@
         "procedureRef": null
       }
     },
-    "expiryNotice": {
-      "advance": {
-        "value": null,
-        "unit": "calendar_days"
-      },
-      "channelRef": null,
-      "policyRef": null
-    },
-    "copyStatusSeparately": null,
-    "restoreAppliesDeletionLedger": null
+    "copyStatusSeparately": null
   },
   "d04": {
     "review": {

@@ -67,7 +67,6 @@ before(async () => {
   const snapshot = JSON.parse(
     readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
   );
-  snapshot.admission.d02.duration.value = 1;
   const draftId = randomUUID();
   await db.packageDraft.create({
     data: { id: draftId, realm: "local", ...snapshot },
@@ -771,70 +770,71 @@ test("HTTP keys reject different commands while a released reservation cannot do
   );
 });
 
-test("exact creation expiry rejects new collection but preserves existing sealed recovery and pending local retry intent", async (t) => {
+test("recording remains available beyond 2099 and an expired upload grant can be renewed without losing a pending clip", async (t) => {
   const p = await bound(),
     i = await interview(p),
     audio = syntheticAudio(),
     base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
-  const expires = Date.parse(
-    data(await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token), 200)
-      .project.terms.creation.expiresAt,
-  );
-  t.mock.timers.enable({ apis: ["Date"], now: expires - 1 });
   const command = () => ({
     clientClipId: randomUUID(),
     bytes: audio.length,
     sha256: createHash("sha256").update(audio).digest("hex"),
   });
-  const ready = data(await request("POST", base, p.narrator.token, command()));
-  const form = data(
-    await request("POST", `${base}/${ready.id}/upload`, p.narrator.token, {}),
-  );
-  assert.equal(
-    (await formUpload(app, form, audio, {}, p.narrator.token)).statusCode,
-    204,
-  );
-  data(await request("POST", `${base}/${ready.id}/seal`, p.narrator.token, {}));
   const pending = data(
     await request("POST", base, p.narrator.token, command()),
   );
-  t.mock.timers.setTime(expires);
-  assert.equal(
-    (await request("POST", base, p.narrator.token, command())).statusCode,
-    403,
+  const expiredForm = data(
+    await request("POST", `${base}/${pending.id}/upload`, p.narrator.token, {}),
   );
-  assert.equal(
-    (await request("POST", `${base}/${pending.id}/seal`, p.narrator.token, {}))
-      .statusCode,
-    403,
-  );
-  assert.equal(
-    data(await request("GET", `${base}/${pending.id}`, p.narrator.token), 200)
-      .state,
-    "pending",
-  );
-  assert.equal(
-    data(
-      await request("POST", `${base}/${ready.id}/seal`, p.narrator.token, {}),
-    ).state,
-    "sealed",
-  );
-  t.mock.timers.setTime(expires + 1);
-  assert.equal(
-    (await request("POST", base, p.narrator.token, command())).statusCode,
-    403,
-  );
-  assert.equal(
-    data(
+  await db.session.updateMany({
+    where: { userId: p.narrator.id },
+    data: { expiresAt: new Date("2200-01-01T00:00:00Z") },
+  });
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: Date.parse("2100-01-01T00:00:00Z"),
+  });
+  try {
+    assert.equal(
+      (await formUpload(app, expiredForm, audio, {}, p.narrator.token))
+        .statusCode,
+      403,
+    );
+    assert.equal(
+      data(await request("GET", `${base}/${pending.id}`, p.narrator.token), 200)
+        .state,
+      "pending",
+    );
+    const form = data(
       await request(
-        "GET",
-        `/v1/projects/${p.projectId}/interviews/${i.id}`,
+        "POST",
+        `${base}/${pending.id}/upload`,
         p.narrator.token,
+        {},
       ),
-      200,
-    ).clips.length,
-    1,
-  );
+    );
+    assert.equal(
+      (await formUpload(app, form, audio, {}, p.narrator.token)).statusCode,
+      204,
+    );
+    assert.equal(
+      data(
+        await request(
+          "POST",
+          `${base}/${pending.id}/seal`,
+          p.narrator.token,
+          {},
+        ),
+      ).state,
+      "sealed",
+    );
+    assert.equal(
+      (await request("POST", base, p.narrator.token, command())).statusCode,
+      201,
+    );
+  } finally {
+    t.mock.timers.reset();
+  }
 });
 
 test("copy followed by database failure remains pending and recovers the same file, quota and unique event", async () => {

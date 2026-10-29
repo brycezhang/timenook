@@ -436,10 +436,7 @@ onUnmounted(() => {
       <h2>当前生产记录</h2>
       <p>生产单：{{ selected.orderId }}</p>
       <p>项目：{{ selected.projectId }}</p>
-      <p>
-        制作期限：{{ selected.creation.state }}
-        {{ selected.creation.expiresAt || "" }}
-      </p>
+      <p>制作服务长期有效 · 当前状态：{{ selected.creation.state }}</p>
       <div
         v-if="!selected.current || selected.current.state === 'cancelled'"
         class="production-form"
@@ -655,7 +652,7 @@ onUnmounted(() => {
               placeholder="synthetic:交付回执"
           /></label>
           <Button :disabled="busy" @click="deliver">记录交付完成</Button>
-          <p>交付事实只起算一次适用的资料服务期限，重复回执不会延长。</p>
+          <p>交付事实只记录一次，资料服务长期有效。</p>
         </div>
         <p v-if="selected.current.deliveredAt" class="section">
           交付完成：{{ selected.current.deliveredAt }}

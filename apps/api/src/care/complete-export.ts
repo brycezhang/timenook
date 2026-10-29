@@ -104,24 +104,14 @@ type ExportSales = {
     };
   };
 };
-type ExportRetention = {
-  d03: {
-    retention: {
-      exportPackages: {
-        startsAt: string;
-        duration: { value: number; unit: string };
-      };
-    };
-  };
-};
 type ExportBatch = {
   row: CareExport;
   sources: ExportSource[];
   counts: Record<string, number>;
 };
-class SourceRetentionExpired extends ForbiddenException {
+class SourceDeleted extends ForbiddenException {
   constructor() {
-    super("EXPORT_SOURCE_RETENTION_EXPIRED");
+    super("EXPORT_SOURCE_DELETED");
   }
 }
 @Injectable()
@@ -173,7 +163,7 @@ export class CompleteExports implements OnModuleDestroy {
     });
   }
   private async policy(tx: Prisma.TransactionClient, id: string) {
-    const terms = await this.terms.read(id, undefined, tx);
+    const terms = await this.terms.read(id, tx);
     if (!terms.exportRequests) throw new ConflictException();
     return terms;
   }
@@ -205,9 +195,7 @@ export class CompleteExports implements OnModuleDestroy {
         contentAllowed !== false &&
         !!userId &&
         row.recipientUserId === userId &&
-        ["ready", "delivered"].includes(row.state) &&
-        !!row.expiresAt &&
-        row.expiresAt.getTime() > Date.now(),
+        ["ready", "delivered"].includes(row.state),
     };
   }
   request(
@@ -243,7 +231,7 @@ export class CompleteExports implements OnModuleDestroy {
         );
       }
       const terms = await this.policy(tx, id);
-      if (terms.exportRequests!.state === "expired")
+      if (terms.exportRequests!.state === "deleted")
         throw new ForbiddenException();
       const care = await this.participation.openExportCaseIn(
         tx,
@@ -272,7 +260,7 @@ export class CompleteExports implements OnModuleDestroy {
     });
   }
   async read(id: string, authorization?: string) {
-    await this.cleanupExpired();
+    await this.cleanupTemporary();
     return this.user(id, authorization, async (tx, p, userId) => {
       const terms = await this.policy(tx, id),
         snapshot = p.order.packageSnapshot as unknown as ExportSales;
@@ -289,7 +277,7 @@ export class CompleteExports implements OnModuleDestroy {
         projectId: id,
         canRequest:
           p.subject.boundUserId === userId &&
-          terms.exportRequests!.state !== "expired",
+          terms.exportRequests!.state !== "deleted",
         amountDueFen: 0,
         requestWindow: terms.exportRequests,
         service: {
@@ -318,9 +306,9 @@ export class CompleteExports implements OnModuleDestroy {
                   (row.manifest as { files?: unknown }).files,
                 );
               } catch (error) {
-                if (!(error instanceof SourceRetentionExpired)) throw error;
+                if (!(error instanceof SourceDeleted)) throw error;
                 value.canDownload = false;
-                value.missingReason = "EXPORT_SOURCE_RETENTION_EXPIRED";
+                value.missingReason = "EXPORT_SOURCE_DELETED";
               }
             }
             return value;
@@ -356,18 +344,13 @@ export class CompleteExports implements OnModuleDestroy {
       );
     if (requireContent && contentAllowed === false)
       throw new ForbiddenException("EXPORT_CURRENT_AUTHORIZATION_REQUIRED");
-    if (
-      terms.exportRequests!.expiresAt &&
-      care.createdAt.getTime() >= Date.parse(terms.exportRequests!.expiresAt)
-    )
-      throw new ForbiddenException();
     const row = await tx.careExport.findUnique({ where: { id } });
     if (
       row &&
       (row.subjectId !== p.subject.id ||
         row.bindingVersion !== p.subject.bindingVersion ||
         row.accessEpoch !== p.project.accessEpoch ||
-        ["revoked", "expired"].includes(row.state))
+        ["revoked"].includes(row.state))
     )
       throw new ForbiddenException();
     if (row?.manifest) {
@@ -409,8 +392,7 @@ export class CompleteExports implements OnModuleDestroy {
     }
     for (const kind of kinds) {
       if (!terms.retention?.[kind]) throw new ForbiddenException();
-      if (terms.retention[kind].state === "expired")
-        throw new SourceRetentionExpired();
+      if (terms.retention[kind].state === "deleted") throw new SourceDeleted();
     }
   }
   private async sourceRetentionIn(
@@ -418,10 +400,7 @@ export class CompleteExports implements OnModuleDestroy {
     projectId: string,
     files: unknown,
   ) {
-    this.assertSourceRetention(
-      await this.terms.read(projectId, undefined, tx),
-      files,
-    );
+    this.assertSourceRetention(await this.terms.read(projectId, tx), files);
   }
   private async versionScopeIn(
     tx: Prisma.TransactionClient,
@@ -740,7 +719,7 @@ export class CompleteExports implements OnModuleDestroy {
       await this.sourceRetentionIn(tx, row.projectId, sources);
     } catch (error) {
       if (
-        error instanceof SourceRetentionExpired ||
+        error instanceof SourceDeleted ||
         (error instanceof ConflictException &&
           /^EXPORT_[A-Z_]+$/.test(error.message))
       )
@@ -841,27 +820,14 @@ export class CompleteExports implements OnModuleDestroy {
       row.leaseUntil.getTime() <= Date.now()
     )
       throw new ConflictException();
-    const policy = await tx.projectServiceTerms.findUniqueOrThrow({
-        where: { projectId: row.projectId },
-      }),
-      rule = (policy.policy as unknown as ExportRetention).d03.retention
-        .exportPackages;
-    if (
-      rule?.startsAt !== "export_ready" ||
-      rule.duration?.unit !== "calendar_days" ||
-      !Number.isSafeInteger(rule.duration.value) ||
-      rule.duration.value < 1
-    )
-      throw new ConflictException();
-    const readyAt = new Date(),
-      expiresAt = new Date(readyAt.getTime() + rule.duration.value * 86400000);
+    const readyAt = new Date();
     return this.view(
       await tx.careExport.update({
         where: { id: row.id },
         data: {
           state: "ready",
           readyAt,
-          expiresAt,
+          expiresAt: null,
           objectKey: archive.objectKey,
           sha256: archive.sha256,
           bytes: archive.bytes.length,
@@ -890,8 +856,6 @@ export class CompleteExports implements OnModuleDestroy {
           !row ||
           row.recipientUserId !== userId ||
           !["ready", "delivered"].includes(row.state) ||
-          !row.expiresAt ||
-          row.expiresAt.getTime() <= Date.now() ||
           !row.objectKey ||
           !row.sha256 ||
           !row.bytes
@@ -899,7 +863,7 @@ export class CompleteExports implements OnModuleDestroy {
           throw new ForbiddenException();
         return row;
       });
-    await this.cleanupExpired();
+    await this.cleanupTemporary();
     const before = await check(),
       bytes = await this.readPackage(before),
       after = await check();
@@ -920,9 +884,7 @@ export class CompleteExports implements OnModuleDestroy {
         scope.project.id !== id ||
         !row ||
         row.recipientUserId !== userId ||
-        !["ready", "delivered"].includes(row.state) ||
-        !row.expiresAt ||
-        row.expiresAt.getTime() <= Date.now()
+        !["ready", "delivered"].includes(row.state)
       )
         throw new ForbiddenException();
       if (row.sha256 !== body.sha256) throw new ConflictException();
@@ -957,8 +919,6 @@ export class CompleteExports implements OnModuleDestroy {
       row.recipient !== "verified_alternative" ||
       !row.recipientRef ||
       !row.readyAt ||
-      !row.expiresAt ||
-      row.expiresAt.getTime() <= Date.now() ||
       !["ready", "delivered"].includes(row.state)
     )
       throw new ForbiddenException();
@@ -993,8 +953,6 @@ export class CompleteExports implements OnModuleDestroy {
       !row ||
       row.recipient !== "verified_alternative" ||
       !row.objectKey ||
-      !row.expiresAt ||
-      row.expiresAt.getTime() <= Date.now() ||
       !["ready", "delivered"].includes(row.state)
     )
       throw new ForbiddenException();
@@ -1043,9 +1001,7 @@ export class CompleteExports implements OnModuleDestroy {
       const live =
         row &&
         ((row.objectKey === `exports/${file}` &&
-          ["ready", "delivered"].includes(row.state) &&
-          !!row.expiresAt &&
-          row.expiresAt.getTime() > Date.now()) ||
+          ["ready", "delivered"].includes(row.state)) ||
           (row.state === "packing" &&
             row.fence === Number(match[2]) &&
             !!row.leaseUntil &&
@@ -1057,26 +1013,9 @@ export class CompleteExports implements OnModuleDestroy {
     }
     return removed;
   }
-  async cleanupExpired() {
+  async cleanupTemporary() {
     await this.rights.assertHealthy();
-    await this.rights.expireExports();
-    const rows = await this.database.careExport.findMany({
-      where: {
-        expiresAt: { lte: new Date() },
-        state: { in: ["ready", "delivered", "expired"] },
-      },
-    });
-    for (const row of rows) {
-      await this.database.careExport.updateMany({
-        where: { id: row.id, state: { in: ["ready", "delivered"] } },
-        data: { state: "expired", fence: { increment: 1 }, leaseUntil: null },
-      });
-      if (row.objectKey) await rm(this.path(row.objectKey), { force: true });
-    }
-    return {
-      expired: rows.length,
-      orphaned: await this.removeOrphanPackages(),
-    };
+    return { orphaned: await this.removeOrphanPackages() };
   }
 }
 @Controller("v1/projects/:id/exports")
@@ -1252,7 +1191,7 @@ export class AdminCompleteExportsController {
       } catch (error) {
         await this.exports.fail(
           batch,
-          error instanceof SourceRetentionExpired
+          error instanceof SourceDeleted
             ? error.message
             : "EXPORT_SOURCE_MISSING_OR_PERMISSION_CHANGED",
         );
@@ -1333,7 +1272,7 @@ export class AdminCompleteExportsController {
     return {
       data: await this.run(req, "care.export.cleanup", async () => {
         await this.command(req, async () => undefined);
-        return this.exports.cleanupExpired();
+        return this.exports.cleanupTemporary();
       }),
       meta: { requestId: req.id },
     };

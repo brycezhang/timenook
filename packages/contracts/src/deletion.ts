@@ -23,7 +23,7 @@ export interface DeletionStatus {
   changes: {
     id: string;
     requestId: string | null;
-    trigger: "verified_request" | "retention_expiry";
+    trigger: "verified_request";
     categories: string[];
     effectiveAt: string;
     createdAt: string;

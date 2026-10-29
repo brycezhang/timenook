@@ -44,17 +44,15 @@ const kindLabel = (kind: string) =>
       ? "退款申请"
       : kind === "production_handoff"
         ? "生产交接核验"
-        : kind === "first_copy_expiry"
-          ? "制作期限人工审核"
-          : kind === "correction"
-            ? "故事限时校对"
-            : kind === "rebind"
-              ? "账号换绑"
-              : kind === "withdraw"
-                ? "本人撤回申请"
-                : kind === "export"
-                  ? "本人资料导出申请"
-                  : "本人删除申请";
+        : kind === "correction"
+          ? "故事限时校对"
+          : kind === "rebind"
+            ? "账号换绑"
+            : kind === "withdraw"
+              ? "本人撤回申请"
+              : kind === "export"
+                ? "本人资料导出申请"
+                : "本人删除申请";
 function currentCorrection(
   care: CareCase,
   generation: number,
@@ -364,7 +362,7 @@ onMounted(refresh);
             : selected.kind === 'delete'
               ? '在线访问已停止；各层删除进度请按下方清单核实。'
               : selected.kind === 'export'
-                ? '本次完整资料交付回执已记录。包下载期限和原始资料保留期限仍分别执行。'
+                ? '本次完整资料交付回执已记录。资料与已完成资料包长期保留，可依当前授权持续访问。'
                 : '工单已完成，原账号权限已撤销，新账号须重新授权。'
         "
       />
@@ -383,11 +381,6 @@ onMounted(refresh);
         v-else-if="selected.kind === 'production_handoff'"
         type="info"
         message="请在生产与物流中核对本次交接编号、负责人、期限和印厂回执。交接未知或取消待核实时，不能重发文件或释放权益；本工单不执行本人撤回、删除或账号换绑。"
-      />
-      <Alert
-        v-else-if="selected.kind === 'first_copy_expiry'"
-        type="info"
-        message="请核对原订单制作期限和冻结政策，再按服务期限流程跟进。记录本工单不会放行制作、预留首本或删除资料；后续提交与生产审核仍须通过全部核验。"
       />
       <Form v-else layout="vertical" class="section"
         ><p v-if="selected.kind === 'withdraw'">
@@ -411,7 +404,7 @@ onMounted(refresh);
         <p>
           {{
             selected.kind === "rebind"
-              ? "核对本人、原账号与目标账号后提交。操作撤销旧授权并保留服务期限。"
+              ? "核对本人、原账号与目标账号后提交。操作撤销旧授权，服务长期有效。"
               : selected.kind === "withdraw"
                 ? "核验本人真实意愿后撤回所选用途许可；提交后立即拒绝相关访问，任务及生产按撤回范围联动；已交接的文件仍须核对印厂实际取消回执。"
                 : selected.kind === "delete"

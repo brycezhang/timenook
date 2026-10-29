@@ -56,13 +56,11 @@ export type PrivateFileTarget = {
 export type DeletionPayload = {
   operation: "erase";
   requestId: string | null;
-  scopedExportId?: string;
-  trigger: "verified_request" | "retention_expiry";
+  trigger: "verified_request";
   categories: string[];
   effectiveAt: string;
   accessEpoch: number;
   targets: PrivateFileTarget[];
-  rule?: unknown;
   taskFences: { id: string; fence: number }[];
   targetAttemptId: string | null;
   deadlines?: Record<string, string | null>;
@@ -208,7 +206,7 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
     if (projectId) {
       // A caller may already hold its project lock. Never start nested replay.
       // A different project's uncommitted PG receipt cannot change this scope;
-      // our own suffix requires receipts except the explicit fixed-PDF case below.
+      // our own suffix requires committed receipts.
       const scopeId = projectId.toLowerCase();
       const pending = snapshot.events
         .slice(checkpoint)
@@ -219,20 +217,9 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
           >`SELECT id,hash,generation FROM privacy_events WHERE source_id=${snapshot.sourceId}::uuid AND project_id=${scopeId}::uuid AND generation>${BigInt(checkpoint)}`
         : [];
       const committed = new Map(receipts.map((r) => [r.id, r]));
-      const project =
-        scope === "bookPdf" && pending.some((e) => !committed.has(e.eventId))
-          ? await this.db.project.findUnique({
-              where: { id: scopeId },
-              select: { accessEpoch: true },
-            })
-          : null;
       for (const event of pending) {
         const receipt = committed.get(event.eventId);
         if (!receipt) {
-          // A fixed PDF owns its copies under bookPdf. Only a strictly known
-          // other-category expiry may remain pending while that file streams.
-          if (project && this.unrelatedPdfExpiry(event, project.accessEpoch))
-            continue;
           throw new ServiceUnavailableException(
             "Independent source replay is pending",
           );
@@ -252,168 +239,6 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
     throw new ServiceUnavailableException(
       "Independent source replay is pending",
     );
-  }
-  private unrelatedPdfExpiry(
-    event: PublishedPrivacyEvent,
-    epoch: number,
-  ): boolean {
-    const p = event.payload,
-      categories = new Set([
-        "originalAudio",
-        "originalPhotos",
-        "derivedAudio",
-        "derivedPhotos",
-        "transcripts",
-        "confirmedStories",
-        "exportPackages",
-        "activeData",
-        "historicalObjects",
-        "backupCopies",
-        "supplierCopies",
-      ]),
-      fields = new Set([
-        "operation",
-        "requestId",
-        "scopedExportId",
-        "trigger",
-        "categories",
-        "effectiveAt",
-        "accessEpoch",
-        "targets",
-        "taskFences",
-        "targetAttemptId",
-        "rule",
-        "deadlines",
-      ]),
-      iso = (v: unknown) =>
-        typeof v === "string" &&
-        Number.isFinite(Date.parse(v)) &&
-        new Date(v).toISOString() === v,
-      uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-      objectScope = this.config.recording
-        ? createHash("sha256")
-            .update(`product:${probeStorageScope(this.config.recording)}`)
-            .digest("hex")
-        : null;
-    if (
-      event.kind !== "deletion" ||
-      p.operation !== "erase" ||
-      p.trigger !== "retention_expiry" ||
-      Object.keys(p).some((k) => !fields.has(k)) ||
-      p.requestId !== null ||
-      !Number.isSafeInteger(p.accessEpoch) ||
-      p.accessEpoch !== epoch ||
-      !Array.isArray(p.categories) ||
-      !p.categories.length ||
-      p.categories.some((c) => typeof c !== "string" || !categories.has(c)) ||
-      new Set(p.categories).size !== p.categories.length ||
-      !iso(p.effectiveAt) ||
-      Date.parse(String(p.effectiveAt)) > Date.now() ||
-      !Array.isArray(p.taskFences) ||
-      p.taskFences.length ||
-      p.targetAttemptId !== null ||
-      !p.rule ||
-      typeof p.rule !== "object" ||
-      Array.isArray(p.rule) ||
-      !p.deadlines ||
-      typeof p.deadlines !== "object" ||
-      Array.isArray(p.deadlines) ||
-      Object.keys(p.deadlines).sort().join(",") !==
-        "active_database,active_files,cache" ||
-      Object.values(p.deadlines).some((d) => d !== p.effectiveAt) ||
-      !Array.isArray(p.targets)
-    )
-      return false;
-    if (
-      p.scopedExportId !== undefined &&
-      (typeof p.scopedExportId !== "string" ||
-        !new RegExp(`^${uuid}$`, "i").test(p.scopedExportId) ||
-        p.categories.length !== 1 ||
-        p.categories[0] !== "exportPackages")
-    )
-      return false;
-    const rule = p.rule as Record<string, unknown>;
-    if (p.scopedExportId !== undefined) {
-      if (
-        Object.keys(rule).sort().join(",") !== "anchor,expiresAt,startsAt" ||
-        rule.startsAt !== "export_ready" ||
-        !iso(rule.anchor) ||
-        rule.expiresAt !== p.effectiveAt ||
-        Date.parse(String(rule.anchor)) > Date.parse(String(p.effectiveAt))
-      )
-        return false;
-    } else {
-      const duration = rule.duration as Record<string, unknown> | null;
-      if (
-        Object.keys(rule).sort().join(",") !==
-          "anchor,duration,policyVersion,startsAt" ||
-        rule.startsAt !== "delivery_completed" ||
-        !iso(rule.anchor) ||
-        typeof rule.policyVersion !== "string" ||
-        !new RegExp(`^${uuid}$`, "i").test(rule.policyVersion) ||
-        !duration ||
-        typeof duration !== "object" ||
-        Array.isArray(duration) ||
-        Object.keys(duration).sort().join(",") !== "unit,value" ||
-        duration.unit !== "calendar_days" ||
-        !Number.isSafeInteger(duration.value) ||
-        Number(duration.value) <= 0 ||
-        Date.parse(String(p.effectiveAt)) !==
-          Date.parse(String(rule.anchor)) + Number(duration.value) * 86400000
-      )
-        return false;
-    }
-    return p.targets.every((value) => {
-      if (!value || typeof value !== "object" || Array.isArray(value))
-        return false;
-      const t = value as Record<string, unknown>;
-      if (
-        Object.keys(t).sort().join(",") !== "category,key,kind,scope" ||
-        typeof t.category !== "string" ||
-        !categories.has(t.category) ||
-        typeof t.key !== "string" ||
-        !t.key ||
-        typeof t.scope !== "string" ||
-        !t.scope
-      )
-        return false;
-      if (
-        p.scopedExportId &&
-        (t.kind !== "export" || t.key !== p.scopedExportId)
-      )
-        return false;
-      if (t.kind === "export")
-        return (
-          t.category === "exportPackages" &&
-          t.scope === this.config.books?.storageRoot &&
-          new RegExp(`^${uuid}$`, "i").test(t.key)
-        );
-      if (!(p.categories as string[]).includes(t.category)) return false;
-      if (t.kind === "temporary" || t.kind === "temporary_file")
-        return (
-          t.scope === this.config.recording?.storageRoot &&
-          new RegExp(
-            t.kind === "temporary"
-              ? `^${uuid}$`
-              : `^${uuid}/(input|output/(original\\.bin|preview\\.jpg|print\\.png|photo\\.json))$`,
-            "i",
-          ).test(t.key)
-        );
-      if (t.kind !== "object" || t.scope !== objectScope) return false;
-      if (t.category === "originalAudio")
-        return new RegExp(`^(staging|sealed)/${uuid}\\.mp3$`, "i").test(t.key);
-      if (t.category === "originalPhotos")
-        return new RegExp(
-          `^photos/(staging/${uuid}\\.bin|sealed/${uuid}/original\\.bin)$`,
-          "i",
-        ).test(t.key);
-      if (t.category === "derivedPhotos")
-        return new RegExp(
-          `^photos/(staging/${uuid}\\.(jpg|png)|sealed/${uuid}/(preview\\.jpg|print\\.png))$`,
-          "i",
-        ).test(t.key);
-      return false;
-    });
   }
   async synchronize() {
     if (!this.journal) throw new Error("Privacy journal is not configured");
@@ -718,20 +543,10 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
             ].includes(c),
         ) ||
         !Array.isArray(d.targets) ||
-        !["verified_request", "retention_expiry"].includes(d.trigger)
+        d.trigger !== "verified_request"
       )
         throw new Error("Invalid deletion scope");
-      if (
-        d.scopedExportId &&
-        (d.trigger !== "retention_expiry" ||
-          d.categories.length !== 1 ||
-          d.categories[0] !== "exportPackages" ||
-          !d.targets.every(
-            (t) => t.kind === "export" && t.key === d.scopedExportId,
-          ))
-      )
-        throw new Error("Invalid exact package expiry");
-      await tx.$executeRaw`INSERT INTO privacy_deletions(id,project_id,request_id,scoped_export_id,trigger,categories,effective_at) VALUES(${event.eventId}::uuid,${event.projectId}::uuid,${d.requestId}::uuid,${d.scopedExportId || null}::uuid,${d.trigger},${JSON.stringify(d.categories)}::jsonb,${new Date(d.effectiveAt)})`;
+      await tx.$executeRaw`INSERT INTO privacy_deletions(id,project_id,request_id,scoped_export_id,trigger,categories,effective_at) VALUES(${event.eventId}::uuid,${event.projectId}::uuid,${d.requestId}::uuid,${null}::uuid,${d.trigger},${JSON.stringify(d.categories)}::jsonb,${new Date(d.effectiveAt)})`;
       if (d.requestId && p.verification) {
         const v = p.verification as {
           key: string;
@@ -761,9 +576,8 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
         const rows = await tx.$queryRawUnsafe<
           { key: Record<string, unknown> }[]
         >(
-          `SELECT privacy_row_key('${e.table}',to_jsonb(r)) AS key FROM "${e.table}" r WHERE ${e.owner}=$1::uuid AND ${"filter" in e ? e.filter : "true"}${d.scopedExportId ? " AND r.id=$2::uuid" : ""}`,
+          `SELECT privacy_row_key('${e.table}',to_jsonb(r)) AS key FROM "${e.table}" r WHERE ${e.owner}=$1::uuid AND ${"filter" in e ? e.filter : "true"}`,
           event.projectId,
-          ...(d.scopedExportId ? [d.scopedExportId] : []),
         );
         for (const row of rows)
           await tx.$executeRaw`INSERT INTO privacy_deletion_items(id,event_id,project_id,category,layer,target_table,target_key,target_columns,deadline) VALUES(${randomUUID()}::uuid,${event.eventId}::uuid,${event.projectId}::uuid,${e.category},'active_database',${e.table},${JSON.stringify(row.key)}::jsonb,${[...e.columns]}::text[],${d.deadlines?.active_database ? new Date(d.deadlines.active_database) : null}) ON CONFLICT DO NOTHING`;
@@ -778,34 +592,19 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
           where: {
             projectId: event.projectId,
             id: { in: affectedExports },
-            // A request that has never produced a package keeps its minimum
-            // failure/acceptance facts. NULL alone is not proof: a previously
-            // ready package can have its locator/manifest erased later.
-            ...(d.trigger === "retention_expiry"
-              ? {
-                  NOT: {
-                    state: { in: ["requested", "accepted", "failed"] },
-                    objectKey: null,
-                    readyAt: null,
-                    sha256: null,
-                    bytes: null,
-                  },
-                }
-              : {}),
-            ...(d.scopedExportId ? { id: d.scopedExportId } : {}),
-            state: d.scopedExportId
-              ? { in: ["ready", "delivered"] }
-              : { not: "revoked" },
+            state: { not: "revoked" },
           },
           data: {
-            state: d.scopedExportId ? "expired" : "revoked",
+            state: "revoked",
             fence: { increment: 1 },
             leaseUntil: null,
           },
         });
-      const discovered = d.scopedExportId
-        ? []
-        : await this.fileTargetsIn(tx, event.projectId, d.categories);
+      const discovered = await this.fileTargetsIn(
+        tx,
+        event.projectId,
+        d.categories,
+      );
       const targets = [
         ...new Map(
           [...d.targets, ...discovered].map((t) => [JSON.stringify(t), t]),
@@ -938,74 +737,6 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
       throw new ForbiddenException(
         "Project materials are permanently unavailable",
       );
-  }
-  /** D03 export_ready belongs to one immutable package, not the project clock. */
-  async expireExports(at = new Date()) {
-    let cursor: string | undefined;
-    for (;;) {
-      const packages = await this.db.careExport.findMany({
-        where: { expiresAt: { lte: at } },
-        take: 100,
-        orderBy: { id: "asc" },
-        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      });
-      if (!packages.length) break;
-      for (const pack of packages)
-        await this.db.$transaction(
-          async (tx) => {
-            await tx.$queryRaw`SELECT id FROM projects WHERE id=${pack.projectId}::uuid FOR UPDATE`;
-            if (
-              (
-                await tx.$queryRaw<
-                  { id: string }[]
-                >`SELECT id FROM privacy_deletions WHERE project_id=${pack.projectId}::uuid AND (scoped_export_id=${pack.id}::uuid OR categories ? 'all')`
-              ).length
-            )
-              return;
-            const project = await tx.project.findUniqueOrThrow({
-              where: { id: pack.projectId },
-            });
-            const payload: DeletionPayload = {
-              operation: "erase",
-              requestId: null,
-              scopedExportId: pack.id,
-              trigger: "retention_expiry",
-              categories: ["exportPackages"],
-              effectiveAt: pack.expiresAt!.toISOString(),
-              accessEpoch: project.accessEpoch,
-              targets: [
-                {
-                  kind: "export",
-                  category: "exportPackages",
-                  scope: this.config.books?.storageRoot || "",
-                  key: pack.id,
-                },
-              ],
-              taskFences: [],
-              targetAttemptId: null,
-              rule: {
-                startsAt: "export_ready",
-                anchor: pack.readyAt?.toISOString(),
-                expiresAt: pack.expiresAt!.toISOString(),
-              },
-              deadlines: {
-                active_database: pack.expiresAt!.toISOString(),
-                active_files: pack.expiresAt!.toISOString(),
-                cache: pack.expiresAt!.toISOString(),
-              },
-            };
-            await this.publishIn(tx, {
-              eventId: randomUUID(),
-              projectId: pack.projectId,
-              kind: "deletion",
-              occurredAt: at.toISOString(),
-              payload: payload as unknown as Record<string, unknown>,
-            });
-          },
-          { timeout: 30000 },
-        );
-      cursor = packages[packages.length - 1].id;
-    }
   }
   async fileTargetsIn(
     tx: Prisma.TransactionClient,

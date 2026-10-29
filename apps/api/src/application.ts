@@ -61,7 +61,6 @@ import {
   PersonalPlans,
   PersonalPlanController,
 } from "./projects/personal-plan-controller";
-import { AdminTermsController } from "./payments/admin-terms-controller";
 import {
   Participation,
   ParticipationController,
@@ -426,7 +425,6 @@ export async function createApplication(
             RefundsController,
             AdminRefundsController,
             OrdersController,
-            AdminTermsController,
             ParticipationController,
             AdminCareController,
             DeletionController,

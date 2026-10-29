@@ -7,7 +7,6 @@ export interface CompleteExportView {
     | "packing"
     | "ready"
     | "failed"
-    | "expired"
     | "revoked"
     | "delivered";
   recipientUserId: string | null;

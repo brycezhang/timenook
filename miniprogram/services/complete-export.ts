@@ -15,7 +15,6 @@ function record(v: CompleteExportView, projectId: string) {
       "packing",
       "ready",
       "failed",
-      "expired",
       "revoked",
       "delivered",
     ].includes(v.state) ||

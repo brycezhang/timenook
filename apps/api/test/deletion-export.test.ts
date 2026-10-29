@@ -19,8 +19,8 @@ import { Deletions } from "../src/care/deletions";
 import { PrivacyJournal } from "../src/privacy-journal/privacy-journal";
 before(startBookFixture);
 after(stopBookFixture);
-test("each export expires at its own ready deadline without erasing another package or barring a later export", async () => {
-  const p = await readyFirstCopyBook({}, {}, { exportPackages: 1 });
+test("completed export packages have no business expiry and survive maintenance and orphan cleanup beyond 2099", async (t) => {
+  const p = await readyFirstCopyBook();
   const headers = await paymentAdmin(config, app, ["care:write", "audit:read"]);
   const admin = (url: string, payload: object) =>
     app.inject({
@@ -69,71 +69,60 @@ test("each export expires at its own ready deadline without erasing another pack
   }
   const first = await pack(),
     second = await pack();
-  assert.ok(Date.parse(first.expiresAt) < Date.parse(second.expiresAt));
-  const old = await db.careExport.findUniqueOrThrow({
+  assert.equal(first.expiresAt, null);
+  assert.equal(second.expiresAt, null);
+  const row = await db.careExport.findUniqueOrThrow({
     where: { id: first.id },
   });
-  const other = await db.careExport.findUniqueOrThrow({
-    where: { id: second.id },
+  const path = join(config.books!.storageRoot, row.objectKey!),
+    bytes = await readFile(path);
+  await db.session.updateMany({
+    data: { expiresAt: new Date("2200-01-01T00:00:00Z") },
   });
-  const oldPath = join(config.books!.storageRoot, old.objectKey!),
-    otherPath = join(config.books!.storageRoot, other.objectKey!);
-  const otherBytes = await readFile(otherPath);
-  await app.get(Deletions).sweep(new Date(Date.parse(first.expiresAt) - 1));
-  assert.ok(
-    (await db.careExport.findUniqueOrThrow({ where: { id: first.id } }))
-      .manifest,
-  );
-  await app.get(Deletions).sweep(new Date(first.expiresAt));
-  const erased = await db.careExport.findUniqueOrThrow({
-    where: { id: first.id },
+  await db.adminSession.updateMany({
+    data: { expiresAt: new Date("2200-01-01T00:00:00Z") },
   });
-  assert.equal(erased.manifest, null);
-  assert.equal(erased.evidenceRef, null);
-  await assert.rejects(access(oldPath), { code: "ENOENT" });
-  assert.equal(
-    (
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/exports/${first.id}/download`,
-        p.narrator.token,
-      )
-    ).statusCode,
-    403,
-  );
-  assert.equal(
-    (
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/exports/${second.id}/download`,
-        p.narrator.token,
-      )
-    ).statusCode,
-    200,
-  );
-  assert.deepEqual(await readFile(otherPath), otherBytes);
-  const next = await pack();
-  assert.equal(next.state, "ready");
-  await restartBookApplication();
-  await app.get(Deletions).sweep(new Date(first.expiresAt));
-  const events = (
-    await new PrivacyJournal(config.privacyJournal!).snapshot()
-  ).events.filter((e) => e.payload.scopedExportId === first.id);
-  assert.equal(events.length, 1);
-  assert.equal(events[0].payload.effectiveAt, first.expiresAt);
-  const status = data(
-    await request(
-      "GET",
-      `/v1/projects/${p.projectId}/deletion-status`,
-      p.narrator.token,
-    ),
-    200,
-  );
-  assert.equal(status.permanentProjectDeletion, false);
-  assert.equal(status.onlineAccessStopped, false);
-  assert.equal(
-    (await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token))
-      .statusCode,
-    200,
-  );
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: Date.parse("2100-01-01T00:00:00Z"),
+  });
+  try {
+    await app.get(Deletions).sweep();
+    data(await admin("/v1/admin/exports/cleanup", {}));
+    await restartBookApplication();
+    await app.get(Deletions).sweep();
+    assert.deepEqual(await readFile(path), bytes);
+    assert.ok(
+      (await db.careExport.findUniqueOrThrow({ where: { id: first.id } }))
+        .manifest,
+    );
+    assert.equal(
+      (
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/exports/${first.id}/download`,
+          p.narrator.token,
+        )
+      ).statusCode,
+      200,
+    );
+    assert.equal(
+      (
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/exports/${second.id}/download`,
+          p.narrator.token,
+        )
+      ).statusCode,
+      200,
+    );
+    const events = (
+      await new PrivacyJournal(config.privacyJournal!).snapshot()
+    ).events.filter(
+      (e) => e.projectId === p.projectId && e.kind === "deletion",
+    );
+    assert.equal(events.length, 0);
+  } finally {
+    t.mock.timers.reset();
+  }
 });

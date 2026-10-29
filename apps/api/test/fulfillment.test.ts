@@ -309,7 +309,7 @@ test("cancellation before handoff is final, but accepted production waits for ve
   );
   assert.equal(third.current.sequence, 3);
 });
-test("physical delivery after creation expiry records one delivery fact and repeated logistics never extend D03", async (t) => {
+test("physical delivery records one delivery fact and repeated logistics preserve lifetime service", async (t) => {
   const p = await attemptFixture();
   data(
     await request(
@@ -324,7 +324,7 @@ test("physical delivery after creation expiry records one delivery fact and repe
   );
   t.mock.timers.enable({
     apis: ["Date"],
-    now: Date.parse(pending.creation.expiresAt) + 1,
+    now: Date.now() + 60000,
   });
   const headers = await operator();
   const accepted = data(
@@ -351,14 +351,14 @@ test("physical delivery after creation expiry records one delivery fact and repe
   );
   assert.equal(shipped.current.state, "shipped");
   assert.equal(shipped.current.wechat.result, "pending");
-  assert.equal(shipped.serviceTerms.playback.state, "not_started");
+  assert.equal(shipped.serviceTerms.playback.state, "active");
   const deliveredAt = new Date().toISOString(),
     delivery = { deliveredAt, evidenceRef: "synthetic:实际签收凭证" };
   const delivered = data(
     await admin("POST", p.attemptBase + "/delivery", headers, delivery),
   );
   assert.equal(delivered.current.state, "delivered");
-  assert.equal(delivered.serviceTerms.playback.startsAt, deliveredAt);
+  assert.equal(delivered.serviceTerms.playback.expiresAt, null);
   const expiresAt = delivered.serviceTerms.playback.expiresAt;
   t.mock.timers.setTime(Date.now() + 1000);
   const replay = data(
@@ -493,7 +493,7 @@ test("handoff approval cannot choose a printing provider outside the purchased D
     409,
   );
 });
-test("assisted operational access requires fresh book-purpose evidence and a paused creation clock still blocks handoff", async () => {
+test("assisted operational access requires fresh book-purpose evidence", async () => {
   const p = await attemptFixture(),
     status = data(
       await request(
@@ -537,26 +537,9 @@ test("assisted operational access requires fresh book-purpose evidence and a pau
       assistedSessionId: correct.id,
     }),
   );
-  const termsHeaders = await paymentAdmin(config, app);
-  data(
-    await admin(
-      "POST",
-      `/v1/admin/service-terms/${p.projectId}/pause`,
-      termsHeaders,
-      { action: "pause", supportCaseRef: "record:synthetic-production-pause" },
-    ),
-  );
   assert.equal(
     (await admin("GET", p.attemptBase + "/materials", p.headers)).statusCode,
-    409,
-  );
-  assert.equal(
-    (await admin("POST", p.attemptBase + "/handoff", p.headers, {})).statusCode,
-    409,
-  );
-  assert.equal(
-    data(await admin("GET", p.base, p.headers), 200).current.state,
-    "approved",
+    200,
   );
 });
 test("operational commands retain authenticated permission CSRF and payload idempotency checks", async () => {
@@ -605,7 +588,7 @@ test("operational commands retain authenticated permission CSRF and payload idem
   );
 });
 
-test("verified cancellation rejection resumes the existing physical stage before and after shipment, then delivery starts D03 once", async () => {
+test("verified cancellation rejection resumes the existing physical stage before and after shipment, then delivery records one lifetime-service fact", async () => {
   const p = await attemptFixture();
   data(
     await request(
@@ -702,7 +685,7 @@ test("verified cancellation rejection resumes the existing physical stage before
     await admin("POST", p.attemptBase + "/delivery", p.headers, delivery),
   );
   assert.equal(delivered.current.state, "delivered");
-  assert.equal(delivered.serviceTerms.playback.startsAt, delivery.deliveredAt);
+  assert.equal(delivered.serviceTerms.playback.expiresAt, null);
   assert.equal(
     data(await admin("POST", p.attemptBase + "/delivery", p.headers, delivery))
       .serviceTerms.playback.expiresAt,

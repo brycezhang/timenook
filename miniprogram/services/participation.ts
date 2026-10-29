@@ -242,7 +242,6 @@ export const participationClient = {
             "export",
             "delete",
             "correction",
-            "first_copy_expiry",
             "production_handoff",
             "refund",
             "quality",

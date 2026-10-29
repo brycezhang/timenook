@@ -35,12 +35,8 @@ export async function adminRequest(
   });
 }
 
-export async function requestedBook(
-  photoRetention: Partial<
-    Record<"originalPhotos" | "derivedPhotos", number>
-  > = {},
-) {
-  const p = await readyFirstCopyBook({}, photoRetention);
+export async function requestedBook() {
+  const p = await readyFirstCopyBook();
   const exp = data(
     await request(
       "POST",
@@ -83,12 +79,8 @@ export async function requestedBook(
   };
 }
 
-export async function acceptedBook(
-  photoRetention: Partial<
-    Record<"originalPhotos" | "derivedPhotos", number>
-  > = {},
-) {
-  const p = await requestedBook(photoRetention);
+export async function acceptedBook() {
+  const p = await requestedBook();
   data(
     await adminRequest("POST", p.exportBase + "/accept", p.admin, {
       dueAt: new Date(Date.now() + 86400000).toISOString(),

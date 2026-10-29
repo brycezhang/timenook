@@ -12,7 +12,6 @@ import Auth from "./views/auth.vue";
 import BasicLayout from "./layouts/basic.vue";
 import Runtime from "./views/runtime.vue";
 import Catalog from "./views/catalog.vue";
-import ServiceTerms from "./views/service-terms.vue";
 import Care from "./views/care.vue";
 import Tasks from "./views/tasks.vue";
 import Fulfillment from "./views/fulfillment.vue";
@@ -27,12 +26,6 @@ const canManageFulfillment = computed(
   () =>
     state.value?.operator?.permissions.includes(
       ADMIN_PERMISSIONS.writeFulfillment,
-    ) ?? false,
-);
-const canManageTerms = computed(
-  () =>
-    state.value?.operator?.permissions.includes(
-      ADMIN_PERMISSIONS.writeServiceTerms,
     ) ?? false,
 );
 const canManageCare = computed(
@@ -138,7 +131,6 @@ onMounted(() => {
     <nav
       v-if="
         canReadCatalog ||
-        canManageTerms ||
         canManageCare ||
         canReadRuntime ||
         canManageFulfillment
@@ -154,12 +146,6 @@ onMounted(() => {
         :type="view === 'catalog' ? 'primary' : 'default'"
         @click="view = 'catalog'"
         >关系与套餐</Button
-      >
-      <Button
-        v-if="canManageTerms"
-        :type="view === 'terms' ? 'primary' : 'default'"
-        @click="view = 'terms'"
-        >服务期限</Button
       >
       <Button
         v-if="canReadRuntime"
@@ -184,15 +170,6 @@ onMounted(() => {
       v-if="view === 'catalog' && canReadCatalog"
       :csrf="state.csrfToken"
       :permissions="state.operator!.permissions"
-      @expired="
-        perform(async () => {
-          throw { error: { code: 'UNAUTHENTICATED' } };
-        })
-      "
-    />
-    <ServiceTerms
-      v-else-if="view === 'terms' && canManageTerms"
-      :csrf="state.csrfToken"
       @expired="
         perform(async () => {
           throw { error: { code: 'UNAUTHENTICATED' } };

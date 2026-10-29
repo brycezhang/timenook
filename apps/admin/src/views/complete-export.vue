@@ -22,7 +22,6 @@ const stateLabel: Record<string, string> = {
   packing: "正在打包",
   ready: "已完成，接收人可领取",
   failed: "未完成，须核对缺失原因",
-  expired: "包到期清理",
   revoked: "授权变化，须重新核验",
   delivered: "替代渠道交付已留证",
 };
@@ -45,7 +44,7 @@ async function perform(
     } else
       error.value =
         code === "FORBIDDEN"
-          ? "本工单、本人授权或下载期限已变化，请重新核验。"
+          ? "本工单或当前本人授权已变化，请重新核验。"
           : "处理未完成，请核对资料、范围及原申请后重试。";
   } finally {
     if (id === props.care.id && g === generation) busy.value = false;
@@ -149,7 +148,7 @@ async function download() {
         </p>
         <p v-if="value.ownerId">处理人：{{ value.ownerId }}</p>
         <p v-if="value.dueAt">处理截止：{{ value.dueAt }}</p>
-        <p v-if="value.expiresAt">包下载截止：{{ value.expiresAt }}</p>
+        <p>已完成的资料包长期有效，可依当前授权领取。</p>
         <p v-if="value.missingReason">
           缺失或待处理原因：{{ value.missingReason }}
         </p>

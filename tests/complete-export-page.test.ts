@@ -164,7 +164,7 @@ function ready() {
     dueAt: "2099-01-01T00:00:00Z",
     ownerId: "55555555-5555-4555-8555-555555555555",
     readyAt: new Date().toISOString(),
-    expiresAt: "2099-01-01T00:00:00Z",
+    expiresAt: null,
     sha256: "f".repeat(64),
     bytes: 42,
     missingReason: null,

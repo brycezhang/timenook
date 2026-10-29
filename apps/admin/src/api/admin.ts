@@ -246,42 +246,6 @@ export const catalogApi = {
   },
 };
 
-export interface ServiceTermsView {
-  policyStatus: string;
-  creation?: {
-    state: string;
-    startsAt: string | null;
-    expiresAt: string | null;
-  };
-  playback?: { state: string; expiresAt: string | null };
-  exportRequests?: { state: string; expiresAt: string | null };
-  notStarted?: { reviewAt: string; action: string };
-}
-export const serviceTermsApi = {
-  async read(projectId: string) {
-    return (
-      await client.get<ApiResponse<ServiceTermsView>>(
-        `/service-terms/${projectId}`,
-      )
-    ).data;
-  },
-  async pause(
-    projectId: string,
-    action: "pause" | "resume",
-    supportCaseRef: string,
-    key: string,
-    csrf: string,
-  ) {
-    return (
-      await client.post<ApiResponse<ServiceTermsView>>(
-        `/service-terms/${projectId}/pause`,
-        { action, supportCaseRef },
-        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
-      )
-    ).data;
-  },
-};
-
 import type { CareCase } from "@timenook/contracts";
 export const careApi = {
   async story(caseId: string, csrf: string) {

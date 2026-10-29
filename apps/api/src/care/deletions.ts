@@ -36,7 +36,6 @@ import { API_CONFIG, ApiConfig } from "../config";
 import { AdminAccess } from "../admin/admin-access";
 import { IdentityAccess } from "../identity/identity-access";
 import { Participation } from "../identity/participation";
-import { ProjectServiceTerms } from "../projects/service-terms";
 import { idempotencyKey } from "../payments/orders";
 import type { ProbeObjects } from "../probe/local-objects";
 import { probeStorageScope } from "../probe/storage-scope";
@@ -79,7 +78,6 @@ type Item = {
 };
 @Injectable()
 export class Deletions implements OnModuleDestroy {
-  private readonly terms: ProjectServiceTerms;
   private readonly redis: Redis;
   private running?: Promise<void>;
   private timer?: ReturnType<typeof setInterval>;
@@ -93,7 +91,6 @@ export class Deletions implements OnModuleDestroy {
     @Inject(DELETION_OBJECTS)
     private readonly objects?: ProbeObjects,
   ) {
-    this.terms = new ProjectServiceTerms(config.databaseUrl);
     this.redis = new Redis(config.redisUrl, {
       lazyConnect: true,
       maxRetriesPerRequest: 0,
@@ -101,18 +98,16 @@ export class Deletions implements OnModuleDestroy {
     });
     this.redis.on("error", () => {});
   }
-  async sweep(at = new Date()): Promise<void> {
+  async sweep(): Promise<void> {
     if (this.stopped)
       throw new ServiceUnavailableException("Deletion maintenance is stopping");
-    // An explicit wakeup keeps its selected clock even if a timer is already
-    // scanning. Timers themselves skip a busy run instead of queuing forever.
+    // Explicit wakeups wait for current deletion work; timers skip busy runs.
     if (this.running) {
       await this.running;
-      return this.sweep(at);
+      return this.sweep();
     }
     this.running = (async () => {
       await this.rights.assertHealthy();
-      await this.scanRetention(at);
       await this.participation.reconcileRevocations();
       const events = await this.rights.db.$queryRaw<
         { project_id: string }[]
@@ -131,94 +126,6 @@ export class Deletions implements OnModuleDestroy {
       }, 1000);
       this.timer.unref();
     }
-  }
-  async scanRetention(at = new Date()) {
-    // The selected fixed D03 rules retain their original anchor. D02/refunds never create these events.
-    let cursor: string | undefined;
-    for (;;) {
-      const projects = await this.rights.db.projectServiceTerms.findMany({
-        take: 100,
-        orderBy: { projectId: "asc" },
-        ...(cursor ? { cursor: { projectId: cursor }, skip: 1 } : {}),
-      });
-      if (!projects.length) break;
-      for (const p of projects) {
-        const terms = await this.terms.read(p.projectId, at);
-        if (!terms.retention) continue;
-        for (const [category, value] of Object.entries(terms.retention)) {
-          if (
-            value.state !== "expired" ||
-            !value.expiresAt ||
-            Date.parse(value.expiresAt) > at.getTime()
-          )
-            continue;
-          if (
-            ![
-              "originalAudio",
-              "originalPhotos",
-              "derivedAudio",
-              "derivedPhotos",
-              "transcripts",
-              "confirmedStories",
-              "bookPdf",
-              "exportPackages",
-              "activeData",
-              "historicalObjects",
-              "backupCopies",
-              "supplierCopies",
-            ].includes(category)
-          )
-            throw new Error("Unknown D03 retention category");
-          await this.rights.db.$transaction(
-            async (tx) => {
-              await tx.$queryRaw`SELECT id FROM projects WHERE id=${p.projectId}::uuid FOR UPDATE`;
-              const prior = await tx.$queryRaw<
-                { id: string }[]
-              >`SELECT id FROM privacy_deletions WHERE project_id=${p.projectId}::uuid AND categories ? ${category}`;
-              if (prior.length) return;
-              const project = await tx.project.findUniqueOrThrow({
-                where: { id: p.projectId },
-              });
-              const rule = (p.policy as any).d03.retention[category];
-              const payload: DeletionPayload = {
-                operation: "erase",
-                requestId: null,
-                trigger: "retention_expiry",
-                categories: [category],
-                effectiveAt: value.expiresAt!,
-                deadlines: {
-                  active_database: value.expiresAt!,
-                  active_files: value.expiresAt!,
-                  cache: value.expiresAt!,
-                },
-                accessEpoch: project.accessEpoch,
-                targets: await this.rights.fileTargetsIn(tx, p.projectId, [
-                  category,
-                ]),
-                rule: {
-                  anchor: value.startsAt,
-                  startsAt: rule.startsAt,
-                  duration: rule.duration,
-                  policyVersion: p.packageVersionId,
-                },
-                taskFences: [],
-                targetAttemptId: null,
-              };
-              await this.rights.publishIn(tx, {
-                eventId: randomUUID(),
-                projectId: p.projectId,
-                kind: "deletion",
-                occurredAt: new Date().toISOString(),
-                payload: payload as unknown as Record<string, unknown>,
-              });
-            },
-            { timeout: 30000 },
-          );
-        }
-      }
-      cursor = projects[projects.length - 1].projectId;
-    }
-    await this.rights.expireExports(at);
   }
   async reconcile(projectId: string) {
     const items = await this.rights.db.$queryRaw<
@@ -432,7 +339,7 @@ export class Deletions implements OnModuleDestroy {
       {
         id: string;
         request_id: string | null;
-        trigger: "verified_request" | "retention_expiry";
+        trigger: "verified_request";
         categories: string[];
         effective_at: Date;
         created_at: Date;
@@ -521,7 +428,6 @@ export class Deletions implements OnModuleDestroy {
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
     await this.running?.catch(() => {});
-    await this.terms.close();
     this.redis.disconnect();
   }
 }

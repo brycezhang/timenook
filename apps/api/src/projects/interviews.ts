@@ -478,7 +478,7 @@ export class Interviews implements OnModuleDestroy {
   async listIn(tx: Prisma.TransactionClient, projectId: string) {
     await this.participation.requireMaterialIn(tx, projectId, "activeData");
     return {
-      canRecord: (await this.terms.read(projectId, undefined, tx)).canRecord,
+      canRecord: (await this.terms.read(projectId, tx)).canRecord,
       plan: await this.recordingPlan(projectId, tx),
       interviews: await Promise.all(
         (
@@ -500,7 +500,7 @@ export class Interviews implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx) => ({
-        canRecord: (await this.terms.read(projectId, undefined, tx)).canRecord,
+        canRecord: (await this.terms.read(projectId, tx)).canRecord,
         plan: await this.recordingPlan(projectId, tx),
         interviews: [],
       }),

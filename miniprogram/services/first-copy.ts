@@ -101,14 +101,4 @@ export const firstCopyClient = {
       projectId,
     );
   },
-  async expiryReview(projectId: string, key: string) {
-    if (!uuid(projectId)) throw new Error("项目编号无效");
-    return context(
-      await sessionClient.request<FirstCopyContext>(
-        `/projects/${projectId}/first-copy/expiry-review`,
-        { key, data: {} },
-      ),
-      projectId,
-    );
-  },
 };
