@@ -12,6 +12,7 @@ export interface ApiErrorResponse {
 
 export interface LoginCommand {
   code: string;
+  expectedUserId?: string;
 }
 export interface Account {
   id: string;
@@ -141,3 +142,5 @@ export * from "./exports";
 export * from "./refunds";
 export * from "./deletion";
 export * from "./quality-care";
+
+export * from "./account-link";

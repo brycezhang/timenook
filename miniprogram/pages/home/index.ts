@@ -82,6 +82,9 @@ Page({
     }
     home("home");
   },
+  accountLink() {
+    go("account-link");
+  },
   orders() {
     go("order");
   },

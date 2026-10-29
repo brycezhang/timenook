@@ -143,6 +143,11 @@ import { IdentityAccess, WECHAT_FETCH } from "./identity/identity-access";
 import { IdentityController } from "./identity/identity-controller";
 import { WebController } from "./web/web-controller";
 import { WebAccess } from "./web/web-access";
+import {
+  WechatLinks,
+  WebWechatLinkController,
+  NativeWechatLinkController,
+} from "./identity/wechat-link";
 import { HttpException } from "@nestjs/common";
 
 @Controller("health")
@@ -439,7 +444,8 @@ export async function createApplication(
   const module = {
     module: AppModule,
     controllers: [
-      ...(config.web ? [WebController] : []),
+      ...(config.web ? [WebController, WebWechatLinkController] : []),
+      NativeWechatLinkController,
       PaymentWebhookController,
       RefundWebhookController,
       ...(productEnabled
@@ -590,6 +596,7 @@ export async function createApplication(
         : []),
       { provide: WECHAT_FETCH, useValue: options.wechatFetch ?? fetch },
       IdentityAccess,
+      WechatLinks,
       ProjectStreams,
       Participation,
       PersonalPlans,
