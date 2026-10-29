@@ -1,6 +1,6 @@
 <view wx:if="{{mode === 'live'}}" class="page">
   <view class="title">本人参与与资料用途</view>
-  <view wx:if="{{participation.policyStatus === 'internal-acceptance' || invitation.policyStatus === 'internal-acceptance'}}" class="soft section">内部功能验收 · 无付款，不发起实体书生产。{{participation.noticeText || invitation.noticeText}}</view>
+  <view wx:if="{{(participation && participation.policyStatus === 'internal-acceptance') || (invitation && invitation.policyStatus === 'internal-acceptance')}}" class="soft section">内部功能验收 · 无付款，不发起实体书生产。{{participation ? participation.noticeText : invitation && invitation.noticeText}}</view>
   <view wx:else="" class="soft section">请阅读本次参与说明，分别决定资料用途。</view>
   <view wx:if="{{accountId}}" class="small muted section">当前账号：{{accountId}}</view>
   <view wx:if="{{status}}" class="soft section">{{status}}</view>

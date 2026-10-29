@@ -1,6 +1,6 @@
 <view wx:if="{{mode === 'live'}}" class="page">
   <view class="title">邀请与参与管理</view>
-  <view class="soft section">{{participation.policyStatus === 'internal-acceptance' ? '内部功能验收 · 无付款，不发起实体书生产。' : '邀请和账号绑定不代替本人用途授权。'}}{{participation.noticeText}}</view>
+  <view wx:if="{{participation}}" class="soft section">{{participation.policyStatus === 'internal-acceptance' ? '内部功能验收 · 无付款，不发起实体书生产。' : '邀请和账号绑定不代替本人用途授权。'}}{{participation.noticeText}}</view>
   <view class="section note">请本人申请后，在线下核对账号再确认。付款和邀请转发都不会授予资料权限。</view>
   <view wx:if="{{status}}" class="soft section">{{status}}</view>
   <button wx:if="{{!loggedIn}}" class="btn section" bindtap="loginLive" disabled="{{busy}}">微信登录后继续邀请</button>
