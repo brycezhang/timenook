@@ -8,6 +8,9 @@ import {
   ParseUUIDPipe,
   Req,
   Injectable,
+  Optional,
+  Inject,
+  ServiceUnavailableException,
   ConflictException,
   BadRequestException,
 } from "@nestjs/common";
@@ -24,6 +27,8 @@ import type { FastifyRequest } from "fastify";
 import { Participation } from "../identity/participation";
 import { Stories } from "../stories/stories";
 import { Interviews } from "./interviews";
+import { readProjectAdmissionIn } from "./project-admission";
+import { INTERNAL_NOTICE_VERSION, INTERNAL_NOTICE } from "./internal-profile";
 import { ProductionTasks } from "../tasks/tasks";
 class ProjectMetadataDto {
   @ApiProperty() @IsInt() @Min(0) expectedVersion!: number;
@@ -33,9 +38,11 @@ class ProjectMetadataDto {
 export class ProjectOverview {
   constructor(
     private readonly participation: Participation,
-    private readonly stories: Stories,
+    @Optional() @Inject(Stories) private readonly stories: Stories | undefined,
     private readonly interviews: Interviews,
-    private readonly tasks: ProductionTasks,
+    @Optional()
+    @Inject(ProductionTasks)
+    private readonly tasks: ProductionTasks | undefined,
   ) {}
   private async view(
     tx: Prisma.TransactionClient,
@@ -46,10 +53,18 @@ export class ProjectOverview {
       accessExpiresAt: string | null;
     },
   ) {
-    const p = await tx.project.findUniqueOrThrow({ where: { id: projectId } }),
-      order = await tx.paymentOrder.findUniqueOrThrow({
-        where: { id: p.orderId! },
-      });
+    const admission = await readProjectAdmissionIn(tx, projectId),
+      p = admission.project;
+    const storyRows = await tx.story.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "asc" },
+    });
+    const taskRows = await tx.productionTask.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "asc" },
+    });
+    if ((storyRows.length && !this.stories) || (taskRows.length && !this.tasks))
+      throw new ServiceUnavailableException();
     const canReadStories = await this.participation.materialAvailableIn(
       tx,
       projectId,
@@ -62,7 +77,7 @@ export class ProjectOverview {
           orderBy: { createdAt: "desc" },
         })
       ).map((s) =>
-        this.stories.view(tx, projectId, s.id, undefined, canReadStories),
+        this.stories!.view(tx, projectId, s.id, undefined, canReadStories),
       ),
     );
     const confirmed = stories.filter((s) => s.decision?.confirmed).length,
@@ -91,7 +106,22 @@ export class ProjectOverview {
       );
     return {
       projectId,
-      bookTitle: p.bookTitle ?? order.bookTitle,
+      bookTitle: p.bookTitle ?? admission.snapshot.bookTitle ?? "人生故事书",
+      source: admission.source,
+      noticeVersion:
+        admission.source === "internal-acceptance"
+          ? INTERNAL_NOTICE_VERSION
+          : "synthetic-d08-v1",
+      evidencePrefix:
+        admission.source === "internal-acceptance" ? "internal:" : "synthetic:",
+      noticeText:
+        admission.source === "internal-acceptance"
+          ? INTERNAL_NOTICE
+          : undefined,
+      policyStatus:
+        admission.source === "internal-acceptance"
+          ? "internal-acceptance"
+          : "synthetic-only",
       metadataVersion: p.metadataVersion,
       subjectId: actor.subjectId,
       role: actor.subjectDecision === "self" ? "narrator" : "initiator",
@@ -103,7 +133,7 @@ export class ProjectOverview {
             where: { projectId },
             orderBy: { createdAt: "asc" },
           })
-        ).map((task) => this.tasks.view(tx, task, false)),
+        ).map((task) => this.tasks!.view(tx, task, false)),
       ),
       interviews: (await this.interviews.listIn(tx, projectId)).interviews,
       summary: { pending, confirmed, included },

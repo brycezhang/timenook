@@ -202,10 +202,22 @@ export async function createApplication(
     refundRuntime?: Partial<RefundRuntime>;
   } = {},
 ): Promise<NestFastifyApplication> {
+  if (
+    config.acceptance &&
+    (config.acceptance.mode !== "internal-acceptance" ||
+      config.acceptance.profileVersion !== "internal-acceptance-v1" ||
+      !config.web ||
+      !config.privacyJournal ||
+      config.payments)
+  )
+    throw new ConfigurationError(
+      "Internal acceptance requires its profile, web sessions, independent privacy journal and no payments",
+    );
   if (config.web) {
     validateWebConfig(config.web);
     if (
       config.environment !== "test" &&
+      !config.acceptance &&
       (config.payments ||
         config.participation ||
         config.recording ||
@@ -399,6 +411,7 @@ export async function createApplication(
     );
   }
   const productEnabled = !!(
+    config.acceptance ||
     config.payments ||
     config.participation ||
     config.recording ||
@@ -448,19 +461,22 @@ export async function createApplication(
       NativeWechatLinkController,
       PaymentWebhookController,
       RefundWebhookController,
+      ...(config.payments
+        ? [RefundsController, AdminRefundsController, OrdersController]
+        : []),
       ...(productEnabled
         ? [
-            RefundsController,
-            AdminRefundsController,
-            OrdersController,
             ParticipationController,
             AdminCareController,
             DeletionController,
             AdminDeletionController,
           ]
         : []),
-      ...(config.participation
+      ...(config.participation || config.acceptance
         ? [PersonalPlanController, InterviewsController]
+        : []),
+      ...(config.recording || config.acceptance
+        ? [ProjectOverviewController]
         : []),
       ...(config.photos ? [PhotosController, PhotoObjectsController] : []),
       ...(config.recording
@@ -484,7 +500,6 @@ export async function createApplication(
             FollowupsController,
             StoryCareController,
             AdminStoryCareController,
-            ProjectOverviewController,
             RecordingObjectsController,
             ProductionTasksController,
             AdminTasksController,
@@ -530,6 +545,7 @@ export async function createApplication(
             },
           ]
         : []),
+      ...(config.recording || config.acceptance ? [ProjectOverview] : []),
       { provide: AI_FETCH, useValue: options.aiFetch ?? fetch },
       ...(config.recording
         ? [
@@ -555,7 +571,6 @@ export async function createApplication(
             Stories,
             Followups,
             StoryCare,
-            ProjectOverview,
             ProductionTasks,
             {
               provide: TASK_OBJECTS,

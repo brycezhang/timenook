@@ -447,7 +447,7 @@ export class ProjectPlans {
       expectedVersion: number;
       subjectId: string;
       operatorUserId: string;
-      method: "self_wechat" | "assisted";
+      method: "self_wechat" | "self_web" | "assisted";
       assistedSessionId?: string;
       blockedTopics: string[];
       questionStates: PlanQuestionState[];

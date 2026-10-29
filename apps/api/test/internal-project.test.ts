@@ -162,3 +162,143 @@ test("controlled CLI creates one real internal project across concurrent retries
     await db.$disconnect();
   }
 });
+
+function request(
+  user: Awaited<ReturnType<typeof signedIn>>,
+  path: string,
+  method: "GET" | "POST" = "GET",
+  payload?: object,
+) {
+  return app.inject({
+    method,
+    url: `/v1${path}`,
+    headers: {
+      ...headers,
+      cookie: user.cookie,
+      "x-csrf-token": user.csrf,
+      "idempotency-key": `internal-${randomUUID()}`,
+    },
+    ...(payload ? { payload } : {}),
+  });
+}
+test("two real web accounts invite, approve, authorize purposes, edit a plan and enter narration", async () => {
+  const owner = await signedIn(),
+    narrator = await signedIn(),
+    outsider = await signedIn();
+  const created = await cli("internal", "create", {
+    provisionKey: `flow-${randomUUID()}`,
+    initiatorUserId: owner.user.id,
+  });
+  const id = created.projectId;
+  const invitation = await request(
+    owner,
+    `/projects/${id}/invitations`,
+    "POST",
+    {},
+  );
+  assert.equal(invitation.statusCode, 201);
+  const token = invitation.json().data.token;
+  const preview = await app.inject({
+    method: "GET",
+    url: `/v1/invitations/${token}`,
+  });
+  assert.equal(preview.statusCode, 200);
+  assert.equal(preview.json().data.policyStatus, "internal-acceptance");
+  const applied = await request(
+    narrator,
+    `/invitations/${token}/requests`,
+    "POST",
+    {
+      noticeVersion: "internal-participation-v1",
+      evidenceRef: "internal:本人阅读告知并申请",
+    },
+  );
+  assert.equal(applied.statusCode, 201);
+  const approved = await request(
+    owner,
+    `/binding-requests/${applied.json().data.id}/approve`,
+    "POST",
+    { expectedBindingVersion: 0, evidenceRef: "internal:发起人核对申请者" },
+  );
+  assert.equal(approved.statusCode, 201);
+  let state = (await request(narrator, `/projects/${id}/participation`)).json()
+    .data;
+  assert.equal(state.canCollect, false);
+  assert.equal(state.role, "narrator");
+  const choose = (
+    user: Awaited<ReturnType<typeof signedIn>>,
+    purpose: string,
+  ) =>
+    request(user, `/projects/${id}/consents`, "POST", {
+      purpose,
+      granted: true,
+      noticeVersion: state.noticeVersion,
+      evidenceRef: "internal:本人明确选择用途",
+      expectedBindingVersion: state.bindingVersion,
+      expectedAccessEpoch: state.accessEpoch,
+    });
+  assert.equal((await choose(owner, "collection")).statusCode, 403);
+  for (const purpose of ["collection", "ai", "sharing"]) {
+    const result = await choose(narrator, purpose);
+    assert.equal(result.statusCode, 201);
+    state = result.json().data;
+  }
+  assert.equal(state.canCollect, true);
+  assert.equal(state.canProcessAi, true);
+  assert.ok(
+    state.consent.every(
+      (decision: { method: string; evidenceRef: string }) =>
+        decision.method === "self_web" &&
+        decision.evidenceRef.startsWith("self_web:"),
+    ),
+  );
+  assert.equal(
+    (await request(outsider, `/projects/${id}/plan`)).statusCode,
+    403,
+  );
+  const plan = await request(narrator, `/projects/${id}/plan`);
+  assert.equal(plan.statusCode, 200);
+  const data = plan.json().data;
+  const changed = structuredClone({
+    chapters: data.chapters,
+    starters: data.starters,
+  });
+  changed.chapters[0].title = "内测编辑章节";
+  const revised = await request(narrator, `/projects/${id}/plan`, "POST", {
+    expectedVersion: data.revision,
+    content: changed,
+  });
+  assert.equal(revised.statusCode, 201);
+  const preferences = await request(
+    narrator,
+    `/projects/${id}/plan/preferences`,
+    "POST",
+    {
+      expectedVersion: revised.json().data.preferences.version,
+      blockedTopics: ["不想回答的话题"],
+      questionStates: [],
+    },
+  );
+  assert.equal(preferences.statusCode, 201);
+  const overview = await request(owner, `/projects/${id}/overview`);
+  assert.equal(overview.statusCode, 200);
+  assert.equal(overview.json().data.noticeVersion, "internal-participation-v1");
+  const started = await request(
+    narrator,
+    `/projects/${id}/interviews`,
+    "POST",
+    {
+      clientInterviewId: randomUUID(),
+      expectedPlanRevision: revised.json().data.revision,
+      starterKind: "free-narration",
+    },
+  );
+  assert.equal(started.statusCode, 201);
+  const context = await request(
+    narrator,
+    `/projects/${id}/interviews/context`,
+    "POST",
+    {},
+  );
+  assert.equal(context.statusCode, 201);
+});
