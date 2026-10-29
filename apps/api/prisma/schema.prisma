@@ -505,9 +505,23 @@ model PaymentInbox {
  @@map("payment_inbox")
 }
 
+model InternalProjectAdmission {
+ id String @id @db.Uuid
+ projectId String @unique @map("project_id") @db.Uuid
+ initiatorUserId String @map("initiator_user_id") @db.Uuid
+ provisionKey String @unique @map("provision_key")
+ requestHash String @map("request_hash") @db.Char(64)
+ profileVersion String @map("profile_version")
+ snapshot Json
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([projectId,id])
+ @@map("internal_project_admissions")
+}
+
 model ProjectServiceTerms {
  projectId String @id @map("project_id") @db.Uuid
- packageVersionId String @map("package_version_id") @db.Uuid
+ packageVersionId String? @map("package_version_id") @db.Uuid
+ internalAdmissionId String? @map("internal_admission_id") @db.Uuid
  policy Json
  activatedAt DateTime @map("activated_at") @db.Timestamptz(3)
  @@map("project_service_terms")

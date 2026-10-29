@@ -63,6 +63,23 @@ export class ProjectServiceTerms {
       },
     });
   }
+  async activateInternal(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    internalAdmissionId: string,
+    snapshot: Prisma.JsonObject,
+    createdAt: Date,
+  ) {
+    const admission = snapshot.admission as Prisma.JsonObject;
+    await tx.projectServiceTerms.create({
+      data: {
+        projectId,
+        internalAdmissionId,
+        activatedAt: createdAt,
+        policy: { d02: admission.d02!, d03: admission.d03! },
+      },
+    });
+  }
   // Trusted server-to-server composition boundary for T11/T23, never user input.
   async recordFact(
     command: {

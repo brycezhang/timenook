@@ -22,6 +22,10 @@ export interface ApiConfig {
     loginTtlSeconds: number;
     sessionTtlSeconds: number;
   };
+  acceptance?: {
+    mode: "internal-acceptance";
+    profileVersion: "internal-acceptance-v1";
+  };
   payments?: WechatPayConfig;
   // No production D08 approval exists. This mode only exercises isolated tests.
   participation?: { mode: "synthetic-d08" };
@@ -362,6 +366,13 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     };
   }
   return {
+    acceptance:
+      env.INTERNAL_ACCEPTANCE_ENABLED === "1"
+        ? {
+            mode: "internal-acceptance",
+            profileVersion: "internal-acceptance-v1",
+          }
+        : undefined,
     web: readWebConfig(env),
     payments,
     privacyJournal,
