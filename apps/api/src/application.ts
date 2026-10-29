@@ -128,6 +128,7 @@ import {
   ApiConfig,
   ConfigurationError,
   validateAiProbeConfig,
+  validateWebConfig,
 } from "./config";
 import { Infrastructure } from "./infrastructure";
 import { errorResponse, HttpErrorFilter } from "./http-error-filter";
@@ -141,6 +142,9 @@ import {
 import { ErrorResponseDto, HealthResponseDto } from "./health-contract";
 import { IdentityAccess, WECHAT_FETCH } from "./identity/identity-access";
 import { IdentityController } from "./identity/identity-controller";
+import { WebController } from "./web/web-controller";
+import { WebAccess } from "./web/web-access";
+import { HttpException } from "@nestjs/common";
 
 @Controller("health")
 @ApiTags("Health")
@@ -194,6 +198,22 @@ export async function createApplication(
     refundRuntime?: Partial<RefundRuntime>;
   } = {},
 ): Promise<NestFastifyApplication> {
+  if (config.web) {
+    validateWebConfig(config.web);
+    if (
+      config.environment !== "test" &&
+      (config.payments ||
+        config.participation ||
+        config.recording ||
+        config.photos ||
+        config.transcription ||
+        config.generation ||
+        config.books)
+    )
+      throw new ConfigurationError(
+        "Web product runtime requires the separate controlled acceptance assembly and lifetime-service verification",
+      );
+  }
   if (options.feishuFetch && config.environment !== "test")
     throw new ConfigurationError(
       "Feishu transport overrides require isolated tests",
@@ -380,7 +400,8 @@ export async function createApplication(
     config.recording ||
     config.books
   );
-  if (productEnabled && !config.privacyJournal)
+  const privateEnabled = productEnabled || !!config.web;
+  if (privateEnabled && !config.privacyJournal)
     throw new ConfigurationError(
       "Product private capabilities require an independent privacy journal",
     );
@@ -419,6 +440,7 @@ export async function createApplication(
   const module = {
     module: AppModule,
     controllers: [
+      ...(config.web ? [WebController] : []),
       PaymentWebhookController,
       RefundWebhookController,
       ...(productEnabled
@@ -473,6 +495,7 @@ export async function createApplication(
         : []),
     ],
     providers: [
+      ...(config.web ? [WebAccess] : []),
       { provide: API_CONFIG, useValue: config },
       { provide: ADMIN_FEISHU_FETCH, useValue: options.feishuFetch ?? fetch },
       Infrastructure,
@@ -597,6 +620,18 @@ export async function createApplication(
       abortOnError: false,
     },
   );
+  if (config.web)
+    adapter.getInstance().addHook("onRequest", async (request, reply) => {
+      try {
+        await app.get(WebAccess).bridge(request);
+      } catch (error) {
+        const status = error instanceof HttpException ? error.getStatus() : 503;
+        return reply
+          .header("Cache-Control", "no-store")
+          .status(status)
+          .send(errorResponse(status, request.id));
+      }
+    });
   adapter.getInstance().addHook("onSend", async (request, reply, payload) => {
     if (request.routeOptions.url?.startsWith("/v1/admin/")) {
       // Validation rejects before the controller; only the fixed action, generated
@@ -619,9 +654,9 @@ export async function createApplication(
     });
   }
   try {
-    if (productEnabled) {
+    if (privateEnabled) {
       await app.get(PrivacyRights).initialize();
-      await app.get(Deletions).sweep();
+      if (productEnabled) await app.get(Deletions).sweep();
     }
   } catch (error) {
     await app.close();
@@ -629,7 +664,7 @@ export async function createApplication(
   }
   adapter.getInstance().addHook("onRequest", async (request) => {
     if (
-      productEnabled &&
+      privateEnabled &&
       !request.url.startsWith("/health/live") &&
       !request.url.startsWith("/docs") &&
       !request.url.startsWith("/openapi")
