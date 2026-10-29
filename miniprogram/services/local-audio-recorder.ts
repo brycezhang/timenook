@@ -11,7 +11,9 @@ export function recordingId() {
 }
 /** One device and durable-file lifecycle, shared by product and controlled probe adapters. */
 export class LocalAudioRecorder {
-  protected readonly manager = wx.getRecorderManager();
+  protected readonly manager = wx.getRecorderManager() as ReturnType<
+    typeof wx.getRecorderManager
+  > & { onStopping?: (listener: () => void) => void };
   protected current: ProbeSnapshot = {
     hasPendingSave: false,
     stage: "idle",
@@ -62,6 +64,11 @@ export class LocalAudioRecorder {
       this.segmentBegan = Date.now();
       this.update("recording", "录音中；尚未保存，请勿强行退出");
     });
+    this.manager.onStopping?.(() => {
+      if (!this.active || !recordingLease.owns(this)) return;
+      this.stopRequested = true;
+      this.update("saving", "录音已停止，正在处理并保存本机文件，请先别退出");
+    });
     this.manager.onStop((value) => {
       if (!this.active || !recordingLease.owns(this)) return;
       recordingLease.release(this);
@@ -107,7 +114,13 @@ export class LocalAudioRecorder {
     this.current = { ...this.current, stage, message };
     this.listener?.(this.snapshot());
   }
-  start(actualQuestionId?: string) {
+  start(actualQuestionId?: string, maxDurationMs = 300000) {
+    if (
+      !Number.isSafeInteger(maxDurationMs) ||
+      maxDurationMs < 1 ||
+      maxDurationMs > 300000
+    )
+      throw new Error("录音额度未确认，请重新查询");
     this.check();
     if (
       this.active ||
@@ -122,7 +135,7 @@ export class LocalAudioRecorder {
     this.stopRequested = false;
     this.update("requesting", "正在请求麦克风权限");
     this.manager.start({
-      duration: 300000,
+      duration: maxDurationMs,
       sampleRate: 16000,
       numberOfChannels: 1,
       encodeBitRate: 48000,
@@ -148,8 +161,10 @@ export class LocalAudioRecorder {
   stop() {
     if (this.active && !this.stopRequested) {
       this.stopRequested = true;
-      if (["recording", "paused"].includes(this.current.stage))
+      if (["recording", "paused"].includes(this.current.stage)) {
+        this.update("saving", "录音已停止，正在处理并保存本机文件，请先别退出");
         this.manager.stop();
+      }
     }
   }
   // Each callback commits only its clip against the latest durable manifest.
