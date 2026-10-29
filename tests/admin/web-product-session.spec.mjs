@@ -690,7 +690,7 @@ test.describe("production shared pages", () => {
         ),
     ).toBe(true);
     await page.screenshot({
-      path: "/Users/bryce/.codex/outputs/timenook-unified-web-2026-10-29/w02b-prepare-390.png",
+      path: join(root, "w02b-prepare-390.png"),
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await expect(
@@ -702,7 +702,7 @@ test.describe("production shared pages", () => {
       ),
     ).toBe(true);
     await page.screenshot({
-      path: "/Users/bryce/.codex/outputs/timenook-unified-web-2026-10-29/w02b-prepare-desktop.png",
+      path: join(root, "w02b-prepare-desktop.png"),
     });
     expect(errors).toEqual([]);
   });
