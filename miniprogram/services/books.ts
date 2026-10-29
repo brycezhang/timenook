@@ -1,6 +1,7 @@
 import type {
   BookContext,
   BookVersionView,
+  BookConfirmationContext,
   PlanDirectory,
 } from "../../packages/contracts/src";
 import { sessionClient } from "./session";
@@ -73,6 +74,30 @@ function context(value: BookContext, projectId: string): BookContext {
   return value;
 }
 export const bookClient = {
+  async confirmations(projectId: string) {
+    validProject(projectId);
+    return sessionClient.request<BookConfirmationContext>(
+      `/projects/${projectId}/book/confirmations`,
+    );
+  },
+  async confirmContent(
+    projectId: string,
+    input: {
+      role: "initiator" | "narrator";
+      bookVersionId: string;
+      snapshotHash: string;
+      pdfHash: string;
+      noticeVersion: string;
+      evidenceRef: string;
+    },
+    key: string,
+  ) {
+    validProject(projectId);
+    return sessionClient.request<BookConfirmationContext>(
+      `/projects/${projectId}/book/confirmations`,
+      { key, data: input },
+    );
+  },
   async reviseCover(
     projectId: string,
     expectedVersion: number,

@@ -20,7 +20,7 @@
 
 新增真实 HTTPS、PostgreSQL/Redis、受控账号 CLI 和 Cookie/CSRF 的浏览器用例，覆盖共用业务请求、恢复和退出、跨标签页换号、离页迟到响应、项目深链刷新、分步准备以及原件提交后回取 hash/MIME/长度。页面检查使用生产构建的手机和桌面入口；传输接口探针使用独立 HTTPS 开发服务，原 W01 生产构建回归保持不变。Browser plugin 未提供，使用仓库 Playwright 流程。
 
-录音声音在此传输用例中仅替换原生设备输入，实际 Page、本机 IndexedDB、HTTP、文件校验及封存均执行。测试项目沿用明确隔离的既有付款协议夹具，授权预先通过原生协议建立；不把它作为无付款项目、真实网页本人授权来源、真实资金或微信设备的证据。非 test 网页产品装配仍默认拒绝，须完成 W02/W04 受控运行及长期服务规则后再启用。
+录音声音在此传输用例中仅替换原生设备输入，实际 Page、本机 IndexedDB、HTTP、文件校验及封存均执行。测试项目沿用明确隔离的既有付款协议夹具，授权预先通过原生协议建立；不把它作为无付款项目、真实网页本人授权来源、真实资金或微信设备的证据。非 test 网页产品默认关闭；现在可通过显式内部验收配置消费长期服务、无付款项目及真实供应商。目标域名的实际结果见[运行验收](delivery/2026-10-29/mobile-web-online.md)。
 
 ```sh
 pnpm exec playwright test tests/admin/web-product-session.spec.mjs -c playwright.admin.config.mjs

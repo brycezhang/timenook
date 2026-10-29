@@ -32,6 +32,11 @@ export interface StoryDecisionView {
   createdAt: string;
 }
 export interface ProjectOverview {
+  noticeVersion?: string;
+  evidencePrefix?: string;
+  noticeText?: string;
+  policyStatus?: "internal-acceptance" | "synthetic-only" | "pending";
+  source?: "paid" | "internal-acceptance";
   projectId: string;
   bookTitle: string;
   metadataVersion: number;

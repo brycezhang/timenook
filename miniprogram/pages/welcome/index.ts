@@ -216,7 +216,8 @@ Page({
       !state ||
       this.data.busy ||
       state.role !== "narrator" ||
-      state.policyStatus !== "synthetic-only" ||
+      (state.policyStatus !== "synthetic-only" &&
+        state.policyStatus !== "internal-acceptance") ||
       !CONSENT_PURPOSES.includes(purpose)
     )
       return;
@@ -320,7 +321,8 @@ Page({
         this.data.busy ||
         !this.data.invitation ||
         !sessionClient.context() ||
-        this.data.invitation.policyStatus !== "synthetic-only"
+        (this.data.invitation.policyStatus !== "synthetic-only" &&
+          this.data.invitation.policyStatus !== "internal-acceptance")
       )
         return;
       const context = sessionClient.context();
@@ -370,7 +372,8 @@ Page({
     if (
       this.data.busy ||
       state?.role !== "narrator" ||
-      state.policyStatus !== "synthetic-only"
+      (state.policyStatus !== "synthetic-only" &&
+        state.policyStatus !== "internal-acceptance")
     )
       return;
     const context = sessionClient.context(),

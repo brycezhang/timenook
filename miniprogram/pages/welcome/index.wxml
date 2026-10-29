@@ -1,6 +1,7 @@
 <view wx:if="{{mode === 'live'}}" class="page">
   <view class="title">本人参与与资料用途</view>
-  <view class="soft section">隔离合成验证 · 当前告知和核验证据仅供工程测试；真实服务规则待冻结。</view>
+  <view wx:if="{{(participation && participation.policyStatus === 'internal-acceptance') || (invitation && invitation.policyStatus === 'internal-acceptance')}}" class="soft section">内部功能验收 · 无付款，不发起实体书生产。{{participation ? participation.noticeText : invitation && invitation.noticeText}}</view>
+  <view wx:else="" class="soft section">请阅读本次参与说明，分别决定资料用途。</view>
   <view wx:if="{{accountId}}" class="small muted section">当前账号：{{accountId}}</view>
   <view wx:if="{{status}}" class="soft section">{{status}}</view>
   <view wx:if="{{invitation}}" class="paper section">
@@ -8,7 +9,7 @@
     <view wx:for="{{invitation.process}}" wx:key="*this" class="section">{{index + 1}}. {{item}}</view>
     <view class="note section">{{invitation.choice}}</view>
     <view class="note section">申请只表示愿意参与，须发起人核对后绑定。采集保存、AI 处理和向发起人共享各自选择；哪些故事入书需之后另行确认。</view>
-    <button wx:if="{{loggedIn}}" class="btn section" bindtap="accept" disabled="{{busy || invitation.policyStatus !== 'synthetic-only'}}">已读说明，申请本人参与</button>
+    <button wx:if="{{loggedIn}}" class="btn section" bindtap="accept" disabled="{{busy || (invitation.policyStatus !== 'synthetic-only' && invitation.policyStatus !== 'internal-acceptance')}}">已读说明，申请本人参与</button>
   </view>
   <button wx:if="{{!loggedIn}}" class="btn section" bindtap="loginLive" disabled="{{busy}}">微信登录后参与</button>
   <button class="link" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button>
@@ -23,15 +24,15 @@
       <view wx:for="{{participation.choices}}" wx:key="purpose" class="paper section">
         <view>{{item.purpose === 'collection' ? '采集并保存讲述和照片' : item.purpose === 'ai' ? '交由AI处理素材' : '向本项目发起人共享资料'}}</view>
         <view class="note">{{item.granted === null ? '尚未选择' : item.granted ? '已同意' : '已拒绝或撤回'}}</view>
-        <button class="btn secondary section" data-purpose="{{item.purpose}}" data-granted="true" bindtap="chooseConsent" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">同意此用途</button>
-        <button class="link" data-purpose="{{item.purpose}}" data-granted="false" bindtap="chooseConsent" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">{{item.granted ? '撤回此用途' : '拒绝此用途'}}</button>
+        <button class="btn secondary section" data-purpose="{{item.purpose}}" data-granted="true" bindtap="chooseConsent" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">同意此用途</button>
+        <button class="link" data-purpose="{{item.purpose}}" data-granted="false" bindtap="chooseConsent" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">{{item.granted ? '撤回此用途' : '拒绝此用途'}}</button>
       </view>
-      <view class="paper section"><view>删除申请核验通过后，在线访问立即停止且项目删除不可逆。各层副本仍分别清理和核验。</view><button class="btn secondary section" bindtap="requestDelete" disabled="{{busy || participation.policyStatus !== 'synthetic-only'}}">提交本人删除申请，等待客服核验</button></view>
+      <view class="paper section"><view>删除申请核验通过后，在线访问立即停止且项目删除不可逆。各层副本仍分别清理和核验。</view><button class="btn secondary section" bindtap="requestDelete" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">提交本人删除申请，等待客服核验</button></view>
       <view class="soft section">{{participation.canCollect ? '已授权采集，可以进入项目开始讲述。' : '未获采集许可，不能开始录音。'}}{{participation.canProcessAi ? '已单独授权AI处理。' : 'AI处理未获许可。'}}</view>
     </view>
-    <view class="paper section"><view class="section-title">联系服务与本人账号绑定</view><view class="note section">目标账号先微信登录，再提供其账号编号。客服核验本人后换绑；新账号须重新选择资料用途。</view>
+    <view class="paper section"><view class="section-title">联系服务与本人账号绑定</view><view class="note section">目标账号先登录产品，再提供其账号编号。客服核验本人后换绑；新账号须重新选择资料用途。</view>
       <input class="input section" placeholder="目标账号编号" value="{{targetUserId}}" bindinput="targetInput" disabled="{{busy}}"/>
-      <button class="btn secondary section" bindtap="requestRebind" disabled="{{busy || !targetUserId || participation.policyStatus !== 'synthetic-only'}}">{{participation.bindingVersion === 0 ? '提交客服本人账号绑定申请' : '提交客服换绑申请'}}</button>
+      <button class="btn secondary section" bindtap="requestRebind" disabled="{{busy || !targetUserId || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">{{participation.bindingVersion === 0 ? '提交客服本人账号绑定申请' : '提交客服换绑申请'}}</button>
       <view wx:if="{{supportCaseRef}}" class="note section">工单：{{supportCaseRef}}</view>
       <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="small muted">{{item.kind === 'rebind' ? '换绑工单' : item.kind === 'withdraw' ? '撤回工单' : item.kind === 'export' ? '资料导出工单' : item.kind === 'correction' ? '故事限时校对工单' : item.kind === 'production_handoff' ? '生产交接工单' : item.kind === 'quality' ? '质量售后工单' : item.kind === 'refund' ? '退款工单' : '删除工单'}}：record:{{item.id}}</view><view class="note">处理状态：{{item.state === 'open' ? '待客服核验' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : item.state === 'verified' ? '已核验，后续交付或执行待完成' : '已完成'}}</view></view>
     </view>

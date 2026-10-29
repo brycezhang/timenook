@@ -17,9 +17,9 @@
           <view>书稿第 {{version.version}} 版</view>
           <view wx:if="{{version.pageCount}}">{{version.pageCount}} 页 · {{excerpts.length}} 篇故事</view>
         </view>
-        <button wx:if="{{version.state === 'ready'}}" class="btn section" bindtap="manuscript">查看完整书稿</button>
-        <button wx:if="{{version.state === 'ready'}}" class="btn secondary section" bindtap="print" disabled="{{busy}}">双方确认与首本制作</button>
-        <button class="btn secondary section" bindtap="quality" disabled="{{busy}}">质量售后与原单重印</button>
+        <button wx:if="{{version.state === 'ready'}}" class="btn section" bindtap="manuscript">查看完整书稿并确认</button>
+        <button wx:if="{{version.state === 'ready' && context.physicalProduction !== false}}" class="btn secondary section" bindtap="print" disabled="{{busy}}">双方确认与首本制作</button>
+        <button wx:if="{{context.physicalProduction !== false}}" class="btn secondary section" bindtap="quality" disabled="{{busy}}">质量售后与原单重印</button>
         <view class="section-title section">本版目录</view>
         <view wx:for="{{version.toc}}" wx:key="index" class="toc-row"><text>{{item.title}}</text><text>第 {{item.page}} 页</text></view>
         <view wx:if="{{!version.toc}}" class="section">实际页数将在书稿生成后显示。</view>
@@ -28,7 +28,7 @@
           <view class="section-title">{{item.title}}</view><text class="excerpt-body">{{item.text}}</text>
         </view>
         <button wx:if="{{version.state === 'failed'}}" class="btn section" bindtap="retry" disabled="{{busy || !draftAvailable}}">重试生成本版</button>
-        <view class="note section">当前为合成测试规格，尚未开放正式生产。</view>
+        <view class="note section">{{context.physicalProduction === false ? '内部功能验收书稿，无付款或实体书生产。' : '当前为合成测试规格，尚未开放正式生产。'}}</view>
       </block>
       <button class="btn section" bindtap="generate" disabled="{{busy || !draftAvailable || dirty || coverDirty || !context.eligibleStories.length || (version && (version.state === 'queued' || version.state === 'rendering'))}}">生成完整书稿</button>
       <button class="btn secondary section" bindtap="editCover" disabled="{{busy || !draftAvailable}}">{{coverEditing ? '收起书封编辑' : '调整书封'}}</button>

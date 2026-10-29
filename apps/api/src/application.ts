@@ -1,3 +1,4 @@
+import { validateInternalMediaConfig } from "./media/product-runtime";
 import { PrivacyRights } from "./care/privacy-rights";
 import {
   Deletions,
@@ -202,10 +203,22 @@ export async function createApplication(
     refundRuntime?: Partial<RefundRuntime>;
   } = {},
 ): Promise<NestFastifyApplication> {
+  if (
+    config.acceptance &&
+    (config.acceptance.mode !== "internal-acceptance" ||
+      config.acceptance.profileVersion !== "internal-acceptance-v1" ||
+      !config.web ||
+      !config.privacyJournal ||
+      config.payments)
+  )
+    throw new ConfigurationError(
+      "Internal acceptance requires its profile, web sessions, independent privacy journal and no payments",
+    );
   if (config.web) {
     validateWebConfig(config.web);
     if (
       config.environment !== "test" &&
+      !config.acceptance &&
       (config.payments ||
         config.participation ||
         config.recording ||
@@ -227,6 +240,7 @@ export async function createApplication(
       "Refund scheduling and clock overrides require isolated tests",
     );
   if (config.books) {
+    const internal = config.books.mode === "internal-acceptance";
     let url: URL;
     try {
       url = new URL(config.books.entryBaseUrl);
@@ -234,31 +248,49 @@ export async function createApplication(
       throw new ConfigurationError("Book original-entry URL is invalid");
     }
     if (
-      config.environment !== "test" ||
-      config.books.mode !== "synthetic-local" ||
+      (internal
+        ? !config.acceptance ||
+          config.environment === "production" ||
+          config.books.specificationVersion !== "internal-a5-candidate-v1" ||
+          config.books.provenanceVersion !== "internal-provenance-v1" ||
+          url.origin !== config.web?.origin ||
+          url.pathname !== "/app/audio/"
+        : config.environment !== "test" ||
+          config.books.mode !== "synthetic-local" ||
+          !/^synthetic-/.test(config.books.specificationVersion) ||
+          !/^synthetic-/.test(config.books.provenanceVersion) ||
+          !url.hostname.endsWith(".invalid") ||
+          url.pathname !== "/timenook/audio/") ||
       !config.recording ||
       !config.books.storageRoot.startsWith("/") ||
-      !/^synthetic-/.test(config.books.specificationVersion) ||
-      !/^synthetic-/.test(config.books.provenanceVersion) ||
       (config.books.maxPhotoBytes !== undefined &&
         (!Number.isSafeInteger(config.books.maxPhotoBytes) ||
           config.books.maxPhotoBytes < 1 ||
           config.books.maxPhotoBytes > 33554432)) ||
       url.protocol !== "https:" ||
-      !url.hostname.endsWith(".invalid") ||
-      url.pathname !== "/timenook/audio/" ||
       url.username ||
       url.password ||
       url.search ||
       url.hash
     )
       throw new ConfigurationError(
-        "Book rendering requires explicit isolated synthetic specification and provenance",
+        "Book rendering requires an explicit internal acceptance or isolated synthetic configuration",
       );
+  }
+  const internalMedia = config.recording?.mode === "internal-acceptance";
+  if (internalMedia) {
+    try {
+      validateInternalMediaConfig(config);
+    } catch {
+      throw new ConfigurationError(
+        "Internal media requires explicit product OSS, ASR and DeepSeek configuration",
+      );
+    }
   }
   const generation = config.generation;
   if (
     generation &&
+    !internalMedia &&
     (config.environment !== "test" ||
       !config.recording ||
       !config.participation ||
@@ -284,6 +316,7 @@ export async function createApplication(
     );
   if (
     config.photos &&
+    !internalMedia &&
     (config.environment !== "test" ||
       config.photos.mode !== "synthetic-local" ||
       !config.recording ||
@@ -297,6 +330,7 @@ export async function createApplication(
     );
   if (
     config.transcription &&
+    !internalMedia &&
     (config.environment !== "test" ||
       !config.recording ||
       config.transcription.mode !== "synthetic-local" ||
@@ -322,6 +356,7 @@ export async function createApplication(
     );
   if (
     config.recording &&
+    !internalMedia &&
     (config.environment !== "test" ||
       config.recording.mode !== "synthetic-local" ||
       !config.participation ||
@@ -399,6 +434,7 @@ export async function createApplication(
     );
   }
   const productEnabled = !!(
+    config.acceptance ||
     config.payments ||
     config.participation ||
     config.recording ||
@@ -448,19 +484,22 @@ export async function createApplication(
       NativeWechatLinkController,
       PaymentWebhookController,
       RefundWebhookController,
+      ...(config.payments
+        ? [RefundsController, AdminRefundsController, OrdersController]
+        : []),
       ...(productEnabled
         ? [
-            RefundsController,
-            AdminRefundsController,
-            OrdersController,
             ParticipationController,
             AdminCareController,
             DeletionController,
             AdminDeletionController,
           ]
         : []),
-      ...(config.participation
+      ...(config.participation || config.acceptance
         ? [PersonalPlanController, InterviewsController]
+        : []),
+      ...(config.recording || config.acceptance
+        ? [ProjectOverviewController]
         : []),
       ...(config.photos ? [PhotosController, PhotoObjectsController] : []),
       ...(config.recording
@@ -469,22 +508,25 @@ export async function createApplication(
             StoriesController,
             ...(config.books
               ? [
-                  QualityCareController,
-                  AdminQualityCareController,
                   BooksController,
-                  CompleteExportsController,
-                  AdminCompleteExportsController,
                   BookAudioController,
-                  FirstCopyController,
-                  FulfillmentController,
-                  AdminFulfillmentController,
-                  AdminFirstCopyController,
+                  ...(config.books.mode === "synthetic-local"
+                    ? [
+                        QualityCareController,
+                        AdminQualityCareController,
+                        CompleteExportsController,
+                        AdminCompleteExportsController,
+                        FirstCopyController,
+                        FulfillmentController,
+                        AdminFulfillmentController,
+                        AdminFirstCopyController,
+                      ]
+                    : []),
                 ]
               : []),
             FollowupsController,
             StoryCareController,
             AdminStoryCareController,
-            ProjectOverviewController,
             RecordingObjectsController,
             ProductionTasksController,
             AdminTasksController,
@@ -530,17 +572,17 @@ export async function createApplication(
             },
           ]
         : []),
+      ...(config.recording || config.acceptance ? [ProjectOverview] : []),
       { provide: AI_FETCH, useValue: options.aiFetch ?? fetch },
       ...(config.recording
         ? [
             ...(config.books
               ? [
-                  QualityCare,
                   Books,
-                  FirstCopies,
-                  CompleteExports,
-                  Fulfillment,
                   BookAudio,
+                  ...(config.books.mode === "synthetic-local"
+                    ? [QualityCare, FirstCopies, CompleteExports, Fulfillment]
+                    : []),
                   {
                     provide: BOOK_OBJECTS,
                     useValue:
@@ -555,7 +597,6 @@ export async function createApplication(
             Stories,
             Followups,
             StoryCare,
-            ProjectOverview,
             ProductionTasks,
             {
               provide: TASK_OBJECTS,

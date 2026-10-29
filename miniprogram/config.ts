@@ -1,5 +1,5 @@
 // Build with TIMENOOK_API_BASE_URL. Empty means real login is unavailable;
-// the ADR 0009 public URL is a deployment target, not an already live service.
+// runtime availability and WeChat configuration are recorded separately.
 declare const __TIMENOOK_API_BASE_URL__: string | undefined;
 declare const __TIMENOOK_COOKIE_WEB__: boolean | undefined;
 export const API_BASE_URL =

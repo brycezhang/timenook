@@ -128,7 +128,12 @@ Page({
   },
   async approve(e: E) {
     const state = this.data.participation;
-    if (!state || this.data.busy || state.policyStatus !== "synthetic-only")
+    if (
+      !state ||
+      this.data.busy ||
+      (state.policyStatus !== "synthetic-only" &&
+        state.policyStatus !== "internal-acceptance")
+    )
       return;
     const input = JSON.stringify({
       id: e.currentTarget.dataset.id,
@@ -144,6 +149,7 @@ Page({
         e.currentTarget.dataset.id,
         state.bindingVersion,
         this.approvalIntent.key,
+        state.noticeVersion,
       );
       if (context !== sessionClient.context() || generation !== this.generation)
         return;
@@ -168,6 +174,18 @@ Page({
   project() {
     home();
   },
+  copyInvitation() {
+    if (!this.data.inviteToken || this.shareContext !== sessionClient.context())
+      return;
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://sgl.wootoon.cn";
+    wx.setClipboardData({
+      data: `${origin}/app/invitation/${this.data.inviteToken}`,
+      fail: () => this.setData({ status: "邀请链接未复制，请重试。" }),
+    });
+  },
   onShareAppMessage() {
     if (dataMode() === "live")
       return this.data.inviteToken &&
@@ -187,7 +205,8 @@ Page({
     if (dataMode() === "live") {
       if (
         this.data.busy ||
-        this.data.participation?.policyStatus !== "synthetic-only"
+        (this.data.participation?.policyStatus !== "synthetic-only" &&
+          this.data.participation?.policyStatus !== "internal-acceptance")
       )
         return;
       const context = sessionClient.context();

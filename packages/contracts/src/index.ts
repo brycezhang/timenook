@@ -86,7 +86,7 @@ export interface PlanPreferenceDecision {
   version: number;
   subjectId: string;
   operatorUserId: string;
-  method: "self_wechat" | "assisted";
+  method: "self_wechat" | "self_web" | "assisted";
   assistedSessionId: string | null;
   blockedTopics: string[];
   questionStates: PlanQuestionState[];

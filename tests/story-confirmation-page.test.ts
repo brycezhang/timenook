@@ -617,53 +617,69 @@ test("project page displays real overview and preserves project/interview when o
   h.page.onUnload();
 });
 
-test("story opens by story id and saves confirmation separately from refusal to include this exact version", async () => {
-  const h = harness("story");
-  h.page.onLoad({ projectId, storyId });
-  const showing = h.page.onShow();
-  await tick();
-  assert.equal(
-    h.requests[0]?.url,
-    `${base}/projects/${projectId}/stories/${storyId}`,
-  );
-  h.respond(0, story());
-  await showing;
-  assert.equal(
-    h.page.data.liveParagraphs[0].text,
-    story().revision.paragraphs[0].text,
-  );
-  const preparing = h.page.prepareDecision();
-  h.respond(1, overview());
-  await preparing;
-  assert.equal(h.page.data.confirmedChoice, null);
-  assert.equal(h.page.data.includeChoice, null);
-  h.page.chooseConfirmation({ currentTarget: { dataset: { value: "true" } } });
-  h.page.chooseInclusion({ currentTarget: { dataset: { value: "false" } } });
-  h.page.decisionEvidence({
-    detail: { value: "本人逐段核对，确认内容，暂不入书。" },
+for (const policy of [
+  {
+    noticeVersion: "synthetic-d08-v1",
+    evidencePrefix: "synthetic:",
+    noticeText: "合成政策验证",
+  },
+  {
+    noticeVersion: "internal-participation-v1",
+    evidencePrefix: "internal:",
+    noticeText: "内部验收，由本人选择",
+  },
+]) {
+  test(`story saves the exact version and separate inclusion choice under ${policy.noticeVersion}`, async () => {
+    const h = harness("story");
+    h.page.onLoad({ projectId, storyId });
+    const showing = h.page.onShow();
+    await tick();
+    assert.equal(
+      h.requests[0]?.url,
+      `${base}/projects/${projectId}/stories/${storyId}`,
+    );
+    h.respond(0, story());
+    await showing;
+    assert.equal(
+      h.page.data.liveParagraphs[0].text,
+      story().revision.paragraphs[0].text,
+    );
+    const preparing = h.page.prepareDecision();
+    h.respond(1, { ...overview(), ...policy });
+    await preparing;
+    assert.equal(h.page.data.confirmedChoice, null);
+    assert.equal(h.page.data.includeChoice, null);
+    h.page.chooseConfirmation({
+      currentTarget: { dataset: { value: "true" } },
+    });
+    h.page.chooseInclusion({ currentTarget: { dataset: { value: "false" } } });
+    h.page.decisionEvidence({
+      detail: { value: "本人逐段核对，确认内容，暂不入书。" },
+    });
+    const deciding = h.page.decideLive();
+    assert.equal(
+      h.requests[2].url,
+      `${base}/projects/${projectId}/stories/${storyId}/decisions`,
+    );
+    const sent = h.requests[2].data;
+    assert.equal(sent.revisionId, revisionId);
+    assert.equal(sent.contentHash, "f".repeat(64));
+    assert.equal(sent.expectedVersion, 1);
+    assert.equal(sent.confirmed, true);
+    assert.equal(sent.allowInBook, false);
+    assert.equal(sent.noticeVersion, policy.noticeVersion);
+    assert.ok(sent.evidenceRef.startsWith(policy.evidencePrefix));
+    assert.equal(h.page.data.noticeText, policy.noticeText);
+    h.respond(2, {
+      ...story(),
+      decision: { revisionId, confirmed: true, allowInBook: false },
+    });
+    await deciding;
+    assert.equal(h.page.data.story.decision.allowInBook, false);
+    assert.match(h.page.data.decisionStatus, /暂不入书/);
+    h.page.onUnload();
   });
-  const deciding = h.page.decideLive();
-  assert.equal(
-    h.requests[2].url,
-    `${base}/projects/${projectId}/stories/${storyId}/decisions`,
-  );
-  const sent = h.requests[2].data;
-  assert.equal(sent.revisionId, revisionId);
-  assert.equal(sent.contentHash, "f".repeat(64));
-  assert.equal(sent.expectedVersion, 1);
-  assert.equal(sent.confirmed, true);
-  assert.equal(sent.allowInBook, false);
-  assert.equal(sent.noticeVersion, "synthetic-d08-v1");
-  assert.match(sent.evidenceRef, /^synthetic:/);
-  h.respond(2, {
-    ...story(),
-    decision: { revisionId, confirmed: true, allowInBook: false },
-  });
-  await deciding;
-  assert.equal(h.page.data.story.decision.allowInBook, false);
-  assert.match(h.page.data.decisionStatus, /暂不入书/);
-  h.page.onUnload();
-});
+}
 
 test("correction page preserves paragraph sources, records reasons and notes, and appends a revision through HTTP", async () => {
   const h = harness("edit-story");

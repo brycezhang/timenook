@@ -73,6 +73,9 @@ Page({
     careExpiry: "",
     careEvidence: "",
     careStatus: "",
+    noticeVersion: "synthetic-d08-v1",
+    evidencePrefix: "synthetic:",
+    noticeText: "当前为本地合成政策验证；此说明仅提交到本次选择。",
     decisionReady: false,
     canDecide: false,
     confirmedChoice: null as boolean | null,
@@ -471,6 +474,11 @@ Page({
       if (!this.currentLive(generation, context)) return;
       this.setData({
         decisionReady: true,
+        noticeVersion: overview.noticeVersion || "synthetic-d08-v1",
+        evidencePrefix: overview.evidencePrefix || "synthetic:",
+        noticeText:
+          overview.noticeText ||
+          "当前为本地合成政策验证；此说明仅提交到本次选择。",
         canDecide: overview.canDecide || !!this.confirmationSessionId,
         confirmedChoice: null,
         includeChoice: null,
@@ -526,7 +534,8 @@ Page({
       expectedVersion: current.version,
       confirmed: this.data.confirmedChoice,
       allowInBook: this.data.includeChoice,
-      evidenceRef: `synthetic:${this.data.evidence.trim()}`,
+      noticeVersion: this.data.noticeVersion,
+      evidenceRef: `${this.data.evidencePrefix}${this.data.evidence.trim()}`,
       ...(this.confirmationSessionId
         ? { assistedSessionId: this.confirmationSessionId }
         : {}),
@@ -605,7 +614,8 @@ Page({
       revisionId: revision.id,
       contentHash: revision.contentHash,
       expectedVersion: current.version,
-      evidenceRef: `synthetic:${evidence}`,
+      noticeVersion: this.data.noticeVersion,
+      evidenceRef: `${this.data.evidencePrefix}${evidence}`,
       expiresAt: expiry,
       ...(this.confirmationSessionId
         ? { assistedSessionId: this.confirmationSessionId }

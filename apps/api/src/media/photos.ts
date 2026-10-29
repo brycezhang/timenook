@@ -1,3 +1,4 @@
+import { readProjectAdmissionIn } from "../projects/project-admission";
 import { PrivacyRights } from "../care/privacy-rights";
 import { join } from "node:path";
 import { ProjectStreams } from "./project-streams";
@@ -195,12 +196,8 @@ export class Photos implements OnModuleDestroy {
   private async quota(tx: Prisma.TransactionClient, projectId: string) {
     await this.participation.requireMaterialIn(tx, projectId, "originalPhotos");
     await this.participation.requireMaterialIn(tx, projectId, "derivedPhotos");
-    const p = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
-    const order = await tx.paymentOrder.findUniqueOrThrow({
-      where: { id: p.orderId! },
-    });
-    const admission = (order.packageSnapshot as Prisma.JsonObject).admission as
-      Prisma.JsonObject | undefined;
+    const { snapshot } = await readProjectAdmissionIn(tx, projectId);
+    const admission = snapshot.admission as Prisma.JsonObject | undefined;
     const d04 = admission?.d04 as Prisma.JsonObject | undefined;
     const quotas = d04?.userQuotas as Prisma.JsonObject | undefined;
     const photos = quotas?.photos as Prisma.JsonObject | undefined;

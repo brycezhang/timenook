@@ -30,7 +30,6 @@ import {
 } from "@nestjs/swagger";
 import {
   IsString,
-  Equals,
   Matches,
   IsInt,
   Min,
@@ -48,7 +47,16 @@ import {
 } from "@prisma/client";
 import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
-import { IdentityAccess } from "./identity-access";
+import {
+  IdentityAccess,
+  readSelfMethodIn,
+  readSessionContextIn,
+} from "./identity-access";
+import { readProjectAdmissionIn } from "../projects/project-admission";
+import {
+  INTERNAL_NOTICE_VERSION,
+  INTERNAL_NOTICE,
+} from "../projects/internal-profile";
 import { closeProjectStreams } from "../media/project-streams";
 import { ProjectServiceTerms } from "../projects/service-terms";
 import { idempotencyKey } from "../payments/orders";
@@ -100,15 +108,15 @@ function careView(
   };
 }
 class ParticipationNoticeDto {
-  @ApiProperty({ enum: ["synthetic-d08-v1"] })
-  @Equals("synthetic-d08-v1")
+  @ApiProperty({ enum: ["synthetic-d08-v1", INTERNAL_NOTICE_VERSION] })
+  @IsIn(["synthetic-d08-v1", INTERNAL_NOTICE_VERSION])
   noticeVersion!: string;
   @ApiProperty({
     description:
-      "Isolated synthetic evidence only; no real identity verification",
+      "Explicit current notice choice; internal runtime records evidence from the actual authenticated session",
   })
   @IsString()
-  @Matches(/^synthetic:[^\r\n]{3,160}$/)
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
   evidenceRef!: string;
 }
 class AssistedSessionDto extends ParticipationNoticeDto {
@@ -132,7 +140,7 @@ class ApprovalDto {
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
   @ApiProperty()
   @IsString()
-  @Matches(/^synthetic:[^\r\n]{3,160}$/)
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
   evidenceRef!: string;
 }
 class RevokeDto extends ParticipationNoticeDto {
@@ -198,7 +206,11 @@ export class Participation
     this.terms = new ProjectServiceTerms(config.databaseUrl);
   }
   onModuleInit() {
-    if (this.config.participation?.mode !== "synthetic-d08") return;
+    if (
+      !this.config.acceptance &&
+      this.config.participation?.mode !== "synthetic-d08"
+    )
+      return;
     this.revocationSweep = setInterval(() => {
       if (this.sweeping) return;
       this.sweeping = this.reconcileRevocations()
@@ -211,8 +223,9 @@ export class Participation
   }
   private policy() {
     if (
-      this.config.environment !== "test" ||
-      this.config.participation?.mode !== "synthetic-d08"
+      !this.config.acceptance &&
+      (this.config.environment !== "test" ||
+        this.config.participation?.mode !== "synthetic-d08")
     )
       throw new ServiceUnavailableException();
   }
@@ -223,13 +236,30 @@ export class Participation
   ) {
     if (lock)
       await tx.$queryRaw`SELECT id FROM projects WHERE id=${id}::uuid FOR UPDATE`;
-    const p = await tx.project.findUnique({ where: { id } });
     await this.rights.requireAvailableIn(tx, id);
-    const order = p?.orderId
-      ? await tx.paymentOrder.findUnique({ where: { id: p.orderId } })
-      : null;
-    if (!p || !order || order.state !== "paid") throw new NotFoundException();
-    return { ...p, order };
+    const admission = await readProjectAdmissionIn(tx, id);
+    return {
+      ...admission.project,
+      initiatorUserId: admission.initiatorUserId,
+      source: admission.source,
+      snapshot: admission.snapshot,
+    };
+  }
+  private validateNotice(body: { noticeVersion: string }) {
+    if (
+      body.noticeVersion !==
+      (this.config.acceptance ? INTERNAL_NOTICE_VERSION : "synthetic-d08-v1")
+    )
+      throw new BadRequestException();
+  }
+  private async evidenceIn(
+    tx: Prisma.TransactionClient,
+    authorization: string | undefined,
+    supplied: string,
+  ) {
+    if (!this.config.acceptance) return supplied;
+    const context = await readSessionContextIn(tx, authorization);
+    return `${context.method}:${context.sessionId}:${randomUUID()}`;
   }
   private async subject(tx: Prisma.TransactionClient, id: string) {
     await tx.$queryRaw`SELECT id FROM project_subjects WHERE project_id=${id}::uuid FOR UPDATE`;
@@ -245,7 +275,7 @@ export class Participation
     const token = randomBytes(32).toString("base64url");
     const invite = await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
-      if (p.order.buyerId !== user.id) throw new ForbiddenException();
+      if (p.initiatorUserId !== user.id) throw new ForbiddenException();
       if ((await this.subject(tx, id)).boundUserId)
         throw new ConflictException();
       await tx.invitation.updateMany({
@@ -280,11 +310,20 @@ export class Participation
     const invite = await this.invitation(this.db, token);
     const p = await this.project(this.db, invite.projectId);
     return {
-      inviter: `发起人账号尾号 ${p.order.buyerId.slice(-6)}`,
+      inviter: `发起人账号尾号 ${p.initiatorUserId.slice(-6)}`,
       process: ["说一段", "保存后看看故事", "确认成书"],
       purposes: [...CONSENT_PURPOSES],
-      noticeVersion: "synthetic-d08-v1",
-      policyStatus: this.config.participation ? "synthetic-only" : "pending",
+      noticeVersion: this.config.acceptance
+        ? INTERNAL_NOTICE_VERSION
+        : "synthetic-d08-v1",
+      evidencePrefix: this.config.acceptance ? "internal:" : "synthetic:",
+      noticeText: this.config.acceptance ? INTERNAL_NOTICE : undefined,
+      source: p.source,
+      policyStatus: this.config.acceptance
+        ? "internal-acceptance"
+        : this.config.participation
+          ? "synthetic-only"
+          : "pending",
       choice:
         "采集保存讲述与照片；AI处理素材；向本项目发起人共享。可分别拒绝或撤回；入书须另行确认。请向邀请人核对账号尾号，提示不能替代本人核验。",
     };
@@ -300,7 +339,13 @@ export class Participation
       const found = await this.invitation(tx, token);
       const p = await this.project(tx, found.projectId, true);
       const invite = await this.invitation(tx, token);
-      if (user.id === p.order.buyerId) throw new ForbiddenException();
+      this.validateNotice(body);
+      const evidenceRef = await this.evidenceIn(
+        tx,
+        authorization,
+        body.evidenceRef,
+      );
+      if (user.id === p.initiatorUserId) throw new ForbiddenException();
       const application = await tx.bindingRequest.upsert({
         where: {
           invitationId_applicantUserId: {
@@ -313,6 +358,7 @@ export class Participation
           invitationId: invite.id,
           applicantUserId: user.id,
           ...body,
+          evidenceRef,
         },
         update: {},
         select: { id: true, state: true },
@@ -322,6 +368,10 @@ export class Participation
   }
   async memberships(authorization?: string) {
     const user = await this.identity.current(authorization);
+    const created = await this.db.project.findMany({
+      where: { createdBy: user.id },
+      select: { id: true },
+    });
     const bound = await this.db.projectSubject.findMany({
       where: { boundUserId: user.id },
       select: { projectId: true },
@@ -339,6 +389,7 @@ export class Participation
     });
     return {
       projects: [
+        ...created.map((p) => ({ projectId: p.id, state: "initiator" })),
         ...bound.map((p) => ({ ...p, state: "bound" })),
         ...invitations
           .filter((p) => !bound.some((b) => b.projectId === p.projectId))
@@ -350,7 +401,7 @@ export class Participation
     const user = await this.identity.current(authorization);
     return this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
-      if (p.order.buyerId !== user.id) throw new ForbiddenException();
+      if (p.initiatorUserId !== user.id) throw new ForbiddenException();
       const invitations = await tx.invitation.findMany({
         where: {
           projectId: id,
@@ -388,7 +439,7 @@ export class Participation
       if (!application || !invite) throw new NotFoundException();
       const p = await this.project(tx, invite.projectId, true);
       if (
-        p.order.buyerId !== user.id ||
+        p.initiatorUserId !== user.id ||
         application.applicantUserId === user.id
       )
         throw new ForbiddenException();
@@ -467,7 +518,7 @@ export class Participation
           method: "initiator_review",
           evidenceRef: (await this.activeDataDeletedIn(tx, p.id))
             ? null
-            : body.evidenceRef,
+            : await this.evidenceIn(tx, authorization, body.evidenceRef),
           requestId,
         },
       });
@@ -483,7 +534,7 @@ export class Participation
     return this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       const subject = await this.subject(tx, id);
-      if (p.order.buyerId !== user.id && subject.boundUserId !== user.id)
+      if (p.initiatorUserId !== user.id && subject.boundUserId !== user.id)
         throw new ForbiddenException();
       return this.status(tx, p, subject, user.id);
     });
@@ -525,7 +576,9 @@ export class Participation
         session.operatorUserId === record.operatorUserId
       );
     }
-    return record.granted && record.method === "self_wechat";
+    return (
+      record.granted && ["self_wechat", "self_web"].includes(record.method)
+    );
   }
   /** The caller holds the project lock; a verification may only consume the
    * exact authorization sequence observed during that subject encounter. */
@@ -626,8 +679,9 @@ export class Participation
       [...decisions].map(([purpose, record]) => [purpose, record.granted]),
     );
     const enabled =
-      this.config.environment === "test" &&
-      this.config.participation?.mode === "synthetic-d08";
+      !!this.config.acceptance ||
+      (this.config.environment === "test" &&
+        this.config.participation?.mode === "synthetic-d08");
     const effective: Partial<Record<ConsentPurpose, boolean>> = {};
     // Sequence orders the actual purpose decisions. Assisted choices produce
     // permission only while their latest matching session remains valid.
@@ -660,8 +714,17 @@ export class Participation
       bindingVersion: subject.bindingVersion,
       accessEpoch: p.accessEpoch,
       role: narrator ? "narrator" : "initiator",
-      noticeVersion: "synthetic-d08-v1",
-      policyStatus: enabled ? "synthetic-only" : "pending",
+      noticeVersion: this.config.acceptance
+        ? INTERNAL_NOTICE_VERSION
+        : "synthetic-d08-v1",
+      evidencePrefix: this.config.acceptance ? "internal:" : "synthetic:",
+      noticeText: this.config.acceptance ? INTERNAL_NOTICE : undefined,
+      source: p.source,
+      policyStatus: enabled
+        ? this.config.acceptance
+          ? "internal-acceptance"
+          : "synthetic-only"
+        : "pending",
       choices: CONSENT_PURPOSES.map((purpose) => ({
         purpose,
         granted:
@@ -689,7 +752,7 @@ export class Participation
       canRead:
         collection &&
         (narrator ||
-          (p.order.buyerId === userId && effective.sharing === true)),
+          (p.initiatorUserId === userId && effective.sharing === true)),
     };
   }
   async consent(
@@ -705,6 +768,7 @@ export class Participation
       const p = await this.project(tx, id, true);
       await this.rights.requireAvailableIn(tx, id);
       const subject = await this.subject(tx, id);
+      this.validateNotice(body);
       if (
         subject.boundUserId !== user.id ||
         subject.bindingVersion !== body.expectedBindingVersion
@@ -745,12 +809,14 @@ export class Participation
           bindingVersion: subject.bindingVersion,
           accessEpoch: updated.accessEpoch,
           operatorUserId: user.id,
-          granteeUserId: body.purpose === "sharing" ? p.order.buyerId : null,
+          granteeUserId: body.purpose === "sharing" ? p.initiatorUserId : null,
           purpose: body.purpose,
           granted: body.granted,
           noticeVersion: body.noticeVersion,
-          evidenceRef: payloadDeleted ? null : body.evidenceRef,
-          method: "self_wechat",
+          evidenceRef: payloadDeleted
+            ? null
+            : await this.evidenceIn(tx, authorization, body.evidenceRef),
+          method: await readSelfMethodIn(tx, authorization),
         },
       });
       if (!body.granted)
@@ -759,7 +825,7 @@ export class Participation
           id,
           updated.accessEpoch,
           body.purpose,
-          "self_wechat",
+          await readSelfMethodIn(tx, authorization),
         );
       await tx.participationCommand.create({
         data: {
@@ -792,7 +858,7 @@ export class Participation
     return this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       const subject = await this.subject(tx, id);
-      if (p.order.buyerId !== user.id && subject.boundUserId !== user.id)
+      if (p.initiatorUserId !== user.id && subject.boundUserId !== user.id)
         throw new ForbiddenException();
       if (body) {
         this.policy();
@@ -846,7 +912,8 @@ export class Participation
     if (subject.bindingVersion !== body.expectedBindingVersion)
       throw new ConflictException();
     if (body.kind === "rebind") {
-      if (body.targetUserId === p.order.buyerId) throw new ForbiddenException();
+      if (body.targetUserId === p.initiatorUserId)
+        throw new ForbiddenException();
       if (subject.boundUserId === body.targetUserId)
         throw new ConflictException();
       if (
@@ -974,8 +1041,9 @@ export class Participation
     )
       throw new ForbiddenException();
     if (
-      !(await this.status(tx, p, subject, care.requesterId ?? p.order.buyerId))
-        .canRead
+      !(
+        await this.status(tx, p, subject, care.requesterId ?? p.initiatorUserId)
+      ).canRead
     )
       throw new ForbiddenException();
     return {
@@ -1208,7 +1276,7 @@ export class Participation
     this.policy();
     const p = await this.project(tx, id, true);
     const subject = await this.subject(tx, id);
-    if (body.targetUserId === p.order.buyerId) throw new ForbiddenException();
+    if (body.targetUserId === p.initiatorUserId) throw new ForbiddenException();
     const hash = digest(JSON.stringify(body));
     const prior = await tx.participationCommand.findUnique({
       where: { projectId_action_key: { projectId: id, action: "rebind", key } },
@@ -1316,14 +1384,16 @@ export class Participation
     return this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       const subject = await this.subject(tx, id);
-      if (user.id !== p.order.buyerId && user.id !== subject.boundUserId)
+      if (user.id !== p.initiatorUserId && user.id !== subject.boundUserId)
         throw new ForbiddenException();
       const state = await this.status(tx, p, subject, user.id);
       if (!state.canRead) throw new ForbiddenException();
       const active = await this.materialAvailableIn(tx, id, "activeData");
       return {
         ...state,
-        bookTitle: active ? p.order.bookTitle : null,
+        bookTitle: active
+          ? (p.bookTitle ?? p.snapshot.bookTitle ?? "人生故事书")
+          : null,
         subjectName: active ? subject.name : null,
       };
     });
@@ -1364,7 +1434,7 @@ export class Participation
         bindingVersion: number;
         accessEpoch: number;
         subjectId: string;
-        method: "self_wechat" | "assisted" | "participant";
+        method: "self_wechat" | "self_web" | "assisted" | "participant";
         assistedSessionId?: string;
         accessExpiresAt: string | null;
         subjectDecision: "self" | "assisted" | null;
@@ -1377,13 +1447,15 @@ export class Participation
       const user = await this.identity.current(authorization, tx);
       const p = await this.project(tx, projectId, true);
       const subject = await this.subject(tx, projectId);
-      if (user.id !== p.order.buyerId && user.id !== subject.boundUserId)
+      if (user.id !== p.initiatorUserId && user.id !== subject.boundUserId)
         throw new ForbiddenException();
       const state = await this.status(tx, p, subject, user.id);
       if (!state.canRead) throw new ForbiddenException();
-      let method: "self_wechat" | "assisted" | "participant" = "participant";
+      let method: "self_wechat" | "self_web" | "assisted" | "participant" =
+        "participant";
       if (subjectDecision) {
-        if (subject.boundUserId === user.id) method = "self_wechat";
+        if (subject.boundUserId === user.id)
+          method = await readSelfMethodIn(tx, authorization);
         else {
           if (!subjectDecision.assistedSessionId)
             throw new ForbiddenException();
@@ -1442,7 +1514,7 @@ export class Participation
         operatorUserId: string;
         bindingVersion: number;
         accessEpoch: number;
-        method: "self_wechat" | "assisted";
+        method: "self_wechat" | "self_web" | "assisted";
         assistedSessionId?: string;
       },
     ) => Promise<T>,
@@ -1456,14 +1528,14 @@ export class Participation
       if (mode === "record")
         await this.requireMaterialIn(tx, projectId, "activeData");
       const subject = await this.subject(tx, projectId);
-      let method: "self_wechat" | "assisted";
+      let method: "self_wechat" | "self_web" | "assisted";
       if (subject.boundUserId === user.id) {
         const state = await this.status(tx, p, subject, user.id);
         if (!(mode === "record" ? state.canCollect : state.canRead))
           throw new ForbiddenException();
-        method = "self_wechat";
+        method = await readSelfMethodIn(tx, authorization);
       } else {
-        if (!assistedSessionId || user.id !== p.order.buyerId)
+        if (!assistedSessionId || user.id !== p.initiatorUserId)
           throw new ForbiddenException();
         await this.authorizeAssisted(tx, {
           projectId,
@@ -1548,7 +1620,17 @@ export class Participation
         !(await this.status(tx, p, subject, subject.boundUserId)).canProcessAi
       )
         return null;
-      grant = { method: "self_wechat" };
+      const decision = await tx.consentRecord.findFirst({
+        where: {
+          projectId: p.id,
+          bindingVersion: subject.bindingVersion,
+          purpose: "collection",
+        },
+        orderBy: { sequence: "desc" },
+      });
+      grant = {
+        method: decision?.method === "self_web" ? "self_web" : "self_wechat",
+      };
     } else {
       const collection = await this.latestAssisted(tx, p.id, "collection");
       const ai = await this.latestAssisted(tx, p.id, "ai");
@@ -1621,7 +1703,7 @@ export class Participation
     if (!enabled || effective.collection !== true) return false;
     if (subject.boundUserId === input.operatorUserId) return true;
     if (
-      project.order.buyerId !== input.operatorUserId ||
+      project.initiatorUserId !== input.operatorUserId ||
       !input.assistedSessionId
     )
       return false;
@@ -1705,7 +1787,7 @@ export class Participation
       !!row &&
       row.projectId === p.id &&
       row.subjectId === subject.id &&
-      row.operatorUserId === p.order.buyerId &&
+      row.operatorUserId === p.initiatorUserId &&
       row.granted &&
       !!row.evidenceRef &&
       row.bindingVersion === subject.bindingVersion &&
@@ -1785,8 +1867,11 @@ export class Participation
       !["story", "book"].includes(command.content.kind) ||
       !/^[-a-f0-9]{36}$/.test(command.content.versionId) ||
       !/^([a-f0-9]{64})$/.test(command.content.hash) ||
-      command.noticeVersion !== "synthetic-d08-v1" ||
-      !/^synthetic:[^\r\n]{3,160}$/.test(command.evidenceRef) ||
+      command.noticeVersion !==
+        (this.config.acceptance
+          ? INTERNAL_NOTICE_VERSION
+          : "synthetic-d08-v1") ||
+      !/^(?:synthetic:|internal:)[^\r\n]{3,160}$/.test(command.evidenceRef) ||
       !/^[-A-Za-z0-9_:]{8,128}$/.test(command.idempotencyKey)
     )
       throw new BadRequestException();
@@ -1909,7 +1994,7 @@ export class Participation
     this.policy();
     const result = await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
-      if (p.order.buyerId !== user.id) throw new ForbiddenException();
+      if (p.initiatorUserId !== user.id) throw new ForbiddenException();
       const subject = await this.subject(tx, id);
       const payloadDeleted = await this.activeDataDeletedIn(tx, id);
       if (!body) {
@@ -2011,7 +2096,9 @@ export class Participation
           purpose: body.purpose,
           granted: body.granted,
           noticeVersion: body.noticeVersion,
-          evidenceRef: payloadDeleted ? null : body.evidenceRef,
+          evidenceRef: payloadDeleted
+            ? null
+            : await this.evidenceIn(tx, authorization, body.evidenceRef),
           bindingVersion: subject.bindingVersion,
           accessEpoch: p.accessEpoch,
           idempotencyKey: key!,
@@ -2276,7 +2363,7 @@ export class Participation
     await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, projectId, true),
         subject = await this.subject(tx, projectId);
-      if (user.id !== p.order.buyerId && user.id !== subject.boundUserId)
+      if (user.id !== p.initiatorUserId && user.id !== subject.boundUserId)
         throw new ForbiddenException();
     });
     await this.reconcileRevocations(projectId);

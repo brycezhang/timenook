@@ -21,6 +21,6 @@
   <view wx:if="{{busy}}" class="waiting">正在核对，请稍候…</view>
   <button wx:if="{{loggedIn}}" class="audio-button secondary" bindtap="refresh" disabled="{{busy}}">重新查询</button>
   <button wx:if="{{loggedIn}}" class="audio-button text-button" bindtap="logout" disabled="{{busy}}">退出登录</button>
-  <view class="boundary-note">二维码固定对应纸书中的故事版本。在线改稿不会替换这段原声；访问仍受本人授权和服务期限约束。</view>
+  <view class="boundary-note">二维码固定对应纸书中的故事版本。在线改稿不会替换这段原声；在线访问按本人当前授权核验。</view>
   <view class="boundary-note">无法回听不表示资料已删除。已交付纸书和已导出的文件不会因在线改稿或撤权而自动收回。</view>
 </view>

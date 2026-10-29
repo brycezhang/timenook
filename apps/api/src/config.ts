@@ -1,3 +1,4 @@
+import { readInternalMediaConfig } from "./media/product-runtime";
 import {
   readOrdinaryMerchantConfig,
   type WechatPayConfig,
@@ -8,6 +9,7 @@ import {
   type DeepSeekConfig,
 } from "./probe/ai-providers";
 import { validOssKeyPrefix, type ProbeOssConfig } from "./probe/oss-objects";
+import { readInternalBookConfig } from "./books/book-config";
 
 export interface ApiConfig {
   environment: "development" | "test" | "production";
@@ -22,12 +24,16 @@ export interface ApiConfig {
     loginTtlSeconds: number;
     sessionTtlSeconds: number;
   };
+  acceptance?: {
+    mode: "internal-acceptance";
+    profileVersion: "internal-acceptance-v1";
+  };
   payments?: WechatPayConfig;
   // No production D08 approval exists. This mode only exercises isolated tests.
   participation?: { mode: "synthetic-d08" };
   privacyJournal?: { root: string; key: string };
   books?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     storageRoot: string;
     entryBaseUrl: string;
     specificationVersion: string;
@@ -36,16 +42,16 @@ export interface ApiConfig {
     maxPhotoBytes?: number;
   };
   photos?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     placement: { widthMm: number; heightMm: number };
   };
   recording?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     storageRoot: string;
     oss?: ProbeOssConfig;
   };
   transcription?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     configVersion: string;
     doubao: import("./probe/ai-providers").DoubaoConfig;
     pollIntervalMs: number;
@@ -53,7 +59,7 @@ export interface ApiConfig {
     deadlineMs: number;
   };
   generation?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     configVersion: string;
     deepseek: DeepSeekConfig;
     submissionReservationFen: number;
@@ -361,7 +367,17 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
       key: env.PRIVACY_JOURNAL_KEY,
     };
   }
+  const internalMedia = readInternalMediaConfig(env);
   return {
+    ...internalMedia,
+    books: readInternalBookConfig(env),
+    acceptance:
+      env.INTERNAL_ACCEPTANCE_ENABLED === "1"
+        ? {
+            mode: "internal-acceptance",
+            profileVersion: "internal-acceptance-v1",
+          }
+        : undefined,
     web: readWebConfig(env),
     payments,
     privacyJournal,

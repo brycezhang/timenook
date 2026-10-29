@@ -1,6 +1,6 @@
 <view wx:if="{{mode === 'live'}}" class="page">
   <view class="title">邀请与参与管理</view>
-  <view class="soft section">隔离合成验证 · D08 本人核验及告知规则尚未正式冻结，不能用于真实资料采集。</view>
+  <view wx:if="{{participation}}" class="soft section">{{participation.policyStatus === 'internal-acceptance' ? '内部功能验收 · 无付款，不发起实体书生产。' : '邀请和账号绑定不代替本人用途授权。'}}{{participation.noticeText}}</view>
   <view class="section note">请本人申请后，在线下核对账号再确认。付款和邀请转发都不会授予资料权限。</view>
   <view wx:if="{{status}}" class="soft section">{{status}}</view>
   <button wx:if="{{!loggedIn}}" class="btn section" bindtap="loginLive" disabled="{{busy}}">微信登录后继续邀请</button>
@@ -8,7 +8,8 @@
   <view wx:if="{{participation}}" class="section">
     <view class="small muted">项目：{{participation.projectId}}</view>
     <view>绑定版本：{{participation.bindingVersion}}</view>
-    <button class="btn section" bindtap="share" disabled="{{busy || participation.bindingVersion > 0 || participation.policyStatus !== 'synthetic-only'}}">准备本人邀请</button>
+    <button class="btn section" bindtap="share" disabled="{{busy || participation.bindingVersion > 0 || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">准备本人邀请</button>
+    <button wx:if="{{inviteToken}}" class="btn secondary section" bindtap="copyInvitation">复制网页邀请链接</button>
     <button wx:if="{{inviteToken}}" class="btn secondary section" open-type="share">发送已准备的邀请</button>
     <view wx:if="{{inviteToken}}" class="note">邀请仅用于申请参与，24小时到期；重新准备会使旧邀请失效。</view>
     <view wx:for="{{requests}}" wx:key="id" class="paper section">

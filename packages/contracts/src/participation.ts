@@ -5,7 +5,10 @@ export interface InvitationView {
   process: string[];
   purposes: ConsentPurpose[];
   noticeVersion: string;
-  policyStatus: "synthetic-only" | "pending";
+  policyStatus: "synthetic-only" | "internal-acceptance" | "pending";
+  evidencePrefix?: string;
+  noticeText?: string;
+  source?: "paid" | "internal-acceptance";
   choice: string;
 }
 export interface ParticipationState {
@@ -15,7 +18,10 @@ export interface ParticipationState {
   bindingVersion: number;
   accessEpoch: number;
   noticeVersion: string;
-  policyStatus: "synthetic-only" | "pending";
+  policyStatus: "synthetic-only" | "internal-acceptance" | "pending";
+  evidencePrefix?: string;
+  noticeText?: string;
+  source?: "paid" | "internal-acceptance";
   choices: { purpose: ConsentPurpose; granted: boolean | null }[];
   consent: ConsentDecisionView[];
   canCollect: boolean;
@@ -136,7 +142,8 @@ export interface WithdrawalStatus {
     id: string;
     accessEpoch: number;
     purpose: ConsentPurpose | "all" | "binding";
-    reason: "self_wechat" | "assisted" | "care_verified" | "rebind";
+    reason:
+      "self_wechat" | "self_web" | "assisted" | "care_verified" | "rebind";
     applied: boolean;
     productionAction:
       | "not_required"

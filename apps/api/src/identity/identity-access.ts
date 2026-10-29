@@ -19,6 +19,39 @@ export const WECHAT_FETCH = Symbol("WECHAT_FETCH");
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 
+export async function readSessionContextIn(
+  tx: Prisma.TransactionClient,
+  authorization?: string,
+) {
+  const match = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(authorization ?? "");
+  if (!match) throw new UnauthorizedException();
+  const tokenHash = digest(match[1]);
+  await tx.$queryRaw`SELECT id FROM sessions WHERE token_hash=${tokenHash} FOR SHARE`;
+  const session = await tx.session.findUnique({
+    where: { tokenHash },
+    include: { webSession: true },
+  });
+  if (
+    !session ||
+    session.revokedAt ||
+    session.expiresAt.getTime() <= Date.now()
+  )
+    throw new UnauthorizedException();
+  return {
+    id: session.userId,
+    sessionId: session.id,
+    method: session.webSession
+      ? ("self_web" as const)
+      : ("self_wechat" as const),
+  };
+}
+export async function readSelfMethodIn(
+  tx: Prisma.TransactionClient,
+  authorization?: string,
+) {
+  return (await readSessionContextIn(tx, authorization)).method;
+}
+
 @Injectable()
 export class IdentityAccess implements OnModuleDestroy {
   private readonly database: PrismaClient;
