@@ -183,11 +183,21 @@ export async function startBookFixture() {
       process.execPath,
       ["node_modules/prisma/build/index.js", "migrate", "deploy"],
       {
-        env: { ...process.env, DATABASE_URL: config.databaseUrl },
+        // Each fixture owns a random schema. Prisma's database-wide migration
+        // lock would serialize unrelated fixtures and time out after 10 seconds.
+        env: {
+          ...process.env,
+          DATABASE_URL: config.databaseUrl,
+          PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK: "1",
+        },
         encoding: "utf8",
       },
     );
-    assert.equal(migrated.status, 0, `isolated migration ${label}`);
+    assert.equal(
+      migrated.status,
+      0,
+      `isolated migration ${label}: ${migrated.error?.message ?? migrated.stderr ?? ""}`,
+    );
   }
   db = new PrismaClient({ datasourceUrl: config.databaseUrl });
   const snapshot = JSON.parse(

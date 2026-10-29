@@ -16,9 +16,11 @@ export class ApiFailure extends Error {
     super(
       code === "UNAUTHENTICATED"
         ? "登录已失效，请重新登录"
-        : code === "NOT_CONFIGURED"
-          ? "真实服务尚未配置"
-          : "服务暂不可用，请稍后重试",
+        : code === "WEB_LOGIN_REQUIRED"
+          ? "请使用网页内测登录链接进入"
+          : code === "NOT_CONFIGURED"
+            ? "真实服务尚未配置"
+            : "服务暂不可用，请稍后重试",
     );
   }
 }
@@ -47,28 +49,65 @@ function loginResult(value: unknown): value is LoginResult {
   );
 }
 
+export type DownloadedFile = Pick<
+  WechatMiniprogram.DownloadFileSuccessCallbackResult,
+  "statusCode" | "tempFilePath" | "errMsg"
+>;
+export interface CookieSessionTransport {
+  context(): string;
+  restore(): Promise<Account | null>;
+  logout(): Promise<void>;
+  onInvalidated(listener: (context: string) => void): () => void;
+  sessionCleanupPending(): boolean;
+  upload(
+    form: import("../../packages/contracts/src/audio-probe").ProbeUploadForm,
+    filePath: string,
+    kind: "recordings" | "photos",
+  ): Promise<void>;
+  download(path: string): Promise<DownloadedFile>;
+  close(): void;
+  request<T>(
+    path: string,
+    command?: { data: Record<string, unknown>; key: string },
+  ): Promise<T>;
+}
+
 export class SessionClient {
+  private cookie?: CookieSessionTransport;
   private generation = 0;
   private invalidatedToken: string | null = null;
   private cleanupPending = false;
   private readonly invalidationListeners = new Set<(context: string) => void>();
   constructor(private readonly apiBaseUrl: string) {}
+  useCookieSession(transport: CookieSessionTransport) {
+    this.generation++;
+    this.cookie?.close();
+    this.cookie = transport;
+  }
+  closeCookieSession() {
+    this.generation++;
+    this.cookie?.close();
+  }
   onInvalidated(listener: (context: string) => void): () => void {
+    if (this.cookie) return this.cookie.onInvalidated(listener);
     this.invalidationListeners.add(listener);
     return () => {
       this.invalidationListeners.delete(listener);
     };
   }
   sessionCleanupPending(): boolean {
+    if (this.cookie) return this.cookie.sessionCleanupPending();
     return this.cleanupPending;
   }
   context(): string {
+    if (this.cookie) return this.cookie.context();
     const stored = this.stored();
     return dataMode() === "live" && stored
       ? `${stored.user.id}:${stored.session.id}`
       : "";
   }
   async restore(): Promise<Account | null> {
+    if (this.cookie) return this.cookie.restore();
     if (dataMode() !== "live") return null;
     const stored = this.stored();
     if (!stored) return null;
@@ -78,6 +117,7 @@ export class SessionClient {
     return result;
   }
   async logout(): Promise<void> {
+    if (this.cookie) return this.cookie.logout();
     this.generation++;
     const stored = this.stored();
     wx.removeStorageSync(this.storageKey);
@@ -96,6 +136,7 @@ export class SessionClient {
     }
   }
   async enterDemo(): Promise<void> {
+    if (this.cookie) throw new ApiFailure("WEB_LOGIN_REQUIRED", 401);
     try {
       await this.logout();
     } finally {
@@ -106,6 +147,7 @@ export class SessionClient {
     path: string,
     command?: { data: Record<string, unknown>; key: string },
   ): Promise<T> {
+    if (this.cookie) return this.cookie.request<T>(path, command);
     if (dataMode() !== "live") throw new ApiFailure("DEMO_MODE");
     const generation = this.generation;
     const stored = this.stored();
@@ -205,6 +247,7 @@ export class SessionClient {
     );
   }
   private async downloadContent(path: string) {
+    if (this.cookie) return this.cookie.download(path);
     const generation = this.generation,
       stored = this.stored();
     if (dataMode() !== "live" || !stored)
@@ -242,25 +285,16 @@ export class SessionClient {
     filePath: string,
     kind: "recordings" | "photos" = "recordings",
   ): Promise<void> {
+    if (this.cookie) return this.cookie.upload(form, filePath, kind);
     const generation = this.generation,
       stored = this.stored();
     if (dataMode() !== "live" || !stored)
       throw new ApiFailure("UNAUTHENTICATED", 401);
     this.checkBaseUrl();
-    const local =
-      form.storage === "local-simulator" && form.url === `/v1/${kind}/objects`;
-    const oss =
-      form.storage === "oss" &&
-      /^https:\/\/[a-z0-9-]+\.oss-[a-z0-9-]+\.aliyuncs\.com$/.test(form.url);
-    if (
-      (!local && !oss) ||
-      !Number.isFinite(Date.parse(form.expiresAt)) ||
-      Date.parse(form.expiresAt) <= Date.now()
-    )
-      throw new ApiFailure("INVALID_RESPONSE");
+    const { local, url } = recordingUploadTarget(form, this.apiBaseUrl, kind);
     const result = await new Promise<number>((resolve, reject) =>
       wx.uploadFile({
-        url: local ? this.apiBaseUrl + form.url.slice(3) : form.url,
+        url,
         name: "file",
         filePath,
         formData: form.fields,
@@ -290,6 +324,7 @@ export class SessionClient {
     }
   }
   async publicRequest<T>(path: string): Promise<T> {
+    if (this.cookie) return this.cookie.request<T>(path);
     if (dataMode() !== "live") throw new ApiFailure("DEMO_MODE");
     const generation = this.generation;
     const result = await this.send<T>(path, "GET");
@@ -360,6 +395,7 @@ export class SessionClient {
   }
 
   async login(expectedUserId?: string): Promise<LoginResult> {
+    if (this.cookie) throw new ApiFailure("WEB_LOGIN_REQUIRED", 401);
     const generation = ++this.generation;
     setDataMode("live");
     wx.removeStorageSync(this.storageKey);
@@ -471,6 +507,25 @@ export class SessionClient {
     )
       throw new ApiFailure("NOT_CONFIGURED");
   }
+}
+
+export function recordingUploadTarget(
+  form: import("../../packages/contracts/src/audio-probe").ProbeUploadForm,
+  apiBaseUrl: string,
+  kind: "recordings" | "photos",
+) {
+  const local =
+    form.storage === "local-simulator" && form.url === `/v1/${kind}/objects`;
+  const oss =
+    form.storage === "oss" &&
+    /^https:\/\/[a-z0-9-]+\.oss-[a-z0-9-]+\.aliyuncs\.com$/.test(form.url);
+  if (
+    (!local && !oss) ||
+    !Number.isFinite(Date.parse(form.expiresAt)) ||
+    Date.parse(form.expiresAt) <= Date.now()
+  )
+    throw new ApiFailure("INVALID_RESPONSE");
+  return { local, url: local ? apiBaseUrl + form.url.slice(3) : form.url };
 }
 
 export const sessionClient = new SessionClient(API_BASE_URL);

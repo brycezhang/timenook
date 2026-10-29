@@ -74,6 +74,45 @@ async function mutateSession<T>(action: () => Promise<T>): Promise<T> {
   // response. Keep exchanges and logout ordered across this origin's tabs.
   return await navigator.locks.request("timenook-web-session", action);
 }
+const pageInstance = crypto.randomUUID();
+function notifySessionChange() {
+  try {
+    const channel = new BroadcastChannel("timenook-web-session");
+    channel.postMessage({ source: pageInstance });
+    channel.close();
+  } catch {
+    /* Each protected operation also rechecks the server session. */
+  }
+}
+export function onWebSessionChange(listener: () => void): () => void {
+  try {
+    const channel = new BroadcastChannel("timenook-web-session");
+    channel.onmessage = (event) => {
+      if (event.data?.source !== pageInstance) listener();
+    };
+    return () => channel.close();
+  } catch {
+    return () => {};
+  }
+}
+export async function withWebSession<T>(
+  expected: WebSession,
+  action: (headers: Record<string, string>) => Promise<T>,
+): Promise<T> {
+  return mutateSession(async () => {
+    const current = session(await request("/web/session"));
+    if (
+      current.user.id !== expected.user.id ||
+      current.session.id !== expected.session.id ||
+      current.csrfToken !== expected.csrfToken
+    )
+      throw new WebApiError(401);
+    return action({
+      "X-Timenook-Web": "1",
+      "X-CSRF-Token": current.csrfToken,
+    });
+  });
+}
 export const webApi = {
   async linkAvailability(): Promise<boolean> {
     const result = (await request("/web/wechat-link")) as {
@@ -107,9 +146,11 @@ export const webApi = {
     return result;
   },
   async login(ticket: string) {
-    return mutateSession(async () =>
+    const result = await mutateSession(async () =>
       session(await request("/web/session", "POST", { ticket })),
     );
+    notifySessionChange();
+    return result;
   },
   async restore() {
     return session(await request("/web/session"));
@@ -122,15 +163,17 @@ export const webApi = {
         // must remain signed in; clear this stale view without revoking it.
         if (current.csrfToken !== csrfToken) return;
         await request("/web/session", "DELETE", undefined, csrfToken);
+        notifySessionChange();
       } catch (error) {
         if (!(error instanceof WebApiError && error.status === 401))
           throw error;
       }
     });
   },
-  async projects(): Promise<ProjectSummary[]> {
-    const result = (await request("/web/projects")) as
-      { projects?: ProjectSummary[] } | undefined;
+  async projects(expected: WebSession): Promise<ProjectSummary[]> {
+    const result = (await withWebSession(expected, () =>
+      request("/web/projects"),
+    )) as { projects?: ProjectSummary[] } | undefined;
     if (
       !result ||
       !Array.isArray(result.projects) ||

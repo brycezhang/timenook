@@ -23,6 +23,9 @@ export default defineConfig({
   plugins: [lamejsLicense()],
   worker: { format: "es" },
   base: "/app/",
+  define: {
+    __TIMENOOK_COOKIE_WEB__: "true",
+  },
   server: {
     host: "127.0.0.1",
     port: 4330,
