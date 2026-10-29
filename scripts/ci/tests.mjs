@@ -1,6 +1,12 @@
-import { readdirSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  readdirSync,
+  mkdirSync,
+  writeFileSync,
+  lstatSync,
+  realpathSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
-import { resolve, relative, basename } from "node:path";
+import { resolve, relative, basename, isAbsolute, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const suites = {
@@ -42,14 +48,124 @@ const costs = {
 export function inventory(root, group) {
   const suite = suites[group];
   if (!suite) throw Error("Unknown CI test group");
+  if (["admin", "website"].includes(group))
+    return browserInventory(root, group).files;
   const files = readdirSync(resolve(root, suite.directory), {
     withFileTypes: true,
   })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(suite.suffix))
-    .map((entry) => `${suite.directory}/${entry.name}`)
+    .filter((entry) => entry.name.endsWith(suite.suffix))
+    .map((entry) => {
+      if (!entry.isFile())
+        throw Error("CI test glob entries must be regular files");
+      return `${suite.directory}/${entry.name}`;
+    })
     .sort();
   if (!files.length) throw Error(`Empty CI test group: ${group}`);
   return files;
+}
+
+function browserCommand(root, group) {
+  if (!["admin", "website"].includes(group))
+    throw Error("Unknown browser CI group");
+  return {
+    cwd: group === "website" ? resolve(root, "apps/website") : root,
+    args: [
+      resolve(root, "node_modules/@playwright/test/cli.js"),
+      "test",
+      ...(group === "admin" ? ["-c", "playwright.admin.config.mjs"] : []),
+    ],
+  };
+}
+
+// Playwright owns recursive discovery, testMatch/testIgnore and project cases.
+// Keep only identities from its JSON report; errors, output and config contents
+// are never persisted as CI artifacts.
+export function browserInventory(root, group) {
+  const command = browserCommand(root, group);
+  const env = { ...process.env };
+  for (const key of [
+    "NODE_TEST_CONTEXT",
+    "PLAYWRIGHT_JSON_OUTPUT_DIR",
+    "PLAYWRIGHT_JSON_OUTPUT_NAME",
+    "PLAYWRIGHT_JSON_OUTPUT_FILE",
+  ])
+    delete env[key];
+  const result = spawnSync(
+    process.execPath,
+    [...command.args, "--list", "--reporter=json"],
+    {
+      cwd: command.cwd,
+      env,
+      encoding: "utf8",
+      timeout: 60000,
+      maxBuffer: 16 * 1024 * 1024,
+    },
+  );
+  if (result.error || result.status !== 0)
+    throw Error(`Playwright inventory collection failed: ${group}`);
+  let collected;
+  try {
+    collected = JSON.parse(result.stdout);
+  } catch {
+    throw Error(`Invalid Playwright inventory: ${group}`);
+  }
+  if (
+    typeof collected.config?.rootDir !== "string" ||
+    !Array.isArray(collected.suites) ||
+    !Array.isArray(collected.errors) ||
+    collected.errors.length
+  )
+    throw Error(`Invalid Playwright inventory: ${group}`);
+  const canonicalRoot = realpathSync(root);
+  const files = new Set();
+  const cases = [];
+  const seen = new Set();
+  function visit(suite) {
+    if (
+      (suite.specs !== undefined && !Array.isArray(suite.specs)) ||
+      (suite.suites !== undefined && !Array.isArray(suite.suites))
+    )
+      throw Error(`Invalid Playwright inventory: ${group}`);
+    for (const spec of suite.specs ?? []) {
+      if (
+        typeof spec.id !== "string" ||
+        !spec.id ||
+        typeof spec.file !== "string" ||
+        !Array.isArray(spec.tests) ||
+        !spec.tests.length
+      )
+        throw Error(`Invalid Playwright inventory: ${group}`);
+      const absolute = resolve(collected.config.rootDir, spec.file);
+      if (!lstatSync(absolute).isFile())
+        throw Error("Collected Playwright tests must be regular files");
+      const file = relative(canonicalRoot, realpathSync(absolute))
+        .split(sep)
+        .join("/");
+      if (!file || file === ".." || file.startsWith("../") || isAbsolute(file))
+        throw Error(
+          "Collected Playwright tests must remain inside the workspace",
+        );
+      files.add(file);
+      for (const test of spec.tests) {
+        if (typeof test.projectName !== "string")
+          throw Error(`Invalid Playwright inventory: ${group}`);
+        const key = `${spec.id}\0${test.projectName}`;
+        if (seen.has(key)) throw Error("Duplicate Playwright inventory case");
+        seen.add(key);
+        cases.push({ id: spec.id, file, project: test.projectName });
+      }
+    }
+    for (const child of suite.suites ?? []) visit(child);
+  }
+  for (const suite of collected.suites) visit(suite);
+  if (!files.size || !cases.length)
+    throw Error(`Empty CI test group: ${group}`);
+  return {
+    files: [...files].sort(),
+    cases: cases.sort(
+      (a, b) => a.id.localeCompare(b.id) || a.project.localeCompare(b.project),
+    ),
+  };
 }
 
 export function partitions(files, group, count = suites[group]?.shards) {
@@ -92,13 +208,23 @@ export function plan(root, group, index = 1, count = suites[group]?.shards) {
     index > count
   )
     throw Error("Unexpected CI shard coordinates");
-  const allFiles = inventory(root, group);
+  const browser = ["admin", "website"].includes(group)
+    ? browserInventory(root, group)
+    : null;
+  const allFiles = browser?.files ?? inventory(root, group);
+  const files = partitions(allFiles, group, count)[index - 1];
   return {
     group,
     index,
     count,
     allFiles,
-    files: partitions(allFiles, group, count)[index - 1],
+    files,
+    ...(browser
+      ? {
+          allCases: browser.cases,
+          cases: browser.cases.filter((test) => files.includes(test.file)),
+        }
+      : {}),
   };
 }
 
@@ -126,9 +252,9 @@ function main() {
   let command = process.execPath;
   let args;
   if (["admin", "website"].includes(group)) {
-    cwd = group === "website" ? resolve(root, "apps/website") : root;
-    args = [resolve(root, "node_modules/@playwright/test/cli.js"), "test"];
-    if (group === "admin") args.push("-c", "playwright.admin.config.mjs");
+    const browser = browserCommand(root, group);
+    cwd = browser.cwd;
+    args = browser.args;
     args.push(
       "--reporter=line," + resolve(root, "scripts/ci/playwright-reporter.mjs"),
     );

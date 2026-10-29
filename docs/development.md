@@ -74,7 +74,7 @@ node scripts/ci/check.mjs docs BASE_COMMIT HEAD_COMMIT
 
 每个 API/浏览器 runner 有独立 PostgreSQL/Redis 服务和临时目录，文件内部沿用原 schema/key prefix 与资源隔离。固定 Node/pnpm、镜像 digest、真实数据库唯一性/锁/恢复、固定音频工具和字体均保持。Linux 自动检查不替代微信原生编译或其他人工验收。
 
-`scripts/ci/tests.mjs` 保存每组预期文件；Node/Playwright reporter 只保存相对文件名、用例名、状态、耗时和候选 SHA，不收集错误正文、stdout、请求、页面、附件或凭据。`scripts/ci/run.mjs` 保留命令输出及失败退出状态，将各阶段耗时写入 runner 临时目录的 `phases.json` 与 Actions job summary；失败也上传已经生成的报告。临时报告不进入工作区和候选包。
+`scripts/ci/tests.mjs` 保存每组预期文件；浏览器文件及各 project 用例从 Playwright 官方 `--list` 发现结果生成，保持其递归、后缀和配置规则；完整汇总安装依赖后再次独立发现并核对用例。Node/Playwright reporter 只保存相对文件名、用例名、状态、耗时和候选 SHA，不收集错误正文、stdout、请求、页面、附件或凭据。`scripts/ci/run.mjs` 保留命令输出及失败退出状态，将各阶段耗时写入 runner 临时目录的 `phases.json` 与 Actions job summary；失败也上传已经生成的报告。临时报告不进入工作区和候选包。
 
 `full` 等待全部并行任务并校验八个报告集合，要求阶段完整成功、预期/实际测试文件一致、分片并集无遗漏重复、浏览器各 project 用例完整、没有失败/跳过/空集或错误 SHA；失败、取消、缺失报告均阻断。仅在完整验证成功后发布原有名称的 `timenook-candidate-SHA` 和 `timenook-website-preview-SHA` artifacts，并显式重验校验和。此前的 `ci-candidate-*` / `ci-website-preview-*` 只是未通过整仓门禁的中间产物。
 

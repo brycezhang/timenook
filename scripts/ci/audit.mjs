@@ -24,6 +24,7 @@ export function expectedPhases(suite) {
       ...setup,
       "prisma-generate",
       "print-font",
+      "browser-install",
       "docs",
       "ci-report-tests",
       "typecheck",
@@ -42,7 +43,7 @@ export function expectedPhases(suite) {
     "audio-tools",
     "prisma-generate",
     "print-font",
-    ...(suite.startsWith("browser") ? ["browser-install"] : []),
+    "browser-install",
     "database-migrate",
     "contracts-build",
     "test-compile",
@@ -54,6 +55,8 @@ export function expectedPhases(suite) {
 }
 const equal = (a, b) =>
   JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+const caseKeys = (cases) =>
+  cases.map((row) => JSON.stringify([row.id, row.file]));
 const requireThat = (condition, message) => {
   if (!condition) throw Error(message);
 };
@@ -138,16 +141,19 @@ export function audit(root, directory, sha) {
       );
       if (["admin", "website"].includes(group)) {
         requireThat(
+          equal(caseKeys(selected.allCases), caseKeys(expected.allCases)) &&
+            equal(caseKeys(selected.cases), caseKeys(expected.cases)) &&
+            equal(caseKeys(tests), caseKeys(expected.cases)),
+          `Browser discovery differs from execution: ${suite}/${group}`,
+        );
+        requireThat(
           new Set(identities).size === identities.length,
           `Duplicate test execution: ${suite}/${group}`,
         );
         const announced = events.find((row) => row.type === "plan");
         requireThat(
           announced?.tests === tests.length &&
-            equal(
-              announced.cases.map((row) => row.id),
-              identities,
-            ),
+            equal(caseKeys(announced.cases), caseKeys(expected.cases)),
           `Incomplete browser cases: ${suite}/${group}`,
         );
       }

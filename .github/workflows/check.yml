@@ -61,6 +61,7 @@ jobs:
         with:
           backend: "true"
           print: "true"
+          browser: "true"
       - run: node scripts/ci/run.mjs docs node scripts/ci/check.mjs docs "$CHECK_BASE" "$CHECK_HEAD"
       - run: node scripts/ci/run.mjs ci-report-tests node --test tests/ci/reporters.test.mjs
       - run: node scripts/ci/run.mjs typecheck pnpm typecheck
@@ -84,7 +85,10 @@ jobs:
         if: always()
         with:
           name: ci-report-build
-          path: ${{ env.TIMENOOK_CI_REPORT_DIR }}/
+          path: |
+            ${{ runner.temp }}/timenook-ci-report/phases.json
+            ${{ runner.temp }}/timenook-ci-report/*-plan.json
+            ${{ runner.temp }}/timenook-ci-report/*.jsonl
           if-no-files-found: error
           retention-days: 7
           overwrite: true
@@ -118,11 +122,14 @@ jobs:
           --health-interval 2s --health-timeout 2s --health-retries 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
       - uses: ./.github/actions/ci-setup
         with:
           backend: "true"
           audio: "true"
           print: "true"
+          browser: "true"
       - run: node scripts/ci/run.mjs database-migrate pnpm db:migrate
       - run: node scripts/ci/run.mjs contracts-build pnpm --filter @timenook/contracts build
       - run: node scripts/ci/run.mjs test-compile pnpm --filter @timenook/api exec tsc -p tsconfig.test.json
@@ -133,7 +140,10 @@ jobs:
         if: always()
         with:
           name: ci-report-api-${{ matrix.shard }}
-          path: ${{ env.TIMENOOK_CI_REPORT_DIR }}/
+          path: |
+            ${{ runner.temp }}/timenook-ci-report/phases.json
+            ${{ runner.temp }}/timenook-ci-report/*-plan.json
+            ${{ runner.temp }}/timenook-ci-report/*.jsonl
           if-no-files-found: error
           retention-days: 7
           overwrite: true
@@ -182,7 +192,10 @@ jobs:
         if: always()
         with:
           name: ci-report-browser-${{ matrix.shard }}
-          path: ${{ env.TIMENOOK_CI_REPORT_DIR }}/
+          path: |
+            ${{ runner.temp }}/timenook-ci-report/phases.json
+            ${{ runner.temp }}/timenook-ci-report/*-plan.json
+            ${{ runner.temp }}/timenook-ci-report/*.jsonl
           if-no-files-found: error
           retention-days: 7
           overwrite: true
@@ -211,7 +224,10 @@ jobs:
         if: always()
         with:
           name: ci-report-website
-          path: ${{ env.TIMENOOK_CI_REPORT_DIR }}/
+          path: |
+            ${{ runner.temp }}/timenook-ci-report/phases.json
+            ${{ runner.temp }}/timenook-ci-report/*-plan.json
+            ${{ runner.temp }}/timenook-ci-report/*.jsonl
           if-no-files-found: error
           retention-days: 7
           overwrite: true
@@ -225,6 +241,10 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
+      - name: Install test discovery dependencies
+        run: |
+          npm install --global pnpm@10.34.7
+          pnpm install --frozen-lockfile
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: ci-report-*

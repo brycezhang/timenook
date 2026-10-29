@@ -31,6 +31,26 @@ function fixture(t) {
     for (let n = 0; n < count; n++)
       writeFileSync(join(root, dir, `${n}${suffix}`), "");
   }
+  // Pure-Node authority fixture; real Playwright discovery is integration-tested
+  // after dependency installation in reporters.test.mjs.
+  const cli = join(root, "node_modules/@playwright/test/cli.js");
+  mkdirSync(join(root, "node_modules/@playwright/test"), { recursive: true });
+  writeFileSync(
+    cli,
+    `
+    const website = process.cwd().endsWith('apps/website');
+    const root = ${JSON.stringify(root)};
+    const directory = website ? 'apps/website/tests' : 'tests/admin';
+    const projects = website ? ['compact-mobile', 'desktop', 'mobile'] : [''];
+    const specs = [];
+    for (let n = 0; n < (website ? 1 : 2); n++) for (const project of projects) {
+      const file = n + (website ? '.spec.ts' : '.spec.mjs');
+      specs.push({file, id: directory + '/' + file + ':' + project,
+        tests: [{projectName: project, projectId: project}]});
+    }
+    console.log(JSON.stringify({config:{rootDir: root + '/' + directory}, suites:[{specs}], errors:[]}));
+  `,
+  );
   for (const [suite, groups] of Object.entries(jobs)) {
     const dir = join(directory, `ci-report-${suite}`);
     mkdirSync(dir, { recursive: true });
@@ -49,12 +69,16 @@ function fixture(t) {
       const p = plan(root, group, index);
       write(join(dir, `${group}-plan.json`), { sha, ...p });
       const browser = ["admin", "website"].includes(group);
-      const rows = p.files.map((file, n) => ({
+      const cases = browser
+        ? p.cases
+        : p.files.map((file) => ({ file, id: file }));
+      const rows = cases.map(({ file, id, project }) => ({
         sha,
         suite,
         type: "test",
         file,
-        id: `${file}-${n}`,
+        id,
+        project,
         name: "case",
         status: "passed",
         durationMs: 1,
@@ -99,12 +123,22 @@ for (const failure of [
   "skipped-case",
   "empty-tests",
   "duplicate-case",
+  "missing-project",
+  "wrong-discovery",
 ]) {
   test(`aggregate fails closed for ${failure}`, (t) => {
     const f = fixture(t);
-    const dir = join(f.directory, "ci-report-browser-1");
+    const dir = join(
+      f.directory,
+      failure === "missing-project"
+        ? "ci-report-website"
+        : "ci-report-browser-1",
+    );
     const phaseFile = join(dir, "phases.json");
-    const file = join(dir, "admin.jsonl");
+    const file = join(
+      dir,
+      failure === "missing-project" ? "website.jsonl" : "admin.jsonl",
+    );
     let events = readFileSync(file, "utf8").trim().split("\n").map(JSON.parse);
     if (failure === "missing-shard") unlinkSync(phaseFile);
     if (failure === "stale-sha")
@@ -120,6 +154,19 @@ for (const failure of [
       const selected = JSON.parse(readFileSync(p, "utf8"));
       selected.files = ["tests/admin/unknown.spec.mjs"];
       f.write(p, selected);
+    }
+    if (failure === "wrong-discovery") {
+      const p = join(dir, "admin-plan.json");
+      const selected = JSON.parse(readFileSync(p, "utf8"));
+      selected.allCases.pop();
+      f.write(p, selected);
+    }
+    if (failure === "missing-project") {
+      const removed = events.find((row) => row.type === "test");
+      events = events.filter((row) => row !== removed);
+      events[0].cases = events[0].cases.filter((row) => row.id !== removed.id);
+      events[0].tests--;
+      events.at(-1).counts.tests--;
     }
     if (failure === "missing-case")
       events = events.filter((row) => row.type !== "test");

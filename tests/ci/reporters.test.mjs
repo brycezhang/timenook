@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { test } from "node:test";
+import { browserInventory, plan } from "../../scripts/ci/tests.mjs";
 
 const root = resolve(".");
 const runner = resolve("scripts/ci/run.mjs");
@@ -282,4 +290,69 @@ test("Playwright reporter exposes an empty plan and process failure without coll
   assert.equal(report[0].tests, 0);
   assert.equal(report.at(-1).status, "failed");
   assert.equal(report.at(-1).counts.tests, 0);
+});
+
+test("official browser inventory follows recursive discovery, multiple suffixes and custom testMatch with reporter-identical case IDs", (t) => {
+  const f = fixture(t);
+  writeFileSync(join(f.dir, "package.json"), '{"type":"module"}\n');
+  mkdirSync(join(f.dir, "node_modules/@playwright/test"), { recursive: true });
+  symlinkSync(
+    join(root, "node_modules/@playwright/test/cli.js"),
+    join(f.dir, "node_modules/@playwright/test/cli.js"),
+  );
+  mkdirSync(join(f.dir, "tests/admin/nested"), { recursive: true });
+  const testModule = pathToFileURL(
+    join(root, "node_modules/@playwright/test/index.mjs"),
+  ).href;
+  for (const name of [
+    "nested/recursive.spec.ts",
+    "alternate.test.mjs",
+    "custom.scenario.mjs",
+  ])
+    writeFileSync(
+      join(f.dir, "tests/admin", name),
+      `import {test} from ${JSON.stringify(testModule)}; test('case ${name}',()=>{});\n`,
+    );
+  const config = join(f.dir, "playwright.admin.config.mjs");
+  const configure = (testMatch) =>
+    writeFileSync(
+      config,
+      `export default {
+    testDir: './tests/admin', workers: 1,
+    ${testMatch ? `testMatch: ${JSON.stringify(testMatch)},` : ""}
+    projects: [{name:'mobile'}, {name:'desktop'}],
+    reporter: [[${JSON.stringify(browserReporter)}]],
+    outputDir: ${JSON.stringify(join(f.dir, "output"))}
+  };`,
+    );
+  configure();
+  const collected = browserInventory(f.dir, "admin");
+  assert.deepEqual(collected.files, [
+    "tests/admin/alternate.test.mjs",
+    "tests/admin/nested/recursive.spec.ts",
+  ]);
+  assert.equal(collected.cases.length, 4);
+  assert.equal(plan(f.dir, "admin", 1).allCases.length, 4);
+  const result = spawnSync(
+    process.execPath,
+    [join(root, "node_modules/@playwright/test/cli.js"), "test", "-c", config],
+    {
+      cwd: f.dir,
+      env: f.env,
+      encoding: "utf8",
+      timeout: 30000,
+    },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const cases = lines(join(f.dir, "tests.jsonl"))
+    .filter((row) => row.type === "test")
+    .map(({ id, file, project }) => ({ id, file, project }));
+  assert.deepEqual(
+    cases.sort((a, b) => a.id.localeCompare(b.id)),
+    collected.cases,
+  );
+  configure("**/*.scenario.mjs");
+  const custom = browserInventory(f.dir, "admin");
+  assert.deepEqual(custom.files, ["tests/admin/custom.scenario.mjs"]);
+  assert.equal(custom.cases.length, 2);
 });
