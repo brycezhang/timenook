@@ -886,8 +886,14 @@ Page({
         result.questionVersion !== questionVersion
       )
         throw new Error("录音问题未确认，请重新查询");
+      if (
+        !Number.isSafeInteger(result.maxDurationMs) ||
+        result.maxDurationMs < 1 ||
+        result.maxDurationMs > 300000
+      )
+        throw new Error("录音额度未确认，请重新查询");
       if (resume) device.resume();
-      else device.start(actualQuestionId);
+      else device.start(actualQuestionId, result.maxDurationMs);
     } catch (error) {
       if (generation === this.generation && dataMode() === "live") {
         if (

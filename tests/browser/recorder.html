@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Isolated recording contract fixture</title>
+  </head>
+  <body>
+    <script type="module">
+      import {
+        createRecorder,
+        temporaryFile,
+        saveBlob,
+        resolveBlob,
+      } from "../../preview/media.ts";
+      window.browserRecorder = createRecorder;
+      window.browserFiles = { temporaryFile, saveBlob, resolveBlob };
+    </script>
+  </body>
+</html>

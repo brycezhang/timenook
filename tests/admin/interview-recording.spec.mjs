@@ -4,7 +4,7 @@ import {
   closePrivacyFixtureApplication,
 } from "./privacy-fixture.mjs";
 import { test, expect } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -254,8 +254,23 @@ async function openPage(
   browser,
   session,
   viewport = { width: 390, height: 844 },
+  realInput = false,
 ) {
   const context = await browser.newContext({ viewport });
+  if (realInput)
+    await context.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = async () => {
+        const source = new AudioContext({ sampleRate: 48000 });
+        const oscillator = source.createOscillator(),
+          output = source.createMediaStreamDestination();
+        oscillator.frequency.value = 440;
+        oscillator.connect(output);
+        oscillator.start();
+        await source.resume();
+        window.syntheticMicrophone = { source, output };
+        return output.stream;
+      };
+    });
   const page = await context.newPage();
   latestPage = page;
   page.on("pageerror", (e) => errors.push(e.message));
@@ -265,12 +280,13 @@ async function openPage(
   });
   await page.goto(base);
   await page.evaluate(
-    ({ session, base, audioBase64 }) => {
+    ({ session, base, audioBase64, realInput }) => {
       localStorage.setItem("timenook.mode.v1", JSON.stringify("live"));
       localStorage.setItem(
         `timenook.session.v1:${base}/api/v1`,
         JSON.stringify(session),
       );
+      if (realInput) return;
       // Only the native device/file boundary is controlled. Page, HTTP and PG remain real.
       const source = `data:audio/mpeg;base64,${audioBase64}`,
         handlers = {};
@@ -297,7 +313,7 @@ async function openPage(
         saveFile: (o) => o.success({ savedFilePath: o.tempFilePath }),
       });
     },
-    { session, base, audioBase64 },
+    { session, base, audioBase64, realInput },
   );
   return page;
 }
@@ -581,5 +597,129 @@ test("a collection-only assisted participant starts and resumes its own pending 
   ).toBe(403);
   expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
   expect(errors).toEqual([]);
+  await page.context().close();
+});
+
+test("actual browser MP3 pauses, survives reload in IndexedDB and seals the identical original through HTTP", async ({
+  browser,
+}) => {
+  const interview = data(
+    await request("POST", `/v1/projects/${projectId}/interviews`, narrator, {
+      clientInterviewId: randomUUID(),
+      expectedPlanRevision: 1,
+      selfWritten: {
+        text: "您记得哪一段夏天的声音？",
+        intent: "合成音源工程验收",
+      },
+    }),
+  );
+  const page = await openPage(browser, narrator, undefined, true);
+  const url = `${base}/#/interview?projectId=${projectId}&interviewId=${interview.id}`;
+  await page.goto(url);
+  await prepareRecordingStep(page);
+  await page.getByRole("button", { name: "开始说", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "暂停一下", exact: true }),
+  ).toBeVisible();
+  await page.waitForTimeout(450);
+  await page.getByRole("button", { name: "暂停一下", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "继续说", exact: true }),
+  ).toBeVisible();
+  await page.waitForTimeout(1100);
+  await page.getByRole("button", { name: "继续说", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "暂停一下", exact: true }),
+  ).toBeVisible();
+  await page.waitForTimeout(450);
+  await page
+    .getByRole("button", { name: "说完了，停止录音", exact: true })
+    .click();
+  await expect(
+    page
+      .locator(".local-recording")
+      .getByText("已保存在这台设备，还未上传", { exact: true }),
+  ).toBeVisible();
+  const local = await page.evaluate(async () => {
+    const { resolveBlob } = await import("/preview/media.ts");
+    const clips = Object.keys(localStorage)
+      .filter((key) => key.includes("timenook.recording.v1:"))
+      .flatMap((key) => JSON.parse(localStorage.getItem(key)));
+    const clip = clips.at(-1),
+      url = await resolveBlob(clip.path),
+      response = await fetch(url);
+    const bytes = Array.from(new Uint8Array(await response.arrayBuffer()));
+    URL.revokeObjectURL(url);
+    return {
+      clip,
+      bytes,
+      mime: response.headers.get("content-type"),
+      sourceRate: window.syntheticMicrophone.source.sampleRate,
+      tracks: window.syntheticMicrophone.output.stream
+        .getTracks()
+        .map((track) => track.readyState),
+    };
+  });
+  expect(local.mime).toBe("audio/mpeg");
+  expect(local.sourceRate).toBe(48000);
+  expect(local.tracks).toEqual(["ended"]);
+  expect(local.clip.durationMs).toBeGreaterThan(800);
+  expect(local.clip.durationMs).toBeLessThan(1800); // 1100ms pause must not become encoded silence
+  const original = Buffer.from(local.bytes),
+    digest = createHash("sha256").update(original).digest("hex");
+  expect(local.clip.sha256).toBe(digest);
+  expect(local.clip.bytes).toBe(original.length);
+  const file = join(root, "actual-browser-original.mp3");
+  await writeFile(file, original);
+  const decoded = spawnSync(process.env.FFMPEG_PATH ?? "ffmpeg", [
+    "-nostdin",
+    "-v",
+    "error",
+    "-xerror",
+    "-i",
+    file,
+    "-ac",
+    "1",
+    "-ar",
+    "16000",
+    "-f",
+    "s16le",
+    "pipe:1",
+  ]);
+  expect(decoded.status, decoded.stderr.toString()).toBe(0);
+  expect(decoded.stdout.length / 32).toBe(local.clip.durationMs);
+  await page.reload();
+  await expect(page.locator(".local-recording")).toBeVisible();
+  await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
+  await expect(
+    page.getByText("已在测试环境保存，真实云端保存仍待验证", { exact: true }),
+  ).toBeVisible();
+  const restored = data(
+    await request(
+      "GET",
+      `/v1/projects/${projectId}/interviews/${interview.id}`,
+      narrator,
+    ),
+    200,
+  );
+  const sealed = data(
+    await request(
+      "GET",
+      `/v1/projects/${projectId}/interviews/${interview.id}/clips/${restored.clips[0].id}`,
+      narrator,
+    ),
+    200,
+  );
+  expect(sealed.sha256).toBe(digest);
+  expect(sealed.asset.mime).toBe("audio/mpeg");
+  expect(sealed.durationMs).toBe(local.clip.durationMs);
+  const content = await request(
+    "GET",
+    `/v1/projects/${projectId}/interviews/${interview.id}/clips/${sealed.id}/content`,
+    narrator,
+  );
+  expect(content.statusCode).toBe(200);
+  expect(content.rawPayload).toEqual(original);
+  expect(content.headers["content-type"]).toBe("audio/mpeg");
   await page.context().close();
 });

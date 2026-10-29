@@ -1,3 +1,4 @@
+import { createMp3Recorder } from "./browser-recorder";
 // Browser-only adapters. The shipping mini program uses native wx APIs.
 const openDb = () =>
   new Promise<IDBDatabase>((resolve, reject) => {
@@ -41,6 +42,7 @@ export async function saveBlob(path: string) {
   const id = "local-media:" + crypto.randomUUID();
   await writeBlob(id, blob);
   temporary.delete(path);
+  URL.revokeObjectURL(path);
   return id;
 }
 export async function writeBlob(id: string, blob: Blob) {
@@ -72,99 +74,7 @@ export async function resolveBlob(path: string) {
   return URL.createObjectURL(blob);
 }
 export function createRecorder() {
-  let recorder: MediaRecorder | null = null,
-    stream: MediaStream | null = null,
-    startTime = 0,
-    elapsedMs = 0,
-    maxDuration = 0,
-    timeout: number | undefined;
-  const handlers: Record<string, Function[]> = {};
-  const emit = (key: string, ...args: unknown[]) =>
-    handlers[key]?.forEach((fn) => fn(...args));
-  const api: any = {
-    async start(options: any) {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mime = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find(
-          (t) => MediaRecorder.isTypeSupported(t),
-        );
-        recorder = new MediaRecorder(
-          stream,
-          mime ? { mimeType: mime } : undefined,
-        );
-        const chunks: BlobPart[] = [];
-        recorder.ondataavailable = (e) => {
-          if (e.data.size) chunks.push(e.data);
-        };
-        recorder.onstop = () => {
-          clearTimeout(timeout);
-          const blob = new Blob(chunks, { type: recorder!.mimeType });
-          stream?.getTracks().forEach((t) => t.stop());
-          emit("Stop", {
-            tempFilePath: temporaryFile(blob),
-            duration:
-              elapsedMs + (startTime ? Math.max(0, Date.now() - startTime) : 0),
-            fileSize: blob.size,
-          });
-        };
-        recorder.onpause = () => {
-          elapsedMs += Math.max(0, Date.now() - startTime);
-          startTime = 0;
-          clearTimeout(timeout);
-          emit("Pause");
-        };
-        recorder.onresume = () => {
-          startTime = Date.now();
-          timeout = window.setTimeout(
-            () => api.stop(),
-            Math.max(0, maxDuration - elapsedMs),
-          );
-          emit("Resume");
-        };
-        recorder.onerror = () => {
-          stream?.getTracks().forEach((t) => t.stop());
-          clearTimeout(timeout);
-          emit("Error", { errMsg: "recording failed" });
-        };
-        recorder.start();
-        startTime = Date.now();
-        elapsedMs = 0;
-        maxDuration = options.duration;
-        emit("Start");
-        timeout = window.setTimeout(() => api.stop(), maxDuration);
-      } catch {
-        emit("Error", { errMsg: "microphone unavailable" });
-      }
-    },
-    pause() {
-      if (recorder?.state === "recording") recorder.pause();
-    },
-    resume() {
-      if (recorder?.state === "paused") recorder.resume();
-    },
-    stop() {
-      if (recorder && ["recording", "paused"].includes(recorder.state))
-        recorder.stop();
-    },
-  };
-  for (const name of [
-    "Start",
-    "Stop",
-    "Pause",
-    "Resume",
-    "Error",
-    "InterruptionBegin",
-  ])
-    api["on" + name] = (fn: Function) => (handlers[name] ??= []).push(fn);
-  document.addEventListener("visibilitychange", () => {
-    if (
-      document.hidden &&
-      recorder &&
-      ["recording", "paused"].includes(recorder.state)
-    )
-      emit("InterruptionBegin");
-  });
-  return api;
+  return createMp3Recorder(temporaryFile);
 }
 export function createAudio() {
   const audio = new Audio();

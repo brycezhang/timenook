@@ -479,6 +479,7 @@ test("recording permission pins the displayed question while later sealing prese
     }),
   );
   assert.equal(permission.actualQuestionId, started.actualQuestion.id);
+  assert.equal(permission.maxDurationMs, 300000);
   const displayed = data(
     await request("POST", `${base}/actual-question`, p.narrator.token, {
       clientQuestionId: randomUUID(),
@@ -1300,10 +1301,25 @@ test("a legitimate short clip can use the remaining frozen quota and concurrent 
       await request("POST", `${base}/${pending.id}/seal`, p.narrator.token, {}),
     );
   }
+  const permissionUrl = `/v1/projects/${p.projectId}/interviews/${i.id}/recording-start`;
+  const permissionBody = {
+    actualQuestionId: i.actualQuestion.id,
+    expectedQuestionVersion: 1,
+  };
+  assert.equal(
+    data(await request("POST", permissionUrl, p.narrator.token, permissionBody))
+      .maxDurationMs,
+    2000,
+  );
   const first = await intent(1);
   await finish(
     data(await request("POST", base, p.narrator.token, first.command)),
     first.audio,
+  );
+  assert.equal(
+    data(await request("POST", permissionUrl, p.narrator.token, permissionBody))
+      .maxDurationMs,
+    920,
   );
   const short = await intent(0.5),
     extra = await intent(0.5);
@@ -1312,6 +1328,11 @@ test("a legitimate short clip can use the remaining frozen quota and concurrent 
     request("POST", base, p.narrator.token, extra.command),
   ]);
   assert.deepEqual(reservations.map((r) => r.statusCode).sort(), [201, 409]);
+  assert.equal(
+    (await request("POST", permissionUrl, p.narrator.token, permissionBody))
+      .statusCode,
+    409,
+  );
   const winner = reservations[0].statusCode === 201 ? 0 : 1;
   const second = await finish(
     data(reservations[winner]),
@@ -1327,6 +1348,11 @@ test("a legitimate short clip can use the remaining frozen quota and concurrent 
     200,
   );
   assert.equal(restored.usage.consumedMs, 1656);
+  assert.equal(
+    data(await request("POST", permissionUrl, p.narrator.token, permissionBody))
+      .maxDurationMs,
+    344,
+  );
 });
 
 test("private original audio rechecks sharing after I/O and applies bounded Range without requiring a new recording term", async () => {

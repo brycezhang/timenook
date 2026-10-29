@@ -17,16 +17,16 @@
 
 页面行为测试验证暂停计时、恢复、失权、原问题绑定、回听、重录确认和步骤导航；浏览器用例复用真实 Page、HTTP、PostgreSQL／Redis，仅设备声音、微信和外部 AI 使用明确隔离的合成边界。官方 WXML／WXSS 编译只证明原生页面可编译，不替代微信真机。
 
-浏览器 MediaRecorder 当前使用实际支持的 WebM/Opus 或 MP4 格式，服务端原录音准入只支持 MP3。真实网页录音的格式准入／正规化仍须在 W03 后续集成完成，不能以文件名改成 `.mp3` 认定格式已适配。网页登录的 Cookie 会话与独立应用接入同一页面源，也需由 W01／W02 后续装配验证。
+浏览器通过 16kHz AudioContext／AudioWorklet 和独立 Worker 直接生成真实 MP3，沿用本机保存、摘要与封存原件契约；编码 padding 计入录前采样预算，详见[浏览器录音原件](development-browser-mp3.md)。网页登录的 Cookie 会话与独立应用接入同一页面源，也需由 W01／W02 后续装配验证。
 
 主要相关命令：
 
 ```sh
-pnpm exec tsx --test tests/interview-recording-page.test.ts tests/browser-recording.test.ts
+pnpm exec tsx --test tests/interview-recording-page.test.ts
 pnpm typecheck:frontend
 pnpm build:frontend
 pnpm check:native
-pnpm exec playwright test tests/admin/interview-recording.spec.mjs tests/admin/optional-followup.spec.mjs tests/admin/transcription.spec.mjs tests/admin/story-generation.spec.mjs tests/admin/story-confirmation.spec.mjs tests/admin/story-photos.spec.mjs -c playwright.admin.config.mjs
+pnpm exec playwright test tests/admin/browser-mp3.spec.mjs tests/admin/interview-recording.spec.mjs tests/admin/optional-followup.spec.mjs tests/admin/transcription.spec.mjs tests/admin/story-generation.spec.mjs tests/admin/story-confirmation.spec.mjs tests/admin/story-photos.spec.mjs -c playwright.admin.config.mjs
 ```
 
-完整前端回归及上述浏览器范围的实际结果由本次候选交付记录保存。实际 OSS、浏览器原始音频、供应商、双端真机和公网验收继续分别留证。
+完整前端回归及上述浏览器范围的实际结果由本次候选交付记录保存。浏览器原始 MP3 已有实际浏览器合成音源工程验证；实际 OSS、供应商、手机麦克风、双端真机和公网验收继续分别留证。

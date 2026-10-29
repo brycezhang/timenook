@@ -67,6 +67,7 @@ export const interviewRecordingClient = {
       allowed: boolean;
       actualQuestionId: string;
       questionVersion: number;
+      maxDurationMs: number;
     }>(`/projects/${projectId}/interviews/${id}/recording-start`, {
       key: paymentKey(),
       data: {
@@ -142,11 +143,11 @@ export class InterviewRecorder extends LocalAudioRecorder {
     if (!this.canRecord())
       throw new Error("当前不能新录音，请保留本机文件并联系服务");
   }
-  start(actualQuestionId?: string) {
+  start(actualQuestionId?: string, maxDurationMs?: number) {
     if (this.uploading) return;
     if (!actualQuestionId || !/^[a-f0-9-]{36}$/.test(actualQuestionId))
       throw new Error("实际问题未确认，请重新查询");
-    super.start(actualQuestionId);
+    super.start(actualQuestionId, maxDurationMs);
   }
   async restore() {
     await super.restore();

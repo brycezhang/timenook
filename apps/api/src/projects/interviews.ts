@@ -1,3 +1,4 @@
+import { recordingBudgetIn } from "../media/recording-budget";
 import { Followups, invalidateFollowupIn } from "../followups/followups";
 import { invalidateStoryRecordingIn } from "../stories/stories";
 import {
@@ -567,10 +568,19 @@ export class Interviews implements OnModuleDestroy {
           (body.expectedQuestionVersion ?? 1) !== current.sequence
         )
           throw new ConflictException();
+        await this.participation.requireMaterialIn(
+          tx,
+          projectId,
+          "originalAudio",
+        );
+        const maxDurationMs = await recordingBudgetIn(tx, projectId);
+        if (maxDurationMs < 1)
+          throw new ConflictException("Recording quota exhausted");
         await invalidateFollowupIn(tx, projectId, id);
         await invalidateStoryRecordingIn(tx, projectId, id);
         return {
           allowed: true,
+          maxDurationMs,
           actualQuestionId: current.actualQuestionId,
           questionVersion: current.sequence,
         };
