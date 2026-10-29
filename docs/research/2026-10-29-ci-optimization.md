@@ -27,7 +27,7 @@
 
 把日志中的静态测试名匹配回文件后，`complete-export.test.ts` 的 25 条可匹配用例耗时合计约 806 秒，单条最长约 124 秒。这是用例耗时之和，不是整个文件的完整墙钟时间，也不等于可以直接减掉的时间；参数化名称和 hook 未完整计入。它足以说明：单纯按文件数量分四片会有长尾，应先拆独立场景和检查准备成本。
 
-[PR #72](https://github.com/brycezhang/timenook/pull/72/files) 只有六个 Markdown 文件变化，但 `apps/website/README.md` 不符合现有 `docsPath` 白名单，因而触发 full。其 [运行 40710658194](https://github.com/brycezhang/timenook/actions/runs/40710658194) 用了 26 分 46 秒，并在 `book-audio` 测试中遇到 `pending` / `completed` 断言失败。失败根因未经复现，不能直接宣布为 flaky；这既是分流缺口的实例，也说明需要记录首次失败时间与最终结束时间，避免只观察总耗时。
+[PR #72](https://github.com/brycezhang/timenook/pull/72/files) 只有六个 Markdown 文件变化，但 `apps/website/README.md` 不符合调研时的 `docsPath` 白名单，因而触发 full。其 [运行 40710658194](https://github.com/brycezhang/timenook/actions/runs/40710658194) 用了 26 分 46 秒，并在 `book-audio` 测试中遇到 `pending` / `completed` 断言失败。第二阶段的 [main 40813954529](https://github.com/brycezhang/timenook/actions/runs/40813954529) 再次失败后，已用真实 PostgreSQL 确定性复现共享擦除守卫将短码 ID 转换为 UUID 的22P02，独立修复归 [#83](https://github.com/brycezhang/timenook/issues/83)。分流缺口与数据库缺陷分别处理，不能把既有失败直接当作 flaky；首次失败及最终结果都须记录。
 
 配置来源：[当前 Check](https://github.com/brycezhang/timenook/blob/1b9a4741ce0ddd4f14c76bc98aa8f14781fcc58f/.github/workflows/check.yml)、[根 scripts](https://github.com/brycezhang/timenook/blob/1b9a4741ce0ddd4f14c76bc98aa8f14781fcc58f/package.json)、[分流器](https://github.com/brycezhang/timenook/blob/1b9a4741ce0ddd4f14c76bc98aa8f14781fcc58f/scripts/ci/check.mjs)。官方机制另见 [核对记录](2026-10-29-ci-official-mechanisms.md)。
 

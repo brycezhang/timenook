@@ -18,10 +18,11 @@ RED→GREEN包含官网声明路径、共享/依赖/迁移/未知拒绝、事件
 
 ## 实际 Actions
 
-| 运行                                                                                         | 端到端   | 累计 job 时间 | 范围/结果  |
-| -------------------------------------------------------------------------------------------- | -------- | ------------- | ---------- |
-| 基础设施 PR [40811365764](https://github.com/brycezhang/timenook/actions/runs/40811365764)   | 9分58秒  | 48分36秒      | full，成功 |
-| 配置合并 main [40812440525](https://github.com/brycezhang/timenook/actions/runs/40812440525) | 11分28秒 | 54分28秒      | full，成功 |
+| 运行                                                                                         | 端到端   | 累计 job 时间 | 范围/结果     |
+| -------------------------------------------------------------------------------------------- | -------- | ------------- | ------------- |
+| 基础设施 PR [40811365764](https://github.com/brycezhang/timenook/actions/runs/40811365764)   | 9分58秒  | 48分36秒      | full，成功    |
+| 配置合并 main [40812440525](https://github.com/brycezhang/timenook/actions/runs/40812440525) | 11分28秒 | 54分28秒      | full，成功    |
+| 官网独立 PR [40813725722](https://github.com/brycezhang/timenook/actions/runs/40813725722)   | 1分44秒  | 1分37秒       | website，成功 |
 
 配置 PR 与 main 的完整报告均确认570 API、364 frontend、19 print、6 release、55 admin和15 website，共1029条既有验证用例全部passed；新增CI工具回归67条通过。PR测试的合成merge SHA与main实际提交分别以报告为准，main合并提交为e3ac42f89cb60c1d37cbc870fdd887b4029ac5e0。上游T30准备文档及随后说明修订保持原样，不纳入本票实现范围。
 
@@ -29,6 +30,10 @@ RED→GREEN包含官网声明路径、共享/依赖/迁移/未知拒绝、事件
 
 ## 官网独立验证提交
 
-为验证真实website路径，本提交仅增强官网公开预览的禁止索引/robots回归及说明文档，不修改产品行为。新增用例在三个视口执行，原15条保留，官网总计18条。实际PR分流、发布artifact集合、最终提交双轴审查，以及合并后main完整1032条用例的结果记录于 [#76](https://github.com/brycezhang/timenook/issues/76)，避免为记录自身运行循环产生新提交。
+为验证真实website路径，[PR #80](https://github.com/brycezhang/timenook/pull/80)仅增强官网公开预览的禁止索引/robots回归及说明文档，不修改产品行为。最终提交b567ca0的Standards/Spec独立审查均0项发现；官网18条三视口用例通过，原15条保留。实际运行只执行changes、website、check，其余任务全部skipped；9个官网阶段及官方测试发现/报告核对通过，只产生官网预览包和报告，没有API候选。相对本次full PR样本，端到端等待减少82.6%，累计job运行时间减少96.7%；这是单次实测对比，不代表p50/p95。
+
+官网合并后的main [40813954529](https://github.com/brycezhang/timenook/actions/runs/40813954529)仍执行full，并正确阻断了API第4片的书中原声删除失败：共享擦除守卫把合法短码ID转换为UUID，触发22P02，删除回执保持pending。该缺陷在前期全量运行也出现过，不由官网改动引入；独立修复与真实PG回归归 [#83](https://github.com/brycezhang/timenook/issues/83)，不以重试、跳过或放松汇总替代修复。修复的最终PR及main完整回归结果、完整计数补充于 [#76](https://github.com/brycezhang/timenook/issues/76)，避免为记录自身运行循环产生新提交。
+
+顺序复验还捕获了期限测试的准备竞态：全局Date推进时，真实后台维护会发布已经到期的bookPdf事件；在其PG回执提交前，无scope音频流按ADR0014的原恢复门闩拒绝，流错误表现为500。受控暂停真实append返回后重现了原始503原因。期限测试改为先等待真实sweep完成，并确认PDF/故事已擦除而原声清单和文件仍在，再原样验证截止前/恰好截止/截止后及full/Range。该调整强化独立期限的前提，不扩大生产scope或绕过未知台账后缀。
 
 官网快速路径不会放行公共协议、依赖、迁移或未知路径。本文不代表生产部署、微信/资金/实物验收。
