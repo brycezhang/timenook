@@ -230,7 +230,7 @@ const approval = () => ({
   expectedBindingVersion: 0,
   evidenceRef: "synthetic:发起人核验申请者",
 });
-test("initiator approval binds only one applicant under concurrency, invalidates invitations and starts service terms once", async () => {
+test("initiator approval binds only one applicant under concurrency, invalidates invitations and preserves lifetime service activation", async () => {
   const p = await project();
   const a = await login();
   const b = await login();
@@ -1185,7 +1185,7 @@ async function assist(
     target,
   );
 }
-test("assisted renewal requires new evidence, refusal invalidates prior sessions and later WeChat binding preserves the first participation clock", async () => {
+test("assisted renewal requires new evidence, refusal invalidates prior sessions and later WeChat binding preserves lifetime service activation", async () => {
   const p = await project();
   const first = data(await assist(p));
   const start = data(
