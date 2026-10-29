@@ -36,18 +36,20 @@ node apps/api/dist/web/web-cli.js revoke --input-file /absolute/private/revoke.j
 
 | 方法及路径 | 行为 |
 | --- | --- |
-| `POST /v1/web/session` | 显式提交 `{ticket}`，要求精确 `Origin` 与 `X-Timenook-Web: 1`；原子消费未过期、未撤销且未使用的票据，返回 201 |
+| `POST /v1/web/session` | 显式提交 `{ticket}`，要求精确 `Origin` 与 `X-Timenook-Web: 1`；原子消费未过期、未撤销且未使用的票据，并撤销请求 Cookie 所指的原网页会话，返回 201 |
 | `GET /v1/web/session` | 从 Cookie 恢复当前账号；匿名、过期、已撤销或密钥已变更时 401 |
 | `DELETE /v1/web/session` | 要求同源及 `X-CSRF-Token`，撤销当前会话并清 Cookie，返回 204 |
 | `GET /v1/web/projects` | 只返回当前创建人／绑定讲述者获准的项目，检查独立拒绝依据、删除和当前共享授权；空列表为 `{projects:[]}` |
 
 登录和恢复的成功 `data` 为 `{user:{id},session:{id,expiresAt},csrfToken}`，不会返回会话令牌。Cookie 为 `__Secure-timenook_web`，使用 HttpOnly、Secure、SameSite=Strict、Path=/api/v1。登录兑换受独立 Redis 来源限流保护；Redis 不可用时拒绝兑换。
 
+账号切换及同账号链接续登都会替换本浏览器原会话，其他设备会话不受影响。原会话撤销与新票据消费、新会话建立在同一事务内；票据无效时保留原会话。只处理格式正确且归属当前网页密钥的网页会话，伪造 Cookie、微信 Bearer 会话和其他网页密钥的会话不作为撤销目标。
+
 已有用户 API 可从该 Cookie 解析到相同内部用户，状态变更要求精确来源、网页意图头及当前会话 CSRF。Cookie 和显式 Authorization 混用被拒绝；管理员、支付通知、探针和微信 code 登录不使用该桥接。既有小程序 Bearer 会话仍按原规则验证，不共享网页 Cookie。
 
 ## 工程验证
 
-测试只使用隔离的真实 PostgreSQL schema、Redis 前缀、临时独立台账和合成数据，不访问云端库或真实微信。公开 CLI／HTTP 回归覆盖 11 项：无效链接、签发兑换及恢复、来源校验、Cookie 桥接与退出、链接撤销、并发单次消费及重启、限流、过期、跨账号证明隔离，以及 activeData 删除台账生效即停止暴露书名、web-only 启动不触发旧期限清理但显式维护仍有效。
+测试只使用隔离的真实 PostgreSQL schema、Redis 前缀、临时独立台账和合成数据，不访问云端库或真实微信。公开 CLI／HTTP 回归覆盖 14 项：无效链接、签发兑换及恢复、来源校验、原浏览器会话原子替换与其他设备隔离、失败兑换保留原会话、Cookie 伪造／微信会话／网页密钥边界、Cookie 桥接与退出、链接撤销、并发单次消费及重启、限流、过期、跨账号证明隔离，以及 activeData 删除台账生效即停止暴露书名、web-only 启动不触发旧期限清理但显式维护仍有效。
 
 ```sh
 pnpm --filter @timenook/api db:generate
@@ -57,4 +59,4 @@ pnpm --filter @timenook/api exec tsc -p tsconfig.test.json
 node --env-file-if-exists=../../.env --test dist-test/test/web-account.test.js dist-test/test/identity.test.js dist-test/test/ai-config.test.js dist-test/test/oss-config.test.js
 ```
 
-W01 首轮含 AI／OSS 配置的相关回归 25 项通过；独立审查发现 activeData 删除后的列表遮罩缺口，补充“拒绝依据已提交但私人书名仍在库中”的 HTTP 回归后，网页账号与既有身份相关回归 22 项通过。API 类型及生产构建通过。W01 实际 HTTPS 浏览器、最终提交 CI 与双轴审查由本票集成记录接续，不以本说明代替目标环境或微信真机验收。
+W01 首轮含 AI／OSS 配置的相关回归 25 项通过；独立审查发现 activeData 删除后的列表遮罩缺口，补充“拒绝依据已提交但私人书名仍在库中”的 HTTP 回归后，网页账号与既有身份相关回归 22 项通过。跨标签页切换账号复审后，补原会话原子替换及拒绝边界的 HTTP RED→GREEN，最新网页账号与既有身份相关回归 25 项通过。API 类型及生产构建通过。W01 实际 HTTPS 浏览器、最终提交 CI 与双轴审查由本票集成记录接续，不以本说明代替目标环境或微信真机验收。

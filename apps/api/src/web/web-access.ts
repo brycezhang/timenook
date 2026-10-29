@@ -87,7 +87,7 @@ export class WebAccess implements OnModuleDestroy {
     if (Number(count) > (this.config.loginLimitPerMinute ?? 120))
       throw new HttpException("Rate limited", 429);
   }
-  async exchange(ticket: string) {
+  async exchange(ticket: string, previousToken?: string) {
     const token = randomBytes(32).toString("base64url"),
       now = new Date();
     const session = await this.db.$transaction(async (tx) => {
@@ -104,6 +104,17 @@ export class WebAccess implements OnModuleDestroy {
       const issued = await tx.webLoginTicket.findUniqueOrThrow({
         where: { tokenHash: webDigest(ticket) },
       });
+      if (previousToken && /^[A-Za-z0-9_-]{43}$/.test(previousToken))
+        await tx.session.updateMany({
+          where: {
+            tokenHash: webDigest(previousToken),
+            revokedAt: null,
+            webSession: {
+              is: { keyHash: webDigest(this.config.web!.sessionKey) },
+            },
+          },
+          data: { revokedAt: now },
+        });
       return tx.session.create({
         data: {
           id: randomUUID(),

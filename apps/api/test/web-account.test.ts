@@ -215,6 +215,175 @@ async function signedIn() {
   };
 }
 
+test("signing in replaces only the browser's prior web session, including for the same user", async () => {
+  const first = await signedIn();
+  const otherDeviceLink = await cli("issue", { userId: first.account.user.id });
+  const otherDevice = await app.inject({
+    method: "POST",
+    url: "/v1/web/session",
+    headers,
+    payload: {
+      ticket: new URLSearchParams(
+        new URL(otherDeviceLink.url).hash.slice(1),
+      ).get("ticket"),
+    },
+  });
+  assert.equal(otherDevice.statusCode, 201);
+  const otherDeviceCookie = String(otherDevice.headers["set-cookie"]).split(
+    ";",
+  )[0];
+  const account = await cli("create", {});
+  const link = await cli("issue", { userId: account.user.id });
+  const switched = await app.inject({
+    method: "POST",
+    url: "/v1/web/session",
+    headers: { ...headers, cookie: first.cookie },
+    payload: {
+      ticket: new URLSearchParams(new URL(link.url).hash.slice(1)).get(
+        "ticket",
+      ),
+    },
+  });
+  assert.equal(switched.statusCode, 201);
+  const restore = (cookie: string) =>
+    app.inject({ method: "GET", url: "/v1/web/session", headers: { cookie } });
+  assert.equal((await restore(first.cookie)).statusCode, 401);
+  const switchedCookie = String(switched.headers["set-cookie"]).split(";")[0];
+  assert.deepEqual(
+    (await restore(switchedCookie)).json().data.user,
+    account.user,
+  );
+  assert.deepEqual(
+    (await restore(otherDeviceCookie)).json().data.user,
+    first.account.user,
+  );
+
+  const sameUserLink = await cli("issue", { userId: account.user.id });
+  const renewed = await app.inject({
+    method: "POST",
+    url: "/v1/web/session",
+    headers: { ...headers, cookie: switchedCookie },
+    payload: {
+      ticket: new URLSearchParams(new URL(sameUserLink.url).hash.slice(1)).get(
+        "ticket",
+      ),
+    },
+  });
+  assert.equal(renewed.statusCode, 201);
+  assert.equal((await restore(switchedCookie)).statusCode, 401);
+  assert.deepEqual(
+    (await restore(String(renewed.headers["set-cookie"]).split(";")[0])).json()
+      .data.user,
+    account.user,
+  );
+});
+
+test("an unsuccessful login exchange preserves the browser's existing session", async () => {
+  const first = await signedIn();
+  const revoked = await cli("issue", { userId: first.account.user.id });
+  await cli("revoke", { ticketId: revoked.ticket.id });
+  for (const ticket of [
+    "C".repeat(43),
+    first.ticket,
+    new URLSearchParams(new URL(revoked.url).hash.slice(1)).get("ticket"),
+  ]) {
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/v1/web/session",
+      headers: { ...headers, cookie: first.cookie },
+      payload: { ticket },
+    });
+    assert.equal(rejected.statusCode, 401);
+    assert.equal(rejected.headers["set-cookie"], undefined);
+    const restored = await app.inject({
+      method: "GET",
+      url: "/v1/web/session",
+      headers: { cookie: first.cookie },
+    });
+    assert.equal(restored.statusCode, 200);
+    assert.deepEqual(restored.json().data, first.data);
+  }
+});
+
+test("replacement ignores forged cookies, WeChat sessions and web sessions using another key", async () => {
+  const first = await signedIn();
+  const otherKeyApp = await createApplication(
+    {
+      ...config,
+      web: { ...config.web, sessionKey: randomBytes(32).toString("base64") },
+      wechat: { appId: "synthetic-app", secret: "synthetic-secret" },
+    },
+    {
+      wechatFetch: async () =>
+        new Response(
+          JSON.stringify({
+            openid: "synthetic-open",
+            session_key: "synthetic-key",
+          }),
+        ),
+    },
+  );
+  try {
+    const native = await otherKeyApp.inject({
+      method: "POST",
+      url: "/v1/sessions/wechat",
+      payload: { code: `synthetic-${randomUUID()}` },
+    });
+    assert.equal(native.statusCode, 201);
+    const nativeSession = native.json().data;
+    for (const previousToken of [
+      "malformed",
+      randomBytes(32).toString("base64url"),
+      nativeSession.session.token,
+    ]) {
+      const link = await cli("issue", { userId: first.account.user.id });
+      const accepted = await app.inject({
+        method: "POST",
+        url: "/v1/web/session",
+        headers: {
+          ...headers,
+          cookie: `__Secure-timenook_web=${previousToken}`,
+        },
+        payload: {
+          ticket: new URLSearchParams(new URL(link.url).hash.slice(1)).get(
+            "ticket",
+          ),
+        },
+      });
+      assert.equal(accepted.statusCode, 201);
+    }
+    const nativeCurrent = await app.inject({
+      method: "GET",
+      url: "/v1/users/me",
+      headers: { authorization: `Bearer ${nativeSession.session.token}` },
+    });
+    assert.equal(nativeCurrent.statusCode, 200);
+    assert.deepEqual(nativeCurrent.json().data, nativeSession.user);
+
+    const link = await cli("issue", { userId: first.account.user.id });
+    const accepted = await otherKeyApp.inject({
+      method: "POST",
+      url: "/v1/web/session",
+      headers: { ...headers, cookie: first.cookie },
+      payload: {
+        ticket: new URLSearchParams(new URL(link.url).hash.slice(1)).get(
+          "ticket",
+        ),
+      },
+    });
+    assert.equal(accepted.statusCode, 201);
+    const restored = await app.inject({
+      method: "GET",
+      url: "/v1/web/session",
+      headers: { cookie: first.cookie },
+    });
+    assert.equal(restored.statusCode, 200);
+    assert.deepEqual(restored.json().data, first.data);
+  } finally {
+    await otherKeyApp.close();
+  }
+});
+
 test("web sessions authorize existing user APIs but require CSRF for state changes and logout", async () => {
   const { account, cookie, data } = await signedIn();
   const me = await app.inject({

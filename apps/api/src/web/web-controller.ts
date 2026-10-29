@@ -31,7 +31,10 @@ export class WebController {
   ) {
     this.access.requireOrigin(request);
     await this.access.limit(request.ip);
-    const result = await this.access.exchange(command.ticket);
+    const result = await this.access.exchange(
+      command.ticket,
+      request.cookies[WEB_COOKIE],
+    );
     reply.setCookie(WEB_COOKIE, result.token, {
       path: WEB_COOKIE_PATH,
       httpOnly: true,
