@@ -60,6 +60,7 @@ test.beforeAll(async () => {
     fixture = apiRequire("./dist-test/test/book-fixture.js");
     await fixture.startBookFixture();
     fixture.config.admin.origin = adminOrigin;
+    await fixture.restartBookApplication();
     qualityFixture = apiRequire("./dist-test/test/quality-fixture.js");
     project = await qualityFixture.deliveredQualityOrder();
     adminHeaders = project.headers;

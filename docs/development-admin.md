@@ -50,7 +50,7 @@ CLI 拒绝符号链接、错误所有者、组/其他用户可读、超过 8KiB 
 
 1. `GET /v1/admin/session` 建立或读取匿名/完整会话，并返回登录是否可用和会话绑定 CSRF。
 2. `POST /v1/admin/feishu/login` 要求同源 Origin、匿名 Cookie 与 CSRF，返回飞书授权 URL；页面随后导航过去。
-3. 服务端回调交换授权码并获取身份，核对企业、应用和白名单，原子消费浏览器绑定的短期 state；采用 PKCE S256。只有该 GET 回调允许跨站顶层导航，其他管理请求保持跨站拒绝。
+3. 服务端原子消费浏览器绑定的短期 state，使用 App Secret、授权码及与授权请求完全相同的固定 HTTPS 回调在 v3 接口交换令牌，再获取身份，核对企业、应用和白名单。采用最新文档支持的保密客户端授权码模式，授权 URL 与 token 请求都不发送 PKCE 参数，不设协议回退或兼容开关。只有该 GET 回调允许跨站顶层导航，其他管理请求保持跨站拒绝。
 4. 完整会话与成功审计在同一 PostgreSQL 事务提交后才签发 Cookie，回调仅跳转固定 `/admin/`；错误仅显示固定安全提示。授权码、飞书访问令牌、Cookie 和 CSRF 不写入日志、浏览器存储或后台跳转 URL，不申请/保存飞书 refresh token。
 
 主会话 Cookie 为 `__Secure-timenook_admin`：Secure、HttpOnly、SameSite=Strict、host-only、Path=`/api/v1/admin`。OAuth 回调用独立五分钟 SameSite=Lax Cookie 绑定发起浏览器，防止主 Cookie 因跨站回调未发送而错误放宽整套 Cookie。过期、重放、错浏览器或并发重复回调拒绝。
@@ -67,4 +67,4 @@ Redis 提供限流和一次性 OAuth 状态；依赖不可用时不继续登录�
 
 `pnpm test:admin-browser`、管理端类型/构建及 API 回归提供工程证据；[本轮实施记录](delivery/2026-10-29/admin-feishu-login.md)记录实际结果。真实飞书应用、回调登记、管理员绑定、登录/拒绝/退出、密钥保管、目标环境和进程重启由 T29 留证。已部署的旧版页面及先前 MFA 测试不代表新方案已部署或验收。
 
-官方接口：[获取授权码](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/authen-v1/authorize/get)、[获取 user_access_token](https://open.feishu.cn/document/authentication-management/access-token/get-user-access-token)、[获取用户信息](https://open.feishu.cn/document/server-docs/authentication-management/login-state-management/get)。使用当前 v3 token endpoint，供应商访问令牌只用于本次服务端核对身份。
+官方接口：[获取授权码](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/authen-v1/authorize/get)、[获取 user_access_token（v3）](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/authentication-management/access-token/get-user-access-token-v3)、[获取用户信息](https://open.feishu.cn/document/server-docs/authentication-management/login-state-management/get)。供应商访问令牌只用于本次服务端核对身份。该服务器模式不提供 PKCE 的授权码与 verifier 绑定；浏览器绑定 state、服务端密钥、固定回调、回调禁请求行日志及 no-referrer 均为必须保留的边界。

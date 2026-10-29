@@ -11,7 +11,8 @@ import { createApplication } from "../src/application";
 import type { ApiConfig } from "../src/config";
 import {
   syntheticFeishu,
-  syntheticFeishuFetch,
+  createSyntheticFeishuFetch,
+  createAdminApplication,
   createFeishuAccount,
   adminCookie,
   beginFeishu,
@@ -53,7 +54,9 @@ before(async () => {
   assert.equal(migration.status, 0, "isolated migration");
   db = new PrismaClient({ datasourceUrl: config.databaseUrl });
   redis = new Redis(config.redisUrl);
-  app = await createApplication(config, { feishuFetch: syntheticFeishuFetch });
+  app = await createApplication(config, {
+    feishuFetch: createSyntheticFeishuFetch(config.admin!.origin),
+  });
 });
 beforeEach(async () => {
   const keys = await redis.keys(`${schema}:admin:oauth-start:*`);
@@ -161,7 +164,7 @@ test("whitelisted Feishu login directly issues a rotated protected session witho
   assert.equal(current.json().data.operator.username, auth.account.username);
   assert.equal(auth.response.headers.location, "/admin/");
 });
-test("OAuth state binds browser and PKCE, grants no pre-callback authority, and is consumed once", async () => {
+test("OAuth state binds the browser, grants no pre-callback authority, and is consumed once", async () => {
   const account = createFeishuAccount(config),
     flow = await beginFeishu(config, app);
   assert.equal(
@@ -173,7 +176,17 @@ test("OAuth state binds browser and PKCE, grants no pre-callback authority, and 
     origin + "/api/v1/admin/feishu/callback",
   );
   assert.equal(flow.url.searchParams.get("client_id"), syntheticFeishu.appId);
-  assert.equal(flow.url.searchParams.get("code_challenge_method"), "S256");
+  for (const field of [
+    "code_challenge",
+    "code_challenge_method",
+    "code_verifier",
+    "client_secret",
+  ])
+    assert.equal(
+      flow.url.searchParams.has(field),
+      false,
+      `authorization URL omits ${field}`,
+    );
   assert.equal(flow.url.searchParams.get("scope"), null);
   assert.match(String(flow.response.headers["set-cookie"]), /SameSite=Lax/);
   assert.equal((await runtime(flow.cookie)).statusCode, 401);
@@ -196,6 +209,86 @@ test("OAuth state binds browser and PKCE, grants no pre-callback authority, and 
   const replay = await callback(flow, code(account));
   assert.equal(replay.headers.location, "/admin/?login_error=denied");
   assert.equal(adminCookie(replay), "");
+});
+test("confidential client exchanges the code at v3 with its server secret and exact callback, without PKCE", async () => {
+  let tokenRequest:
+    | { url: string; body: Record<string, unknown>; init?: RequestInit }
+    | undefined;
+  const syntheticFetch = createSyntheticFeishuFetch(config.admin!.origin);
+  const target = await createApplication(config, {
+    feishuFetch: async (input, init) => {
+      if (String(input) === "https://accounts.feishu.cn/oauth/v3/token")
+        tokenRequest = {
+          url: String(input),
+          body: JSON.parse(String(init?.body)),
+          init,
+        };
+      return syntheticFetch(input, init);
+    },
+  });
+  try {
+    const account = createFeishuAccount(config),
+      flow = await beginFeishu(config, target);
+    const result = await callback(flow, code(account), flow.flowCookie, target);
+    assert.ok(tokenRequest, "the current v3 endpoint receives the exchange");
+    assert.deepEqual(
+      Object.keys(tokenRequest.body).sort(),
+      [
+        "grant_type",
+        "client_id",
+        "client_secret",
+        "code",
+        "redirect_uri",
+      ].sort(),
+    );
+    assert.equal(tokenRequest.body.client_secret, syntheticFeishu.appSecret);
+    assert.equal(
+      tokenRequest.body.redirect_uri,
+      flow.url.searchParams.get("redirect_uri"),
+    );
+    assert.equal(result.headers.location, "/admin/");
+    assert.equal((await runtime(adminCookie(result), target)).statusCode, 200);
+  } finally {
+    await target.close();
+  }
+});
+test("Feishu login binds each fixture application's current origin after restart", async () => {
+  const fixtureConfig = { ...config, admin: { ...config.admin! } };
+  const account = createFeishuAccount(fixtureConfig);
+  for (const [configuredOrigin, expectedCallback] of [
+    [
+      "https://localhost:3443",
+      "https://localhost:3443/api/v1/admin/feishu/callback",
+    ],
+    [
+      "https://localhost:3446",
+      "https://localhost:3446/api/v1/admin/feishu/callback",
+    ],
+    [
+      "https://localhost:5177",
+      "https://localhost:5177/api/v1/admin/feishu/callback",
+    ],
+  ]) {
+    fixtureConfig.admin.origin = configuredOrigin;
+    const target = await createAdminApplication(fixtureConfig);
+    try {
+      const flow = await beginFeishu(fixtureConfig, target);
+      assert.equal(flow.url.searchParams.get("redirect_uri"), expectedCallback);
+      const result = await callback(
+        flow,
+        code(account),
+        flow.flowCookie,
+        target,
+      );
+      assert.equal(result.headers.location, "/admin/", configuredOrigin);
+      assert.equal(
+        (await runtime(adminCookie(result), target)).statusCode,
+        200,
+      );
+    } finally {
+      await target.close();
+    }
+  }
 });
 test("unapproved, disabled, foreign-tenant, wrong-application identities cannot sign in", async () => {
   for (const kind of ["unknown", "disabled", "tenant", "app"] as const) {
@@ -316,7 +409,7 @@ test("logout revokes persistent authority; process restart retains only valid se
   const auth = await authenticateFeishu(config, app),
     second = await authenticateFeishu(config, app),
     restarted = await createApplication(config, {
-      feishuFetch: syntheticFeishuFetch,
+      feishuFetch: createSyntheticFeishuFetch(config.admin!.origin),
     });
   try {
     assert.equal((await runtime(auth.cookie, restarted)).statusCode, 200);
@@ -410,7 +503,7 @@ test("short OAuth flows and full sessions expire without silent renewal", async 
       admin: { ...config.admin!, sessionTtlSeconds: 1, challengeTtlSeconds: 1 },
     },
     short = await createApplication(shortConfig, {
-      feishuFetch: syntheticFeishuFetch,
+      feishuFetch: createSyntheticFeishuFetch(shortConfig.admin.origin),
     });
   try {
     const auth = await authenticateFeishu(shortConfig, short);
@@ -483,7 +576,7 @@ test("controlled disable denies every prior session and further login", async ()
 test("Redis failure has no login fallback and authorization attempts are rate limited", async () => {
   const unavailable = await createApplication(
     { ...config, redisUrl: "redis://127.0.0.1:1" },
-    { feishuFetch: syntheticFeishuFetch },
+    { feishuFetch: createSyntheticFeishuFetch(config.admin!.origin) },
   );
   try {
     const response = await unavailable.inject({
@@ -554,7 +647,7 @@ test("development/production reject injected Feishu network implementations", as
     await assert.rejects(
       createApplication(
         { ...config, environment },
-        { feishuFetch: syntheticFeishuFetch },
+        { feishuFetch: createSyntheticFeishuFetch(config.admin!.origin) },
       ),
       /Feishu transport overrides require isolated tests/,
     );

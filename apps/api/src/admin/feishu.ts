@@ -15,7 +15,6 @@ type FeishuSettings = NonNullable<NonNullable<ApiConfig["admin"]>["feishu"]>;
 export async function feishuIdentity(
   settings: FeishuSettings,
   code: string,
-  verifier: string,
   redirectUri: string,
   transport: typeof fetch,
 ): Promise<{ openId: string; tenantKey: string }> {
@@ -34,7 +33,6 @@ export async function feishuIdentity(
         client_secret: settings.appSecret,
         code,
         redirect_uri: redirectUri,
-        code_verifier: verifier,
       }),
     });
     if (!tokenResponse.ok) {

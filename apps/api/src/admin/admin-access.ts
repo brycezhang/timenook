@@ -400,10 +400,8 @@ export class AdminAccess implements OnModuleDestroy {
     await this.limit("oauth-start", request.ip, 20);
     const state = randomBytes(32).toString("base64url");
     const browser = randomBytes(32).toString("base64url");
-    const verifier = randomBytes(32).toString("base64url");
     const flow = {
       browserHash: digest(browser),
-      verifier,
       sessionId: anonymous.id,
       appId: feishu.appId,
       tenantKey: feishu.tenantKey,
@@ -433,11 +431,6 @@ export class AdminAccess implements OnModuleDestroy {
     url.searchParams.set("response_type", "code");
     url.searchParams.set("redirect_uri", settings.origin + CALLBACK_PATH);
     url.searchParams.set("state", state);
-    url.searchParams.set(
-      "code_challenge",
-      createHash("sha256").update(verifier).digest("base64url"),
-    );
-    url.searchParams.set("code_challenge_method", "S256");
     return { authorizationUrl: url.toString() };
   }
   async feishuCallback(
@@ -470,7 +463,6 @@ export class AdminAccess implements OnModuleDestroy {
     }
     if (typeof stored !== "string") throw new UnauthorizedException();
     const flow = JSON.parse(stored) as {
-      verifier: string;
       sessionId: string;
       appId: string;
       tenantKey: string;
@@ -490,7 +482,6 @@ export class AdminAccess implements OnModuleDestroy {
     const user = await feishuIdentity(
       feishu,
       query.code,
-      flow.verifier,
       settings.origin + CALLBACK_PATH,
       this.feishuFetch,
     );
