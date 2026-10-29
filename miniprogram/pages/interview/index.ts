@@ -125,30 +125,35 @@ Page({
     if (q.photo === "1") this.pickPhoto();
   },
   async onShow() {
+    this.taskVisible = true;
+    if (dataMode() === "live") await this.refresh();
+  },
+  watchSession() {
     this.stopSessionWatch?.();
     this.stopSessionWatch = undefined;
     const ownerContext = sessionClient.context();
     if (dataMode() === "live" && ownerContext)
       this.stopSessionWatch = sessionClient.onInvalidated((context) => {
         if (context !== ownerContext) return;
-        this.onHide();
+        this.clearPrivateView();
         this.setData({
           status: sessionClient.sessionCleanupPending()
             ? "登录已失效；设备会话缓存清理失败，请重试登录"
             : "当前权限已失效，请重新查询或登录；本机原文件仍保留",
         });
       });
-    this.taskVisible = true;
-    if (dataMode() === "live") await this.refresh();
   },
   onHide() {
+    this.taskVisible = false;
+    this.clearPrivateView();
+  },
+  clearPrivateView() {
     this.closePlayback();
     if (this.collectionWatch) clearTimeout(this.collectionWatch);
     this.collectionWatch = undefined;
     this.clearFollowup();
     this.stopSessionWatch?.();
     this.stopSessionWatch = undefined;
-    this.taskVisible = false;
     if (this.taskPollHandle) clearTimeout(this.taskPollHandle);
     this.taskPollHandle = undefined;
     ++this.taskSequence;
@@ -194,6 +199,8 @@ Page({
     );
   },
   async refresh() {
+    if (!this.taskVisible || dataMode() !== "live") return;
+    this.watchSession();
     this.closePlayback();
     this.liveRecorder?.stop();
     this.liveRecorder?.unsubscribe();
@@ -272,7 +279,7 @@ Page({
       }
     } catch (error) {
       if (generation === this.generation) {
-        this.onHide();
+        this.clearPrivateView();
         this.liveRecorder = null;
         this.setData({
           status: error instanceof Error ? error.message : "查询失败，请重试",
@@ -353,7 +360,7 @@ Page({
         this.watchCollection(generation, context, interviewId);
       } catch {
         if (!this.current(generation, context)) return;
-        this.onHide();
+        this.clearPrivateView();
         this.setData({
           status: "采集授权已变化，录音已停止；本机原文件仍保留，请重新查询",
         });
@@ -382,7 +389,7 @@ Page({
       dataMode() === "live" &&
       (!current || current === context)
     ) {
-      this.onHide();
+      this.clearPrivateView();
       this.setData({
         status: sessionClient.sessionCleanupPending()
           ? "登录已失效；设备会话缓存清理失败，请重试登录"
@@ -703,7 +710,7 @@ Page({
       );
       if (!this.current(generation, context)) return;
       if (!result.allowed) {
-        this.onHide();
+        this.clearPrivateView();
         this.setData({
           status: "当前采集授权已变化，回听已停止；本机原文件仍保留。",
         });
@@ -887,7 +894,7 @@ Page({
           error instanceof ApiFailure &&
           (error.status === 401 || error.status === 403)
         ) {
-          this.onHide();
+          this.clearPrivateView();
           this.liveRecorder = null;
         }
         this.setData({

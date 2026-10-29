@@ -1427,6 +1427,118 @@ test("the interview page restores transcription state, stops polling in backgrou
   h.page.onUnload();
 });
 
+test("same-page recovery after a context outage resumes automatic and manual transcription queries", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const earlierStatus = h.page.refreshTasks();
+  const earlierRequest = h.requests.shift();
+  const failing = h.page.refresh();
+  respond(h.requests.shift(), undefined, 503);
+  await failing;
+  assert.equal(h.page.data.interview, null);
+
+  const restored = {
+    ...interview,
+    clips: [{ id: "77777777-7777-4777-8777-777777777777", state: "sealed" }],
+  };
+  const recovering = h.page.refresh();
+  respond(h.requests.shift(), { ...context, interviews: [restored] });
+  await recovering;
+  await tick();
+  const automatic = h.requests.shift();
+  assert.equal(
+    automatic?.url,
+    `${base}/projects/${projectId}/tasks/status`,
+    "successful visible-page recovery must query the sealed recording",
+  );
+  respond(
+    automatic,
+    [
+      {
+        id: "99999999-9999-4999-8999-999999999999",
+        projectId,
+        state: "waiting_provider",
+        retryable: false,
+        nextAction: "leave_and_return",
+      },
+    ],
+    201,
+  );
+  await tick();
+  assert.match(h.page.data.taskRows[0].label, /转写中/);
+  const manual = h.page.refreshTasks();
+  respond(
+    h.requests.shift(),
+    [
+      {
+        id: "99999999-9999-4999-8999-999999999999",
+        projectId,
+        state: "succeeded",
+        retryable: false,
+        nextAction: "none",
+      },
+    ],
+    201,
+  );
+  await manual;
+  assert.match(h.page.data.taskRows[0].label, /转写完成/);
+  respond(earlierRequest, undefined, 401);
+  await earlierStatus;
+  assert.equal(
+    h.page.data.interview,
+    null,
+    "the recovered visible page must observe login invalidation from an older request",
+  );
+  assert.equal(h.page.data.question, "");
+  assert.equal(h.page.data.taskRows.length, 0);
+  assert.equal(
+    h.files.size,
+    1,
+    "the original recording remains available for its account",
+  );
+});
+
+test("a hidden page cannot restart context or transcription queries until it is shown again", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  const inFlight = h.page.refresh();
+  const pending = h.requests.shift();
+  h.page.onHide();
+  respond(pending, {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        clips: [
+          { id: "77777777-7777-4777-8777-777777777777", state: "sealed" },
+        ],
+      },
+    ],
+  });
+  await inFlight;
+  assert.equal(
+    h.requests.length,
+    0,
+    "a hidden page ignores the late context response",
+  );
+  const refreshing = h.page.refresh();
+  assert.equal(
+    h.requests.length,
+    0,
+    "a background refresh must remain inactive",
+  );
+  await refreshing;
+  await h.page.refreshTasks();
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.question, "");
+});
+
 const taskId = "99999999-9999-4999-8999-999999999999";
 async function restoredTaskPage() {
   const h = harness();
