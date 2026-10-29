@@ -32,10 +32,228 @@ function fixture(t) {
     git("commit", "-qm", "fixture");
     return git("rev-parse", "HEAD");
   };
-  const run = (...args) =>
-    spawnSync(process.execPath, [script, ...args], { cwd, encoding: "utf8" });
-  return { cwd, git, put, commit, run };
+  const runWithEnv = (env, ...args) =>
+    spawnSync(process.execPath, [script, ...args], {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, CHECK_EVENT_NAME: "", CHECK_REF: "", ...env },
+    });
+  const run = (...args) => runWithEnv({}, ...args);
+  return { cwd, git, put, commit, run, runWithEnv };
 }
+
+const pullRequest = {
+  CHECK_EVENT_NAME: "pull_request",
+  CHECK_REF: "refs/pull/76/merge",
+};
+
+test("website PR source, fixtures and declared standalone configuration route to website", (t) => {
+  const f = fixture(t);
+  f.put("README.md", "# Project\n");
+  let base = f.commit();
+  for (const path of [
+    "apps/website/index.html",
+    "apps/website/src/main.ts",
+    "apps/website/src/view.tsx",
+    "apps/website/src/main.js",
+    "apps/website/src/view.jsx",
+    "apps/website/src/config.mjs",
+    "apps/website/tests/fixture.cjs",
+    "apps/website/src/style.css",
+    "apps/website/src/assets/logo.svg",
+    "apps/website/src/assets/photo.png",
+    "apps/website/src/assets/photo.jpg",
+    "apps/website/src/assets/photo.jpeg",
+    "apps/website/src/assets/photo.webp",
+    "apps/website/src/assets/photo.gif",
+    "apps/website/src/assets/photo.avif",
+    "apps/website/src/assets/favicon.ico",
+    "apps/website/src/assets/font.woff",
+    "apps/website/src/assets/font.woff2",
+    "apps/website/src/assets/font.ttf",
+    "apps/website/src/assets/font.otf",
+    "apps/website/tests/fixtures/content.json",
+    "apps/website/tests/nested/website.spec.ts",
+    "apps/website/vite.config.ts",
+    "apps/website/playwright.config.ts",
+    "apps/website/tsconfig.json",
+    "apps/website/scripts/prepare-assets.mjs",
+    "apps/website/scripts/package.mjs",
+  ]) {
+    f.put(path, "fixture\n");
+    const head = f.commit();
+    const result = f.runWithEnv(pullRequest, "classify", base, head);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), "website", path);
+    base = head;
+  }
+});
+
+test("website with explanatory docs routes to website while docs alone stay docs", (t) => {
+  const f = fixture(t);
+  f.put("README.md", "# Project\n");
+  const base = f.commit();
+  f.put("apps/website/README.md", "# Website\n");
+  f.put("docs/website.md", "# Website development\n");
+  const docs = f.commit();
+  assert.equal(
+    f.runWithEnv(pullRequest, "classify", base, docs).stdout.trim(),
+    "docs",
+  );
+  f.put("apps/website/src/main.ts", "export {};\n");
+  assert.equal(
+    f.runWithEnv(pullRequest, "classify", base, f.commit()).stdout.trim(),
+    "website",
+  );
+});
+
+test("website PR rejects dependency manifests, any lock files and undeclared inputs", (t) => {
+  for (const path of [
+    "apps/website/package.json",
+    "apps/website/pnpm-lock.yaml",
+    "apps/website/src/package.json",
+    "apps/website/tests/fixtures/package.json",
+    "apps/website/src/bower.json",
+    "apps/website/src/composer.json",
+    "apps/website/src/deno.json",
+    "apps/website/tests/jsr.json",
+    "apps/website/tests/npm-shrinkwrap.json",
+    "apps/website/src/package-lock.json",
+    "apps/website/tests/fixtures/lock.json",
+    "apps/website/src/yarn.lock",
+    "apps/website/src/bun.lockb",
+    "apps/website/tests/fixtures/service-lockfile.json",
+    "apps/website/src/migrations/001.ts",
+    "apps/website/tests/fixtures/migration/001.json",
+    "apps/website/scripts/new-tool.mjs",
+    "apps/website/public/logo.svg",
+    "apps/website/src/template.md",
+    "apps/website/tests/fixtures/arbitrary.html",
+    "apps/website/unknown.config.ts",
+    "package.json",
+    "pnpm-lock.yaml",
+    "tsconfig.json",
+    "packages/contracts/src/index.ts",
+    "apps/api/prisma/schema.prisma",
+    "apps/admin/src/app.vue",
+    "miniprogram/domain/model.ts",
+    "miniprogram/assets/book.jpg",
+    "design/brand/shiguangli-logo-original.jpg",
+    "tools/vite-private-artifacts.ts",
+    "scripts/ci/tests.mjs",
+    ".github/workflows/check.yml",
+  ]) {
+    const f = fixture(t);
+    f.put("apps/website/src/main.ts", "export {};\n");
+    const base = f.commit();
+    f.put("apps/website/src/main.ts", "export const changed = true;\n");
+    f.put(path, "fixture\n");
+    const result = f.runWithEnv(pullRequest, "classify", base, f.commit());
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), "full", path);
+  }
+});
+
+test("every main push and unknown event require full including documentation", (t) => {
+  const f = fixture(t);
+  f.put("README.md", "# Project\n");
+  const base = f.commit();
+  f.put("docs/guide.md", "# Guide\n");
+  const docs = f.commit();
+  f.put("apps/website/src/main.ts", "export {};\n");
+  const website = f.commit();
+  for (const env of [
+    { CHECK_EVENT_NAME: "push", CHECK_REF: "refs/heads/main" },
+    { CHECK_EVENT_NAME: "push", CHECK_REF: "refs/heads/another" },
+    { CHECK_EVENT_NAME: "workflow_dispatch", CHECK_REF: "refs/heads/main" },
+    { CHECK_EVENT_NAME: "schedule" },
+    {
+      CHECK_EVENT_NAME: "pull_request_target",
+      CHECK_REF: "refs/pull/76/merge",
+    },
+    { CHECK_EVENT_NAME: "unknown" },
+    { CHECK_REF: "refs/heads/main" },
+  ]) {
+    for (const head of [docs, website])
+      assert.equal(
+        f.runWithEnv(env, "classify", base, head).stdout.trim(),
+        "full",
+        JSON.stringify(env),
+      );
+  }
+  assert.equal(f.run("classify", base, docs).stdout.trim(), "docs");
+  assert.equal(f.run("classify", docs, website).stdout.trim(), "full");
+  assert.equal(
+    f.runWithEnv(pullRequest, "classify", website, website).stdout.trim(),
+    "full",
+  );
+  for (const env of [
+    pullRequest,
+    { CHECK_EVENT_NAME: "push", CHECK_REF: "refs/heads/main" },
+  ])
+    assert.notEqual(
+      f.runWithEnv(env, "classify", "missing-ref", website).status,
+      0,
+    );
+});
+
+test("website deletion, rename and permission checks include both old and new paths", (t) => {
+  for (const kind of [
+    "delete-website",
+    "delete-shared",
+    "rename-website",
+    "rename-from-shared",
+    "rename-to-shared",
+    "executable",
+    "remove-executable",
+    "symlink",
+    "remove-symlink",
+  ]) {
+    const f = fixture(t);
+    f.put("apps/website/src/main.ts", "export {};\n");
+    f.put("miniprogram/domain/model.ts", "export {};\n");
+    if (kind === "remove-executable")
+      chmodSync(join(f.cwd, "apps/website/src/main.ts"), 0o755);
+    if (kind === "remove-symlink") {
+      rmSync(join(f.cwd, "apps/website/src/main.ts"));
+      symlinkSync(
+        "../../../miniprogram/domain/model.ts",
+        join(f.cwd, "apps/website/src/main.ts"),
+      );
+    }
+    const base = f.commit();
+    if (kind === "delete-website") f.git("rm", "apps/website/src/main.ts");
+    if (kind === "delete-shared") f.git("rm", "miniprogram/domain/model.ts");
+    if (kind === "rename-website")
+      f.git("mv", "apps/website/src/main.ts", "apps/website/src/renamed.ts");
+    if (kind === "rename-from-shared")
+      f.git("mv", "miniprogram/domain/model.ts", "apps/website/src/shared.ts");
+    if (kind === "rename-to-shared")
+      f.git("mv", "apps/website/src/main.ts", "apps/renamed.ts");
+    if (kind === "executable")
+      chmodSync(join(f.cwd, "apps/website/src/main.ts"), 0o755);
+    if (kind === "remove-executable")
+      chmodSync(join(f.cwd, "apps/website/src/main.ts"), 0o644);
+    if (kind === "symlink") {
+      rmSync(join(f.cwd, "apps/website/src/main.ts"));
+      symlinkSync(
+        "../../../miniprogram/domain/model.ts",
+        join(f.cwd, "apps/website/src/main.ts"),
+      );
+    }
+    if (kind === "remove-symlink") {
+      rmSync(join(f.cwd, "apps/website/src/main.ts"));
+      f.put("apps/website/src/main.ts", "export {};\n");
+    }
+    const result = f.runWithEnv(pullRequest, "classify", base, f.commit());
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      result.stdout.trim(),
+      ["delete-website", "rename-website"].includes(kind) ? "website" : "full",
+      kind,
+    );
+  }
+});
 test("explanatory Markdown routes to docs and mixed implementation changes route to full", (t) => {
   const f = fixture(t);
   f.put("README.md", "# Example\n");
@@ -174,43 +392,78 @@ test("ticket structure rejects missing acceptance and unknown blockers without h
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /T01.*T99/);
 });
-test("stable check gate accepts only its selected successful check and fails closed on missing or failed classification", (t) => {
-  const f = fixture(t);
-  const run = (needs) =>
-    spawnSync(process.execPath, [script, "gate"], {
-      cwd: f.cwd,
-      encoding: "utf8",
-      env: { ...process.env, CHECK_NEEDS: JSON.stringify(needs) },
-    });
-  const needs = {
-    changes: { result: "success", outputs: { mode: "docs" } },
-    docs: { result: "success" },
-    full: { result: "skipped" },
+function gateNeeds(mode) {
+  return {
+    changes: { result: "success", outputs: { mode } },
+    docs: { result: mode === "docs" ? "success" : "skipped" },
+    build: { result: mode === "full" ? "success" : "skipped" },
+    api: { result: mode === "full" ? "success" : "skipped" },
+    browser: { result: mode === "full" ? "success" : "skipped" },
+    website: { result: mode === "docs" ? "skipped" : "success" },
+    full: { result: mode === "full" ? "success" : "skipped" },
   };
-  assert.equal(run(needs).status, 0);
-  for (const result of ["failure", "cancelled", "skipped", ""]) {
-    assert.notEqual(run({ ...needs, docs: { result } }).status, 0);
+}
+
+test("stable gate accepts each complete selected PR mode and enforces every job result", (t) => {
+  const f = fixture(t);
+  const run = (needs, env = pullRequest) =>
+    f.runWithEnv({ ...env, CHECK_NEEDS: JSON.stringify(needs) }, "gate");
+  for (const mode of ["docs", "website", "full"]) {
+    const needs = gateNeeds(mode);
+    assert.equal(run(needs).status, 0, mode);
+    for (const job of Object.keys(needs)) {
+      for (const result of ["success", "failure", "cancelled", "skipped", ""]) {
+        if (result === needs[job].result) continue;
+        const changed = structuredClone(needs);
+        changed[job].result = result;
+        assert.notEqual(run(changed).status, 0, `${mode}/${job}/${result}`);
+      }
+      const missing = structuredClone(needs);
+      delete missing[job];
+      assert.notEqual(run(missing).status, 0, `${mode}/missing ${job}`);
+    }
+    assert.notEqual(
+      run({ ...needs, unexpected: { result: "success" } }).status,
+      0,
+    );
+  }
+  assert.notEqual(run({}).status, 0);
+  for (const changes of [
+    { result: "success", outputs: {} },
+    { result: "success", outputs: { mode: "unknown" } },
+    { result: "success" },
+  ]) {
+    assert.notEqual(run({ ...gateNeeds("full"), changes }).status, 0);
   }
   assert.notEqual(
-    run({ ...needs, changes: { result: "failure", outputs: { mode: "docs" } } })
-      .status,
+    f.runWithEnv({ ...pullRequest, CHECK_NEEDS: "{" }, "gate").status,
     0,
   );
-  assert.notEqual(
-    run({ ...needs, changes: { result: "success", outputs: {} } }).status,
-    0,
-  );
-  assert.notEqual(run({}).status, 0);
-  assert.notEqual(run({ ...needs, full: { result: "failure" } }).status, 0);
-  assert.equal(
-    run({
-      ...needs,
-      changes: { result: "success", outputs: { mode: "full" } },
-      docs: { result: "skipped" },
-      full: { result: "success" },
-    }).status,
-    0,
-  );
+});
+
+test("stable gate rejects lightweight results for main, push and unknown events", (t) => {
+  const f = fixture(t);
+  const run = (mode, env) =>
+    f.runWithEnv(
+      { ...env, CHECK_NEEDS: JSON.stringify(gateNeeds(mode)) },
+      "gate",
+    );
+  for (const env of [
+    { CHECK_EVENT_NAME: "push", CHECK_REF: "refs/heads/main" },
+    { CHECK_EVENT_NAME: "push", CHECK_REF: "refs/heads/another" },
+    { CHECK_EVENT_NAME: "workflow_dispatch", CHECK_REF: "refs/heads/main" },
+    { CHECK_EVENT_NAME: "schedule" },
+    { CHECK_EVENT_NAME: "pull_request_target" },
+    { CHECK_EVENT_NAME: "unknown" },
+    { CHECK_REF: "refs/heads/main" },
+  ]) {
+    assert.notEqual(run("docs", env).status, 0, JSON.stringify(env));
+    assert.notEqual(run("website", env).status, 0, JSON.stringify(env));
+    assert.equal(run("full", env).status, 0, JSON.stringify(env));
+  }
+  assert.equal(run("docs", {}).status, 0);
+  assert.equal(run("full", {}).status, 0);
+  assert.notEqual(run("website", {}).status, 0);
 });
 
 test("docs check preserves historical unresolved links and Git-excluded evidence but rejects added diff errors", (t) => {

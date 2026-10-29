@@ -39,7 +39,16 @@ export function expectedPhases(suite) {
       "candidate-verify",
     ];
   if (suite === "website")
-    return [...setup, "browser-install", "website-tests", "website-package"];
+    return [
+      ...setup,
+      "browser-install",
+      "docs",
+      "website-typecheck",
+      "website-build",
+      "website-tests",
+      "website-package",
+      "website-verify",
+    ];
   return [
     ...setup,
     "audio-tools",
@@ -56,23 +65,37 @@ export function expectedPhases(suite) {
 }
 const equal = (a, b) =>
   JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
-const caseKeys = (cases) =>
-  cases.map((row) => JSON.stringify([row.id, row.file]));
+const caseKeys = (cases, withProject = false) =>
+  cases.map((row) =>
+    JSON.stringify(
+      withProject ? [row.id, row.file, row.project] : [row.id, row.file],
+    ),
+  );
 const requireThat = (condition, message) => {
   if (!condition) throw Error(message);
 };
 
-export function audit(root, directory, sha) {
+export function audit(root, directory, sha, mode = "full") {
+  requireThat(["full", "website"].includes(mode), "Unknown CI audit mode");
+  requireThat(
+    typeof sha === "string" && /^[a-f0-9]{40}$/.test(sha),
+    "Invalid CI candidate SHA",
+  );
   const rows = [];
   const phases = [];
   const groupFiles = new Map();
-  for (const [suite, groups] of Object.entries(jobs)) {
-    const reportDir = resolve(directory, `ci-report-${suite}`);
+  const selectedJobs = mode === "website" ? { website: jobs.website } : jobs;
+  for (const [suite, groups] of Object.entries(selectedJobs)) {
+    const reportDir =
+      mode === "website" ? directory : resolve(directory, `ci-report-${suite}`);
     const read = (name) =>
       JSON.parse(readFileSync(resolve(reportDir, name), "utf8"));
     const stage = read("phases.json");
     requireThat(
-      stage.sha === sha && stage.suite === suite && stage.phases.length > 0,
+      stage.sha === sha &&
+        stage.suite === suite &&
+        Array.isArray(stage.phases) &&
+        stage.phases.length > 0,
       `Invalid phase report: ${suite}`,
     );
     requireThat(
@@ -89,9 +112,45 @@ export function audit(root, directory, sha) {
       ),
       `Failed phase: ${suite}`,
     );
-    phases.push(...stage.phases.map((phase) => ({ suite, ...phase })));
+    requireThat(
+      stage.phases.every(
+        (phase) => Number.isFinite(phase.durationMs) && phase.durationMs >= 0,
+      ),
+      `Invalid phase duration: ${suite}`,
+    );
+    phases.push(
+      ...stage.phases.map((phase) => {
+        const timing = {};
+        for (const name of ["startedAt", "endedAt"])
+          if (phase[name] !== undefined) {
+            requireThat(
+              typeof phase[name] === "string" &&
+                Number.isFinite(Date.parse(phase[name])),
+              `Invalid phase timestamp: ${suite}`,
+            );
+            timing[name] = new Date(phase[name]).toISOString();
+          }
+        return {
+          suite,
+          name: phase.name,
+          status: phase.status,
+          exitCode: phase.exitCode,
+          signal: phase.signal ?? null,
+          durationMs: phase.durationMs,
+          ...timing,
+        };
+      }),
+    );
     for (const [group, index] of groups) {
       const expected = plan(root, group, index);
+      if (group === "website")
+        requireThat(
+          equal(
+            [...new Set(expected.allCases.map((row) => row.project))],
+            ["compact-mobile", "desktop", "mobile"],
+          ),
+          "Website discovery must include all three projects",
+        );
       const selected = read(`${group}-plan.json`);
       requireThat(
         selected.sha === sha &&
@@ -110,11 +169,17 @@ export function audit(root, directory, sha) {
         events.every((row) => row.sha === sha && row.suite === suite),
         `Stale test report: ${suite}/${group}`,
       );
-      const summary = events.findLast(
+      const summaries = events.filter(
         (row) => row.type === "summary" && !row.file,
       );
+      const summary = summaries[0];
       requireThat(
-        summary?.status === "passed" && summary.counts.tests > 0,
+        summaries.length === 1 &&
+          events.at(-1) === summary &&
+          summary?.status === "passed" &&
+          summary.counts.tests > 0 &&
+          Number.isFinite(summary.durationMs) &&
+          summary.durationMs >= 0,
         `Missing/failed/empty test summary: ${suite}/${group}`,
       );
       const tests = events.filter(
@@ -142,18 +207,26 @@ export function audit(root, directory, sha) {
       );
       if (["admin", "website"].includes(group)) {
         requireThat(
-          equal(caseKeys(selected.allCases), caseKeys(expected.allCases)) &&
-            equal(caseKeys(selected.cases), caseKeys(expected.cases)) &&
-            equal(caseKeys(tests), caseKeys(expected.cases)),
+          equal(
+            caseKeys(selected.allCases, true),
+            caseKeys(expected.allCases, true),
+          ) &&
+            equal(
+              caseKeys(selected.cases, true),
+              caseKeys(expected.cases, true),
+            ) &&
+            equal(caseKeys(tests, true), caseKeys(expected.cases, true)),
           `Browser discovery differs from execution: ${suite}/${group}`,
         );
         requireThat(
           new Set(identities).size === identities.length,
           `Duplicate test execution: ${suite}/${group}`,
         );
-        const announced = events.find((row) => row.type === "plan");
+        const announcements = events.filter((row) => row.type === "plan");
+        const announced = announcements[0];
         requireThat(
-          announced?.tests === tests.length &&
+          announcements.length === 1 &&
+            announced?.tests === tests.length &&
             equal(caseKeys(announced.cases), caseKeys(expected.cases)),
           `Incomplete browser cases: ${suite}/${group}`,
         );
@@ -175,25 +248,36 @@ export function audit(root, directory, sha) {
         new Set(files).size === files.length,
       `Incomplete shard union: ${group}`,
     );
-  return { schemaVersion: 1, sha, rows, phases };
+  return { schemaVersion: 1, mode, sha, rows, phases };
 }
 
 function main() {
-  const directory = resolve(process.argv[2]);
+  const [directoryArgument, mode = "full", ...extra] = process.argv.slice(2);
+  requireThat(
+    Boolean(directoryArgument) &&
+      !extra.length &&
+      ["full", "website"].includes(mode),
+    "Invalid CI audit arguments",
+  );
+  const directory = resolve(directoryArgument);
   const sha = process.env.CHECK_HEAD ?? process.env.GITHUB_SHA;
-  const results = JSON.parse(process.env.CHECK_JOB_RESULTS ?? "{}");
   const errors = [];
-  if (
-    !["build", "api", "browser", "website"].every(
-      (name) => results[name]?.result === "success",
+  if (mode === "full") {
+    const results = JSON.parse(process.env.CHECK_JOB_RESULTS ?? "{}");
+    if (
+      !["build", "api", "browser", "website"].every(
+        (name) => results[name]?.result === "success",
+      )
     )
-  )
-    errors.push("A required parallel job failed, was cancelled or did not run");
+      errors.push(
+        "A required parallel job failed, was cancelled or did not run",
+      );
+  }
   let report;
   try {
-    report = audit(process.cwd(), directory, sha);
+    report = audit(process.cwd(), directory, sha, mode);
   } catch (error) {
-    errors.push(error.message);
+    errors.push("CI execution report validation failed");
   }
   if (report) {
     writeFileSync(
@@ -201,7 +285,7 @@ function main() {
       JSON.stringify(report, null, 2) + "\n",
     );
     const table =
-      `## Complete CI execution\n\nCandidate: \`${sha}\`\n\n| Job | Group | Files | Tests | Test duration |\n| --- | --- | ---: | ---: | ---: |\n` +
+      `## ${mode === "website" ? "Website" : "Complete"} CI execution\n\nCandidate: \`${sha}\`\n\n| Job | Group | Files | Tests | Test duration |\n| --- | --- | ---: | ---: | ---: |\n` +
       report.rows
         .map(
           (row) =>
@@ -223,7 +307,7 @@ if (
   try {
     main();
   } catch (error) {
-    console.error(error.message);
+    console.error("CI execution audit failed");
     process.exitCode = 1;
   }
 }

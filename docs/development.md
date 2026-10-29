@@ -55,34 +55,46 @@ API 默认绑定本机。GET /health/live 返回进程存活；GET /health/ready
 
 `Check` 只响应 PR 和 main push，功能分支 push 不重复执行。代码稳定后固定提交，PR CI 与独立双轴审查并行；修复后只认最终提交的 PR CI 和复审结果。完成合并后再开始下一票；main 检查用于发现集成回归。具体交付门槛见 [Issue tracker](agents/issue-tracker.md#逐票验证与合并)。
 
-仅 `docs/**/*.md`、`apps/*/README.md` 和根 `README.md`、`CONTEXT.md`、`GLOSSARY.md`、`AGENTS.md` 的普通文件变化走轻量检查；模块内部其他 Markdown（例如运行时提示模板）、JSON、图片/模板、代码、迁移、依赖、工作流、可执行位或符号链接变化均保守执行完整检查。重命名同时检查旧、新路径；空差异走完整检查，无法读取差异直接失败。
+main 每次 push 固定执行 `full`，包括纯说明文档和官网变更。PR 按以下规则选择；这些规则只改变 PR 等待范围，合并后仍接受整仓回归。
+
+| PR 变更                                        | 路径      | 验证                                                                   |
+| ---------------------------------------------- | --------- | ---------------------------------------------------------------------- |
+| 仅普通说明文档                                 | `docs`    | 原文档链接、diff 和票据结构检查                                        |
+| 仅声明的官网独立文件，可伴随说明文档           | `website` | 文档、官网类型、生产构建、全部三视口测试、独立打包、SHA/清单与报告核对 |
+| 公共契约、依赖、迁移、共享输入、未知或混合路径 | `full`    | 全部检查                                                               |
+
+说明文档白名单为 `docs/**/*.md`、`apps/*/README.md` 及根 `README.md`、`CONTEXT.md`、`GLOSSARY.md`、`AGENTS.md`。官网白名单限定 `apps/website/index.html`、`src/` 和 `tests/` 中已声明的源码/样式/素材或测试数据扩展、独立的 Vite/Playwright/TypeScript 配置以及当前素材准备/打包脚本；具体匹配以 `scripts/ci/check.mjs` 为准，新路径不自动获得轻量资格。任何依赖 manifest/锁文件和迁移路径优先全量。
+
+官网还消费 `miniprogram/domain/model.ts`、`miniprogram/assets/`、`design/brand/` 和 `tools/vite-private-artifacts.ts`；这些是共享输入，变更仍全量。可执行位、符号链接、代码移出/移入白名单、未知事件均保守全量；重命名同时检查旧、新路径。空差异走完整检查，无法读取差异直接失败。
 
 轻量检查只需要 Git 和 Node：检查 `git diff --check`、仓库内 Markdown 文件链接及 `tickets.json` 对应的票据标题、验收清单、测试/依赖章节、Issue 与依赖一致性，不固定票据总数或依赖条数。新增断链、删除被引用文件会失败；原有未解决链接单独计数，不追认通过。Git 忽略的本地证据、个人绝对路径和外部 URL 不做可用性探测；标题锚点不在本轮检查范围。票据状态仍以 GitHub 为准，轻量检查不代替规格审查或平台验收。
 
 ```bash
-node --test tests/ci/check.test.mjs tests/ci/shards.test.mjs tests/ci/audit.test.mjs
+node --test tests/ci/check.test.mjs tests/ci/shards.test.mjs tests/ci/audit.test.mjs tests/ci/website-package.test.mjs
 node scripts/ci/check.mjs classify BASE_COMMIT HEAD_COMMIT
 node scripts/ci/check.mjs docs BASE_COMMIT HEAD_COMMIT
 ```
 
-代码路径执行完整范围，并行任务如下；没有按业务模块或代码覆盖率选测：
+`full` 保持完整范围，并行任务如下；API、管理端和小程序没有按影响范围选测：
 
 - `build`：完整类型检查、364 条前端行为测试、print/release 测试、所有生产构建、OpenAPI 导出、Linux Prisma 运行时检查和候选打包/验证；安装依赖后另验证耗时报告工具。
 - `api`：四个独立 runner 执行全部 API 测试文件。按固定历史耗时分组，新文件自动纳入；四组完整导出场景分散执行，其原有 35 条用例及真实 fixture 保留。全部 API runner 保留完整 Git 历史供真实恢复演练使用。
 - `browser`：两个独立 runner 执行全部管理端浏览器测试文件，各自编译 API 与 fixture；`workers: 1`、trace/screenshot/video 关闭保持。
-- `website`：执行官网全部三种视口测试及独立预览打包。官网类型与生产构建还在 `build` 中验证。
+- `website`：在 `full` 与 `website` 路径中复用，独立完成文档、官网类型、生产构建、全部三种视口测试、预览打包和清单校验。以官方发现结果重新核对每个 project/case，不启动数据库或 API。官网类型与生产构建还在 `build` 中验证。
 
 每个 API/浏览器 runner 有独立 PostgreSQL/Redis 服务和临时目录，文件内部沿用原 schema/key prefix 与资源隔离。固定 Node/pnpm、镜像 digest、真实数据库唯一性/锁/恢复、固定音频工具和字体均保持。Linux 自动检查不替代微信原生编译或其他人工验收。
 
 `scripts/ci/tests.mjs` 保存每组预期文件；浏览器文件及各 project 用例从 Playwright 官方 `--list` 发现结果生成，保持其递归、后缀和配置规则；完整汇总安装依赖、生成 Prisma 并编译 contracts/API fixture 后再次独立发现并核对用例。Node/Playwright reporter 只保存相对文件名、用例名、状态、耗时和候选 SHA，不收集错误正文、stdout、请求、页面、附件或凭据。`scripts/ci/run.mjs` 保留命令输出及失败退出状态，将各阶段耗时写入 runner 临时目录的 `phases.json` 与 Actions job summary；失败也上传已经生成的报告。临时报告不进入工作区和候选包。
 
+官网任务在报告完整、用例终态与 SHA 校验成功后，`website` 路径可输出 `timenook-website-preview-SHA`，并上传脱敏的阶段/用例/汇总报告；只有官网预览产物，不生成 API 候选。`full` 路径继续由完整汇总发布最终产物。
+
 `full` 等待全部并行任务并校验八个报告集合，要求阶段完整成功、预期/实际测试文件一致、分片并集无遗漏重复、浏览器各 project 用例完整、没有失败/跳过/空集或错误 SHA；失败、取消、缺失报告均阻断。仅在完整验证成功后发布原有名称的 `timenook-candidate-SHA` 和 `timenook-website-preview-SHA` artifacts，并显式重验校验和。此前的 `ci-candidate-*` / `ci-website-preview-*` 只是未通过整仓门禁的中间产物。
 
 本地复现单片时使用隔离的真实服务，先生成 Prisma、迁移、构建 contracts 并编译 API 测试；设置 `TIMENOOK_CI_REPORT_DIR` 为工作区外的新临时目录、`TIMENOOK_CI_SUITE=api-1` 和候选 `CHECK_HEAD`，执行 `node scripts/ci/run.mjs api-tests node scripts/ci/tests.mjs api 1`。四片均需运行，单片绿色不代表完整验证通过。`pnpm check` 继续提供原有本地整仓串行入口。
 
-所有路径最后汇入始终运行、名称不变的 `check`：分类成功且选中的检查成功才通过；分类失败、选中任务失败/取消/跳过都失败。没有 workflow 级路径过滤，避免必需检查一直 Pending；依据 [GitHub 路径过滤说明](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore)及 [needs / always 条件](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idneeds)。
+所有路径最后汇入始终运行、名称不变的 `check`：分类成功、全部选中任务成功、全部未选任务跳过才通过；分类失败、缺失、失败、取消或异常执行/跳过均失败。main 模式还必须为 `full`。没有 workflow 级路径过滤，避免必需检查一直 Pending；依据 [GitHub 路径过滤说明](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore)及 [needs / always 条件](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idneeds)。
 
-本地每个行为保持 RED → GREEN，并验证相关回归、类型与构建；全量回归交给 CI，不在结果已充分时机械重复。最终提交的 PR CI 与独立 Standards / Spec 审查通过后才可合并；合并后仍等待 main CI 全绿再合并下一票。本次只做文档分流与完整回归的并行调度，不增加按影响范围选测、缓存或 CD 门槛迁移；实际耗时与验收记录在 [CI 第一阶段票据](https://github.com/brycezhang/timenook/issues/73)。
+本地每个行为保持 RED → GREEN，并验证相关回归、类型与构建；全量回归交给 CI，不在结果已充分时机械重复。最终提交的 PR CI 与独立 Standards / Spec 审查通过后才可合并；合并后仍等待 main CI 全绿再合并下一票。第二阶段只允许 PR 的官网独立分流，保持 main 完整回归；不增加 API/admin/小程序选测、缓存或 CD 门槛迁移。第一阶段实测见[记录](delivery/2026-10-29/ci-phase1.md)，第二阶段的实施与实际验收见 [#76](https://github.com/brycezhang/timenook/issues/76)。
 
 ## T06 微信身份与小程序模式
 

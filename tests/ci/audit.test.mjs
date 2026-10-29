@@ -10,10 +10,12 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { jobs, audit, expectedPhases } from "../../scripts/ci/audit.mjs";
 import { plan } from "../../scripts/ci/tests.mjs";
 
-function fixture(t) {
+function fixture(t, mode = "full") {
   const root = mkdtempSync(join(tmpdir(), "timenook-ci-audit-test-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const directory = join(root, "reports");
@@ -51,8 +53,11 @@ function fixture(t) {
     console.log(JSON.stringify({config:{rootDir: root + '/' + directory}, suites:[{specs}], errors:[]}));
   `,
   );
-  for (const [suite, groups] of Object.entries(jobs)) {
-    const dir = join(directory, `ci-report-${suite}`);
+  for (const [suite, groups] of Object.entries(
+    mode === "website" ? { website: jobs.website } : jobs,
+  )) {
+    const dir =
+      mode === "website" ? directory : join(directory, `ci-report-${suite}`);
     mkdirSync(dir, { recursive: true });
     write(join(dir, "phases.json"), {
       sha,
@@ -112,6 +117,156 @@ test("aggregate validates all eight jobs and the exact union of test files", (t)
   assert.equal(report.rows.filter((row) => row.group === "api").length, 4);
   assert.equal(report.sha, f.sha);
 });
+
+test("website self-audit reads only its producer directory and requires its complete independent stages", (t) => {
+  const f = fixture(t, "website");
+  const stageFile = join(f.directory, "phases.json");
+  const stages = JSON.parse(readFileSync(stageFile));
+  stages.phases[0].privatePayload = "DO_NOT_COPY_PRIVATE_REPORT_PAYLOAD";
+  f.write(stageFile, stages);
+  const report = audit(f.root, f.directory, f.sha, "website");
+  assert.deepEqual(
+    report.rows.map(({ suite, group, tests }) => ({ suite, group, tests })),
+    [{ suite: "website", group: "website", tests: 3 }],
+  );
+  assert.deepEqual(
+    report.phases.map((phase) => phase.name),
+    [
+      "pnpm-setup",
+      "pnpm-install",
+      "browser-install",
+      "docs",
+      "website-typecheck",
+      "website-build",
+      "website-tests",
+      "website-package",
+      "website-verify",
+    ],
+  );
+  assert.ok(
+    !JSON.stringify(report).includes("DO_NOT_COPY_PRIVATE_REPORT_PAYLOAD"),
+  );
+  assert.throws(() => audit(f.root, f.directory, f.sha, "unknown"));
+  assert.throws(() => audit(f.root, f.directory, "not-a-sha", "website"));
+});
+
+test("website CLI self-audit ignores parallel job results while full CLI still requires successful jobs", (t) => {
+  const script = fileURLToPath(
+    new URL("../../scripts/ci/audit.mjs", import.meta.url),
+  );
+  const f = fixture(t, "website");
+  const result = spawnSync(process.execPath, [script, f.directory, "website"], {
+    cwd: f.root,
+    env: {
+      ...process.env,
+      CHECK_HEAD: f.sha,
+      CHECK_JOB_RESULTS: JSON.stringify({ website: { result: "failure" } }),
+    },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    JSON.parse(readFileSync(join(f.directory, "summary.json"))).rows.length,
+    1,
+  );
+  const full = fixture(t);
+  const missing = spawnSync(process.execPath, [script, full.directory], {
+    cwd: full.root,
+    env: { ...process.env, CHECK_HEAD: full.sha, CHECK_JOB_RESULTS: "{}" },
+    encoding: "utf8",
+  });
+  assert.notEqual(missing.status, 0);
+  const complete = spawnSync(process.execPath, [script, full.directory], {
+    cwd: full.root,
+    env: {
+      ...process.env,
+      CHECK_HEAD: full.sha,
+      CHECK_JOB_RESULTS: JSON.stringify(
+        Object.fromEntries(
+          ["build", "api", "browser", "website"].map((name) => [
+            name,
+            { result: "success" },
+          ]),
+        ),
+      ),
+    },
+    encoding: "utf8",
+  });
+  assert.equal(complete.status, 0, complete.stderr);
+});
+
+for (const failure of [
+  "stale-sha",
+  "missing-stage",
+  "failed-stage",
+  "empty",
+  "missing-project",
+  "wrong-case",
+  "wrong-project",
+  "incomplete-config",
+  "private-error",
+]) {
+  test(`website self-audit fails closed for ${failure}`, (t) => {
+    const f = fixture(t, "website");
+    const phaseFile = join(f.directory, "phases.json");
+    const file = join(f.directory, "website.jsonl");
+    let events = readFileSync(file, "utf8").trim().split("\n").map(JSON.parse);
+    if (failure === "stale-sha")
+      events.forEach((row) => (row.sha = "b".repeat(40)));
+    if (failure === "missing-stage" || failure === "failed-stage") {
+      const stages = JSON.parse(readFileSync(phaseFile));
+      if (failure === "missing-stage") stages.phases.pop();
+      else stages.phases.at(-1).status = "failed";
+      f.write(phaseFile, stages);
+    }
+    if (failure === "empty")
+      events = events.filter((row) => row.type !== "test");
+    if (failure === "missing-project") {
+      events = events.filter(
+        (row) => row.type !== "test" || row.project !== "mobile",
+      );
+      events[0].cases = events[0].cases.filter(
+        (row) => row.project !== "mobile",
+      );
+      events[0].tests--;
+      events.at(-1).counts.tests--;
+    }
+    if (failure === "wrong-case")
+      events.find((row) => row.type === "test").id = "unknown";
+    if (failure === "wrong-project")
+      events.find((row) => row.type === "test").project = "unknown";
+    if (failure === "incomplete-config") {
+      const cli = join(f.root, "node_modules/@playwright/test/cli.js");
+      writeFileSync(
+        cli,
+        readFileSync(cli, "utf8").replace(
+          "['compact-mobile', 'desktop', 'mobile']",
+          "['compact-mobile', 'desktop']",
+        ),
+      );
+    }
+    if (failure === "private-error") {
+      writeFileSync(file, "PRIVATE_BAD_REPORT_CONTENT");
+      const script = fileURLToPath(
+        new URL("../../scripts/ci/audit.mjs", import.meta.url),
+      );
+      const result = spawnSync(
+        process.execPath,
+        [script, f.directory, "website"],
+        {
+          cwd: f.root,
+          env: { ...process.env, CHECK_HEAD: f.sha },
+          encoding: "utf8",
+        },
+      );
+      assert.notEqual(result.status, 0);
+      assert.ok(!result.stderr.includes("PRIVATE_BAD_REPORT_CONTENT"));
+      return;
+    }
+    writeFileSync(file, events.map(JSON.stringify).join("\n") + "\n");
+    assert.throws(() => audit(f.root, f.directory, f.sha, "website"));
+  });
+}
 
 for (const failure of [
   "missing-shard",
