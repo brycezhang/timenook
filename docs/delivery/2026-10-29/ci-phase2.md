@@ -18,10 +18,10 @@ RED→GREEN包含官网声明路径、共享/依赖/迁移/未知拒绝、事件
 
 ## 实际 Actions
 
-| 运行                                                                                         | 端到端  | 累计 job 时间 | 范围/结果    |
-| -------------------------------------------------------------------------------------------- | ------- | ------------- | ------------ |
-| 基础设施 PR [40811365764](https://github.com/brycezhang/timenook/actions/runs/40811365764)   | 9分58秒 | 48分36秒      | full，成功   |
-| 配置合并 main [40812440525](https://github.com/brycezhang/timenook/actions/runs/40812440525) | 待完成  | 待完成        | full，运行中 |
+| 运行                                                                                         | 端到端   | 累计 job 时间 | 范围/结果  |
+| -------------------------------------------------------------------------------------------- | -------- | ------------- | ---------- |
+| 基础设施 PR [40811365764](https://github.com/brycezhang/timenook/actions/runs/40811365764)   | 9分58秒  | 48分36秒      | full，成功 |
+| 配置合并 main [40812440525](https://github.com/brycezhang/timenook/actions/runs/40812440525) | 11分28秒 | 54分28秒      | full，成功 |
 
 配置 PR 与 main 的完整报告均确认570 API、364 frontend、19 print、6 release、55 admin和15 website，共1029条既有验证用例全部passed；新增CI工具回归67条通过。PR测试的合成merge SHA与main实际提交分别以报告为准，main合并提交为e3ac42f89cb60c1d37cbc870fdd887b4029ac5e0。上游T30准备文档及随后说明修订保持原样，不纳入本票实现范围。
 
