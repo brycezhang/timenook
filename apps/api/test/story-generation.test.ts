@@ -6,6 +6,7 @@ import { paymentAdmin } from "./payment-admin-fixture";
 import { once } from "node:events";
 import { ProductionTasks } from "../src/tasks/tasks";
 import { startProductionWorker } from "../src/tasks/worker";
+import { waitForWorkerJobs } from "./worker-completion";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -500,24 +501,10 @@ async function wakeStory(
   id: string,
   otherId?: string,
 ) {
-  const pending = new Set([id, ...(otherId ? [otherId] : [])]);
-  const done = new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      runtime.worker.off("completed", onDone);
-      reject(new Error("story worker timeout"));
-    }, 5000);
-    function onDone(job: { id?: string }) {
-      if (job.id) pending.delete(job.id);
-      if (!pending.size) {
-        clearTimeout(timer);
-        runtime.worker.off("completed", onDone);
-        resolve();
-      }
-    }
-    runtime.worker.on("completed", onDone);
+  await waitForWorkerJobs(runtime.worker, async () => {
+    await runtime.recoverDue();
+    return [id, ...(otherId ? [otherId] : [])];
   });
-  await runtime.recoverDue();
-  await done;
 }
 test("the actual Worker waits for the final transcript then composes the complete sourced immutable story", async () => {
   const p = await bound(),
@@ -674,7 +661,7 @@ test("an invalid sourced output retries the same user intent with a new accounte
   assert.equal(complete.usage.organizations, 1);
   assert.equal(complete.task.attempts[1].actualCostFen, null);
 });
-test("a full waiting-input batch yields to a later ready story without resetting its submission clock", async () => {
+test("a full waiting-input batch yields to a later ready story without resetting its submission clock", async (t) => {
   const waiting: string[] = [];
   for (let group = 0; group < 3; group++) {
     const p = await bound(),
@@ -696,32 +683,28 @@ test("a full waiting-input batch yields to a later ready story without resetting
   const ready = await preparedStory(),
     runtime = await startProductionWorker(app);
   try {
-    const events: string[] = [];
-    const listener = (job: { id?: string }) => events.push(job.id!);
-    runtime.worker.on("completed", listener);
+    assert.equal(new Set(waiting).size, 102);
+    const tasks = app.get(ProductionTasks),
+      due = tasks.due.bind(tasks);
+    let selected: string[] = [];
+    t.mock.method(tasks, "due", async () => {
+      selected = await due();
+      return selected;
+    });
     async function scan() {
-      const offset = events.length,
-        count = await runtime.recoverDue();
-      if (events.length - offset >= count) return;
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          runtime.worker.off("completed", check);
-          reject(new Error("batch timeout"));
-        }, 10000);
-        function check() {
-          if (events.length - offset >= count) {
-            clearTimeout(timer);
-            runtime.worker.off("completed", check);
-            resolve();
-          }
-        }
-        runtime.worker.on("completed", check);
-        check();
-      });
+      await waitForWorkerJobs(
+        runtime.worker,
+        async () => {
+          const count = await runtime.recoverDue();
+          assert.equal(selected.length, count);
+          return selected;
+        },
+        10000,
+      );
+      return selected;
     }
-    await scan();
-    await scan();
-    runtime.worker.off("completed", listener);
+    assert.equal((await scan()).length, 100);
+    assert.ok((await scan()).includes(ready.story.task.id));
     const completed = data(
       await request(
         "GET",
@@ -984,6 +967,12 @@ test("a response lost at PostgreSQL commit recovers to manual takeover with its 
     where: { id: p.story.task.id },
     data: { leaseUntil: new Date(0), nextRunAt: new Date(0) },
   }); // Expire the exact crashed owner lease.
+  // Keep the independent control in this scan's finite frontier; older waiting
+  // fixtures must not displace it from the scheduler's first 100 due tasks.
+  await db.productionTask.update({
+    where: { id: other.story.task.id },
+    data: { nextRunAt: new Date(0) },
+  });
   const runtime = await startProductionWorker(app);
   try {
     await wakeStory(runtime, p.story.task.id, other.story.task.id);
