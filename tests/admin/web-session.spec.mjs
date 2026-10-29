@@ -18,8 +18,15 @@ const { PrismaClient } = apiRequire("@prisma/client");
 const Redis = apiRequire("ioredis");
 const schema = `w01_browser_${randomUUID().replaceAll("-", "")}`;
 const origin = "https://127.0.0.1:4331";
-let app, server, config, root, relay;
+let app, linkedApp, server, config, root, relay;
 let delayedLogin;
+let linkedBackend = false;
+const wechatCodes = new Map();
+function freshCode(identity) {
+  const code = `synthetic-${randomUUID()}`;
+  wechatCodes.set(code, identity);
+  return code;
+}
 
 async function cli(command, input) {
   const id = randomUUID();
@@ -104,6 +111,28 @@ test.beforeAll(async () => {
   };
   app = await createPrivacyFixtureApplication(config);
   await app.listen(3451, "127.0.0.1");
+  const { createApplication } = apiRequire("./dist-test/src/application.js");
+  linkedApp = await createApplication(
+    {
+      ...config,
+      wechat: { appId: "synthetic-browser-app", secret: "synthetic-secret" },
+    },
+    {
+      wechatFetch: async (input) => {
+        const identity = wechatCodes.get(
+          new URL(String(input)).searchParams.get("js_code"),
+        );
+        return new Response(
+          JSON.stringify(
+            identity
+              ? { openid: identity, session_key: "synthetic" }
+              : { errcode: 40029 },
+          ),
+        );
+      },
+    },
+  );
+  await linkedApp.listen(3453, "127.0.0.1");
   // Transparent HTTP transport fault injection; application responses are real.
   relay = createServer((request, response) => {
     const held =
@@ -114,7 +143,7 @@ test.beforeAll(async () => {
     const upstream = forwardRequest(
       {
         host: "127.0.0.1",
-        port: 3451,
+        port: linkedBackend ? 3453 : 3451,
         path: request.url,
         method: request.method,
         headers: request.headers,
@@ -222,6 +251,7 @@ test.afterAll(async () => {
     await new Promise((resolveClosed) => relay.close(resolveClosed));
   }
   await closePrivacyFixtureApplication(app);
+  await linkedApp?.close();
   if (config) {
     const db = new PrismaClient({ datasourceUrl: config.databaseUrl });
     const redis = new Redis(config.redisUrl);
@@ -413,4 +443,133 @@ test("an old tab can exit after account switching without signing out the new ac
   } finally {
     await other.close();
   }
+});
+
+test("web association clearly remains unavailable without independent WeChat configuration", async ({
+  page,
+}) => {
+  const issued = await loginLink();
+  await openLink(page, issued.url);
+  await page.getByRole("button", { name: "进入我的故事书" }).click();
+  await page.getByRole("button", { name: "关联微信小程序" }).click();
+  await expect(
+    page.getByText("独立小程序尚未配置，暂不可关联。正式微信验证仍待完成。"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "生成短期关联码" }),
+  ).toHaveCount(0);
+});
+
+test("web page and server-proven native identity explicitly confirm the same product account", async ({
+  page,
+}) => {
+  linkedBackend = true;
+  const issued = await loginLink();
+  await openLink(page, issued.url);
+  await page.getByRole("button", { name: "进入我的故事书" }).click();
+  await page.getByRole("button", { name: "关联微信小程序" }).click();
+  await page.getByRole("button", { name: "生成短期关联码" }).click();
+  await expect(page.locator(".pair-code")).toHaveText(/^\d{8}$/);
+  const linkCode = await page.locator(".pair-code").textContent();
+  const native = await linkedApp.inject({
+    method: "POST",
+    url: "/v1/wechat-links/claim",
+    payload: { linkCode, code: freshCode("browser-native-identity") },
+  });
+  expect(native.statusCode).toBe(201);
+  const { proof, challenge } = native.json().data;
+  await page.getByRole("button", { name: "刷新关联状态" }).click();
+  await expect(page.locator(".pair-code")).toHaveText(
+    challenge.verificationCode,
+  );
+  await expect(page.locator(".account-id")).toContainText(issued.userId);
+  await page
+    .getByLabel("输入小程序上的6位核对码")
+    .fill(challenge.verificationCode);
+  await page.getByRole("button", { name: "核对一致，确认关联" }).click();
+  await expect(page.getByText("网页已确认 · 小程序待确认")).toBeVisible();
+  const confirmed = await linkedApp.inject({
+    method: "POST",
+    url: "/v1/wechat-links/confirm",
+    payload: {
+      proof,
+      code: freshCode("browser-native-identity"),
+      verificationCode: challenge.verificationCode,
+    },
+  });
+  expect(confirmed.statusCode).toBe(201);
+  await page.getByRole("button", { name: "刷新关联状态" }).click();
+  await expect(
+    page.getByText("两端已确认，关联完成。请在小程序重新微信登录同一账号。"),
+  ).toBeVisible();
+  const restored = await linkedApp.inject({
+    method: "POST",
+    url: "/v1/sessions/wechat",
+    payload: {
+      code: freshCode("browser-native-identity"),
+      expectedUserId: issued.userId,
+    },
+  });
+  expect(restored.statusCode).toBe(201);
+  expect(restored.json().data.user.id).toBe(issued.userId);
+  expect(
+    await page.evaluate(() => JSON.stringify(Object.entries(localStorage))),
+  ).not.toContain(proof);
+  expect(new URL(page.url()).hash).toBe("");
+  await page.setViewportSize({ width: 320, height: 740 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});
+
+test("a stale web pairing view cannot confirm after another tab changes account", async ({
+  page,
+  context,
+}) => {
+  linkedBackend = true;
+  const first = await loginLink();
+  await openLink(page, first.url);
+  await page.getByRole("button", { name: "进入我的故事书" }).click();
+  await page.getByRole("button", { name: "关联微信小程序" }).click();
+  await page.getByRole("button", { name: "生成短期关联码" }).click();
+  const linkCode = await page.locator(".pair-code").textContent();
+  const claimed = await linkedApp.inject({
+    method: "POST",
+    url: "/v1/wechat-links/claim",
+    payload: { linkCode, code: freshCode("stale-browser-native") },
+  });
+  expect(claimed.statusCode).toBe(201);
+  const { proof, challenge } = claimed.json().data;
+  await page.getByRole("button", { name: "刷新关联状态" }).click();
+  await expect(page.locator(".pair-code")).toHaveText(
+    challenge.verificationCode,
+  );
+  const second = await context.newPage(),
+    replacement = await loginLink();
+  await openLink(second, replacement.url);
+  await second.getByRole("button", { name: "进入我的故事书" }).click();
+  await expect(
+    second.getByRole("heading", { name: "我的故事书" }),
+  ).toBeVisible();
+  await page
+    .getByLabel("输入小程序上的6位核对码")
+    .fill(challenge.verificationCode);
+  await page.getByRole("button", { name: "核对一致，确认关联" }).click();
+  await expect(
+    page.getByText("账号已切换，请重新打开当前账号后再关联。"),
+  ).toBeVisible();
+  await expect(page.locator(".pair-code")).toHaveCount(0);
+  const late = await linkedApp.inject({
+    method: "POST",
+    url: "/v1/wechat-links/confirm",
+    payload: {
+      proof,
+      code: freshCode("stale-browser-native"),
+      verificationCode: challenge.verificationCode,
+    },
+  });
+  expect(late.statusCode).toBe(401);
+  await second.close();
 });

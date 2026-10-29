@@ -113,6 +113,7 @@ model User {
   identities WechatIdentity[]
   sessions   Session[]
   webLoginTickets WebLoginTicket[]
+  wechatLinks WechatLink[]
 
   @@map("users")
 }
@@ -137,6 +138,7 @@ model Session {
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
   user      User      @relation(fields: [userId], references: [id])
   webSession WebSession?
+  wechatLinks WechatLink[]
 
   @@index([userId])
   @@index([expiresAt])
@@ -162,6 +164,29 @@ model WebSession {
   keyHash String @map("key_hash") @db.Char(64)
   session Session @relation(fields: [sessionId], references: [id])
   @@map("web_sessions")
+}
+
+model WechatLink {
+  id String @id @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  sessionId String @map("session_id") @db.Uuid
+  codeHash String @unique @map("code_hash") @db.Char(64)
+  proofHash String? @unique @map("proof_hash") @db.Char(64)
+  verificationCode String? @map("verification_code") @db.Char(6)
+  appId String? @map("app_id")
+  openId String? @map("open_id")
+  state String @default("waiting")
+  attempts Int @default(0)
+  webConfirmed Boolean @default(false) @map("web_confirmed")
+  nativeConfirmed Boolean @default(false) @map("native_confirmed")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  user User @relation(fields: [userId], references: [id])
+  session Session @relation(fields: [sessionId], references: [id])
+  @@index([sessionId])
+  @@index([appId, openId])
+  @@index([expiresAt])
+  @@map("wechat_links")
 }
 
 // An exchange is consumed before the external request, including unknown results.
