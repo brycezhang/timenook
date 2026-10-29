@@ -102,7 +102,8 @@ Page({
       (!this.data.storyPurpose && !this.data.bookPurpose) ||
       !current ||
       this.data.busy ||
-      current.policyStatus !== "synthetic-only"
+      (current.policyStatus !== "synthetic-only" &&
+        current.policyStatus !== "internal-acceptance")
     )
       return;
     if (!/^[^\r\n]{3,160}$/.test(evidence)) {
@@ -119,7 +120,7 @@ Page({
       purpose,
       granted,
       noticeVersion: current.noticeVersion,
-      evidenceRef: `synthetic:${evidence}`,
+      evidenceRef: `${current.evidencePrefix ?? "synthetic:"}${evidence}`,
       expectedBindingVersion: current.bindingVersion,
       expectedAccessEpoch: current.accessEpoch,
       ...(expectedSessionId ? { expectedSessionId } : {}),
@@ -338,7 +339,8 @@ Page({
     if (
       !current ||
       this.data.busy ||
-      current.policyStatus !== "synthetic-only" ||
+      (current.policyStatus !== "synthetic-only" &&
+        current.policyStatus !== "internal-acceptance") ||
       !CONSENT_PURPOSES.includes(purpose)
     )
       return;
@@ -380,7 +382,8 @@ Page({
     if (
       !current ||
       this.data.busy ||
-      current.policyStatus !== "synthetic-only" ||
+      (current.policyStatus !== "synthetic-only" &&
+        current.policyStatus !== "internal-acceptance") ||
       !["withdraw", "export", "delete"].includes(kind)
     )
       return;
