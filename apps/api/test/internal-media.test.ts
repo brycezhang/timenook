@@ -337,10 +337,16 @@ test("one unpaid Cookie project records, seals, transcribes, confirms its story 
     ),
     pdfRuntime = await startProductionWorker(app);
   try {
-    await waitForWorkerJobs(pdfRuntime.worker, async (expect) => {
-      expect([book.task.id]);
-      await pdfRuntime.recoverDue();
-    });
+    // PDF rendering and inspection each have a bounded 60s subprocess budget.
+    // A valid render need not emit a completed event within the default 5s idle window.
+    await waitForWorkerJobs(
+      pdfRuntime.worker,
+      async (expect) => {
+        expect([book.task.id]);
+        await pdfRuntime.recoverDue();
+      },
+      125_000,
+    );
   } finally {
     await pdfRuntime.close();
   }
