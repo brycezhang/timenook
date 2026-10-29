@@ -83,6 +83,12 @@ export async function feishuLogin(page, identity) {
     await page.waitForURL((url) => url.origin === "https://accounts.feishu.cn");
     await page.getByRole("link", { name: "授权并返回", exact: true }).click();
     await page.waitForURL((url) => url.pathname === "/admin/");
+    // Keep interception active until the returned app mounts. Removing the final
+    // route during module imports can leave Chromium's requests paused.
+    await page.locator("#app .auth-panel, #app .app-header").first().waitFor({
+      state: "visible",
+      timeout: 5000,
+    });
   } finally {
     await remove();
   }

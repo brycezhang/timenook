@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createApplication } from "../src/application";
 import type { ApiConfig } from "../src/config";
@@ -66,8 +66,14 @@ export function createFeishuAccount(
     writeFileSync(path, JSON.stringify(account), { mode: 0o600 });
     const cli = spawnSync(
       process.execPath,
-      ["dist-test/src/admin/admin-cli.js", "create", "--input-file", path],
+      [
+        resolve(__dirname, "../src/admin/admin-cli.js"),
+        "create",
+        "--input-file",
+        path,
+      ],
       {
+        cwd: resolve(__dirname, "../.."),
         env: {
           ...process.env,
           NODE_ENV: config.environment,

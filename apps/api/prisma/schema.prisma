@@ -158,9 +158,9 @@ model AdminAccount {
   id String @id @db.Uuid
   username String
   realm String
-  feishuAppId String @map("feishu_app_id")
-  feishuOpenId String @map("feishu_open_id")
-  tenantKey String @map("tenant_key")
+  feishuAppId String? @map("feishu_app_id")
+  feishuOpenId String? @map("feishu_open_id")
+  tenantKey String? @map("tenant_key")
   permissions String[]
   disabled Boolean @default(false)
   sessions AdminSession[]

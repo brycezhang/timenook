@@ -205,9 +205,7 @@ test("desktop and mobile operator completes one Feishu login, survives API resta
   expect(callbackHeaders.cookie ?? "").not.toContain(
     "__Secure-timenook_admin=",
   );
-  await expect(page.getByRole("heading", { name: "运行信息" })).toBeVisible({
-    timeout: 15000,
-  });
+  await expect(page.getByRole("heading", { name: "运行信息" })).toBeVisible();
   await expect(page.getByText("服务可用", { exact: true })).toBeVisible();
   const cookies = await context.cookies(
     "https://localhost:3443/api/v1/admin/runtime",
@@ -435,6 +433,24 @@ test("callback failure text is fixed and removed from browser history", async ({
   expect(await page.locator("body").innerText()).not.toContain(
     "private-provider-detail",
   );
+});
+
+test("fresh browser sessions consistently reach the console after Feishu authorization", async ({
+  browser,
+}) => {
+  for (let round = 0; round < 10; round++) {
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    try {
+      const page = await context.newPage();
+      await page.goto("https://localhost:3443/admin/");
+      await feishuLogin(page, account);
+      await expect(
+        page.getByRole("heading", { name: "运行信息", exact: true }),
+      ).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  }
 });
 
 test("an unconfigured Feishu login is clearly unavailable on mobile", async ({

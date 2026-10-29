@@ -356,9 +356,9 @@ export class AdminAccess implements OnModuleDestroy {
   }
   private identityHash(account: {
     realm: string;
-    feishuAppId: string;
-    tenantKey: string;
-    feishuOpenId: string;
+    feishuAppId: string | null;
+    tenantKey: string | null;
+    feishuOpenId: string | null;
   }) {
     return digest(
       JSON.stringify([

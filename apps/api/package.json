@@ -45,6 +45,7 @@
     "@types/fs-ext": "2.0.3",
     "@types/node": "22.19.15",
     "nock": "14.0.10",
+    "otplib": "13.5.0",
     "prisma": "6.19.3",
     "typescript": "5.9.3"
   }
