@@ -948,12 +948,14 @@ test("a derived-photo deadline crossed during packing prevents the late ZIP from
 test("an unused derived-photo retention category does not block an otherwise complete archive", async (t) => {
   const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 }),
     end = await photoDeadline(p);
+  // Freeze the actual source manifest before crossing the category deadline.
+  // A package still packing without a manifest must remain conservative.
+  const packed = data(
+    await adminRequest("POST", p.exportBase + "/pack", p.admin, {}),
+  );
+  assert.equal(packed.state, "ready");
   t.mock.timers.enable({ apis: ["Date"], now: end });
   try {
-    const packed = data(
-      await adminRequest("POST", p.exportBase + "/pack", p.admin, {}),
-    );
-    assert.equal(packed.state, "ready");
     await app.get(Deletions).sweep(new Date(end));
     assert.equal(
       (await db.careExport.findUniqueOrThrow({ where: { id: p.exp.id } }))
