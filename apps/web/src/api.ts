@@ -84,6 +84,10 @@ export const webApi = {
   async logout(csrfToken: string) {
     await mutateSession(async () => {
       try {
+        const current = session(await request("/web/session"));
+        // A different tab may have replaced this page's account. Its session
+        // must remain signed in; clear this stale view without revoking it.
+        if (current.csrfToken !== csrfToken) return;
         await request("/web/session", "DELETE", undefined, csrfToken);
       } catch (error) {
         if (!(error instanceof WebApiError && error.status === 401))

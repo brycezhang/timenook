@@ -384,3 +384,33 @@ test("logout finishes when another tab already revoked the shared session", asyn
     await other.close();
   }
 });
+
+test("an old tab can exit after account switching without signing out the new account", async ({
+  page,
+  context,
+}) => {
+  const first = await loginLink(),
+    second = await loginLink();
+  await openLink(page, first.url);
+  await page.getByRole("button", { name: "进入我的故事书" }).click();
+  await expect(page.getByRole("heading", { name: "我的故事书" })).toBeVisible();
+  const other = await context.newPage();
+  try {
+    await openLink(other, second.url);
+    await other.getByRole("button", { name: "进入我的故事书" }).click();
+    await expect(
+      other.getByRole("heading", { name: "我的故事书" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "退出", exact: true }).click();
+    await expect(page.getByText("请从内测登录链接进入。")).toBeVisible();
+    const correct = await other.evaluate(async (userId) => {
+      const result = await (
+        await fetch("/api/v1/web/session", { credentials: "same-origin" })
+      ).json();
+      return result.data.user.id === userId;
+    }, second.userId);
+    expect(correct).toBe(true);
+  } finally {
+    await other.close();
+  }
+});
