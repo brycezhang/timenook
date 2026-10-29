@@ -51,6 +51,52 @@ test("explanatory Markdown routes to docs and mixed implementation changes route
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.trim(), "full");
 });
+
+test("application READMEs use docs checks including their local links", (t) => {
+  const f = fixture(t);
+  f.put("README.md", "# Project\n");
+  const base = f.commit();
+  f.put("apps/website/README.md", "# Website\n[Project](../../README.md)\n");
+  const head = f.commit();
+  assert.equal(f.run("classify", base, head).stdout.trim(), "docs");
+  assert.equal(f.run("docs", base, head).status, 0);
+  f.put("apps/website/README.md", "# Website\n[Missing](missing.md)\n");
+  assert.notEqual(f.run("docs", head, f.commit()).status, 0);
+});
+
+test("README routing preserves executable, symlink, resource and old-path boundaries", (t) => {
+  for (const kind of [
+    "executable",
+    "symlink",
+    "resource",
+    "rename",
+    "runtime-markdown",
+  ]) {
+    const f = fixture(t);
+    f.put("README.md", "# Project\n");
+    f.put("app.ts", "export {};\n");
+    const base = f.commit();
+    if (kind === "rename") {
+      mkdirSync(join(f.cwd, "apps/website"), { recursive: true });
+      f.git("mv", "app.ts", "apps/website/README.md");
+    } else if (kind === "symlink") {
+      mkdirSync(join(f.cwd, "apps/website"), { recursive: true });
+      symlinkSync("../../README.md", join(f.cwd, "apps/website/README.md"));
+    } else {
+      f.put("apps/website/README.md", "# Website\n");
+      if (kind === "executable")
+        chmodSync(join(f.cwd, "apps/website/README.md"), 0o755);
+      if (kind === "resource") f.put("apps/website/src/logo.svg", "<svg/>\n");
+      if (kind === "runtime-markdown")
+        f.put("apps/api/src/prompt.md", "Runtime template\n");
+    }
+    assert.equal(
+      f.run("classify", base, f.commit()).stdout.trim(),
+      "full",
+      kind,
+    );
+  }
+});
 test("renamed or deleted code, executable Markdown and fixtures under docs require full checks", (t) => {
   const f = fixture(t);
   f.put("app.ts", "export const value = 1;\n");
