@@ -1,0 +1,158 @@
+:root {
+  color-scheme: light;
+  --paper: #f8f4ed;
+  --surface: #fffcf7;
+  --line: #e8ded0;
+  --ink: #352d25;
+  --muted: #817467;
+  --brown: #593b2c;
+  --olive: #566348;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
+    sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+  line-height: 1.6;
+  font-size: 17px;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 280px;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--olive);
+  outline-offset: 5px;
+}
+.site-header {
+  max-width: 720px;
+  margin: auto;
+  padding: max(24px, env(safe-area-inset-top)) 24px 22px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.brand,
+h1,
+h2 {
+  font-family: "Songti SC", STSong, "Noto Serif SC", SimSun, serif;
+  color: var(--brown);
+}
+.brand {
+  font-size: 25px;
+  text-decoration: none;
+  letter-spacing: 3px;
+  white-space: nowrap;
+}
+.site-header > span {
+  font-size: 14px;
+  color: var(--muted);
+}
+main {
+  max-width: 680px;
+  margin: auto;
+  padding: 40px 24px max(48px, env(safe-area-inset-bottom));
+}
+.login-screen {
+  padding-top: clamp(64px, 16vh, 144px);
+}
+h1 {
+  font-size: clamp(28px, 7.5vw, 36px);
+  line-height: 1.45;
+  font-weight: 600;
+  margin: 0 0 20px;
+}
+h2 {
+  font-size: 23px;
+  line-height: 1.5;
+  font-weight: 600;
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+.description {
+  color: var(--muted);
+  margin: 0 0 24px;
+}
+.primary {
+  border: 0;
+  border-radius: 14px;
+  color: #fff;
+  background: var(--olive);
+  min-height: 56px;
+  padding: 14px 24px;
+  width: 100%;
+  margin-top: 12px;
+}
+.quiet {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  min-height: 48px;
+  padding: 10px 18px;
+}
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.section-heading h1 {
+  margin: 0;
+}
+.notice {
+  border-left: 3px solid var(--olive);
+  padding-left: 16px;
+  margin: 28px 0;
+}
+.error {
+  color: #9a3f2e;
+}
+.project-list {
+  list-style: none;
+  padding: 0;
+  margin: 32px 0;
+}
+.project-list li {
+  border-bottom: 1px solid var(--line);
+  padding: 24px 0;
+}
+.role {
+  color: var(--muted);
+  font-size: 15px;
+}
+@media (min-width: 760px) {
+  .site-header {
+    margin-top: 24px;
+  }
+  main {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+  .login-screen .primary {
+    max-width: 360px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button {
+    transition:
+      background-color 150ms ease,
+      opacity 150ms ease;
+  }
+}

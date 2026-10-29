@@ -119,6 +119,16 @@ export class Deletions implements OnModuleDestroy {
     return this.running;
   }
   onModuleInit() {
+    // W01 opens account access, not the legacy product maintenance runtime.
+    // Explicit operator maintenance and existing product assemblies keep their rules.
+    if (
+      this.config.web &&
+      !this.config.payments &&
+      !this.config.participation &&
+      !this.config.recording &&
+      !this.config.books
+    )
+      return;
     if (this.rights.enabled) {
       this.timer = setInterval(() => {
         if (this.stopped || this.running) return;
