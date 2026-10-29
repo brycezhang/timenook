@@ -553,13 +553,12 @@ test("a stale web pairing view cannot confirm after another tab changes account"
   await expect(
     second.getByRole("heading", { name: "我的故事书" }),
   ).toBeVisible();
-  await page
-    .getByLabel("输入小程序上的6位核对码")
-    .fill(challenge.verificationCode);
-  await page.getByRole("button", { name: "核对一致，确认关联" }).click();
   await expect(
-    page.getByText("账号已切换，请重新打开当前账号后再关联。"),
+    page.getByText("账号已变化或登录已失效，当前资料已清空。"),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "核对一致，确认关联" }),
+  ).toHaveCount(0);
   await expect(page.locator(".pair-code")).toHaveCount(0);
   const late = await linkedApp.inject({
     method: "POST",
