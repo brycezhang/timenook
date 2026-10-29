@@ -132,10 +132,10 @@ export class QualityCare implements OnModuleDestroy {
   }
   private async evidenceTermsIn(tx: Tx, projectId: string) {
     await this.rights.requireAvailableIn(tx, projectId, "activeData");
-    const terms = await this.terms.read(projectId, undefined, tx);
+    const terms = await this.terms.read(projectId, tx);
     if (
       !terms.retention?.activeData ||
-      terms.retention.activeData.state === "expired"
+      terms.retention.activeData.state === "deleted"
     )
       throw new ForbiddenException("Quality evidence retention is unavailable");
   }
@@ -190,7 +190,7 @@ export class QualityCare implements OnModuleDestroy {
       pdfHash: attempt.pdfHash,
       addressHash: attempt.addressHash,
       deliveredAt: attempt.deliveredAt?.toISOString() ?? null,
-      tracking: (await this.participation.activeDataPayloadExpiredIn(
+      tracking: (await this.participation.activeDataDeletedIn(
         tx,
         attempt.projectId,
       ))
@@ -426,7 +426,7 @@ export class QualityCare implements OnModuleDestroy {
     key: string,
   ) {
     const { row, order } = await this.caseIn(tx, caseId);
-    const payloadExpired = await this.participation.activeDataPayloadExpiredIn(
+    const payloadDeleted = await this.participation.activeDataDeletedIn(
       tx,
       row.projectId,
     );
@@ -456,7 +456,7 @@ export class QualityCare implements OnModuleDestroy {
           ownerAdminId: actorId,
           assignedAt: new Date(),
           dueAt: new Date(body.dueAt),
-          assignmentEvidenceRef: payloadExpired ? undefined : body.evidenceRef,
+          assignmentEvidenceRef: payloadDeleted ? undefined : body.evidenceRef,
         },
       }),
     );
@@ -637,11 +637,11 @@ export class QualityCare implements OnModuleDestroy {
     key: string,
   ) {
     const { row, order } = await this.caseIn(tx, caseId);
-    const payloadExpired = await this.participation.activeDataPayloadExpiredIn(
+    const payloadDeleted = await this.participation.activeDataDeletedIn(
       tx,
       row.projectId,
     );
-    const minimumRefund = payloadExpired && body.resolution === "refund";
+    const minimumRefund = payloadDeleted && body.resolution === "refund";
     const scope = minimumRefund
       ? null
       : await this.scopeIn(tx, caseId, actorId);
@@ -730,7 +730,7 @@ export class QualityCare implements OnModuleDestroy {
         resolution: body.resolution,
         reprintMode: body.mode ?? null,
         reviewedAt: new Date(),
-        reviewEvidenceRef: payloadExpired ? undefined : body.evidenceRef,
+        reviewEvidenceRef: payloadDeleted ? undefined : body.evidenceRef,
         requestWindowStartedAt: start,
         requestWindowEndsAt: end,
       },
@@ -741,7 +741,7 @@ export class QualityCare implements OnModuleDestroy {
         state: "verified",
         verifiedBy: actorId,
         verifiedAt: updated.reviewedAt,
-        verificationEvidence: payloadExpired ? undefined : body.evidenceRef,
+        verificationEvidence: payloadDeleted ? undefined : body.evidenceRef,
       },
     });
     return this.viewIn(tx, updated);

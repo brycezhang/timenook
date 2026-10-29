@@ -273,10 +273,10 @@ export class Recordings implements OnModuleDestroy {
       async (tx) => {
         const row = await this.intent(tx, projectId, interviewId, id);
         if (row.state !== "sealed") throw new ConflictException();
-        const terms = await this.terms.read(projectId, undefined, tx);
+        const terms = await this.terms.read(projectId, tx);
         if (
-          terms.playback?.state === "expired" ||
-          terms.retention?.originalAudio?.state === "expired"
+          terms.playback?.state === "deleted" ||
+          terms.retention?.originalAudio?.state === "deleted"
         )
           throw new ForbiddenException();
         return row;

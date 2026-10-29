@@ -148,7 +148,7 @@ test("verified deletion purges controlled downloaded media while retaining origi
   assert.equal(h.storage.get("original-recording"), "local-original");
   assert.equal(h.storage.get("rights-intent"), "new-intent");
   assert.match(h.page.data.summary, /不可逆/);
-  assert.match(h.page.data.rows[0].state, /待到期或核验/);
+  assert.match(h.page.data.rows[0].state, /清理待核验/);
   assert.match(h.page.data.rows[0].deadline, /仍待核实/);
   h.page.onHide();
 });
@@ -191,7 +191,7 @@ for (const event of ["hide", "account"])
     assert.equal(h.page.data.rows.length, 0);
     assert.equal(h.requests.length, 1);
   });
-test("category retention expiry does not label the whole project deleted or expose unknown category values", async () => {
+test("verified scoped deletion does not label the whole project deleted or expose unknown category values", async () => {
   const h = await harness();
   h.page.onLoad({ projectId });
   const loading = h.page.onShow();
@@ -204,7 +204,7 @@ test("category retention expiry does not label the whole project deleted or expo
   await new Promise((r) => setImmediate(r));
   if (h.requests[1]) h.respond(1, { requests: [] });
   await loading;
-  assert.match(h.page.data.summary, /部分资料/);
+  assert.match(h.page.data.summary, /核验的删除范围/);
   assert.equal(h.page.data.rows[0].category, "相关资料");
   assert.match(h.page.data.rows[0].deadline, /待确认/);
   h.page.onHide();

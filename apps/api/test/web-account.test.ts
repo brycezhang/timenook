@@ -653,7 +653,7 @@ test("the project list hides active-data deletion immediately before payload era
         payload: {
           operation: "erase",
           requestId: null,
-          trigger: "retention_expiry",
+          trigger: "verified_request",
           categories: ["activeData"],
           effectiveAt: now,
           accessEpoch: 0,
@@ -678,7 +678,7 @@ test("the project list hides active-data deletion immediately before payload era
   }
 });
 
-test("web-only startup does not start legacy retention erasure while serving an existing project", async () => {
+test("web-only startup and explicit maintenance preserve an existing lifetime project", async () => {
   const { account, cookie } = await signedIn();
   await app.close();
   const db = new PrismaClient({ datasourceUrl: config.databaseUrl });
@@ -695,10 +695,6 @@ test("web-only startup does not start legacy retention erasure while serving an 
         "utf8",
       ),
     );
-    snapshot.admission.d03.retention.activeData.duration.value = 1;
-    snapshot.admission.d03.retention = {
-      activeData: snapshot.admission.d03.retention.activeData,
-    };
     const anchor = new Date(Date.now() - 1000 * 86400000);
     await db.packageDraft.create({
       data: { id: draftId, realm: "local", ...snapshot },
@@ -753,11 +749,14 @@ test("web-only startup does not start legacy retention erasure while serving an 
       { id: projectId, bookTitle: "合成内测保留书名", role: "initiator" },
     ]);
     await app.get(Deletions).sweep();
-    assert.deepEqual(
-      (await list()).json().data.projects,
-      [],
-      "explicit maintenance still applies existing deletion rules",
-    );
+    assert.deepEqual((await list()).json().data.projects, [
+      { id: projectId, bookTitle: "合成内测保留书名", role: "initiator" },
+    ]);
+    assert.equal((await terms.read(projectId)).canRecord, true);
+    const [deletions] = await db.$queryRaw<
+      { n: bigint }[]
+    >`SELECT count(*) n FROM privacy_deletions WHERE project_id=${projectId}::uuid`;
+    assert.equal(deletions.n, 0n);
   } finally {
     await plans.close();
     await terms.close();

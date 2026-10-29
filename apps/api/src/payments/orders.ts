@@ -723,30 +723,6 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       /* Database readiness is reported by health; no payloads in logs. */
     }
   }
-  async readTerms(projectId: string) {
-    const cfg = this.enabled();
-    const project = await this.database.project.findUnique({
-      where: { id: projectId },
-    });
-    if (!project?.orderId) throw new NotFoundException();
-    const order = await this.database.paymentOrder.findFirst({
-      where: {
-        id: project.orderId,
-        appId: cfg.appId,
-        merchantId: cfg.merchantId,
-        mode: this.mode(),
-      },
-    });
-    if (!order) throw new NotFoundException();
-    return this.terms.read(projectId);
-  }
-  async changePause(
-    tx: Prisma.TransactionClient,
-    command: Parameters<ProjectServiceTerms["changePause"]>[0],
-  ) {
-    await this.readTerms(command.projectId);
-    return this.terms.changePause(command, tx);
-  }
   async onModuleInit() {
     if (!this.config.payments) return;
     this.enabled();

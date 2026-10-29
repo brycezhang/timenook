@@ -416,7 +416,7 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
     .getByLabel("交付证据", { exact: true })
     .fill("synthetic:人工核对签收");
   view = await command(admin, "记录交付完成", "/delivery");
-  expect(view.serviceTerms.playback.startsAt).toBe(deliveredAt);
+  expect(view.serviceTerms.playback.expiresAt).toBeNull();
   const originalExpiry = view.serviceTerms.playback.expiresAt;
   await narrator
     .getByRole("button", { name: "重新查询生产与物流", exact: true })

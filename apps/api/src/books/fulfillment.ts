@@ -238,12 +238,12 @@ export class Fulfillment implements OnModuleDestroy {
       accessExpiresAt: string | null;
     },
   ): Promise<FulfillmentView> {
-    const erased = await this.participation.activeDataPayloadExpiredIn(
+    const erased = await this.participation.activeDataDeletedIn(
       tx,
       projectId,
     );
     const order = await tx.firstCopyOrder.findUnique({ where: { projectId } }),
-      terms = await this.terms.read(projectId, undefined, tx),
+      terms = await this.terms.read(projectId, tx),
       subject = await tx.projectSubject.findUniqueOrThrow({
         where: { projectId },
       });
@@ -356,7 +356,7 @@ export class Fulfillment implements OnModuleDestroy {
       operatorId,
       key,
     );
-    const terms = await this.terms.read(order.projectId, undefined, tx);
+    const terms = await this.terms.read(order.projectId, tx);
     return terms.creation?.state === "active";
   }
   async createIn(
@@ -733,7 +733,7 @@ export class Fulfillment implements OnModuleDestroy {
       where: { id: attemptId },
       select: { projectId: true },
     });
-    const expired = await this.participation.activeDataPayloadExpiredIn(
+    const expired = await this.participation.activeDataDeletedIn(
       tx,
       attempt.projectId,
     );
@@ -867,7 +867,7 @@ export class Fulfillment implements OnModuleDestroy {
         attemptId,
       );
     if (!prior.fresh) return this.view(tx, order.projectId);
-    const expired = await this.participation.activeDataPayloadExpiredIn(
+    const expired = await this.participation.activeDataDeletedIn(
       tx,
       order.projectId,
     );
@@ -1039,7 +1039,7 @@ export class Fulfillment implements OnModuleDestroy {
         "Applicable WeChat shipping path is not ready",
       );
     const shippedAt = this.occurred(body.shippedAt, attempt.createdAt),
-      expired = await this.participation.activeDataPayloadExpiredIn(
+      expired = await this.participation.activeDataDeletedIn(
         tx,
         order.projectId,
       );
@@ -1096,7 +1096,7 @@ export class Fulfillment implements OnModuleDestroy {
         attemptId,
       );
     if (!prior.fresh) return this.view(tx, order.projectId);
-    const expired = await this.participation.activeDataPayloadExpiredIn(
+    const expired = await this.participation.activeDataDeletedIn(
       tx,
       order.projectId,
     );

@@ -35,12 +35,20 @@ export async function adminRequest(
   });
 }
 
-export async function requestedBook(
-  photoRetention: Partial<
-    Record<"originalPhotos" | "derivedPhotos", number>
-  > = {},
+/** Capture once during the actual subject encounter, before sending verify. */
+export async function exportVerificationScope(
+  id: string,
+  admin: Record<string, string>,
 ) {
-  const p = await readyFirstCopyBook({}, photoRetention);
+  const care = data(
+    await adminRequest("GET", `/v1/admin/care-requests/${id}`, admin),
+    200,
+  );
+  return { expectedAccessSequence: care.verificationScope.accessSequence };
+}
+
+export async function requestedBook() {
+  const p = await readyFirstCopyBook();
   const exp = data(
     await request(
       "POST",
@@ -68,6 +76,7 @@ export async function requestedBook(
       `/v1/admin/care-requests/${exp.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(exp.id, admin)),
         expectedBindingVersion: current.bindingVersion,
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
@@ -83,12 +92,8 @@ export async function requestedBook(
   };
 }
 
-export async function acceptedBook(
-  photoRetention: Partial<
-    Record<"originalPhotos" | "derivedPhotos", number>
-  > = {},
-) {
-  const p = await requestedBook(photoRetention);
+export async function acceptedBook() {
+  const p = await requestedBook();
   data(
     await adminRequest("POST", p.exportBase + "/accept", p.admin, {
       dueAt: new Date(Date.now() + 86400000).toISOString(),
@@ -132,6 +137,7 @@ export async function anotherAcceptedExport(
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
         evidenceRef: "synthetic:核验本次本人和完整范围",
+        ...(await exportVerificationScope(exp.id, p.admin)),
       },
     ),
   );
@@ -325,6 +331,7 @@ export async function acceptAlternativeCase(
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
         evidenceRef: "synthetic:核验本人及替代交付完整范围",
+        ...(await exportVerificationScope(exp.id, admin)),
       },
     ),
   );
@@ -452,4 +459,46 @@ export async function observed(check: () => Promise<boolean>, message: string) {
   while (!(await check())) {
     assert.ok(performance.now() < deadline, message);
   }
+}
+
+/** A new recorded encounter: never a login refresh or replay of a prior grant. */
+export async function recordAlternativeStaffVerification(p: {
+  projectId: string;
+  exp: { id: string };
+  admin: Record<string, string>;
+  buyer: { token: string };
+}) {
+  const current = await state(p, p.buyer.token);
+  const row = await db.careExport.findUniqueOrThrow({
+    where: { id: p.exp.id },
+  });
+  const scope = data(
+    await adminRequest(
+      "GET",
+      `/v1/admin/care-requests/${p.exp.id}/export`,
+      p.admin,
+    ),
+    200,
+  ).staffAccess;
+  return data(
+    await adminRequest(
+      "POST",
+      `/v1/admin/care-requests/${p.exp.id}/export/access-verification`,
+      p.admin,
+      {
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+        expectedAccessSequence: scope.accessSequence,
+        purpose: "complete_export_delivery",
+        noticeVersion: "synthetic-d08-v1",
+        identityVerified: true,
+        subjectConsented: true,
+        identityProcedureRef: "record:subject-verification",
+        confirmationChannelRef: "record:subject-confirmation",
+        verificationRef: `record:synthetic-fresh-staff-verification-${randomUUID()}`,
+        recipientRef: row.recipientRef,
+        expiresAt: new Date(Date.now() + 15 * 60000).toISOString(),
+      },
+    ),
+  );
 }

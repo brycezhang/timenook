@@ -32,6 +32,7 @@ import { before, after, test } from "node:test";
 import {
   requestedBook,
   adminRequest,
+  exportVerificationScope,
   acceptedBook,
   anotherAcceptedExport,
   photoDeadline,
@@ -112,10 +113,7 @@ test("verified complete export produces independently readable full ZIP with exa
   );
   assert.equal(packed.state, "ready");
   assert.ok(packed.sha256);
-  assert.equal(
-    packed.expiresAt,
-    new Date(Date.parse(packed.readyAt) + 7 * 86400000).toISOString(),
-  );
+  assert.equal(packed.expiresAt, null);
   const response = await request(
     "GET",
     `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
@@ -219,10 +217,7 @@ test("export completion rejects withdrawal during storage read and retry cannot 
   );
   assert.equal(status.requests[0].canDownload, false);
   assert.equal(status.requests[0].state, "revoked");
-  assert.notEqual(
-    status.requests[0].missingReason,
-    "EXPORT_SOURCE_RETENTION_EXPIRED",
-  );
+  assert.notEqual(status.requests[0].missingReason, "EXPORT_SOURCE_DELETED");
   assert.equal(
     (
       await request(
@@ -238,64 +233,6 @@ test("export completion rejects withdrawal during storage read and retry cannot 
       .statusCode,
     403,
   );
-});
-
-test("export package expiry is independent and repeated delivery never extends its fixed ready window", async (t) => {
-  const p = await acceptedBook(),
-    packed = data(
-      await adminRequest("POST", p.exportBase + "/pack", p.admin, {}),
-    );
-  const stored = await db.careExport.findUniqueOrThrow({
-      where: { id: p.exp.id },
-    }),
-    path = join(config.books!.storageRoot, stored.objectKey!);
-  const expiry = Date.parse(packed.expiresAt);
-  await db.session.updateMany({
-    where: { userId: p.narrator.id },
-    data: { expiresAt: new Date(expiry + 86400000) },
-  });
-  t.mock.timers.enable({ apis: ["Date"], now: expiry - 1 });
-  try {
-    assert.equal(
-      (
-        await request(
-          "GET",
-          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
-          p.narrator.token,
-        )
-      ).statusCode,
-      200,
-    );
-    t.mock.timers.setTime(expiry);
-    assert.equal(
-      (
-        await request(
-          "GET",
-          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
-          p.narrator.token,
-        )
-      ).statusCode,
-      403,
-    );
-    const view = data(
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/exports`,
-        p.narrator.token,
-      ),
-      200,
-    );
-    assert.equal(view.requests[0].state, "expired");
-    assert.equal(view.requests[0].expiresAt, packed.expiresAt);
-    await assert.rejects(access(path));
-    assert.ok(
-      (await db.recordingAsset.count({ where: { projectId: p.projectId } })) >
-        0,
-      "package cleanup retains source assets",
-    );
-  } finally {
-    t.mock.timers.reset();
-  }
 });
 
 test("only an explicitly authorized initiator receives the package and download acknowledgement preserves expiry", async () => {
@@ -324,6 +261,7 @@ test("only an explicitly authorized initiator receives the package and download 
       `/v1/admin/care-requests/${exp.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(exp.id, admin)),
         expectedBindingVersion: current.bindingVersion,
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
@@ -444,6 +382,7 @@ test("without-WeChat export uses a separately verified subject recipient and lea
       `/v1/admin/care-requests/${care.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(care.id, admin)),
         expectedBindingVersion: 0,
         expectedAccessEpoch: 0,
         noticeVersion: "synthetic-d08-v1",
@@ -500,78 +439,6 @@ test("without-WeChat export uses a separately verified subject recipient and lea
       .deliveredAt,
     delivered.deliveredAt,
   );
-});
-
-test("an accepted request survives its request deadline while new requests stop exactly at that deadline", async (t) => {
-  const p = await acceptedBook(),
-    terms = new ProjectServiceTerms(config.databaseUrl),
-    deliveredAt = new Date();
-  await terms.recordFact({
-    projectId: p.projectId,
-    eventId: `export-delivery:${randomUUID()}`,
-    kind: "delivery_completed",
-    occurredAt: deliveredAt,
-  });
-  await terms.close();
-  const expiry = deliveredAt.getTime() + 365 * 86400000;
-  await db.session.updateMany({
-    where: { userId: p.narrator.id },
-    data: { expiresAt: new Date(expiry + 86400000) },
-  });
-  await db.adminSession.updateMany({
-    data: { expiresAt: new Date(expiry + 86400000) },
-  });
-  t.mock.timers.enable({ apis: ["Date"], now: expiry - 1 });
-  try {
-    assert.equal(
-      data(
-        await request(
-          "GET",
-          `/v1/projects/${p.projectId}/exports`,
-          p.narrator.token,
-        ),
-        200,
-      ).canRequest,
-      true,
-    );
-    t.mock.timers.setTime(expiry);
-    assert.equal(
-      (
-        await request(
-          "POST",
-          `/v1/projects/${p.projectId}/exports`,
-          p.narrator.token,
-          {
-            recipient: "self",
-            noticeVersion: "synthetic-d08-v1",
-            evidenceRef: "synthetic:到期新请求拒绝",
-          },
-        )
-      ).statusCode,
-      403,
-    );
-    const packed = data(
-      await adminRequest("POST", p.exportBase + "/pack", p.admin, {}),
-    );
-    assert.equal(packed.state, "ready");
-    assert.equal(
-      (
-        await request(
-          "GET",
-          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
-          p.narrator.token,
-        )
-      ).statusCode,
-      200,
-    );
-    assert.equal(
-      data(await adminRequest("POST", p.exportBase + "/pack", p.admin, {}))
-        .expiresAt,
-      packed.expiresAt,
-    );
-  } finally {
-    t.mock.timers.reset();
-  }
 });
 
 test("missing source bytes never publish an incomplete package and orphan cleanup survives a process restart", async () => {
@@ -657,6 +524,7 @@ test("incomplete original transcript is reported in the shared case instead of o
       `/v1/admin/care-requests/${exp.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(exp.id, admin)),
         expectedBindingVersion: current.bindingVersion,
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
@@ -683,344 +551,4 @@ test("incomplete original transcript is reported in the shared case instead of o
   );
   assert.equal(view.requests[0].missingReason, "EXPORT_TRANSCRIPT_PENDING");
   assert.equal(view.requests[0].canDownload, false);
-});
-
-test("a first pack at or after source retention expiry records a stable failure visible to the recipient and operator", async (t) => {
-  const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 });
-  await storyPhoto(p, "首次打包前已到期的衍生图");
-  const after = await anotherAcceptedExport(p),
-    end = await photoDeadline(p);
-  const before = data(await adminRequest("GET", p.exportBase, p.admin), 200);
-  assert.equal(before.state, "accepted");
-  assert.equal(before.missingReason, null);
-  t.mock.timers.enable({ apis: ["Date"], now: end });
-  try {
-    for (const [id, base, now] of [
-      [p.exp.id, p.exportBase, end],
-      [after.id, after.base, end + 1],
-    ] as const) {
-      t.mock.timers.setTime(now);
-      const accepted = data(await adminRequest("GET", base, p.admin), 200);
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const failed = data(
-          await adminRequest("POST", base + "/pack", p.admin, {}),
-        );
-        assert.equal(failed.state, "failed");
-        assert.equal(failed.missingReason, "EXPORT_SOURCE_RETENTION_EXPIRED");
-        await app.get(Deletions).sweep(new Date(now));
-        const recipient = data(
-          await request(
-            "GET",
-            `/v1/projects/${p.projectId}/exports`,
-            p.narrator.token,
-          ),
-          200,
-        ).requests.find((r: { id: string }) => r.id === id);
-        const operator = data(await adminRequest("GET", base, p.admin), 200);
-        for (const view of [failed, recipient, operator]) {
-          assert.equal(view.state, "failed");
-          assert.equal(view.missingReason, "EXPORT_SOURCE_RETENTION_EXPIRED");
-          assert.equal(view.acceptedAt, accepted.acceptedAt);
-          assert.equal(view.dueAt, accepted.dueAt);
-          assert.equal(view.readyAt, null);
-          assert.equal(view.expiresAt, null);
-          assert.equal(view.sha256, null);
-          assert.equal(view.bytes, null);
-          assert.equal(view.canDownload, false);
-        }
-        assert.equal(
-          (
-            await request(
-              "GET",
-              `/v1/projects/${p.projectId}/exports/${id}/download`,
-              p.narrator.token,
-            )
-          ).statusCode,
-          403,
-        );
-      }
-    }
-  } finally {
-    t.mock.timers.reset();
-  }
-});
-
-test("derived-photo retention stops new complete packs and existing ZIP downloads exactly at its own deadline", async (t) => {
-  // Quiesce actual maintenance before creating this project's sources. Logical
-  // cutoff is checked first while every owned copy is provably still present.
-  await app.get(Deletions).onModuleDestroy();
-  try {
-    const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 });
-    await storyPhoto(p, "本次期限不同的原图与衍生照片");
-    const at = await anotherAcceptedExport(p),
-      after = await anotherAcceptedExport(p),
-      end = await photoDeadline(p);
-    const assets = await db.photoAsset.findMany({
-      where: { projectId: p.projectId },
-    });
-    assert.ok(assets.some((a) => a.kind !== "original"));
-    t.mock.timers.enable({ apis: ["Date"], now: end - 1 });
-    const packed = data(
-      await adminRequest("POST", p.exportBase + "/pack", p.admin, {}),
-    );
-    assert.equal(packed.state, "ready");
-    assert.equal(
-      (
-        await request(
-          "GET",
-          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
-          p.narrator.token,
-        )
-      ).statusCode,
-      200,
-    );
-    t.mock.timers.setTime(end);
-    assert.equal(
-      data(await adminRequest("POST", at.base + "/pack", p.admin, {})).state,
-      "failed",
-      "expired derived photos cannot enter a newly packed archive",
-    );
-    assert.equal(
-      (
-        await request(
-          "GET",
-          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
-          p.narrator.token,
-        )
-      ).statusCode,
-      403,
-      "existing package cannot bypass the source-category deadline",
-    );
-    const view = data(
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/exports`,
-        p.narrator.token,
-      ),
-      200,
-    );
-    assert.equal(
-      view.requests.find((r: { id: string }) => r.id === p.exp.id).canDownload,
-      false,
-    );
-    t.mock.timers.setTime(end + 1);
-    assert.equal(
-      data(await adminRequest("POST", after.base + "/pack", p.admin, {})).state,
-      "failed",
-    );
-    assert.equal(
-      (
-        await request(
-          "GET",
-          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
-          p.narrator.token,
-        )
-      ).statusCode,
-      403,
-    );
-    const [{ n }] = await db.$queryRaw<{ n: bigint }[]>`
-      SELECT count(*) n FROM privacy_deletions WHERE project_id=${p.projectId}::uuid AND categories ? 'derivedPhotos'
-    `;
-    assert.equal(n, 0n, "logical denial precedes source-category scanning");
-    for (const asset of assets)
-      await access(join(root, "objects", asset.objectKey));
-    assert.ok(
-      Date.parse(packed.expiresAt) > end,
-      "the package's own download window remains unexpired",
-    );
-    const original = assets.find((asset) => asset.kind === "original");
-    const derived = assets.find((asset) => asset.kind === "print");
-    assert.ok(original);
-    assert.ok(derived);
-    const photo = `/v1/projects/${p.projectId}/interviews/${p.interviewId}/photos/${original.intentId}`;
-    const readOriginal = async () => {
-      const result = await request(
-        "GET",
-        photo + "/content/original",
-        p.narrator.token,
-      );
-      assert.equal(result.statusCode, 200);
-      assert.equal(
-        createHash("sha256").update(result.rawPayload).digest("hex"),
-        original.sha256,
-      );
-    };
-    await readOriginal();
-    assert.equal(
-      (
-        await request(
-          "GET",
-          `${photo}/assets/${derived.id}/content`,
-          p.narrator.token,
-        )
-      ).statusCode,
-      403,
-    );
-
-    // A fresh instance reuses the same authenticated source. Explicitly run
-    // production maintenance and verify physical deletion as a separate phase.
-    await restartBookApplication();
-    await app.get(Deletions).sweep(new Date(end + 1));
-    for (const asset of assets) {
-      const path = join(root, "objects", asset.objectKey);
-      if (asset.kind === "original") await access(path);
-      else await assert.rejects(access(path), { code: "ENOENT" });
-    }
-    await readOriginal();
-    assert.equal(
-      (
-        await request(
-          "GET",
-          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
-          p.narrator.token,
-        )
-      ).statusCode,
-      403,
-    );
-    assert.equal(
-      (
-        await db.careExport.findUniqueOrThrow({ where: { id: p.exp.id } })
-      ).expiresAt?.toISOString(),
-      packed.expiresAt,
-    );
-  } finally {
-    t.mock.timers.reset();
-    await restartBookApplication();
-  }
-});
-
-test("a derived-photo deadline crossed during packing prevents the late ZIP from becoming ready", async (t) => {
-  await app.get(Deletions).onModuleDestroy();
-  let release = () => {};
-  try {
-    const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 });
-    await storyPhoto(p, "慢打包期间到期的衍生图");
-    const end = await photoDeadline(p);
-    let entered!: () => void;
-    const gate = new Promise<void>((r) => {
-        release = r;
-      }),
-      started = new Promise<void>((r) => {
-        entered = r;
-      });
-    t.mock.timers.enable({ apis: ["Date"], now: end - 1 });
-    interceptBookObjectRead(async () => {
-      entered();
-      await gate;
-    });
-    const packing = adminRequest("POST", p.exportBase + "/pack", p.admin, {});
-    await started;
-    t.mock.timers.setTime(end);
-    release();
-    assert.equal((await packing).statusCode, 403);
-    const view = data(
-        await request(
-          "GET",
-          `/v1/projects/${p.projectId}/exports`,
-          p.narrator.token,
-        ),
-        200,
-      ),
-      row = view.requests.find((r: { id: string }) => r.id === p.exp.id);
-    assert.equal(row.canDownload, false);
-    assert.equal(row.sha256, null);
-    assert.equal(row.readyAt, null);
-    assert.equal(row.state, "failed");
-    assert.equal(row.missingReason, "EXPORT_SOURCE_RETENTION_EXPIRED");
-    const operator = data(
-      await adminRequest("GET", p.exportBase, p.admin),
-      200,
-    );
-    assert.equal(operator.state, "failed");
-    assert.equal(operator.missingReason, "EXPORT_SOURCE_RETENTION_EXPIRED");
-    for (const asset of await db.photoAsset.findMany({
-      where: { projectId: p.projectId },
-    }))
-      await access(join(root, "objects", asset.objectKey));
-  } finally {
-    release();
-    interceptBookObjectRead();
-    t.mock.timers.reset();
-    await restartBookApplication();
-  }
-});
-
-test("an unused derived-photo retention category does not block an otherwise complete archive", async (t) => {
-  const p = await acceptedBook({ derivedPhotos: 1, originalPhotos: 400 }),
-    end = await photoDeadline(p);
-  // Freeze the actual source manifest before crossing the category deadline.
-  // A package still packing without a manifest must remain conservative.
-  const packed = data(
-    await adminRequest("POST", p.exportBase + "/pack", p.admin, {}),
-  );
-  assert.equal(packed.state, "ready");
-  t.mock.timers.enable({ apis: ["Date"], now: end });
-  try {
-    await app.get(Deletions).sweep(new Date(end));
-    assert.equal(
-      (await db.careExport.findUniqueOrThrow({ where: { id: p.exp.id } }))
-        .state,
-      "ready",
-    );
-    const next = data(
-      await request(
-        "POST",
-        `/v1/projects/${p.projectId}/exports`,
-        p.narrator.token,
-        {
-          recipient: "self",
-          noticeVersion: "synthetic-d08-v1",
-          evidenceRef: "synthetic:不含已到期照片的新导出",
-        },
-      ),
-    );
-    const current = await state(p, p.narrator.token);
-    data(
-      await adminRequest(
-        "POST",
-        `/v1/admin/care-requests/${next.id}/verify`,
-        p.admin,
-        {
-          expectedBindingVersion: current.bindingVersion,
-          expectedAccessEpoch: current.accessEpoch,
-          noticeVersion: "synthetic-d08-v1",
-          evidenceRef: "synthetic:新独立申请核验",
-        },
-      ),
-    );
-    const nextBase = `/v1/admin/care-requests/${next.id}/export`;
-    data(
-      await adminRequest("POST", nextBase + "/accept", p.admin, {
-        dueAt: new Date(end + 86400000).toISOString(),
-        evidenceRef: "synthetic:按原日历处理新申请",
-      }),
-    );
-    const newPack = data(
-      await adminRequest("POST", nextBase + "/pack", p.admin, {}),
-    );
-    assert.equal(newPack.state, "ready");
-    assert.equal(
-      (
-        await request(
-          "POST",
-          `/v1/projects/${p.projectId}/interviews/${p.interviewId}/photos`,
-          p.narrator.token,
-          { clientPhotoId: randomUUID(), bytes: 100, sha256: "a".repeat(64) },
-        )
-      ).statusCode,
-      403,
-    );
-    assert.equal(
-      (
-        await request(
-          "GET",
-          `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
-          p.narrator.token,
-        )
-      ).statusCode,
-      200,
-    );
-  } finally {
-    t.mock.timers.reset();
-  }
 });

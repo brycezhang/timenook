@@ -51,24 +51,15 @@ export class ProjectStreams implements OnModuleDestroy {
   async epoch(projectId: string) {
     return (await this.fence(projectId)).epoch;
   }
-  async userFence(
-    projectId: string,
-    authorization: string | undefined,
-    scope?: "bookPdf",
-  ) {
+  async userFence(projectId: string, authorization: string | undefined) {
     const user = await this.identity.current(authorization);
-    return this.fence(
-      projectId,
-      await this.usesSharing(projectId, user.id),
-      scope,
-    );
+    return this.fence(projectId, await this.usesSharing(projectId, user.id));
   }
   async fence(
     projectId: string,
     usesSharing = true,
-    scope?: "bookPdf",
   ): Promise<ProjectStreamFence> {
-    await this.rights.assertReplayed(projectId, scope);
+    await this.rights.assertReplayed(projectId);
     if (await this.rights.deletedIn(this.db as never, projectId))
       throw new ForbiddenException();
     const project = await this.db.project.findUnique({
@@ -119,7 +110,6 @@ export class ProjectStreams implements OnModuleDestroy {
     // Only a content owner with its own current operational grant uses this.
     // Product Authorization always derives purpose from the real user instead.
     usesSharingOverride?: boolean,
-    scope?: "bookPdf",
   ): Promise<Readable> {
     const user = authorization
       ? await this.identity.current(authorization)
@@ -130,7 +120,7 @@ export class ProjectStreams implements OnModuleDestroy {
     const sequence =
       capturedSequence ?? (await this.sequence(projectId, usesSharing));
     const currentFence = async () => {
-      const fence = await this.fence(projectId, usesSharing, scope);
+      const fence = await this.fence(projectId, usesSharing);
       if (fence.epoch !== epoch || fence.sequence !== sequence)
         throw new ForbiddenException();
     };

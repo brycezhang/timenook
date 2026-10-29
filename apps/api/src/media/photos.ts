@@ -592,7 +592,7 @@ export class Photos implements OnModuleDestroy {
       async (tx) => {
         const row = await this.intent(tx, projectId, interviewId, id);
         if (row.state !== "sealed") throw new ConflictException();
-        const terms = await this.terms.read(projectId, undefined, tx);
+        const terms = await this.terms.read(projectId, tx);
         const snapshot = await this.readSnapshot(tx, projectId, interviewId);
         const selected = snapshot?.entries
           .find((e) => e.photoId === id)
@@ -616,7 +616,7 @@ export class Photos implements OnModuleDestroy {
           terms.retention?.[
             asset.kind === "original" ? "originalPhotos" : "derivedPhotos"
           ];
-        if (!retention || retention.state === "expired")
+        if (!retention || retention.state === "deleted")
           throw new ForbiddenException();
         if (
           asset.storageScope !== this.scope ||

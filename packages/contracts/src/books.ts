@@ -135,8 +135,6 @@ export type FirstCopyBlocker =
   | "ADDRESS_REQUIRED"
   | "NARRATOR_CONFIRMATION_REQUIRED"
   | "INITIATOR_CONFIRMATION_REQUIRED"
-  | "CREATION_PAUSED"
-  | "CREATION_EXPIRED"
   | "POLICY_PENDING"
   | "SPECIFICATION_MISMATCH"
   | "ENTITLEMENT_UNAVAILABLE"
@@ -165,7 +163,6 @@ export interface FirstCopyContext {
     terms: import("./catalog").PackageTerm[];
   };
   creation: { state: string; expiresAt: string | null };
-  expiryReview: { available: boolean; caseId: string | null };
   blockers: FirstCopyBlocker[];
   canSubmit: boolean;
   canReviseProduction: boolean;
@@ -178,5 +175,4 @@ export interface FirstCopyContext {
 export interface FirstCopyApprovalView {
   projectId: string;
   production: FirstCopyOrderView;
-  expiryReview: { available: boolean; caseId: string | null };
 }

@@ -46,35 +46,7 @@
         "decisionRef": "record:decision-review",
         "decidedAt": "2026-10-22T08:00:00Z"
       },
-      "duration": {
-        "value": 180,
-        "unit": "calendar_days"
-      },
-      "startsAt": "subject_participation",
-      "notStarted": {
-        "maxWait": {
-          "value": 90,
-          "unit": "calendar_days"
-        },
-        "startsAt": "payment_verified",
-        "resolution": "contact_and_offer_refund",
-        "noticeRef": "record:not-started-policy"
-      },
-      "pause": {
-        "clock": "stops",
-        "maxTotal": {
-          "value": 30,
-          "unit": "calendar_days"
-        },
-        "atLimit": "resume_clock",
-        "policyRef": "record:pause-policy"
-      },
-      "expiration": {
-        "newRecording": "blocked",
-        "firstCopy": "manual_review",
-        "existingData": "per_d03",
-        "noticeRef": "record:creation-expiry"
-      }
+      "service": "lifetime"
     },
     "d03": {
       "review": {
@@ -84,98 +56,45 @@
         "decidedAt": "2026-10-22T08:00:00Z"
       },
       "onlinePlayback": {
-        "duration": {
-          "value": 365,
-          "unit": "calendar_days"
-        },
-        "startsAt": "delivery_completed",
-        "expires": "stop_access"
+        "service": "lifetime"
       },
       "exportRequests": {
-        "duration": {
-          "value": 365,
-          "unit": "calendar_days"
-        },
-        "startsAt": "delivery_completed",
+        "service": "lifetime",
         "channelRef": "record:export-intake"
       },
       "retention": {
         "originalAudio": {
-          "duration": {
-            "value": 400,
-            "unit": "calendar_days"
-          },
-          "startsAt": "delivery_completed"
+          "service": "lifetime"
         },
         "originalPhotos": {
-          "duration": {
-            "value": 400,
-            "unit": "calendar_days"
-          },
-          "startsAt": "delivery_completed"
+          "service": "lifetime"
         },
         "derivedAudio": {
-          "duration": {
-            "value": 400,
-            "unit": "calendar_days"
-          },
-          "startsAt": "delivery_completed"
+          "service": "lifetime"
         },
         "derivedPhotos": {
-          "duration": {
-            "value": 400,
-            "unit": "calendar_days"
-          },
-          "startsAt": "delivery_completed"
+          "service": "lifetime"
         },
         "transcripts": {
-          "duration": {
-            "value": 400,
-            "unit": "calendar_days"
-          },
-          "startsAt": "delivery_completed"
+          "service": "lifetime"
         },
         "confirmedStories": {
-          "duration": {
-            "value": 400,
-            "unit": "calendar_days"
-          },
-          "startsAt": "delivery_completed"
+          "service": "lifetime"
         },
         "bookPdf": {
-          "duration": {
-            "value": 400,
-            "unit": "calendar_days"
-          },
-          "startsAt": "delivery_completed"
+          "service": "lifetime"
         },
         "exportPackages": {
-          "duration": {
-            "value": 7,
-            "unit": "calendar_days"
-          },
-          "startsAt": "export_ready"
+          "service": "lifetime"
         },
         "activeData": {
-          "duration": {
-            "value": 400,
-            "unit": "calendar_days"
-          },
-          "startsAt": "delivery_completed"
+          "service": "lifetime"
         },
         "historicalObjects": {
-          "duration": {
-            "value": 400,
-            "unit": "calendar_days"
-          },
-          "startsAt": "delivery_completed"
+          "service": "lifetime"
         },
         "backupCopies": {
-          "duration": {
-            "value": 430,
-            "unit": "calendar_days"
-          },
-          "startsAt": "delivery_completed"
+          "service": "lifetime"
         },
         "supplierCopies": {
           "duration": {
@@ -219,16 +138,7 @@
           "procedureRef": "record:deletion-procedure"
         }
       },
-      "expiryNotice": {
-        "advance": {
-          "value": 30,
-          "unit": "calendar_days"
-        },
-        "channelRef": "record:expiry-contact",
-        "policyRef": "record:expiry-policy"
-      },
-      "copyStatusSeparately": true,
-      "restoreAppliesDeletionLedger": true
+      "copyStatusSeparately": true
     },
     "d04": {
       "review": {

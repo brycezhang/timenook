@@ -41,7 +41,7 @@ export async function startProductionWorker(app: NestFastifyApplication) {
     async recoverDue() {
       await rights.assertHealthy();
       await deletions.sweep();
-      await exports?.cleanupExpired();
+      await exports?.cleanupTemporary();
       const ids = await tasks.due();
       for (const id of ids) {
         await queue.add(

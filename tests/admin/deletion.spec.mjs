@@ -274,7 +274,7 @@ test("本人申请删除、客服核验、在线停止与逐层外部证据保�
     .getByRole("button", { name: `查看 ${created.id}`, exact: true })
     .click();
   await expect(
-    admin.getByText("尚无已核验删除或保留期届满记录。", { exact: false }),
+    admin.getByText("尚无已核验删除记录。", { exact: false }),
   ).toBeVisible();
   await admin
     .getByLabel("D08 核验证据引用", { exact: true })
@@ -351,7 +351,7 @@ test("本人申请删除、客服核验、在线停止与逐层外部证据保�
   await expect(mini.getByText("在线访问已停止", { exact: true })).toBeVisible();
   await expect(mini.getByText(/项目删除不可逆/)).toBeVisible();
   await expect(
-    mini.getByText("备份待到期或核验", { exact: true }).first(),
+    mini.getByText("备份清理待核验", { exact: true }).first(),
   ).toBeVisible();
   const backup = confirmed.changes
     .flatMap((change) => change.items)
@@ -483,9 +483,7 @@ test("管理员切换工单后，旧删除清单的迟到响应不会恢复旧�
     await expect(
       admin.getByText(`共享工单：record:${b.care.id}`, { exact: true }),
     ).toBeVisible();
-    await expect(
-      panel.getByText(/尚无已核验删除或保留期届满记录/),
-    ).toBeVisible();
+    await expect(panel.getByText(/尚无已核验删除记录/)).toBeVisible();
     const late = admin.waitForResponse((response) =>
       response.url().endsWith(`/care-requests/${a.care.id}/deletion-status`),
     );

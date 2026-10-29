@@ -166,10 +166,10 @@ export class Books implements OnModuleDestroy {
     };
   }
   private async bookTerms(tx: Prisma.TransactionClient, projectId: string) {
-    const terms = await this.terms.read(projectId, undefined, tx);
+    const terms = await this.terms.read(projectId, tx);
     if (
       !terms.retention?.bookPdf ||
-      terms.retention.bookPdf.state === "expired"
+      terms.retention.bookPdf.state === "deleted"
     )
       throw new ForbiddenException();
     return terms;
@@ -178,8 +178,8 @@ export class Books implements OnModuleDestroy {
     const terms = await this.bookTerms(tx, projectId);
     if (
       !terms.retention?.confirmedStories ||
-      terms.retention.confirmedStories.state === "expired" ||
-      terms.retention?.activeData?.state === "expired"
+      terms.retention.confirmedStories.state === "deleted" ||
+      terms.retention?.activeData?.state === "deleted"
     )
       throw new ForbiddenException();
     return terms;
@@ -189,14 +189,11 @@ export class Books implements OnModuleDestroy {
     accessExpiresAt: string | null,
   ) {
     const rule = terms.retention?.confirmedStories,
-      expiresAt = this.expiry(
-        this.expiry(accessExpiresAt, rule?.expiresAt ?? null),
-        terms.retention?.activeData?.expiresAt ?? null,
-      ),
+      expiresAt = accessExpiresAt,
       allowed = !!(
         rule &&
-        rule.state !== "expired" &&
-        terms.retention?.activeData?.state !== "expired" &&
+        rule.state !== "deleted" &&
+        terms.retention?.activeData?.state !== "deleted" &&
         (!expiresAt || Date.parse(expiresAt) > Date.now())
       );
     return { allowed, expiresAt: allowed ? expiresAt : null };
@@ -210,25 +207,15 @@ export class Books implements OnModuleDestroy {
       snapshot.cover.photo ||
       snapshot.chapters.some((c) => c.stories.some((s) => s.photos.length))
     ) {
-      const terms = await this.terms.read(projectId, undefined, tx);
+      const terms = await this.terms.read(projectId, tx);
       if (
         !terms.retention?.derivedPhotos ||
-        terms.retention.derivedPhotos.state === "expired"
+        terms.retention.derivedPhotos.state === "deleted"
       )
         throw new ForbiddenException();
     }
   }
-  private expiry(
-    actor: string | null,
-    retention: string | null,
-  ): string | null {
-    const dates = [actor, retention].filter((v): v is string => !!v);
-    return dates.length
-      ? new Date(Math.min(...dates.map(Date.parse))).toISOString()
-      : null;
-  }
-  // Current inputs still invalidate frozen books after source retention expires.
-  // Callers require sourceTerms separately before exposing live inputs or changing them.
+  // Current edits and permissions still invalidate frozen books.
   private async inputIn(tx: Prisma.TransactionClient, projectId: string) {
     const terms = await this.bookTerms(tx, projectId);
     const project = await tx.project.findUniqueOrThrow({
@@ -416,7 +403,6 @@ export class Books implements OnModuleDestroy {
       project,
       subject,
       terms,
-      retentionExpiresAt: terms.retention!.bookPdf.expiresAt,
     };
   }
   private async viewIn(
@@ -456,22 +442,15 @@ export class Books implements OnModuleDestroy {
               ? "queued"
               : "failed";
     const terms = await this.bookTerms(tx, row.projectId);
-    accessExpiresAt = this.expiry(
-      accessExpiresAt,
-      terms.retention!.bookPdf.expiresAt,
-    );
     const snapshot = row.snapshot as unknown as BookSnapshot,
       coverRule = snapshot.cover.photo
         ? terms.retention?.derivedPhotos
         : undefined,
-      coverExpiresAt = this.expiry(
-        accessExpiresAt,
-        coverRule?.expiresAt ?? null,
-      ),
+      coverExpiresAt = accessExpiresAt,
       canPreviewCover = !!(
         snapshot.cover.photo &&
         coverRule &&
-        coverRule.state !== "expired" &&
+        coverRule.state !== "deleted" &&
         (!coverExpiresAt || Date.parse(coverExpiresAt) > Date.now())
       );
     return {
@@ -654,10 +633,6 @@ export class Books implements OnModuleDestroy {
     accessExpiresAt: string | null,
   ) {
     const terms = await this.bookTerms(tx, projectId);
-    accessExpiresAt = this.expiry(
-      accessExpiresAt,
-      terms.retention!.bookPdf.expiresAt,
-    );
     const draft = this.draftAccess(terms, accessExpiresAt).allowed
       ? await this.inputIn(tx, projectId)
       : null;
@@ -854,12 +829,7 @@ export class Books implements OnModuleDestroy {
           const row = await tx.bookVersion.findUniqueOrThrow({
             where: { id: command.resultId },
           });
-          return this.viewIn(
-            tx,
-            row,
-            draft.inputHash,
-            this.expiry(actor.accessExpiresAt, draft.retentionExpiresAt),
-          );
+          return this.viewIn(tx, row, draft.inputHash, actor.accessExpiresAt);
         }
         if (
           body.expectedInputHash !== draft.inputHash ||
@@ -971,12 +941,7 @@ export class Books implements OnModuleDestroy {
               leaseUntil: null,
             },
           });
-        return this.viewIn(
-          tx,
-          row,
-          draft.inputHash,
-          this.expiry(actor.accessExpiresAt, draft.retentionExpiresAt),
-        );
+        return this.viewIn(tx, row, draft.inputHash, actor.accessExpiresAt);
       },
     );
   }
@@ -1188,12 +1153,7 @@ export class Books implements OnModuleDestroy {
           key,
         );
         const draft = await this.inputIn(tx, projectId);
-        return this.viewIn(
-          tx,
-          row,
-          draft.inputHash,
-          this.expiry(actor.accessExpiresAt, draft.retentionExpiresAt),
-        );
+        return this.viewIn(tx, row, draft.inputHash, actor.accessExpiresAt);
       },
     );
   }
@@ -1548,11 +1508,7 @@ export class BooksController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
-    const fence = await this.streams.userFence(
-      id,
-      req.headers.authorization,
-      "bookPdf",
-    );
+    const fence = await this.streams.userFence(id, req.headers.authorization);
     const bytes = await this.books.download(
       id,
       versionId,
@@ -1575,8 +1531,6 @@ export class BooksController {
           () => this.books.read(id, versionId, req.headers.authorization),
           req.headers.authorization,
           fence.sequence,
-          undefined,
-          "bookPdf",
         ),
       );
   }
