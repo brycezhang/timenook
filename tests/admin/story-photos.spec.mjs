@@ -109,7 +109,7 @@ test.beforeAll(async () => {
       };
     }
   }
-  const { paymentConfig, paymentFetch, paid } = apiRequire(
+  const { paymentConfig, paymentFetch } = apiRequire(
     "./dist-test/test/payment-fixture.js",
   );
   api = await createPrivacyFixtureApplication(
@@ -204,55 +204,7 @@ test.beforeAll(async () => {
   await db.$disconnect();
   buyer = await login("synthetic-plan-buyer");
   narrator = await login("synthetic-plan-narrator");
-  const order = data(
-    await request("POST", "/v1/orders", buyer, {
-      packageVersionId: versionId,
-      recipient: { relationshipLabel: "朋友" },
-      shippingRegionCode: "CN-110000",
-    }),
-  );
-  data(await request("POST", `/v1/orders/${order.id}/payment`, buyer, {}));
-  paid(order.outTradeNo);
-  projectId = data(await request("GET", `/v1/orders/${order.id}`, buyer), 200)
-    .project.id;
-  const invitation = data(
-    await request("POST", `/v1/projects/${projectId}/invitations`, buyer, {}),
-  );
-  const application = data(
-    await request(
-      "POST",
-      `/v1/invitations/${invitation.token}/requests`,
-      narrator,
-      {
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: "synthetic:browser本人申请",
-      },
-    ),
-  );
-  data(
-    await request(
-      "POST",
-      `/v1/binding-requests/${application.id}/approve`,
-      buyer,
-      { expectedBindingVersion: 0, evidenceRef: "synthetic:browser核对申请者" },
-    ),
-  );
-  for (const purpose of ["collection", "sharing"]) {
-    const state = data(
-      await request("GET", `/v1/projects/${projectId}/participation`, narrator),
-      200,
-    );
-    data(
-      await request("POST", `/v1/projects/${projectId}/consents`, narrator, {
-        purpose,
-        granted: true,
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: "synthetic:browser本人选择",
-        expectedBindingVersion: state.bindingVersion,
-        expectedAccessEpoch: state.accessEpoch,
-      }),
-    );
-  }
+  projectId = await createBoundPhotoProject();
   runtime = await apiRequire(
     "./dist-test/src/tasks/worker.js",
   ).startProductionWorker(api);
@@ -345,8 +297,16 @@ async function openPage(
     network.push([new URL(r.url()).pathname, r.failure()?.errorText]),
   );
   page.on("pageerror", (e) => errors.push(e.message));
+  page.expectedRevokedBlobUrls = new Set();
   page.on("console", (m) => {
-    if (m.type() === "error" && !/\b(?:40[139]|422|503)\b/.test(m.text()))
+    const expectedRevocationProbe =
+      page.expectedRevokedBlobUrls.has(m.location().url) &&
+      /net::ERR_FILE_NOT_FOUND/.test(m.text());
+    if (
+      m.type() === "error" &&
+      !/\b(?:40[139]|422|503)\b/.test(m.text()) &&
+      !expectedRevocationProbe
+    )
       errors.push(m.text());
   });
   await page.goto(base);
@@ -1137,9 +1097,7 @@ test("unsupported photo recovery retains the local original and permission chang
     .getByRole("button", { name: "安全查看这张照片", exact: true })
     .first()
     .click();
-  await expect(
-    page.getByText("照片权限已变化，请重新查询", { exact: true }),
-  ).toBeVisible();
+  await expectPhotoPermissionChange(page);
   await expect(page.locator(".photos-page > img")).toHaveCount(0);
   const cacheKey = `timenook.photo-previews.v1:${base}/api/v1`;
   await expect
@@ -1169,3 +1127,306 @@ test("unsupported photo recovery retains the local original and permission chang
   expect(errors).toEqual([]);
   await page.context().close();
 });
+
+async function expectPhotoPermissionChange(page) {
+  // Either real permission boundary may settle the page first; both clearly report revocation.
+  await expect(
+    page
+      .getByText("照片权限已变化，请重新查询", { exact: true })
+      .or(
+        page.getByText(
+          "资料用途或账号授权已变化，照片预览已清理；本机原文件仍保留",
+          { exact: true },
+        ),
+      ),
+  ).toBeVisible();
+}
+function responseBarrier() {
+  let release;
+  const promise = new Promise((resolve) => {
+    release = resolve;
+  });
+  return { promise, release: () => release() };
+}
+async function createBoundPhotoProject() {
+  const { paid } = apiRequire("./dist-test/test/payment-fixture.js");
+  const order = data(
+    await request("POST", "/v1/orders", buyer, {
+      packageVersionId: versionId,
+      recipient: { relationshipLabel: "朋友" },
+      shippingRegionCode: "CN-110000",
+    }),
+  );
+  data(await request("POST", `/v1/orders/${order.id}/payment`, buyer, {}));
+  paid(order.outTradeNo);
+  const id = data(await request("GET", `/v1/orders/${order.id}`, buyer), 200)
+    .project.id;
+  const invitation = data(
+    await request("POST", `/v1/projects/${id}/invitations`, buyer, {}),
+  );
+  const application = data(
+    await request(
+      "POST",
+      `/v1/invitations/${invitation.token}/requests`,
+      narrator,
+      {
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:照片撤权次序验收",
+      },
+    ),
+  );
+  data(
+    await request(
+      "POST",
+      `/v1/binding-requests/${application.id}/approve`,
+      buyer,
+      { expectedBindingVersion: 0, evidenceRef: "synthetic:核对同一讲述者" },
+    ),
+  );
+  for (const purpose of ["collection", "sharing"]) {
+    const participation = data(
+      await request("GET", `/v1/projects/${id}/participation`, narrator),
+      200,
+    );
+    data(
+      await request("POST", `/v1/projects/${id}/consents`, narrator, {
+        purpose,
+        granted: true,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:明确授权照片用途",
+        expectedBindingVersion: participation.bindingVersion,
+        expectedAccessEpoch: participation.accessEpoch,
+      }),
+    );
+  }
+  return id;
+}
+async function freshPhotoProject() {
+  const id = await createBoundPhotoProject();
+  const interview = data(
+    await request("POST", `/v1/projects/${id}/interviews`, narrator, {
+      clientInterviewId: randomUUID(),
+      expectedPlanRevision: 1,
+      selfWritten: { text: "照片里是哪一年？", intent: "合成照片撤权测试" },
+    }),
+  );
+  return { project: id, interview: interview.id };
+}
+for (const order of ["preview-first", "watcher-first", "watcher-only"]) {
+  test(`photo revocation clears private Blob URLs and retains the original when ${order}`, async ({
+    browser,
+  }) => {
+    const owner = await freshPhotoProject(),
+      page = await openPage(browser, narrator);
+    const checksHeld = responseBarrier(),
+      checksMayFinish = responseBarrier(),
+      previewHeld = responseBarrier(),
+      previewMayFinish = responseBarrier();
+    const previewText = "照片权限已变化，请重新查询";
+    const watcherText =
+      "资料用途或账号授权已变化，照片预览已清理；本机原文件仍保留";
+    try {
+      await page.goto(
+        `${base}/#/photos?projectId=${owner.project}&interviewId=${owner.interview}`,
+      );
+      await expect(
+        page.getByText("每张照片分别保存和上传；原文件会保留", { exact: true }),
+      ).toBeVisible();
+      const chooser = page.waitForEvent("filechooser");
+      await page
+        .getByRole("button", { name: "选择原照片", exact: true })
+        .click();
+      await (await chooser).setFiles(photoPaths[0]);
+      await expect(
+        page.getByText("本机原文件和清单已保存，尚未封存", { exact: true }),
+      ).toHaveCount(1);
+      await page
+        .getByRole("button", { name: "单独上传或重试", exact: true })
+        .click();
+      await expect(
+        page.getByText("已封存；清晰度较低，只作提示，不会编造图像", {
+          exact: true,
+        }),
+      ).toHaveCount(1);
+      const view = page.getByRole("button", {
+        name: "安全查看这张照片",
+        exact: true,
+      });
+      await view.click();
+      await expect(page.locator(".photos-page > img")).toBeVisible();
+      const originalPreviewUrl = await page
+        .locator(".photos-page > img")
+        .getAttribute("src");
+      expect(originalPreviewUrl).toMatch(/^blob:/);
+      await page
+        .getByPlaceholder("这张照片想说明什么？")
+        .fill("尚未保存的私有照片说明");
+      await expect(
+        page.getByRole("button", {
+          name: "放弃说明草稿并重新查询",
+          exact: true,
+        }),
+      ).toBeVisible();
+      // Delay only real HTTP responses. Page, permission logic, downloads, storage and backend stay real.
+      await page.route("**/collection-check", async (route) => {
+        checksHeld.release();
+        await checksMayFinish.promise;
+        await route.continue();
+      });
+      await checksHeld.promise;
+      await page.evaluate(() => {
+        window.syntheticPhotoDownloadPaths = [];
+        const download = window.wx.downloadFile;
+        window.wx.downloadFile = (options) =>
+          download({
+            ...options,
+            success: (result) => {
+              window.syntheticPhotoDownloadPaths.push(result.tempFilePath);
+              options.success(result);
+            },
+          });
+      });
+      let lateResponse;
+      if (order === "watcher-first") {
+        await page.route("**/photos/*/assets/*/content", async (route) => {
+          const response = await route.fetch();
+          expect(response.status()).toBe(200);
+          previewHeld.release();
+          await previewMayFinish.promise;
+          await route.fulfill({ response });
+        });
+        await view.click();
+        await previewHeld.promise; // The response was genuinely authorized before withdrawal.
+      }
+      const participation = data(
+        await request(
+          "GET",
+          `/v1/projects/${owner.project}/participation`,
+          narrator,
+        ),
+        200,
+      );
+      data(
+        await request(
+          "POST",
+          `/v1/projects/${owner.project}/consents`,
+          narrator,
+          {
+            purpose: "collection",
+            granted: false,
+            noticeVersion: "synthetic-d08-v1",
+            evidenceRef: "synthetic:本人撤回照片采集",
+            expectedBindingVersion: participation.bindingVersion,
+            expectedAccessEpoch: participation.accessEpoch,
+          },
+        ),
+      );
+      if (order !== "preview-first") {
+        checksMayFinish.release();
+        await expect(
+          page.getByText(watcherText, { exact: true }),
+        ).toBeVisible();
+        if (order === "watcher-first") {
+          lateResponse = page.waitForResponse(
+            (response) =>
+              response.url().includes("/assets/") &&
+              response.url().endsWith("/content") &&
+              response.status() === 200,
+          );
+          previewMayFinish.release();
+        }
+      } else {
+        lateResponse = page.waitForResponse(
+          (response) =>
+            response.url().includes("/assets/") &&
+            response.url().endsWith("/content") &&
+            response.status() === 403,
+        );
+        await view.click();
+      }
+      if (lateResponse) await lateResponse;
+      await expectPhotoPermissionChange(page);
+      await expect(
+        page.getByText(order === "preview-first" ? previewText : watcherText, {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(page.locator(".photos-page img")).toHaveCount(0);
+      await expect(view).toHaveCount(0);
+      await expect(
+        page.getByRole("button", {
+          name: "放弃说明草稿并重新查询",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      await expect(page.getByPlaceholder("这张照片想说明什么？")).toHaveCount(
+        0,
+      );
+      const cacheKey = `timenook.photo-previews.v1:${base}/api/v1`;
+      await expect
+        .poll(() =>
+          page.evaluate(
+            (key) => JSON.parse(localStorage.getItem(key) || "[]").length,
+            cacheKey,
+          ),
+        )
+        .toBe(0);
+      await expect
+        .poll(() =>
+          page.evaluate(() => window.syntheticPhotoDownloadPaths.length),
+        )
+        .toBe(order === "watcher-only" ? 0 : 1);
+      const paths = [
+        originalPreviewUrl,
+        ...(await page.evaluate(() => window.syntheticPhotoDownloadPaths)),
+      ];
+      for (const path of paths) page.expectedRevokedBlobUrls.add(path);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            async (paths) =>
+              Promise.all(
+                paths.map(async (path) => {
+                  try {
+                    await fetch(path);
+                    return false;
+                  } catch {
+                    return true;
+                  }
+                }),
+              ),
+            paths,
+          ),
+        )
+        .toEqual(order === "watcher-only" ? [true] : [true, true]);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            (key) => JSON.parse(localStorage.getItem(key) || "[]").length,
+            cacheKey,
+          ),
+        )
+        .toBe(0);
+      const original = await page.evaluate(async () => {
+        const files = Object.entries(localStorage)
+          .filter(([key]) => key.startsWith("timenook.photos.v1:"))
+          .flatMap(([, value]) => JSON.parse(value));
+        const { resolveBlob } = await import("/preview/media.ts");
+        const url = await resolveBlob(files[0].path),
+          response = await fetch(url),
+          bytes = Array.from(new Uint8Array(await response.arrayBuffer()));
+        URL.revokeObjectURL(url);
+        return { count: files.length, bytes };
+      });
+      expect(original.count).toBe(1);
+      expect(Buffer.from(original.bytes)).toEqual(sourcePhoto);
+      await expect(page.locator(".photos-page img")).toHaveCount(0); // late200 must never revive the preview
+      expect(errors).toEqual([]);
+    } finally {
+      checksMayFinish.release();
+      previewMayFinish.release();
+      await page.unrouteAll({ behavior: "wait" });
+      await page.context().close();
+    }
+  });
+}
