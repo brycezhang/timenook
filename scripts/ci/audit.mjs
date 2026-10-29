@@ -25,6 +25,7 @@ export function expectedPhases(suite) {
       "prisma-generate",
       "print-font",
       "browser-install",
+      "database-migrate",
       "docs",
       "ci-report-tests",
       "typecheck",
@@ -32,6 +33,7 @@ export function expectedPhases(suite) {
       "print-tests",
       "release-tests",
       "build",
+      "openapi",
       "prisma-runtime",
       "candidate-package",
       "candidate-verify",
@@ -47,7 +49,6 @@ export function expectedPhases(suite) {
     "database-migrate",
     "contracts-build",
     "test-compile",
-    ...(suite === "api-1" ? ["openapi"] : []),
     ...(suite.startsWith("browser")
       ? ["api-build", "admin-tests"]
       : ["api-tests"]),
