@@ -8,6 +8,45 @@ function listenersRemoved(events: EventEmitter) {
     assert.equal(events.listenerCount(event), 0, event);
 }
 
+for (const event of ["failed", "error"] as const) {
+  test(`synchronous Worker ${event} cannot be hidden by completing every target`, async () => {
+    const events = new EventEmitter();
+    const failure = new Error("synthetic synchronous failure");
+    const waiting = waitForWorkerJobs(events, async (declareExpected) => {
+      declareExpected(["target"]);
+      if (event === "failed") events.emit(event, { id: "target" }, failure);
+      else events.emit(event, failure);
+      events.emit("completed", { id: "target" });
+    });
+    await assert.rejects(
+      waiting,
+      event === "failed"
+        ? /Worker job failed: target/
+        : /synthetic synchronous failure/,
+    );
+    listenersRemoved(events);
+  });
+}
+
+for (const stage of ["wake", "completion"] as const) {
+  test(`an observed Worker error wins a queued ${stage} success`, async () => {
+    const events = new EventEmitter();
+    const waiting = waitForWorkerJobs(events, async (declareExpected) => {
+      declareExpected(["target"]);
+      if (stage === "wake") events.emit("completed", { id: "target" });
+    });
+    if (stage === "completion") {
+      await new Promise<void>(setImmediate);
+      events.emit("completed", { id: "target" });
+    }
+    queueMicrotask(() =>
+      events.emit("error", new Error("synthetic queued failure")),
+    );
+    await assert.rejects(waiting, /synthetic queued failure/);
+    listenersRemoved(events);
+  });
+}
+
 test("expected Worker progress keeps a still-dispatching frontier alive", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const events = new EventEmitter();
@@ -27,6 +66,7 @@ test("expected Worker progress keeps a still-dispatching frontier alive", async 
     () => "completed",
     () => "failed",
   );
+  await new Promise<void>(setImmediate);
   t.mock.timers.tick(9);
   events.emit("completed", { id: "first" });
   t.mock.timers.tick(9);
@@ -137,6 +177,7 @@ test("a stalled scheduling call fails and removes all listeners", async (t) => {
     waiting,
     /Worker made no progress: scheduling/,
   );
+  await new Promise<void>(setImmediate);
   t.mock.timers.tick(9);
   events.emit("completed", { id: "unknown" });
   t.mock.timers.tick(1);
@@ -157,6 +198,7 @@ test("completed jobs cannot hide a stalled final dispatch acknowledgement", asyn
     10,
   );
   const rejected = assert.rejects(waiting, /Worker made no progress: dispatch/);
+  await new Promise<void>(setImmediate);
   t.mock.timers.tick(10);
   await rejected;
   listenersRemoved(events);

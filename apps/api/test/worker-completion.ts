@@ -23,6 +23,7 @@ export async function waitForWorkerJobs(
   const completed = new Set<string>();
   let pending: Set<string> | undefined;
   let closed = false;
+  let failure: Error | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let resolveDone!: () => void;
   let rejectStopped!: (error: Error) => void;
@@ -32,10 +33,15 @@ export async function waitForWorkerJobs(
   const stopped = new Promise<never>((_, reject) => {
     rejectStopped = reject;
   });
+  function stop(error: Error) {
+    if (closed) return;
+    failure ??= error;
+    rejectStopped(failure);
+  }
   function arm() {
     clearTimeout(timer);
     timer = setTimeout(() => {
-      rejectStopped(
+      stop(
         new Error(
           `Worker made no progress: ${pending ? (pending.size ? [...pending].join(",") : "dispatch") : "scheduling"}`,
         ),
@@ -60,23 +66,29 @@ export async function waitForWorkerJobs(
     }
   }
   function onFailed(job: Job | undefined, error: Error) {
-    rejectStopped(
+    stop(
       new Error(`Worker job failed: ${job?.id ?? "unknown"}`, { cause: error }),
     );
   }
   function onError(error: Error) {
-    rejectStopped(error);
+    stop(error);
   }
   worker.on("completed", onCompleted);
   worker.on("failed", onFailed);
   worker.on("error", onError);
   arm();
   try {
-    await Promise.race([wake(declareExpected), stopped]);
+    await Promise.race([
+      Promise.resolve().then(() => wake(declareExpected)),
+      stopped,
+    ]);
+    // A fulfilled race must not hide a failure observed before its continuation.
+    if (failure) throw failure;
     if (!pending)
       throw new Error("Worker scheduling did not declare expected tasks");
     if (!pending.size) return;
     await Promise.race([done, stopped]);
+    if (failure) throw failure;
   } finally {
     closed = true;
     clearTimeout(timer);
