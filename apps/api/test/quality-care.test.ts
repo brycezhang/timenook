@@ -11,6 +11,7 @@ import {
   login,
   choose,
   app,
+  db,
 } from "./book-fixture";
 import {
   deliveredQualityOrder,
@@ -731,8 +732,10 @@ test("quality eligibility keeps the original application time through delayed re
         description: "原窗口内已申请",
       }),
     );
-  const end =
-    Date.parse(p.delivered.serviceTerms.playback.startsAt) + 30 * 86400000;
+  const delivery = await db.fulfillmentDelivery.findUniqueOrThrow({
+    where: { orderId: p.order.id },
+  });
+  const end = delivery.occurredAt.getTime() + 30 * 86400000;
   t.mock.timers.enable({ apis: ["Date"], now: end });
   t.after(() => t.mock.timers.reset());
   const buyer = await login(p.buyer.who),
@@ -947,13 +950,13 @@ test("narrator can grant a dedicated quality owner while refusing buyer sharing 
     403,
   );
 });
-test("expired D03 active data blocks new quality evidence and fresh grants while leaving minimal case status", async (t) => {
+test("quality evidence stays available beyond 2099 while private staff grants still expire and can be renewed", async (t) => {
   const p = await deliveredQualityOrder(),
     created = data(
       await request("POST", p.qualityBase, p.narrator.token, {
         attemptId: p.attempt.id,
         reason: "qualityMissingPages",
-        description: "到期前申请的质量证据",
+        description: "长期保留的质量证据",
       }),
     ),
     base = `/v1/admin/quality/cases/${created.caseId}`;
@@ -961,47 +964,46 @@ test("expired D03 active data blocks new quality evidence and fresh grants while
     await adminRequest("POST", base + "/assign", p.headers, {
       expectedVersion: created.version,
       dueAt: new Date(Date.now() + 86400000).toISOString(),
-      evidenceRef: "synthetic:到期边界核验",
+      evidenceRef: "synthetic:按人工时限核验",
     }),
   );
-  t.mock.timers.enable({
-    apis: ["Date"],
-    now:
-      Date.parse(p.delivered.serviceTerms.playback.startsAt) + 400 * 86400000,
+  await db.adminSession.updateMany({
+    data: { expiresAt: new Date("2200-01-01T00:00:00Z") },
   });
-  t.after(() => t.mock.timers.reset());
-  const narrator = await login(p.narrator.who);
-  assert.equal(
-    (
-      await request("POST", p.qualityBase, narrator.token, {
-        attemptId: p.attempt.id,
-        reason: "qualityMissingPages",
-        description: "到期后不应新增私人证据",
-      })
-    ).statusCode,
-    403,
-  );
-  assert.equal(
-    (
-      await request(
-        "POST",
-        `${p.qualityBase}/${created.id}/access`,
-        narrator.token,
-        {
-          expectedVersion: assigned.version,
-          scopes: ["evidence"],
-          expiresAt: new Date(Date.now() + 60000).toISOString(),
-          consented: true,
-          noticeVersion: "synthetic-d08-v1",
-        },
-      )
-    ).statusCode,
-    403,
-  );
-  const status = data(await request("GET", p.qualityBase, narrator.token), 200);
-  assert.equal(status.requests[0].id, created.id);
-  assert.equal(status.requests[0].description, undefined);
+  const future = Date.parse("2100-01-01T00:00:00Z");
+  t.mock.timers.enable({ apis: ["Date"], now: future });
+  try {
+    const narrator = await login(p.narrator.who);
+    const grant = () =>
+      request("POST", `${p.qualityBase}/${created.id}/access`, narrator.token, {
+        expectedVersion: assigned.version,
+        scopes: ["evidence"],
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
+        consented: true,
+        noticeVersion: "synthetic-d08-v1",
+      });
+    data(await grant());
+    assert.equal(
+      data(await adminRequest("GET", base + "/materials", p.headers), 200)
+        .description,
+      "长期保留的质量证据",
+    );
+    t.mock.timers.setTime(future + 60000);
+    assert.equal(
+      (await adminRequest("GET", base + "/materials", p.headers)).statusCode,
+      403,
+    );
+    data(await grant());
+    assert.equal(
+      data(await adminRequest("GET", base + "/materials", p.headers), 200)
+        .description,
+      "长期保留的质量证据",
+    );
+  } finally {
+    t.mock.timers.reset();
+  }
 });
+
 test("original quality reprint obeys the exact story version's current book permission while care evidence remains available", async () => {
   const p = await reviewedQualityOrder(),
     storyUrl = `/v1/projects/${p.projectId}/stories/${p.story.id}`;

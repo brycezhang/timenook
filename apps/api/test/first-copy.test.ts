@@ -40,8 +40,7 @@ test("first-copy context uses the paid project and requires current private-cont
     c.shipping.terms.map((term: { key: string }) => term.key),
     [
       "print_specification",
-      "creation_window",
-      "creation_expiration",
+      "creation_service",
       "shipping",
       "service.production",
       "service.logistics",
@@ -107,7 +106,6 @@ test("only the initiator can version an address inside the purchased shipping ra
     null,
   );
 });
-
 
 const addressBody = {
   expectedVersion: 0,
@@ -230,6 +228,32 @@ async function confirmedFirstCopy() {
   };
   return { ...p, body };
 }
+test("first-copy submission remains available beyond 2099 and retains one paid entitlement", async (t) => {
+  const p = await confirmedFirstCopy();
+  await db.session.updateMany({
+    where: { userId: p.buyer.id },
+    data: { expiresAt: new Date("2200-01-01T00:00:00Z") },
+  });
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: Date.parse("2100-01-01T00:00:00Z"),
+  });
+  try {
+    const current = data(await request("GET", p.base, p.buyer.token), 200);
+    assert.equal(current.creation.state, "active");
+    assert.equal(current.creation.expiresAt, null);
+    assert.equal(current.expiryReview, undefined);
+    assert.equal(current.canSubmit, true);
+    const saved = data(
+      await request("POST", p.base + "/submit", p.buyer.token, p.body),
+    );
+    assert.equal(saved.production.state, "reserved");
+    assert.equal(saved.production.copies, 1);
+    assert.equal(saved.production.amountDueFen, 0);
+  } finally {
+    t.mock.timers.reset();
+  }
+});
 test("concurrent same and distinct submission keys reserve exactly one first copy without another payment", async () => {
   const p = await confirmedFirstCopy();
   const key = randomUUID();
@@ -275,45 +299,6 @@ test("concurrent same and distinct submission keys reserve exactly one first cop
     results[0].production.id,
   );
 });
-test("exact creation expiry creates one shared manual-review case across concurrent attempts and never reserves or deletes", async (t) => {
-  const p = await confirmedFirstCopy();
-  const before = data(await request("GET", p.base, p.buyer.token), 200);
-  const end = Date.parse(before.creation.expiresAt);
-  t.mock.timers.enable({ apis: ["Date"], now: end - 1 });
-  assert.equal(
-    data(await request("GET", p.base, p.buyer.token), 200).canSubmit,
-    true,
-  );
-  t.mock.timers.setTime(end);
-  const attempts = await Promise.all(
-    Array.from({ length: 5 }, () =>
-      request("POST", p.base + "/expiry-review", p.buyer.token, {}),
-    ),
-  );
-  const contexts = attempts.map((r) => data(r));
-  assert.equal(new Set(contexts.map((c) => c.expiryReview.caseId)).size, 1);
-  assert.ok(contexts[0].expiryReview.caseId);
-  assert.equal(contexts[0].creation.state, "expired");
-  assert.equal(contexts[0].production, null);
-  assert.equal(contexts[0].expiryReview.available, false);
-  t.mock.timers.setTime(end + 1);
-  const submitted = data(
-    await request("POST", p.base + "/submit", p.buyer.token, p.body),
-  );
-  assert.equal(submitted.production, null);
-  assert.equal(submitted.expiryReview.caseId, contexts[0].expiryReview.caseId);
-  assert.equal(
-    data(
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/book/versions/${p.book.id}`,
-        p.narrator.token,
-      ),
-      200,
-    ).state,
-    "ready",
-  );
-});
 
 test("admin approval rechecks the same current PDF and permissions rather than overriding a stale reservation", async () => {
   const p = await confirmedFirstCopy();
@@ -342,7 +327,6 @@ test("admin approval rechecks the same current PDF and permissions rather than o
   });
   assert.equal(data(result).production.state, "approved");
   assert.deepEqual(Object.keys(data(result)).sort(), [
-    "expiryReview",
     "production",
     "projectId",
   ]);
@@ -395,54 +379,6 @@ test("changing an address and changing it back cannot resurrect an old initiator
   assert.equal(back.address.hash, p.body.addressHash);
   assert.equal(back.confirmations.narrator, true);
   assert.equal(back.confirmations.initiator, false);
-});
-test("an expired reservation cannot be approved or unlocked by unrelated subject-verification tools", async (t) => {
-  const p = await confirmedFirstCopy();
-  const original = data(
-    await request("POST", p.base + "/submit", p.buyer.token, p.body),
-  );
-  t.mock.timers.enable({
-    apis: ["Date"],
-    now: Date.parse(original.creation.expiresAt),
-  });
-  const headers = await paymentAdmin(config, app, [
-    "fulfillment:write",
-    "care:write",
-  ]);
-  const attempted = data(
-    await app.inject({
-      method: "POST",
-      url: `/v1/admin/first-copy/${original.production.id}/approve`,
-      headers: { ...headers, "idempotency-key": randomUUID() },
-      payload: p.body,
-    }),
-  );
-  assert.equal(attempted.production.state, "reserved");
-  assert.ok(attempted.expiryReview.caseId);
-  const state = data(
-    await request(
-      "GET",
-      `/v1/projects/${p.projectId}/participation`,
-      p.buyer.token,
-    ),
-    200,
-  );
-  const unrelated = await app.inject({
-    method: "POST",
-    url: `/v1/admin/care-requests/${attempted.expiryReview.caseId}/verify`,
-    headers: { ...headers, "idempotency-key": randomUUID() },
-    payload: {
-      expectedBindingVersion: state.bindingVersion,
-      expectedAccessEpoch: state.accessEpoch,
-      noticeVersion: "synthetic-d08-v1",
-      evidenceRef: `synthetic:不能以本人核验放行-${randomUUID()}`,
-    },
-  });
-  assert.equal(unrelated.statusCode, 409);
-  assert.equal(
-    data(await request("GET", p.base, p.buyer.token), 200).production.state,
-    "reserved",
-  );
 });
 
 test("server rejects missing confirmations and unprintable purchased specifications", async () => {
@@ -538,32 +474,6 @@ test("new story permission and a shared deletion request each prevent first-copy
     (await request("POST", q.base + "/submit", q.buyer.token, q.body))
       .statusCode,
     409,
-  );
-});
-test("pause applies the purchased creation clock to submission and can be resumed only through service terms", async () => {
-  const p = await confirmedFirstCopy(),
-    headers = await paymentAdmin(config, app);
-  const pause = (action: string) =>
-    app.inject({
-      method: "POST",
-      url: `/v1/admin/service-terms/${p.projectId}/pause`,
-      headers: { ...headers, "idempotency-key": randomUUID() },
-      payload: { action, supportCaseRef: "record:synthetic-creation-pause" },
-    });
-  data(await pause("pause"));
-  const c = data(await request("GET", p.base, p.buyer.token), 200);
-  assert.equal(c.creation.state, "paused");
-  assert.ok(c.blockers.includes("CREATION_PAUSED"));
-  assert.equal(
-    (await request("POST", p.base + "/submit", p.buyer.token, p.body))
-      .statusCode,
-    409,
-  );
-  data(await pause("resume"));
-  assert.equal(
-    data(await request("POST", p.base + "/submit", p.buyer.token, p.body))
-      .production.state,
-    "reserved",
   );
 });
 test("assisted book confirmation requires the dedicated current purpose and records fresh exact-version evidence", async () => {

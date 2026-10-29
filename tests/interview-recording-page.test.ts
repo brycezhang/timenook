@@ -32,6 +32,7 @@ function harness(
       ["timenook.mode.v1", "live"],
       [`timenook.session.v1:${base}`, login],
     ]),
+    requestedDurations: number[] = [],
     requests: any[] = [],
     uploads: any[] = [],
     files = new Set<string>(),
@@ -113,7 +114,8 @@ function harness(
         },
         onError: (f: any) => (handlers.error ??= []).push(f),
         onInterruptionBegin: (f: any) => (handlers.interrupt ??= []).push(f),
-        start: () => {
+        start: (options: any) => {
+          requestedDurations.push(options.duration);
           starts++;
           deviceStage = "recording";
           emit("start");
@@ -165,6 +167,7 @@ function harness(
     page,
     storage,
     requests,
+    requestedDurations,
     uploads,
     files,
     emit,
@@ -282,6 +285,7 @@ async function start(h: ReturnType<typeof harness>) {
         h.page.data.interview.actualQuestion
       ).id,
       questionVersion: h.page.data.interview.questionVersion ?? 1,
+      maxDurationMs: 300000,
     },
     201,
   );
@@ -440,7 +444,12 @@ test("one recording pauses without counting idle time and resumes only after rec
   assert.equal(request.data.actualQuestionId, question.id);
   respond(
     request,
-    { allowed: true, actualQuestionId: question.id, questionVersion: 1 },
+    {
+      allowed: true,
+      actualQuestionId: question.id,
+      questionVersion: 1,
+      maxDurationMs: 300000,
+    },
     201,
   );
   await resuming;
@@ -895,7 +904,12 @@ test("a pending recording keeps its opening question when the same interview dis
   assert.equal(permission.data.expectedQuestionVersion, 1);
   respond(
     permission,
-    { allowed: true, actualQuestionId: question.id, questionVersion: 1 },
+    {
+      allowed: true,
+      actualQuestionId: question.id,
+      questionVersion: 1,
+      maxDurationMs: 300000,
+    },
     201,
   );
   await starting;
@@ -922,7 +936,12 @@ test("a pending recording keeps its opening question when the same interview dis
   assert.equal(nextPermission.data.actualQuestionId, laterQuestion.id);
   respond(
     nextPermission,
-    { allowed: true, actualQuestionId: laterQuestion.id, questionVersion: 2 },
+    {
+      allowed: true,
+      actualQuestionId: laterQuestion.id,
+      questionVersion: 2,
+      maxDurationMs: 300000,
+    },
     201,
   );
   await next;
@@ -2186,4 +2205,42 @@ test("a follow-up network failure in a valid session retains the private questio
   await recovering;
   assert.equal(h.page.data.busy, false);
   h.page.onUnload();
+});
+
+test("stopping enters saving while the device finishes encoding and cannot resume the stopped recording", async (t) => {
+  const h = harness({ deferStops: true });
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  assert.equal(h.page.data.state, "saving");
+  assert.equal(h.page.data.localClips.length, 0);
+  await h.page.togglePause();
+  assert.equal(h.resumes, 0);
+  h.pendingStops[0]();
+  await tick();
+  assert.equal(h.page.data.state, "local");
+});
+
+test("the page passes the remaining server budget to the native recording boundary and rejects a missing budget", async (t) => {
+  for (const maxDurationMs of [920, undefined]) {
+    const h = harness();
+    t.after(() => h.page.onUnload());
+    await ready(h);
+    const starting = h.page.record();
+    respond(
+      h.requests.shift(),
+      {
+        allowed: true,
+        actualQuestionId: question.id,
+        questionVersion: 1,
+        maxDurationMs,
+      },
+      201,
+    );
+    await starting;
+    assert.deepEqual(h.requestedDurations, maxDurationMs ? [920] : []);
+    if (!maxDurationMs) assert.match(h.page.data.status, /额度未确认/);
+    h.page.onUnload();
+  }
 });

@@ -12,7 +12,6 @@ const labels: Record<CompleteExportView["state"], string> = {
   packing: "正在打包",
   ready: "资料包可下载",
   failed: "资料包未完成，请客服核对缺失原因",
-  expired: "资料包已到期清理",
   revoked: "授权已变化，请重新核验",
   delivered: "已按核验渠道交付",
 };
@@ -82,8 +81,8 @@ Page({
         label:
           row.missingReason === "EXPORT_CURRENT_AUTHORIZATION_REQUIRED"
             ? "当前本人授权不可用，请重新核验"
-            : row.missingReason === "EXPORT_SOURCE_RETENTION_EXPIRED"
-              ? "资料保留期限已到，不能领取"
+            : row.missingReason === "EXPORT_SOURCE_DELETED"
+              ? "资料已删除，不能领取"
               : labels[row.state],
       })),
     });
@@ -99,17 +98,6 @@ Page({
         this.setData({ status: "账号已变化，请重新查询" });
         return;
       }
-      const rows = this.data.rows.map((row) =>
-        row.expiresAt && Date.parse(row.expiresAt) <= Date.now()
-          ? {
-              ...row,
-              state: "expired" as const,
-              label: labels.expired,
-              canDownload: false,
-            }
-          : row,
-      );
-      this.setData({ rows });
       this.watch();
     }, 1000);
   },
@@ -213,14 +201,7 @@ Page({
   async download(e: { currentTarget: { dataset: { id: string } } }) {
     const row = this.data.rows.find((r) => r.id === e.currentTarget.dataset.id),
       epoch = this.data.context?.accessEpoch;
-    if (
-      this.data.busy ||
-      !row?.canDownload ||
-      !row.expiresAt ||
-      Date.parse(row.expiresAt) <= Date.now() ||
-      !row.sha256 ||
-      !row.bytes
-    )
+    if (this.data.busy || !row?.canDownload || !row.sha256 || !row.bytes)
       return;
     const generation = ++this.generation,
       owner = this.owner;
@@ -231,7 +212,7 @@ Page({
       const result = await sessionClient.downloadExport(this.projectId, row.id);
       filePath = result.tempFilePath;
       if (!this.current(generation, owner)) return;
-      if (result.statusCode !== 200) throw Error("授权或下载期限已变化");
+      if (result.statusCode !== 200) throw Error("本次领取授权已变化");
       const info =
         await new Promise<WechatMiniprogram.GetFileInfoSuccessCallbackResult>(
           (resolve, reject) =>
@@ -250,9 +231,7 @@ Page({
       if (
         context.accessEpoch !== epoch ||
         !current?.canDownload ||
-        current.sha256 !== row.sha256 ||
-        current.expiresAt !== row.expiresAt ||
-        Date.parse(current.expiresAt!) <= Date.now()
+        current.sha256 !== row.sha256
       )
         throw Error("本次领取授权已变化，请重新核验");
       await new Promise<void>((resolve, reject) =>

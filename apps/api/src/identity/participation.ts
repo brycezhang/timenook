@@ -162,6 +162,15 @@ export class CareRequestDto {
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
 }
 export class VerifyCareDto extends ParticipationNoticeDto {
+  @ApiProperty({
+    minimum: 0,
+    required: false,
+    description: "Required for export subject verification",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedAccessSequence?: number;
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedAccessEpoch!: number;
 }
@@ -456,7 +465,7 @@ export class Participation
           operatorRealm: "product",
           noticeVersion: application.noticeVersion,
           method: "initiator_review",
-          evidenceRef: (await this.activeDataPayloadExpiredIn(tx, p.id))
+          evidenceRef: (await this.activeDataDeletedIn(tx, p.id))
             ? null
             : body.evidenceRef,
           requestId,
@@ -517,6 +526,27 @@ export class Participation
       );
     }
     return record.granted && record.method === "self_wechat";
+  }
+  /** The caller holds the project lock; a verification may only consume the
+   * exact authorization sequence observed during that subject encounter. */
+  async exportAccessSequenceIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ) {
+    await this.rights.assertReplayed(projectId);
+    await this.rights.requireAvailableIn(tx, projectId);
+    const latest = await tx.projectAccessRevocation.findFirst({
+      where: {
+        projectId,
+        OR: [
+          { reason: { not: "assisted" } },
+          { purpose: { in: ["collection", "sharing", "all", "binding"] } },
+        ],
+      },
+      orderBy: { sequence: "desc" },
+      select: { sequence: true },
+    });
+    return latest?.sequence ?? 0;
   }
   private async collectionStampIn(
     tx: Prisma.TransactionClient,
@@ -623,7 +653,7 @@ export class Participation
       await this.currentPurposesIn(tx, p, subject);
     const deleted = await this.rights.deletedIn(tx, p.id);
     const collection = !deleted && enabled && effective.collection === true;
-    const terms = await this.terms.read(p.id, undefined, tx);
+    const terms = await this.terms.read(p.id, tx);
     return {
       projectId: p.id,
       subjectId: subject.id,
@@ -642,7 +672,7 @@ export class Participation
             ...record,
             ...(operatorAdminId ? { operatorAdminId } : {}),
             evidenceRef:
-              terms.retention?.activeData?.state === "expired"
+              terms.retention?.activeData?.state === "deleted"
                 ? null
                 : record.evidenceRef,
             purpose: record.purpose as ConsentPurpose,
@@ -654,7 +684,7 @@ export class Participation
         narrator &&
         collection &&
         terms.canRecord &&
-        terms.retention?.activeData?.state !== "expired",
+        terms.retention?.activeData?.state !== "deleted",
       canProcessAi: narrator && collection && effective.ai === true,
       canRead:
         collection &&
@@ -696,10 +726,10 @@ export class Participation
       }
       if (p.accessEpoch !== body.expectedAccessEpoch)
         throw new ConflictException();
-      const payloadExpired = await this.activeDataPayloadExpiredIn(tx, id);
-      if (payloadExpired && body.granted)
+      const payloadDeleted = await this.activeDataDeletedIn(tx, id);
+      if (payloadDeleted && body.granted)
         throw new ForbiddenException(
-          "Expired activity cannot acquire new authorization payload",
+          "Deleted activity cannot acquire new authorization payload",
         );
       const updated = await tx.project.update({
         where: { id },
@@ -719,7 +749,7 @@ export class Participation
           purpose: body.purpose,
           granted: body.granted,
           noticeVersion: body.noticeVersion,
-          evidenceRef: payloadExpired ? null : body.evidenceRef,
+          evidenceRef: payloadDeleted ? null : body.evidenceRef,
           method: "self_wechat",
         },
       });
@@ -988,10 +1018,19 @@ export class Participation
     await tx.$queryRaw`SELECT id FROM care_requests WHERE id=${id}::uuid FOR UPDATE`;
     const care = (await tx.careRequest.findUnique({ where: { id } }))!;
     // Operational review and production cases are not D08 subject-right requests.
-    if (
-      ["first_copy_expiry", "production_handoff", "quality"].includes(care.kind)
-    )
+    if (["production_handoff", "quality"].includes(care.kind))
       throw new ConflictException();
+    const verificationAccessSequence =
+      care.kind === "export"
+        ? await this.exportAccessSequenceIn(tx, p.id)
+        : null;
+    if (
+      care.kind === "export" &&
+      body.expectedAccessSequence !== verificationAccessSequence
+    )
+      throw new ConflictException(
+        "Subject authorization changed; verify the subject again",
+      );
     const hash = digest(JSON.stringify(body));
     const result = () => ({
       id,
@@ -1019,7 +1058,7 @@ export class Participation
     )
       throw new ConflictException();
     let epoch: number | null = null;
-    const payloadExpired = await this.activeDataPayloadExpiredIn(tx, p.id);
+    const payloadDeleted = await this.activeDataDeletedIn(tx, p.id);
     if (["withdraw", "delete"].includes(care.kind)) {
       epoch = (
         await tx.project.update({
@@ -1041,7 +1080,7 @@ export class Participation
             purpose,
             granted: false,
             noticeVersion: body.noticeVersion,
-            evidenceRef: payloadExpired ? null : body.evidenceRef,
+            evidenceRef: payloadDeleted ? null : body.evidenceRef,
             method: "care_verified",
           },
         });
@@ -1052,10 +1091,11 @@ export class Participation
         state: "verified",
         verifiedBy: operatorId,
         verifiedAt: new Date(),
+        verificationAccessSequence,
         verificationKey: key,
         verificationHash: hash,
-        verificationEvidence: payloadExpired ? null : body.evidenceRef,
-        verificationNotice: payloadExpired ? null : body.noticeVersion,
+        verificationEvidence: payloadDeleted ? null : body.evidenceRef,
+        verificationNotice: payloadDeleted ? null : body.noticeVersion,
         revokedAccessEpoch: epoch,
       },
     });
@@ -1096,14 +1136,21 @@ export class Participation
           verifiedAt: true,
           verificationEvidence: true,
           verificationNotice: true,
+          verificationAccessSequence: true,
           revokedAccessEpoch: true,
         },
       });
       if (!row) throw new NotFoundException();
-      const payloadExpired = await this.activeDataPayloadExpiredIn(
-        tx,
-        row.projectId,
-      );
+      const payloadDeleted = await this.activeDataDeletedIn(tx, row.projectId);
+      // Page context is observed now. The later command must return this exact
+      // sequence, never have the server upgrade an old verification body.
+      let verificationScope: { accessSequence: number } | undefined;
+      if (row.kind === "export" && !payloadDeleted) {
+        await this.project(tx, row.projectId, true);
+        verificationScope = {
+          accessSequence: await this.exportAccessSequenceIn(tx, row.projectId),
+        };
+      }
       const changes: CareBindingChangeView[] = (
         await tx.bindingChange.findMany({
           where: { supportCaseId: id },
@@ -1123,11 +1170,12 @@ export class Participation
         })
       ).map((change) => ({
         ...change,
-        evidenceRef: payloadExpired ? null : change.evidenceRef,
+        evidenceRef: payloadDeleted ? null : change.evidenceRef,
         createdAt: change.createdAt.toISOString(),
       }));
       return {
         ...careView(row),
+        ...(verificationScope ? { verificationScope } : {}),
         supportCaseRef: `record:${id}`,
         correctionGrant: await tx.storyCareGrant.findUnique({
           where: { caseId: id },
@@ -1137,10 +1185,11 @@ export class Participation
           ? {
               operatorAdminId: row.verifiedBy,
               createdAt: row.verifiedAt?.toISOString(),
-              evidenceRef: payloadExpired ? null : row.verificationEvidence,
-              noticeVersion: payloadExpired ? null : row.verificationNotice,
+              evidenceRef: payloadDeleted ? null : row.verificationEvidence,
+              noticeVersion: payloadDeleted ? null : row.verificationNotice,
               method: "care_verified",
               accessEpoch: row.revokedAccessEpoch,
+              accessSequence: row.verificationAccessSequence,
             }
           : null,
         changes,
@@ -1231,7 +1280,7 @@ export class Participation
         supportCaseId: caseId,
         noticeVersion: body.noticeVersion,
         method: "care_verified",
-        evidenceRef: (await this.activeDataPayloadExpiredIn(tx, id))
+        evidenceRef: (await this.activeDataDeletedIn(tx, id))
           ? null
           : body.evidenceRef,
         requestId,
@@ -1279,13 +1328,10 @@ export class Participation
       };
     });
   }
-  async activeDataPayloadExpiredIn(
-    tx: Prisma.TransactionClient,
-    projectId: string,
-  ) {
+  async activeDataDeletedIn(tx: Prisma.TransactionClient, projectId: string) {
     if (await this.rights.deletedIn(tx, projectId, "activeData")) return true;
-    const terms = await this.terms.read(projectId, undefined, tx);
-    return terms.retention?.activeData?.state === "expired";
+    const terms = await this.terms.read(projectId, tx);
+    return terms.retention?.activeData?.state === "deleted";
   }
   // Plan callers keep authentication, current purpose/epoch checks and writes
   // under the same Session -> Project -> Subject lock order.
@@ -1295,9 +1341,9 @@ export class Participation
     category: string,
   ) {
     if (await this.rights.deletedIn(tx, projectId, category)) return false;
-    const terms = await this.terms.read(projectId, undefined, tx),
+    const terms = await this.terms.read(projectId, tx),
       rule = terms.retention?.[category];
-    return !!rule && rule.state !== "expired";
+    return !!rule && rule.state !== "deleted";
   }
   async requireMaterialIn(
     tx: Prisma.TransactionClient,
@@ -1489,11 +1535,11 @@ export class Participation
         (await this.taskRevokedIn(tx, input.projectId, input.taskId)))
     )
       return null;
-    const terms = await this.terms.read(p.id, undefined, tx);
+    const terms = await this.terms.read(p.id, tx);
     if (
-      terms.retention?.activeData?.state === "expired" ||
-      terms.retention?.originalAudio?.state === "expired" ||
-      terms.retention?.transcripts?.state === "expired"
+      terms.retention?.activeData?.state === "deleted" ||
+      terms.retention?.originalAudio?.state === "deleted" ||
+      terms.retention?.transcripts?.state === "deleted"
     )
       return null;
     let grant: Prisma.JsonObject;
@@ -1697,7 +1743,7 @@ export class Participation
     if (
       command.purpose === "collection" &&
       command.requireRecording !== false &&
-      !(await this.terms.read(p.id, undefined, tx)).canRecord
+      !(await this.terms.read(p.id, tx)).canRecord
     )
       throw new ForbiddenException();
     return {
@@ -1827,7 +1873,7 @@ export class Participation
     bindingVersion: number,
     accessEpoch: number,
     latestSessionId: string,
-    payloadExpired: boolean,
+    payloadDeleted: boolean,
   ): AssistedSessionView {
     return {
       id: row.id,
@@ -1837,7 +1883,7 @@ export class Participation
       purpose: row.purpose as AssistedPurpose,
       granted: row.granted,
       noticeVersion: row.noticeVersion,
-      evidenceRef: payloadExpired ? null : row.evidenceRef,
+      evidenceRef: payloadDeleted ? null : row.evidenceRef,
       bindingVersion: row.bindingVersion,
       accessEpoch: row.accessEpoch,
       createdAt: row.createdAt.toISOString(),
@@ -1848,7 +1894,7 @@ export class Participation
             row.bindingVersion !== bindingVersion ||
             row.accessEpoch !== accessEpoch
           ? "revoked"
-          : payloadExpired || row.expiresAt.getTime() <= Date.now()
+          : payloadDeleted || row.expiresAt.getTime() <= Date.now()
             ? "expired"
             : "active",
     };
@@ -1865,7 +1911,7 @@ export class Participation
       const p = await this.project(tx, id, true);
       if (p.order.buyerId !== user.id) throw new ForbiddenException();
       const subject = await this.subject(tx, id);
-      const payloadExpired = await this.activeDataPayloadExpiredIn(tx, id);
+      const payloadDeleted = await this.activeDataDeletedIn(tx, id);
       if (!body) {
         const sessions = await tx.assistedSession.findMany({
           where: { projectId: id, operatorUserId: user.id },
@@ -1881,7 +1927,7 @@ export class Participation
               subject.bindingVersion,
               p.accessEpoch,
               latest.get(row.purpose)!,
-              payloadExpired,
+              payloadDeleted,
             ),
           ),
         };
@@ -1904,12 +1950,12 @@ export class Participation
           subject.bindingVersion,
           p.accessEpoch,
           latest!.id,
-          payloadExpired,
+          payloadDeleted,
         );
       }
-      if (payloadExpired && body.granted)
+      if (payloadDeleted && body.granted)
         throw new ForbiddenException(
-          "Expired activity cannot acquire new authorization payload",
+          "Deleted activity cannot acquire new authorization payload",
         );
       if (
         (await tx.assistedSession.findFirst({
@@ -1965,7 +2011,7 @@ export class Participation
           purpose: body.purpose,
           granted: body.granted,
           noticeVersion: body.noticeVersion,
-          evidenceRef: payloadExpired ? null : body.evidenceRef,
+          evidenceRef: payloadDeleted ? null : body.evidenceRef,
           bindingVersion: subject.bindingVersion,
           accessEpoch: p.accessEpoch,
           idempotencyKey: key!,
@@ -1986,7 +2032,7 @@ export class Participation
             purpose: body.purpose,
             granted: body.granted,
             noticeVersion: body.noticeVersion,
-            evidenceRef: payloadExpired ? null : body.evidenceRef,
+            evidenceRef: payloadDeleted ? null : body.evidenceRef,
             method: "assisted",
           },
         });
@@ -1997,7 +2043,7 @@ export class Participation
         subject.bindingVersion,
         p.accessEpoch,
         row.id,
-        payloadExpired,
+        payloadDeleted,
       );
     });
     if (body && !body.granted) await this.reconcileRevocations(id);

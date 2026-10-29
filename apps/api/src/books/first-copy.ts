@@ -154,7 +154,7 @@ export class FirstCopies implements OnModuleDestroy {
         projectId,
         actor.accessExpiresAt,
       ),
-      terms = await this.terms.read(projectId, undefined, tx),
+      terms = await this.terms.read(projectId, tx),
       address = await tx.firstCopyAddress.findUnique({ where: { projectId } }),
       entitlement = await tx.firstCopyEntitlement.findUnique({
         where: { projectId },
@@ -225,12 +225,9 @@ export class FirstCopies implements OnModuleDestroy {
     ).filter(
       (code) => !snapshot.admission.d05.excludedRegionCodes.includes(code),
     );
-    const review = await tx.careRequest.findFirst({
-      where: { projectId, kind: "first_copy_expiry" },
-    });
     const blockers: FirstCopyBlocker[] = [];
     if (book?.state !== "ready" || !book.pdf) blockers.push("BOOK_NOT_READY");
-    const activeData = !(await this.participation.activeDataPayloadExpiredIn(
+    const activeData = !(await this.participation.activeDataDeletedIn(
       tx,
       projectId,
     ));
@@ -263,12 +260,8 @@ export class FirstCopies implements OnModuleDestroy {
       blockers.push("ENTITLEMENT_UNAVAILABLE");
     if (!terms.creation || terms.policyStatus === "pending")
       blockers.push("POLICY_PENDING");
-    else if (terms.creation.state === "paused")
-      blockers.push("CREATION_PAUSED");
     else if (["terminated", "suspended"].includes(terms.creation.state))
       blockers.push("PROJECT_FROZEN");
-    else if (terms.creation.state !== "active")
-      blockers.push("CREATION_EXPIRED");
     if (book?.state === "ready") {
       const spec = snapshot.d01;
       if (
@@ -330,21 +323,13 @@ export class FirstCopies implements OnModuleDestroy {
             "service.production",
             "service.logistics",
             "print_specification",
-            "creation_window",
-            "creation_expiration",
+            "creation_service",
           ].includes(term.key ?? ""),
         ),
       },
       creation: {
         state: terms.creation?.state ?? "pending",
         expiresAt: terms.creation?.expiresAt ?? null,
-      },
-      expiryReview: {
-        available:
-          role === "initiator" &&
-          terms.creation?.state === "expired" &&
-          !review,
-        caseId: review?.id ?? null,
       },
       blockers,
       canSubmit: role === "initiator" && blockers.length === 0,
@@ -593,10 +578,6 @@ export class FirstCopies implements OnModuleDestroy {
             throw new ConflictException();
           return current;
         }
-        if (current.creation.state === "expired") {
-          await this.expiryIn(tx, projectId, actor.userId, "product");
-          return this.contextIn(tx, projectId, actor);
-        }
         this.assertBook(current, body);
         if (current.address.hash !== body.addressHash || !current.canSubmit)
           throw new ConflictException(
@@ -667,70 +648,10 @@ export class FirstCopies implements OnModuleDestroy {
       },
     );
   }
-  private async expiryIn(
-    tx: Prisma.TransactionClient,
-    projectId: string,
-    operatorId: string,
-    realm: "product" | "admin",
-  ) {
-    const existing = await tx.careRequest.findFirst({
-      where: { projectId, kind: "first_copy_expiry" },
-    });
-    if (existing) return existing.id;
-    const project = await tx.project.findUniqueOrThrow({
-        where: { id: projectId },
-      }),
-      subject = await tx.projectSubject.findUniqueOrThrow({
-        where: { projectId },
-      });
-    const row = await tx.careRequest.create({
-      data: {
-        id: randomUUID(),
-        projectId,
-        requesterId: realm === "product" ? operatorId : null,
-        requesterSubjectId: subject.id,
-        operatorId,
-        operatorRealm: realm,
-        sourceBindingVersion: subject.bindingVersion,
-        sourceAccessEpoch: project.accessEpoch,
-        idempotencyKey: "first-copy-expiry",
-        requestHash: digest({ projectId, kind: "first_copy_expiry" }),
-        kind: "first_copy_expiry",
-      },
-    });
-    return row.id;
-  }
-  expiryReview(
-    projectId: string,
-    authorization: string | undefined,
-    key: string,
-  ) {
-    return this.participation.withPlanAccess(
-      projectId,
-      authorization,
-      undefined,
-      async (tx, actor) => {
-        const current = await this.contextIn(tx, projectId, actor);
-        if (current.role !== "initiator") throw new ForbiddenException();
-        await this.command(
-          tx,
-          projectId,
-          actor.userId,
-          "expiry-review",
-          key,
-          {},
-        );
-        if (current.creation.state !== "expired") throw new ConflictException();
-        await this.expiryIn(tx, projectId, actor.userId, "product");
-        return this.contextIn(tx, projectId, actor);
-      },
-    );
-  }
   private approvalView(context: FirstCopyContext): FirstCopyApprovalView {
     return {
       projectId: context.projectId,
       production: context.production!,
-      expiryReview: context.expiryReview,
     };
   }
   async approveIn(
@@ -788,10 +709,6 @@ export class FirstCopies implements OnModuleDestroy {
       view.addressHash !== body.addressHash
     )
       throw new ConflictException();
-    if (current.creation.state === "expired") {
-      await this.expiryIn(tx, projectId, operatorId, "admin");
-      return this.approvalView(await this.contextIn(tx, projectId, actor));
-    }
     this.assertBook(current, body);
     if (
       current.blockers.some((code) => code !== "ALREADY_SUBMITTED") ||
@@ -1016,11 +933,7 @@ export class FirstCopies implements OnModuleDestroy {
       current.address.hash !== body.addressHash ||
       current.blockers.some(
         (code) =>
-          ![
-            "ENTITLEMENT_UNAVAILABLE",
-            "ALREADY_SUBMITTED",
-            "CREATION_EXPIRED",
-          ].includes(code),
+          !["ENTITLEMENT_UNAVAILABLE", "ALREADY_SUBMITTED"].includes(code),
       )
     )
       throw new ConflictException(
@@ -1134,23 +1047,6 @@ export class FirstCopyController {
       data: await this.copies.submit(
         id,
         body,
-        req.headers.authorization,
-        idempotencyKey(req),
-      ),
-      meta: { requestId: req.id },
-    };
-  }
-
-  @Post("expiry-review")
-  @Header("Cache-Control", "no-store")
-  @ApiHeader({ name: "Idempotency-Key", required: true })
-  async expiryReview(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.copies.expiryReview(
-        id,
         req.headers.authorization,
         idempotencyKey(req),
       ),

@@ -61,7 +61,6 @@ import {
   PersonalPlans,
   PersonalPlanController,
 } from "./projects/personal-plan-controller";
-import { AdminTermsController } from "./payments/admin-terms-controller";
 import {
   Participation,
   ParticipationController,
@@ -144,6 +143,11 @@ import { IdentityAccess, WECHAT_FETCH } from "./identity/identity-access";
 import { IdentityController } from "./identity/identity-controller";
 import { WebController } from "./web/web-controller";
 import { WebAccess } from "./web/web-access";
+import {
+  WechatLinks,
+  WebWechatLinkController,
+  NativeWechatLinkController,
+} from "./identity/wechat-link";
 import { HttpException } from "@nestjs/common";
 
 @Controller("health")
@@ -440,7 +444,8 @@ export async function createApplication(
   const module = {
     module: AppModule,
     controllers: [
-      ...(config.web ? [WebController] : []),
+      ...(config.web ? [WebController, WebWechatLinkController] : []),
+      NativeWechatLinkController,
       PaymentWebhookController,
       RefundWebhookController,
       ...(productEnabled
@@ -448,7 +453,6 @@ export async function createApplication(
             RefundsController,
             AdminRefundsController,
             OrdersController,
-            AdminTermsController,
             ParticipationController,
             AdminCareController,
             DeletionController,
@@ -592,6 +596,7 @@ export async function createApplication(
         : []),
       { provide: WECHAT_FETCH, useValue: options.wechatFetch ?? fetch },
       IdentityAccess,
+      WechatLinks,
       ProjectStreams,
       Participation,
       PersonalPlans,

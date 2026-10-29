@@ -253,7 +253,7 @@ test("reading a PDF for an assisted book confirmation retains the current purpos
   h.page.onUnload();
 });
 
-test("source-story retention expiry leaves a ready frozen book reachable and refuses new source edits or generation", async () => {
+test("unavailable source stories leave an independently available frozen book reachable and refuse new source edits or generation", async () => {
   const h = harness(),
     retained = context();
   retained.inputHash = null;

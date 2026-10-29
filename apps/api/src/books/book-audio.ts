@@ -73,14 +73,14 @@ export class BookAudio implements OnModuleDestroy {
         const entry = await tx.bookAudioEntry.findUnique({ where: { id } });
         if (!entry || entry.projectId !== locator.projectId)
           throw new NotFoundException();
-        const terms = await this.terms.read(entry.projectId, undefined, tx);
+        const terms = await this.terms.read(entry.projectId, tx);
         const playback = terms.playback,
           retention = terms.retention?.originalAudio;
         if (
           !playback ||
           !retention ||
-          playback.state === "expired" ||
-          retention.state === "expired"
+          playback.state === "deleted" ||
+          retention.state === "deleted"
         )
           throw new ForbiddenException();
         const revision = await tx.storyRevision.findFirst({
@@ -177,11 +177,6 @@ export class BookAudio implements OnModuleDestroy {
             durationMs: asset.durationMs,
           });
         }
-        const expiries = [
-          actor.accessExpiresAt,
-          playback.expiresAt,
-          retention.expiresAt,
-        ].filter((v): v is string => !!v);
         return {
           id: entry.id,
           projectId: entry.projectId,
@@ -193,9 +188,7 @@ export class BookAudio implements OnModuleDestroy {
           },
           clips,
           accessEpoch: actor.accessEpoch,
-          accessExpiresAt: expiries.length
-            ? new Date(Math.min(...expiries.map(Date.parse))).toISOString()
-            : null,
+          accessExpiresAt: actor.accessExpiresAt,
         };
       },
     );

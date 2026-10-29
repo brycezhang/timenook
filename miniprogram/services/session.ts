@@ -331,6 +331,31 @@ export class SessionClient {
     this.assertCurrent(generation);
     return result;
   }
+  async wechatLink<T>(
+    action: "claim" | "confirm" | "status" | "cancel",
+    data: Record<string, unknown>,
+  ): Promise<T> {
+    if (dataMode() !== "live") throw new ApiFailure("DEMO_MODE");
+    const generation = this.generation;
+    let code: string | undefined;
+    if (action === "claim" || action === "confirm")
+      code = await new Promise<string>((resolve, reject) =>
+        wx.login({
+          success: (result) =>
+            result.code
+              ? resolve(result.code)
+              : reject(new ApiFailure("WECHAT_LOGIN_FAILED")),
+          fail: () => reject(new ApiFailure("WECHAT_LOGIN_FAILED")),
+        }),
+      );
+    this.assertCurrent(generation);
+    const result = await this.send<T>(`/wechat-links/${action}`, "POST", {
+      ...data,
+      ...(code ? { code } : {}),
+    });
+    this.assertCurrent(generation);
+    return result;
+  }
   private get storageKey() {
     return `timenook.session.v1:${this.apiBaseUrl}`;
   }
@@ -369,7 +394,7 @@ export class SessionClient {
       throw new ApiFailure("STALE_RESPONSE");
   }
 
-  async login(): Promise<LoginResult> {
+  async login(expectedUserId?: string): Promise<LoginResult> {
     if (this.cookie) throw new ApiFailure("WEB_LOGIN_REQUIRED", 401);
     const generation = ++this.generation;
     setDataMode("live");
@@ -388,6 +413,7 @@ export class SessionClient {
     this.assertCurrent(generation);
     const result = await this.send<LoginResult>("/sessions/wechat", "POST", {
       code,
+      ...(expectedUserId ? { expectedUserId } : {}),
     });
     if (
       !loginResult(result) ||

@@ -45,8 +45,35 @@ model CareExport {
  reviewHash String? @map("review_hash") @db.Char(64)
  @@unique([projectId,id])
  @@index([projectId,state])
- @@index([expiresAt])
  @@map("care_exports")
+}
+
+// Minimal immutable authorization facts; evidence/recipient payloads remain outside this table.
+model ExportStaffGrant {
+ id String @id @db.Uuid
+ sequence BigInt @unique @default(autoincrement())
+ projectId String @map("project_id") @db.Uuid
+ caseId String @map("case_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ adminId String @map("admin_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ accessSequence Int @map("access_sequence")
+ key String
+ requestHash String @map("request_hash") @db.Char(64)
+ source String
+ purpose String
+ noticeVersion String @map("notice_version")
+ identityProcedureRef String @map("identity_procedure_ref")
+ confirmationChannelRef String @map("confirmation_channel_ref")
+ recipientHash String @map("recipient_hash") @db.Char(64)
+ evidenceHash String @map("evidence_hash") @db.Char(64)
+ verifiedAt DateTime @map("verified_at") @db.Timestamptz(3)
+ expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+ @@unique([caseId,key])
+ @@unique([source,evidenceHash])
+ @@index([caseId,sequence])
+ @@map("export_staff_grants")
 }
 
 model OutlineTemplateVersion {
@@ -113,6 +140,7 @@ model User {
   identities WechatIdentity[]
   sessions   Session[]
   webLoginTickets WebLoginTicket[]
+  wechatLinks WechatLink[]
 
   @@map("users")
 }
@@ -137,6 +165,7 @@ model Session {
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
   user      User      @relation(fields: [userId], references: [id])
   webSession WebSession?
+  wechatLinks WechatLink[]
 
   @@index([userId])
   @@index([expiresAt])
@@ -162,6 +191,29 @@ model WebSession {
   keyHash String @map("key_hash") @db.Char(64)
   session Session @relation(fields: [sessionId], references: [id])
   @@map("web_sessions")
+}
+
+model WechatLink {
+  id String @id @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  sessionId String @map("session_id") @db.Uuid
+  codeHash String @unique @map("code_hash") @db.Char(64)
+  proofHash String? @unique @map("proof_hash") @db.Char(64)
+  verificationCode String? @map("verification_code") @db.Char(6)
+  appId String? @map("app_id")
+  openId String? @map("open_id")
+  state String @default("waiting")
+  attempts Int @default(0)
+  webConfirmed Boolean @default(false) @map("web_confirmed")
+  nativeConfirmed Boolean @default(false) @map("native_confirmed")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  user User @relation(fields: [userId], references: [id])
+  session Session @relation(fields: [sessionId], references: [id])
+  @@index([sessionId])
+  @@index([appId, openId])
+  @@index([expiresAt])
+  @@map("wechat_links")
 }
 
 // An exchange is consumed before the external request, including unknown results.
@@ -466,8 +518,6 @@ model ProjectServiceEvent {
  eventId String @map("event_id")
  kind String
  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
- supportCaseRef String? @map("support_case_ref")
- operatorId String? @map("operator_id") @db.Uuid
  @@id([projectId,eventId])
  @@index([projectId,occurredAt])
  @@map("project_service_events")
@@ -543,6 +593,7 @@ model CareRequest {
   targetUserId         String?   @map("target_user_id") @db.Uuid
   sourceBindingVersion Int      @map("source_binding_version")
   sourceAccessEpoch Int @map("source_access_epoch")
+  verificationAccessSequence Int? @map("verification_access_sequence")
   verificationKey String? @map("verification_key")
   verificationHash String? @map("verification_hash") @db.Char(64)
   verificationEvidence String? @map("verification_evidence")

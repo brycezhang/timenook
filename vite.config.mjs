@@ -1,6 +1,9 @@
+import { lamejsLicense } from "./tools/lamejs-license.ts";
 import { defineConfig } from "vite";
 import { privateArtifactsDeny } from "./tools/vite-private-artifacts.ts";
 export default defineConfig({
+  plugins: [lamejsLicense()],
+  worker: { format: "es" },
   define: {
     __TIMENOOK_PAYMENT_VERIFICATION__: JSON.stringify(
       process.env.TIMENOOK_PAYMENT_VERIFICATION === "local-verification",

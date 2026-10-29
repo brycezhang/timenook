@@ -203,3 +203,34 @@ h2 {
       opacity 150ms ease;
   }
 }
+.link-panel {
+  margin-top: 28px;
+}
+.link-panel .quiet {
+  margin: 16px 12px 0 0;
+}
+.pair-code {
+  font-size: 36px;
+  letter-spacing: 7px;
+  color: var(--olive);
+  font-variant-numeric: tabular-nums;
+}
+.account-id {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  color: var(--muted);
+}
+.link-panel label {
+  display: block;
+  margin-top: 24px;
+}
+.link-panel input {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+}

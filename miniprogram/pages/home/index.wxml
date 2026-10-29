@@ -7,6 +7,7 @@
   <button wx:if="{{userId}}" class="btn secondary" bindtap="orders">查看订单与恢复项目</button>
   <button class="btn" bindtap="catalog">查看套餐与赠礼称呼</button>
   <button wx:if="{{!userId}}" class="btn" loading="{{busy}}" disabled="{{busy}}" bindtap="login">微信登录</button>
+  <button class="btn secondary" disabled="{{busy}}" bindtap="accountLink">关联已有网页账号</button>
   <button class="link" disabled="{{busy}}" bindtap="logout">退出登录</button>
   <button class="link" disabled="{{busy}}" bindtap="useDemo">切换到本机演示</button>
 </view>
@@ -23,6 +24,7 @@
     ><text class="hero-label">效果示意</text></view
     ><view class="home-content"
     ><view class="demo-note">本机演示 · 不会付款，资料不属于服务端账号</view
+    ><button class="link" bindtap="accountLink">关联已有网页账号</button
     ><button class="link" bindtap="login">切换到真实服务</button
     ><button wx:if="{{hasProject}}" class="home-return" bindtap="project">回到我的项目 <image class="icon small" src="/assets/icons/arrow-right.svg" /></button
     ><view class="gift-options"

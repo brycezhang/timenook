@@ -9,6 +9,7 @@ export function setDataMode(mode: DataMode): void {
 export function livePageAllowed(page: string): boolean {
   return [
     "home",
+    "account-link",
     "purchase",
     "order",
     "refunds",

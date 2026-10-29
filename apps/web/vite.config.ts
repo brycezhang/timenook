@@ -1,3 +1,4 @@
+import { lamejsLicense } from "../../tools/lamejs-license";
 import { defineConfig } from "vite";
 import { readFileSync } from "node:fs";
 import { privateArtifactsDeny } from "../../tools/vite-private-artifacts";
@@ -19,6 +20,8 @@ const proxy = process.env.TIMENOOK_WEB_API_TARGET
   : undefined;
 
 export default defineConfig({
+  plugins: [lamejsLicense()],
+  worker: { format: "es" },
   base: "/app/",
   define: {
     __TIMENOOK_COOKIE_WEB__: "true",

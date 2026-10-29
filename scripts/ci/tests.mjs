@@ -34,7 +34,6 @@ const costs = {
   "transcription.test.ts": 134,
   "story-generation.test.ts": 125,
   "story-confirmation.test.ts": 99,
-  "privacy-upgrade.test.ts": 95,
   "refunds.test.ts": 90,
   "withdrawal.test.ts": 85,
   "deletion-review.test.ts": 85,

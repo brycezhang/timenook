@@ -1,0 +1,19 @@
+<view class="page">
+  <view class="title">关联已有网页账号</view>
+  <view class="section muted">在网页“我的故事书”发起关联。关联只统一产品账号，不代替讲述者本人对任何用途的授权。</view>
+  <view class="section" aria-role="status">{{status}}</view>
+  <block wx:if="{{available && !challenge}}">
+    <input class="link-input" type="number" maxlength="8" value="{{linkCode}}" bindinput="inputCode" placeholder="网页上的8位关联码" aria-label="8位关联码" />
+    <button class="btn" disabled="{{busy || linkCode.length !== 8}}" loading="{{busy}}" bindtap="claim">用当前微信证明身份</button>
+  </block>
+  <view wx:if="{{challenge}}" class="section">
+    <view class="small muted">目标网页账号</view><view class="account-id">{{challenge.targetUser.id}}</view>
+    <view wx:if="{{challenge.verificationCode}}" class="link-code">{{challenge.verificationCode}}</view>
+    <view class="small muted">请当面核对两端相同的6位码，仅关联你自己的账号。</view>
+    <button wx:if="{{challenge.state === 'paired' && !challenge.nativeConfirmed}}" class="btn" disabled="{{busy}}" bindtap="confirm">两端核对码一致，确认关联此账号</button>
+    <button wx:if="{{challenge.state === 'paired'}}" class="btn secondary" disabled="{{busy}}" bindtap="refresh">刷新另一端确认状态</button>
+    <button wx:if="{{challenge.state === 'paired'}}" class="link" disabled="{{busy}}" bindtap="cancel">取消关联</button>
+    <button wx:if="{{challenge.state === 'linked' && !userId}}" class="btn" disabled="{{busy}}" bindtap="finish">重新微信登录同一账号</button>
+    <view wx:if="{{userId}}" class="small account-id">已登录账号：{{userId}}</view>
+  </view>
+</view>

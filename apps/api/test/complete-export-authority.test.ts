@@ -19,6 +19,7 @@ import { ProductionTasks } from "../src/tasks/tasks";
 import { before, after, test } from "node:test";
 import {
   adminRequest,
+  exportVerificationScope,
   acceptedBook,
   anotherAcceptedExport,
   pausedZip,
@@ -26,6 +27,7 @@ import {
   streamExport,
   assistedExportChoice,
   acceptAlternativeCase,
+  recordAlternativeStaffVerification,
 } from "./complete-export-fixture";
 
 before(startBookFixture);
@@ -72,6 +74,7 @@ test("a new product ZIP request cannot use pre-refusal export authority after sa
       `/v1/admin/care-requests/${exp.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(exp.id, admin)),
         expectedBindingVersion: current.bindingVersion,
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
@@ -148,6 +151,7 @@ test("a new product ZIP request cannot use pre-refusal export authority after sa
       `/v1/admin/care-requests/${pending.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(pending.id, admin)),
         expectedBindingVersion: denied.bindingVersion,
         expectedAccessEpoch: denied.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
@@ -180,6 +184,7 @@ test("a new product ZIP request cannot use pre-refusal export authority after sa
       `/v1/admin/care-requests/${next.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(next.id, admin)),
         expectedBindingVersion: denied.bindingVersion,
         expectedAccessEpoch: denied.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
@@ -309,6 +314,7 @@ test("the alternative transport rejects fresh claims under same-epoch refusal an
     403,
   );
   data(await assistedExportChoice(p, "collection", true));
+  await recordAlternativeStaffVerification(p);
   const stream = await pausedZip(p.base + "/download", p.admin);
   try {
     data(
@@ -464,6 +470,8 @@ for (const channel of ["product", "alternative"] as const)
         "EXPORT_CURRENT_AUTHORIZATION_REQUIRED",
       );
       data(await assistedExportChoice(p, "collection", true));
+      if (channel === "alternative")
+        await recordAlternativeStaffVerification(p);
       const restored = await app.inject({
         method: "GET",
         url: p.url,

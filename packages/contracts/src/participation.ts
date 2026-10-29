@@ -75,13 +75,13 @@ export interface CareCase {
     | "export"
     | "delete"
     | "correction"
-    | "first_copy_expiry"
     | "production_handoff"
     | "refund"
     | "quality";
   createdAt: string;
   supportCaseRef?: string;
   changes?: CareBindingChangeView[];
+  verificationScope?: { accessSequence: number };
   verification?: {
     operatorAdminId: string;
     createdAt: string;
@@ -89,6 +89,7 @@ export interface CareCase {
     noticeVersion: string | null;
     method: string;
     accessEpoch: number | null;
+    accessSequence: number | null;
   } | null;
 }
 export interface ProjectCareRequestView {
@@ -99,7 +100,6 @@ export interface ProjectCareRequestView {
     | "export"
     | "delete"
     | "correction"
-    | "first_copy_expiry"
     | "production_handoff"
     | "refund"
     | "quality";

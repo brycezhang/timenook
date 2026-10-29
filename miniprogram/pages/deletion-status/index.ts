@@ -148,7 +148,7 @@ Page({
                 return [`${layers[layer]}本层已核验完成`];
               return [
                 layer === "backup"
-                  ? "备份待到期或核验"
+                  ? "备份清理待核验"
                   : layer === "supplier"
                     ? "外部副本待确认"
                     : "历史版本待核验",
@@ -162,10 +162,10 @@ Page({
       summary: value.permanentProjectDeletion
         ? "在线访问已停止，项目删除不可逆。各层清理结果分别如下。"
         : value.changes.length
-          ? "部分资料已按保留期限进入清理，未表示全项目删除；独立有效的资料按原规则提供。"
+          ? "已记录本人核验的删除范围，各层清理结果分别如下。"
           : pending
             ? "删除申请待客服核验；尚未确认在线访问停止。"
-            : "尚无已核验的删除或资料到期清理记录。",
+            : "尚无已核验的删除记录。",
       rows: value.changes.flatMap((change) =>
         change.items.map((item) => ({
           id: item.id,
@@ -177,7 +177,7 @@ Page({
               : item.state === "running"
                 ? "本层清理中"
                 : item.layer === "backup"
-                  ? "备份待到期或核验"
+                  ? "备份清理待核验"
                   : item.layer === "supplier"
                     ? "外部副本待确认"
                     : item.layer === "object_history"

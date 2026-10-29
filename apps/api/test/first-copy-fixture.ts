@@ -9,23 +9,13 @@ export async function readyFirstCopyBook(
     maxPages?: number;
     bleedMm?: number;
   } = {},
-  photoRetention: Partial<
-    Record<"originalPhotos" | "derivedPhotos", number>
-  > = {},
-  retention: Record<string, number> = {},
-  creationDays = 1,
 ) {
   const snapshot = JSON.parse(
     readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
   );
-  for (const [kind, value] of Object.entries(retention))
-    snapshot.admission.d03.retention[kind].duration.value = value;
-  for (const [kind, value] of Object.entries(photoRetention))
-    snapshot.admission.d03.retention[kind].duration.value = value;
   snapshot.d01.minPages = 1;
   snapshot.d01.bleedMm = 0;
   Object.assign(snapshot.d01, specification);
-  snapshot.admission.d02.duration.value = creationDays;
   const draftId = randomUUID(),
     packageId = randomUUID();
   await db.packageDraft.create({
@@ -100,10 +90,8 @@ export async function readyFirstCopyBook(
   assert.equal(current.book.state, "ready");
   return { ...p, story, base, book: current.book };
 }
-export async function readyReservedFirstCopy(
-  retention: Record<string, number> = {},
-) {
-  const p = await readyFirstCopyBook({}, {}, retention);
+export async function readyReservedFirstCopy() {
+  const p = await readyFirstCopyBook();
   const address = data(
     await request("POST", p.base + "/address", p.buyer.token, {
       expectedVersion: 0,

@@ -805,6 +805,7 @@ test("the active interview clears private state when a hidden photo download's 4
       allowed: true,
       actualQuestionId: authorization.data.actualQuestionId,
       questionVersion: 1,
+      maxDurationMs: 300000,
     },
     201,
   );

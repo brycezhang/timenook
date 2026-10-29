@@ -15,6 +15,15 @@ const client = new RequestClient({
 });
 import type { CompleteExportView } from "@timenook/contracts";
 export const completeExportApi = {
+  async verifyAccess(id: string, body: object, key: string, csrf: string) {
+    return (
+      await client.post<ApiResponse<{ id: string; expiresAt: string }>>(
+        `/care-requests/${id}/export/access-verification`,
+        body,
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
   async read(id: string) {
     return (
       await client.get<ApiResponse<CompleteExportView | null>>(
@@ -246,42 +255,6 @@ export const catalogApi = {
   },
 };
 
-export interface ServiceTermsView {
-  policyStatus: string;
-  creation?: {
-    state: string;
-    startsAt: string | null;
-    expiresAt: string | null;
-  };
-  playback?: { state: string; expiresAt: string | null };
-  exportRequests?: { state: string; expiresAt: string | null };
-  notStarted?: { reviewAt: string; action: string };
-}
-export const serviceTermsApi = {
-  async read(projectId: string) {
-    return (
-      await client.get<ApiResponse<ServiceTermsView>>(
-        `/service-terms/${projectId}`,
-      )
-    ).data;
-  },
-  async pause(
-    projectId: string,
-    action: "pause" | "resume",
-    supportCaseRef: string,
-    key: string,
-    csrf: string,
-  ) {
-    return (
-      await client.post<ApiResponse<ServiceTermsView>>(
-        `/service-terms/${projectId}/pause`,
-        { action, supportCaseRef },
-        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
-      )
-    ).data;
-  },
-};
-
 import type { CareCase } from "@timenook/contracts";
 export const careApi = {
   async story(caseId: string, csrf: string) {
@@ -342,6 +315,9 @@ export const careApi = {
           evidenceRef,
           expectedBindingVersion: care.sourceBindingVersion,
           expectedAccessEpoch: care.sourceAccessEpoch,
+          ...(care.kind === "export"
+            ? { expectedAccessSequence: care.verificationScope?.accessSequence }
+            : {}),
         },
         { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
       )
