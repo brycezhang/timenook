@@ -31,6 +31,7 @@ p {
   padding: 24px;
 }
 .auth-panel {
+  box-sizing: border-box;
   width: min(100%, 430px);
   padding: 38px;
   background: white;
@@ -53,25 +54,6 @@ p {
 }
 .notice {
   margin-bottom: 20px;
-}
-.enrollment {
-  background: #f5f7fa;
-  padding: 16px;
-  border-radius: 6px;
-  margin-bottom: 22px;
-}
-.enrollment p {
-  font-size: 13px;
-  margin: 8px 0;
-}
-.enrollment code {
-  font-family: monospace;
-  display: block;
-  overflow-wrap: anywhere;
-  user-select: all;
-}
-.cancel {
-  margin-top: 12px;
 }
 .sidebar-brand {
   color: white;

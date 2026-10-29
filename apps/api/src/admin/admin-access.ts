@@ -20,16 +20,21 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { ADMIN_PERMISSIONS, isAdminPermission } from "@timenook/contracts";
 import type {
   AdminAuditEntry,
-  AdminEnrollment,
+  AdminFeishuLogin,
   AdminPermission,
   AdminState,
 } from "@timenook/contracts";
-import { verify, generateURI } from "otplib";
 import { API_CONFIG, ApiConfig } from "../config";
-import { decryptSecret, hashPassword, verifyPassword } from "./secrets";
+import {
+  ADMIN_FEISHU_FETCH,
+  FEISHU_AUTHORIZE_URL,
+  feishuIdentity,
+} from "./feishu";
 
 const COOKIE = "__Secure-timenook_admin";
 const PATH = "/api/v1/admin";
+const FLOW_COOKIE = "__Secure-timenook_oauth";
+const CALLBACK_PATH = `${PATH}/feishu/callback`;
 const ROUTE_ACTIONS: Record<string, string> = {
   "POST /v1/admin/quality/cases/:caseId/review": "quality.review",
   "POST /v1/admin/quality/cases/:caseId/reprints": "quality.reprint",
@@ -73,9 +78,8 @@ const ROUTE_ACTIONS: Record<string, string> = {
   "GET /v1/admin/service-terms/:id": "service-terms.read",
   "POST /v1/admin/service-terms/:id/pause": "service-terms.pause",
   "GET /v1/admin/session": "admin.session",
-  "POST /v1/admin/login": "admin.password",
-  "GET /v1/admin/mfa/enrollment": "admin.mfa.enrollment",
-  "POST /v1/admin/mfa": "admin.mfa",
+  "POST /v1/admin/feishu/login": "admin.feishu.login",
+  "GET /v1/admin/feishu/callback": "admin.feishu.callback",
   "GET /v1/admin/runtime": "admin.runtime",
   "GET /v1/admin/audit": "admin.audit",
   "POST /v1/admin/logout": "admin.logout",
@@ -102,11 +106,13 @@ export class AdminAccess implements OnModuleDestroy {
   private readonly database: PrismaClient;
   private readonly redis: Redis;
   private connection?: Promise<void>;
-  private dummyHash = hashPassword(randomBytes(32).toString("hex"));
   private get realm() {
     return this.config.environment === "production" ? "production" : "local";
   }
-  constructor(@Inject(API_CONFIG) private readonly config: ApiConfig) {
+  constructor(
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
+    @Inject(ADMIN_FEISHU_FETCH) private readonly feishuFetch: typeof fetch,
+  ) {
     this.database = new PrismaClient({ datasourceUrl: config.databaseUrl });
     this.redis = new Redis(config.redisUrl, {
       lazyConnect: true,
@@ -125,7 +131,10 @@ export class AdminAccess implements OnModuleDestroy {
   ): Promise<T> {
     request.adminAction = action;
     try {
-      if (request.headers["sec-fetch-site"] === "cross-site")
+      if (
+        request.headers["sec-fetch-site"] === "cross-site" &&
+        !(action === "admin.feishu.callback" && request.method === "GET")
+      )
         throw new ForbiddenException();
       const result = await work();
       if (!request.auditRecorded) await this.audit(action, request, "success");
@@ -168,7 +177,7 @@ export class AdminAccess implements OnModuleDestroy {
     return value;
   }
   private csrf(token: string) {
-    return createHmac("sha256", this.settings().encryptionKey)
+    return createHmac("sha256", this.settings().sessionKey)
       .update(`csrf:${token}`)
       .digest("base64url");
   }
@@ -184,6 +193,8 @@ export class AdminAccess implements OnModuleDestroy {
       session.revokedAt ||
       session.expiresAt.getTime() <= Date.now() ||
       session.account?.disabled ||
+      (session.phase === "authenticated" && !session.account) ||
+      (session.account && !this.currentIdentity(session)) ||
       (phase && session.phase !== phase)
     )
       throw new UnauthorizedException();
@@ -204,9 +215,7 @@ export class AdminAccess implements OnModuleDestroy {
   private result(session: Session, token: string): AdminState {
     return {
       authenticated: session.phase === "authenticated",
-      mfaRequired: session.phase === "password",
-      enrollmentRequired:
-        session.phase === "password" && !session.account?.mfaEnrolled,
+      loginAvailable: !!this.config.admin?.feishu,
       operator:
         session.phase === "authenticated"
           ? {
@@ -259,6 +268,9 @@ export class AdminAccess implements OnModuleDestroy {
         phase,
         adminId,
         tokenHash: digest(token),
+        identityHash: adminId
+          ? await this.accountIdentityHash(adminId, tx)
+          : null,
         expiresAt: new Date(Date.now() + ttl * 1000),
       },
       include: { account: true },
@@ -342,77 +354,193 @@ export class AdminAccess implements OnModuleDestroy {
       ),
     );
   }
-  async login(
+  private identityHash(account: {
+    realm: string;
+    feishuAppId: string | null;
+    tenantKey: string | null;
+    feishuOpenId: string | null;
+  }) {
+    return digest(
+      JSON.stringify([
+        account.realm,
+        account.feishuAppId,
+        account.tenantKey,
+        account.feishuOpenId,
+      ]),
+    );
+  }
+  private currentIdentity(session: Session) {
+    const account = session.account,
+      feishu = this.settings().feishu;
+    return (
+      !!account &&
+      !!feishu &&
+      account.realm === this.realm &&
+      account.feishuAppId === feishu.appId &&
+      account.tenantKey === feishu.tenantKey &&
+      session.identityHash === this.identityHash(account)
+    );
+  }
+  private async accountIdentityHash(id: string, tx: Prisma.TransactionClient) {
+    const account = await tx.adminAccount.findUniqueOrThrow({ where: { id } });
+    return this.identityHash(account);
+  }
+  private flowKey(state: string) {
+    return `${this.config.redisKeyPrefix ?? "timenook"}:admin:oauth:${digest(state)}`;
+  }
+  async feishuLogin(
     request: AdminRequest,
     reply: FastifyReply,
-    username: string,
-    password: string,
-  ) {
-    const old = await this.session(request, "anonymous");
+  ): Promise<AdminFeishuLogin> {
+    const settings = this.settings(),
+      feishu = settings.feishu;
+    if (!feishu) throw new ServiceUnavailableException();
+    const anonymous = await this.session(request, "anonymous");
     this.assertCsrf(request);
-    await this.limit("password-ip", request.ip, 30);
-    await this.limit("password-account", username, 5);
-    const account = await this.database.adminAccount.findUnique({
-      where: { realm_username: { realm: this.realm, username } },
-    });
-    const valid = await verifyPassword(
-      password,
-      account?.passwordHash ?? (await this.dummyHash),
-    );
-    if (!valid || !account || account.disabled)
-      throw new UnauthorizedException();
-    request.adminOperator = account.id;
-    return this.finish(
-      request,
-      reply,
-      await this.database.$transaction((tx) =>
-        this.issue(request, "password", account.id, old.id, tx),
-      ),
-    );
-  }
-  async enrollment(request: AdminRequest): Promise<AdminEnrollment> {
-    const session = await this.session(request, "password");
-    if (!session.account || session.account.mfaEnrolled)
-      throw new ForbiddenException();
-    const secret = decryptSecret(
-      session.account.mfaSecret,
-      this.settings().encryptionKey,
-    );
-    return {
-      secret,
-      uri: generateURI({
-        issuer: "TimeNook",
-        label: session.account.username,
-        secret,
-      }),
+    await this.limit("oauth-start", request.ip, 20);
+    const state = randomBytes(32).toString("base64url");
+    const browser = randomBytes(32).toString("base64url");
+    const verifier = randomBytes(32).toString("base64url");
+    const flow = {
+      browserHash: digest(browser),
+      verifier,
+      sessionId: anonymous.id,
+      appId: feishu.appId,
+      tenantKey: feishu.tenantKey,
+      realm: this.realm,
     };
-  }
-  async mfa(request: AdminRequest, reply: FastifyReply, code: string) {
-    const session = await this.session(request, "password");
-    this.assertCsrf(request);
-    await this.limit("mfa", session.adminId!, 5);
-    const issued = await this.database.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${session.adminId!}, 0))`;
-      const account = await tx.adminAccount.findUniqueOrThrow({
-        where: { id: session.adminId! },
-      });
-      if (account.disabled) throw new UnauthorizedException();
-      const result = await verify({
-        secret: decryptSecret(account.mfaSecret, this.settings().encryptionKey),
-        token: code,
-        epochTolerance: [30, 0],
-        afterTimeStep:
-          account.lastTotpStep < 0 ? undefined : account.lastTotpStep,
-      });
-      if (!result.valid || !("timeStep" in result))
-        throw new UnauthorizedException();
-      await tx.adminAccount.update({
-        where: { id: account.id },
-        data: { mfaEnrolled: true, lastTotpStep: result.timeStep },
-      });
-      return this.issue(request, "authenticated", account.id, session.id, tx);
+    try {
+      await this.redis.set(
+        this.flowKey(state),
+        JSON.stringify(flow),
+        "EX",
+        settings.challengeTtlSeconds,
+      );
+    } catch {
+      throw new ServiceUnavailableException();
+    }
+    await this.audit(request.adminAction!, request, "success");
+    request.auditRecorded = true;
+    reply.setCookie(FLOW_COOKIE, browser, {
+      path: CALLBACK_PATH,
+      secure: true,
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: settings.challengeTtlSeconds,
     });
-    return this.finish(request, reply, issued);
+    const url = new URL(FEISHU_AUTHORIZE_URL);
+    url.searchParams.set("client_id", feishu.appId);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("redirect_uri", settings.origin + CALLBACK_PATH);
+    url.searchParams.set("state", state);
+    url.searchParams.set(
+      "code_challenge",
+      createHash("sha256").update(verifier).digest("base64url"),
+    );
+    url.searchParams.set("code_challenge_method", "S256");
+    return { authorizationUrl: url.toString() };
+  }
+  async feishuCallback(
+    request: AdminRequest,
+    reply: FastifyReply,
+    query: { state?: string; code?: string; error?: string },
+  ) {
+    const settings = this.settings(),
+      feishu = settings.feishu;
+    if (!feishu) throw new ServiceUnavailableException();
+    await this.limit("oauth-callback", request.ip, 60);
+    const browser = request.cookies?.[FLOW_COOKIE];
+    if (
+      typeof query.state !== "string" ||
+      !/^[A-Za-z0-9_-]{43}$/.test(query.state) ||
+      !browser ||
+      !/^[A-Za-z0-9_-]{43}$/.test(browser)
+    )
+      throw new UnauthorizedException();
+    let stored: unknown;
+    try {
+      stored = await this.redis.eval(
+        "local v=redis.call('GET',KEYS[1]); if not v then return nil end; local p=cjson.decode(v); if p.browserHash~=ARGV[1] then return nil end; redis.call('DEL',KEYS[1]); return v",
+        1,
+        this.flowKey(query.state),
+        digest(browser),
+      );
+    } catch {
+      throw new ServiceUnavailableException();
+    }
+    if (typeof stored !== "string") throw new UnauthorizedException();
+    const flow = JSON.parse(stored) as {
+      verifier: string;
+      sessionId: string;
+      appId: string;
+      tenantKey: string;
+      realm: string;
+    };
+    if (
+      flow.appId !== feishu.appId ||
+      flow.tenantKey !== feishu.tenantKey ||
+      flow.realm !== this.realm ||
+      query.error ||
+      typeof query.code !== "string" ||
+      !query.code ||
+      query.code.length > 2048 ||
+      /[\r\n]/.test(query.code)
+    )
+      throw new UnauthorizedException();
+    const user = await feishuIdentity(
+      feishu,
+      query.code,
+      flow.verifier,
+      settings.origin + CALLBACK_PATH,
+      this.feishuFetch,
+    );
+    if (user.tenantKey !== feishu.tenantKey) throw new ForbiddenException();
+    const issued = await this.database.$transaction(async (tx) => {
+      const account = await tx.adminAccount.findUnique({
+        where: {
+          realm_feishuAppId_tenantKey_feishuOpenId: {
+            realm: this.realm,
+            feishuAppId: feishu.appId,
+            tenantKey: user.tenantKey,
+            feishuOpenId: user.openId,
+          },
+        },
+      });
+      if (!account || account.disabled) throw new ForbiddenException();
+      request.adminOperator = account.id;
+      // Lock the anonymous session before the account, matching command/logout lock order.
+      const previous = await tx.$queryRaw<
+        { id: string }[]
+      >`SELECT id FROM admin_sessions WHERE id = ${flow.sessionId}::uuid AND phase = 'anonymous' AND realm = ${this.realm} AND revoked_at IS NULL AND expires_at > now() FOR UPDATE`;
+      if (!previous.length) throw new UnauthorizedException();
+      await tx.$queryRaw`SELECT id FROM admin_accounts WHERE id = ${account.id}::uuid FOR NO KEY UPDATE`;
+      const current = await tx.adminAccount.findUniqueOrThrow({
+        where: { id: account.id },
+      });
+      if (
+        current.disabled ||
+        current.feishuAppId !== feishu.appId ||
+        current.tenantKey !== user.tenantKey ||
+        current.feishuOpenId !== user.openId
+      )
+        throw new ForbiddenException();
+      return this.issue(
+        request,
+        "authenticated",
+        current.id,
+        flow.sessionId,
+        tx,
+      );
+    });
+    this.finish(request, reply, issued);
+  }
+  clearOAuthCookie(reply: FastifyReply) {
+    reply.clearCookie(FLOW_COOKIE, {
+      path: CALLBACK_PATH,
+      secure: true,
+      httpOnly: true,
+      sameSite: "lax",
+    });
   }
   async authorized(request: AdminRequest, permission: AdminPermission) {
     const session = await this.session(request, "authenticated");
@@ -443,6 +571,7 @@ export class AdminAccess implements OnModuleDestroy {
         current.revokedAt ||
         current.expiresAt.getTime() <= Date.now() ||
         current.account?.disabled ||
+        !this.currentIdentity(current) ||
         current.phase !== "authenticated" ||
         current.realm !== this.realm
       )
@@ -479,7 +608,7 @@ export class AdminAccess implements OnModuleDestroy {
         },
         data: { revokedAt: new Date() },
       });
-      // A concurrent password/MFA rotation may already have consumed this
+      // A concurrent OAuth callback may already have consumed this
       // cookie. Do not claim logout succeeded or clear the newer cookie.
       if (!revoked.count) throw new UnauthorizedException();
       await this.audit(request.adminAction!, request, "success", tx);

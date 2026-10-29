@@ -4,7 +4,47 @@ import { posix } from "node:path";
 const git = (...args) =>
   execFileSync("git", args, { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
 const docsPath = (path) =>
-  /^(?:docs\/.*|README|CONTEXT|GLOSSARY|AGENTS)\.md$/.test(path);
+  /^(?:docs\/.*|apps\/[^/]+\/README|README|CONTEXT|GLOSSARY|AGENTS)\.md$/.test(
+    path,
+  );
+const websiteFiles = new Set([
+  "apps/website/index.html",
+  "apps/website/vite.config.ts",
+  "apps/website/playwright.config.ts",
+  "apps/website/tsconfig.json",
+  "apps/website/scripts/prepare-assets.mjs",
+  "apps/website/scripts/package.mjs",
+]);
+const dependencyManifests = new Set([
+  "package.json",
+  "bower.json",
+  "composer.json",
+  "deno.json",
+  "jsr.json",
+  "npm-shrinkwrap.json",
+]);
+function websitePath(path) {
+  const name = posix.basename(path);
+  if (
+    dependencyManifests.has(name) ||
+    /(?:^|[-.])lock(?:file|b)?(?:[.-]|$)/i.test(name) ||
+    /(?:^|\/)migrations?\//.test(path)
+  )
+    return false;
+  return (
+    websiteFiles.has(path) ||
+    /^apps\/website\/(?:src|tests)\/.+\.(?:tsx?|jsx?|mjs|cjs|css|svg|png|jpe?g|webp|gif|avif|ico|woff2?|ttf|otf|json)$/.test(
+      path,
+    )
+  );
+}
+function lightweightEvent() {
+  const event = process.env.CHECK_EVENT_NAME;
+  return (
+    process.env.CHECK_REF !== "refs/heads/main" &&
+    (!event || event === "pull_request")
+  );
+}
 function changed(base, head) {
   // Disable rename detection so a code file renamed to .md still includes its old path.
   return git("diff", "--no-renames", "--name-only", "-z", base, head, "--")
@@ -28,16 +68,23 @@ function classify(base, head) {
   const paths = changed(base, head);
   const before = tree(base),
     after = tree(head);
-  return paths.length &&
-    paths.every(
-      (path) =>
-        docsPath(path) &&
-        [before.get(path), after.get(path)].every(
-          (mode) => mode === undefined || mode === "100644",
-        ),
+  if (
+    !lightweightEvent() ||
+    !paths.length ||
+    !paths.every((path) =>
+      [before.get(path), after.get(path)].every(
+        (mode) => mode === undefined || mode === "100644",
+      ),
     )
-    ? "docs"
-    : "full";
+  )
+    return "full";
+  if (paths.every(docsPath)) return "docs";
+  if (
+    process.env.CHECK_EVENT_NAME === "pull_request" &&
+    paths.every((path) => docsPath(path) || websitePath(path))
+  )
+    return "website";
+  return "full";
 }
 function links(markdown) {
   const text = markdown
@@ -149,11 +196,23 @@ try {
   if (command === "gate") {
     const needs = JSON.parse(process.env.CHECK_NEEDS || "{}");
     const mode = needs.changes?.outputs?.mode;
+    const selected = {
+      docs: ["docs"],
+      website: ["website"],
+      full: ["build", "api", "browser", "website", "full"],
+    }[mode];
+    const jobs = ["docs", "build", "api", "browser", "website", "full"];
     if (
+      Object.keys(needs).length !== jobs.length + 1 ||
       needs.changes?.result !== "success" ||
-      !["docs", "full"].includes(mode) ||
-      needs[mode]?.result !== "success" ||
-      needs[mode === "docs" ? "full" : "docs"]?.result !== "skipped"
+      !selected ||
+      (mode !== "full" && !lightweightEvent()) ||
+      (mode === "website" && process.env.CHECK_EVENT_NAME !== "pull_request") ||
+      !jobs.every(
+        (job) =>
+          needs[job]?.result ===
+          (selected.includes(job) ? "success" : "skipped"),
+      )
     )
       throw new Error(
         "Selected check or change classification did not succeed",

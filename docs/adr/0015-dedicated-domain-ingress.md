@@ -9,14 +9,14 @@ TimeNook 与 deed 共用 ECS，API 使用独立域名 `https://timenookapi.three
 
 Nginx 将 `/api/` 剥离一次，转发回环端口 4310。以下是统一目标配置，运行结果单独见[域名配置记录](../delivery/2026-10-28/domain-ingress.md)。
 
-| 用途     | 服务内部路径                       | 独立域名下的公网路径                    |
-| -------- | ---------------------------------- | --------------------------------------- |
-| 用户 API | `/v1/...`                          | `/api/v1/...`                           |
-| 运营 API | `/v1/admin/...`                    | `/api/v1/admin/...`                     |
-| 支付通知 | `/v1/webhooks/wechat-pay/payments` | `/api/v1/webhooks/wechat-pay/payments`  |
-| 退款通知 | `/v1/webhooks/wechat-pay/refunds`  | `/api/v1/webhooks/wechat-pay/refunds`   |
-| 健康检查 | `/health/live`、`/health/ready`    | `/api/health/live`、`/api/health/ready` |
-| 管理页面 | 静态站点 `/admin/`                 | `/admin/`                               |
+| 用途 | 服务内部路径 | 独立域名下的公网路径 |
+| --- | --- | --- |
+| 用户 API | `/v1/...` | `/api/v1/...` |
+| 运营 API | `/v1/admin/...` | `/api/v1/admin/...` |
+| 支付通知 | `/v1/webhooks/wechat-pay/payments` | `/api/v1/webhooks/wechat-pay/payments` |
+| 退款通知 | `/v1/webhooks/wechat-pay/refunds` | `/api/v1/webhooks/wechat-pay/refunds` |
+| 健康检查 | `/health/live`、`/health/ready` | `/api/health/live`、`/api/health/ready` |
+| 管理页面 | 静态站点 `/admin/` | `/admin/` |
 
 管理端 `ADMIN_ORIGIN` 为 `https://timenookapi.threeminreading.com`，API 和 Cookie Path 为 `/api/v1/admin`。支付采用普通商户直连，支付与退款通知分别使用上表地址。微信合法域名、用户客户端和受控素材入口按同一 API 域名配置。
 

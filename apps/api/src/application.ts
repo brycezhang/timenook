@@ -105,6 +105,7 @@ import {
 } from "./probe/local-objects";
 import cookie from "@fastify/cookie";
 import { AdminAccess } from "./admin/admin-access";
+import { ADMIN_FEISHU_FETCH } from "./admin/feishu";
 import { AdminController } from "./admin/admin-controller";
 import { randomUUID } from "node:crypto";
 import {
@@ -185,6 +186,7 @@ export async function createApplication(
   config: ApiConfig,
   options: {
     wechatFetch?: typeof fetch;
+    feishuFetch?: typeof fetch;
     probeObjects?: ProbeObjects;
     aiFetch?: typeof fetch;
     paymentFetch?: typeof fetch;
@@ -192,6 +194,10 @@ export async function createApplication(
     refundRuntime?: Partial<RefundRuntime>;
   } = {},
 ): Promise<NestFastifyApplication> {
+  if (options.feishuFetch && config.environment !== "test")
+    throw new ConfigurationError(
+      "Feishu transport overrides require isolated tests",
+    );
   if (options.refundRuntime && config.environment !== "test")
     throw new ConfigurationError(
       "Refund scheduling and clock overrides require isolated tests",
@@ -468,6 +474,7 @@ export async function createApplication(
     ],
     providers: [
       { provide: API_CONFIG, useValue: config },
+      { provide: ADMIN_FEISHU_FETCH, useValue: options.feishuFetch ?? fetch },
       Infrastructure,
       PrivacyRights,
       Deletions,

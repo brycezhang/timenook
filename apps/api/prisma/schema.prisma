@@ -158,14 +158,14 @@ model AdminAccount {
   id String @id @db.Uuid
   username String
   realm String
-  passwordHash String @map("password_hash")
-  mfaSecret String @map("mfa_secret")
-  mfaEnrolled Boolean @default(false) @map("mfa_enrolled")
-  lastTotpStep Int @default(-1) @map("last_totp_step")
+  feishuAppId String? @map("feishu_app_id")
+  feishuOpenId String? @map("feishu_open_id")
+  tenantKey String? @map("tenant_key")
   permissions String[]
   disabled Boolean @default(false)
   sessions AdminSession[]
   @@unique([realm, username])
+  @@unique([realm, feishuAppId, tenantKey, feishuOpenId])
   @@map("admin_accounts")
 }
 model AdminSession {
@@ -175,6 +175,7 @@ model AdminSession {
   account AdminAccount? @relation(fields: [adminId], references: [id])
   realm String
   phase String
+  identityHash String? @map("identity_hash") @db.Char(64)
   expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
   @@index([expiresAt])

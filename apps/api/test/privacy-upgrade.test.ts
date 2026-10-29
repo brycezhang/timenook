@@ -23,7 +23,15 @@ import { createApplication } from "../src/application";
 import { PrivacyJournal } from "../src/privacy-journal/privacy-journal";
 import { privacyAuthorityId } from "../src/care/privacy-rights";
 import { ProductionTasks } from "../src/tasks/tasks";
+import {
+  syntheticFeishu,
+  syntheticFeishuFetch,
+  createFeishuAccount,
+  authenticateFeishu,
+} from "./admin-feishu-fixture";
 
+// This immutable historical runtime imports otplib13.5.0 through NODE_PATH.
+// It is a pinned test-only devDependency; current application login never loads it.
 const oldMain = "321f0e15a0687f458df6d60ad88bff793cd3c8d4";
 
 /** Compile immutable historical sources only. The old schema generates its own
@@ -268,7 +276,13 @@ async function historicalUpgradeScenario(
         timeout: 30000,
       },
     );
-    assert.equal(result.status, 0, "real incremental T26 migration");
+    if (result.status !== 0)
+      writeFileSync(
+        join(directory, "migration-failure.txt"),
+        result.stdout + result.stderr,
+        { mode: 0o600 },
+      );
+    assert.equal(result.status, 0, "real incremental database migration");
   };
   const container = () => {
     const result = spawnSync(
@@ -422,6 +436,9 @@ async function historicalUpgradeScenario(
     const schema = new URL(fixture.config.databaseUrl).searchParams.get(
       "schema",
     )!;
+    const backupAdminActors = await fixture.db.adminAccount.findMany({
+      select: { id: true },
+    });
     const dumped = spawnSync(
       "docker",
       [
@@ -517,6 +534,13 @@ async function historicalUpgradeScenario(
       where: { projectId: deleted.projectId },
       select: { content: true },
     });
+    const oldAdminActors = await fixture.db.adminAccount.findMany({
+      select: { id: true },
+    });
+    assert.ok(
+      oldAdminActors.length > 0,
+      "historical fixture contains actual credential-based operators",
+    );
     await fixture.app.close();
 
     phase = "explicit source and incremental upgrade";
@@ -536,6 +560,64 @@ async function historicalUpgradeScenario(
       },
     );
     fixture.config.privacyJournal = { root: sourceRoot, key };
+    // This deployment explicitly provisions current Feishu access. Historical
+    // operators remain audit identities and their old sessions never carry over.
+    fixture.config.admin = {
+      origin: fixture.config.admin.origin,
+      sessionKey: randomBytes(32).toString("base64"),
+      sessionTtlSeconds: 28800,
+      challengeTtlSeconds: 300,
+      feishu: { ...syntheticFeishu },
+    };
+    options = { ...options, feishuFetch: syntheticFeishuFetch };
+    let currentAdminHeaders: Record<string, string>;
+    const provisionCurrentOperator = async (
+      expectedActors = oldAdminActors,
+    ) => {
+      for (const old of expectedActors) {
+        const [actor] = await fixture.db.$queryRawUnsafe(
+          "SELECT disabled,feishu_app_id,feishu_open_id,tenant_key FROM admin_accounts WHERE id=$1::uuid",
+          old.id,
+        );
+        assert.equal(
+          actor.disabled,
+          true,
+          "historical operator is retired, not assigned a guessed identity",
+        );
+        assert.equal(actor.feishu_app_id, null);
+        assert.equal(actor.feishu_open_id, null);
+        assert.equal(actor.tenant_key, null);
+      }
+      await assert.rejects(
+        fixture.db.$executeRawUnsafe(
+          "UPDATE admin_accounts SET disabled=false WHERE id=$1::uuid",
+          expectedActors[0].id,
+        ),
+        "an unbound historical actor cannot become an active administrator",
+      );
+      for (const old of shipmentControls) {
+        const response = await fixture.app.inject({
+          method: "GET",
+          url: "/v1/admin/runtime",
+          headers: old.headers,
+        });
+        assert.equal(
+          response.statusCode,
+          401,
+          "old password/MFA session cannot access current deployment",
+        );
+      }
+      const auth = await authenticateFeishu(
+        fixture.config,
+        fixture.app,
+        createFeishuAccount(fixture.config, ["fulfillment:write"]),
+      );
+      currentAdminHeaders = {
+        cookie: auth.cookie,
+        origin: fixture.config.admin.origin,
+        "x-csrf-token": auth.csrf,
+      };
+    };
     // The historical application used its real old environment. The upgraded
     // deployment explicitly adopts ADR 0015's current callback configuration.
     fixture.config.payments.notifyUrl = new URL(
@@ -543,6 +625,7 @@ async function historicalUpgradeScenario(
       fixture.config.payments.notifyUrl,
     ).toString();
     fixture.app = await createApplication(fixture.config, options);
+    await provisionCurrentOperator();
     const journal = new PrivacyJournal(fixture.config.privacyJournal);
     const imported = await journal.snapshot();
     assert.ok(imported.events.some((e) => e.eventId === oldRevocation.id));
@@ -565,7 +648,7 @@ async function historicalUpgradeScenario(
           await fixture.app.inject({
             method: "GET",
             url: `/v1/admin/fulfillment/${shipped.orderId}`,
-            headers: shipped.headers,
+            headers: currentAdminHeaders,
           }),
           200,
         );
@@ -737,6 +820,7 @@ async function historicalUpgradeScenario(
       "explicit recovery replays imported history before changing authority",
     );
     fixture.app = await createApplication(fixture.config, options);
+    await provisionCurrentOperator(backupAdminActors);
     await verify();
     assert.equal(
       (await journal.snapshot()).generation,

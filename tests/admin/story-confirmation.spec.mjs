@@ -93,7 +93,7 @@ test.beforeAll(async () => {
     (config = {
       admin: {
         origin: "https://localhost:5182",
-        encryptionKey: randomBytes(32).toString("base64"),
+        sessionKey: randomBytes(32).toString("base64"),
         sessionTtlSeconds: 28800,
         challengeTtlSeconds: 300,
       },

@@ -6,7 +6,7 @@
 
 新增公开营销网页，介绍「时光里·岁月成书」的产品价值与功能，引导访客进入微信小程序下单。
 
-品牌、功能和套餐以 [MVP PRD](../时光里_岁月成书_MVP_PRD.md) 为依据。官网已预留 `https://sgl.wootoon.cn`，入口约定见 [ADR 0015](../adr/0015-dedicated-domain-ingress.md)；运行情况见[域名配置记录](../delivery/2026-10-28/domain-ingress.md)。
+品牌、功能和套餐以 [MVP PRD](../时光里_岁月成书_MVP_PRD.md) 为依据。官网使用 `https://sgl.wootoon.cn`，入口约定见 [ADR 0015](../adr/0015-dedicated-domain-ingress.md)；运行情况见[域名配置记录](../delivery/2026-10-28/domain-ingress.md)。
 
 ## 工程组织与交付
 

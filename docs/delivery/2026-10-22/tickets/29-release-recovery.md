@@ -14,7 +14,7 @@ GitHub：[#30](https://github.com/brycezhang/timenook/issues/30) · 状态以 Gi
 - [ ] 验证 RDS/Tair/OSS 权限、TLS、健康检查、Tair Lua/阻塞命令/续租/noeviction；密钥只在服务端独立配置。
 - [ ] 演练发布回滚、数据库备份恢复且先重放删除台账、Redis 丢失重建、供应商失败及队列积压；记录 RTO/RPO 实测。
 - [ ] 按 request/project/task/revision/book/fulfillment 标识串联脱敏日志，告警覆盖支付无权益、Outbox、任务费用、错版、访问与工单超时。
-- [ ] 集中承接 T06/T07 的正式域名及管理部署验证：实际管理员受控建号/MFA、密钥保管与恢复、生产 PostgreSQL/Redis 重启；独立域名下用户 `/api/v1`、运营与 Cookie Path `/api/v1/admin`、管理页面 `/admin/`、支付/退款 `/api/v1/webhooks/wechat-pay/...` 与健康路径 `/api/health/...` 正确，API 前缀只剥离一次。检查静态资源、客户端/通知/OpenAPI 基址及同机 legal-agent 服务。
+- [ ] 集中承接 T06/T07 的正式域名及管理部署验证：实际管理员受控绑定/飞书登录、密钥保管与恢复、生产 PostgreSQL/Redis 重启；独立域名下用户 `/api/v1`、运营与 Cookie Path `/api/v1/admin`、管理页面 `/admin/`、支付/退款 `/api/v1/webhooks/wechat-pay/...` 与健康路径 `/api/health/...` 正确，API 前缀只剥离一次。检查静态资源、客户端/通知/OpenAPI 基址及同机 legal-agent 服务。
 - [ ] 验证 T10/T26 服务期限调度在暂停、重启、积压与恢复后补扫，重复事件不延长权益或重复执行清理；正式参数和时钟有依据，资料副本清理结果逐层留证。
 
 ## 实现边界

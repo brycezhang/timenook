@@ -29,7 +29,7 @@ for (const scenario of [
       TIMENOOK_WECHAT_APP_ID: "synthetic",
       TIMENOOK_WECHAT_APP_SECRET: "synthetic",
       ADMIN_ORIGIN: "",
-      ADMIN_ENCRYPTION_KEY: "",
+      ADMIN_SESSION_KEY: "",
     },
     message: /Production requires independent admin origin/,
   },
@@ -37,7 +37,7 @@ for (const scenario of [
     name: "non-HTTPS admin origin",
     overrides: {
       ADMIN_ORIGIN: "http://localhost:3443",
-      ADMIN_ENCRYPTION_KEY: "synthetic-invalid-key",
+      ADMIN_SESSION_KEY: "synthetic-invalid-key",
     },
     message: /ADMIN_ORIGIN must be an HTTPS origin/,
   },
@@ -45,17 +45,44 @@ for (const scenario of [
     name: "path in admin origin",
     overrides: {
       ADMIN_ORIGIN: "https://localhost:3443/timenook",
-      ADMIN_ENCRYPTION_KEY: "synthetic-invalid-key",
+      ADMIN_SESSION_KEY: "synthetic-invalid-key",
     },
     message: /ADMIN_ORIGIN must be an HTTPS origin/,
   },
   {
-    name: "invalid admin encryption key",
+    name: "invalid admin session key",
     overrides: {
       ADMIN_ORIGIN: "https://localhost:3443",
-      ADMIN_ENCRYPTION_KEY: "synthetic-invalid-key",
+      ADMIN_SESSION_KEY: "synthetic-invalid-key",
     },
-    message: /ADMIN_ENCRYPTION_KEY must be a 32-byte/,
+    message: /ADMIN_SESSION_KEY must be a 32-byte/,
+  },
+  {
+    name: "partial admin Feishu credentials",
+    overrides: {
+      ADMIN_ORIGIN: "https://localhost:3443",
+      ADMIN_SESSION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      ADMIN_FEISHU_APP_ID: "cli_synthetic_admin",
+      ADMIN_FEISHU_APP_SECRET: "",
+      ADMIN_FEISHU_TENANT_KEY: "",
+    },
+    message:
+      /Configure valid admin Feishu app ID, secret and tenant key together/,
+  },
+  {
+    name: "production missing admin Feishu login",
+    overrides: {
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://synthetic:synthetic@127.0.0.1:1/synthetic",
+      TIMENOOK_WECHAT_APP_ID: "synthetic",
+      TIMENOOK_WECHAT_APP_SECRET: "synthetic",
+      ADMIN_ORIGIN: "https://localhost:3443",
+      ADMIN_SESSION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      ADMIN_FEISHU_APP_ID: "",
+      ADMIN_FEISHU_APP_SECRET: "",
+      ADMIN_FEISHU_TENANT_KEY: "",
+    },
+    message: /Production requires admin Feishu credentials and tenant key/,
   },
   {
     name: "missing Redis URL",

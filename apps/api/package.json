@@ -36,7 +36,6 @@
     "fs-ext": "2.1.1",
     "ioredis": "5.11.1",
     "libheif-js": "1.23.5",
-    "otplib": "13.5.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "sharp": "0.34.5"
@@ -46,6 +45,7 @@
     "@types/fs-ext": "2.0.3",
     "@types/node": "22.19.15",
     "nock": "14.0.10",
+    "otplib": "13.5.0",
     "prisma": "6.19.3",
     "typescript": "5.9.3"
   }

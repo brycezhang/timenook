@@ -42,3 +42,7 @@ GitHub：[#31](https://github.com/brycezhang/timenook/issues/31) · 状态以 Gi
 ## 验收映射
 
 A01–A24、X01–X06、D01–D10。依据：[实施规格](../spec.md)及其中链接的已定稿 PRD/架构/ADR。
+
+## 验收准备
+
+2026-10-29，用户授权先推进不依赖微信小程序/支付配置的准备范围。见[验收清单与证据缺口](../../2026-10-29/t30-acceptance-preparation.md)、[负责人确认清单](../../2026-10-29/t30-owner-confirmations.md)和[执行记录模板](../../2026-10-29/t30-run-record-template.md)。准备材料不改变本票验收条件；T29 原生依赖、真实验收未勾选和关闭销售的边界保持。

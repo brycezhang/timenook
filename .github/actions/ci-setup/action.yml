@@ -1,0 +1,41 @@
+name: CI dependencies
+description: Install the pinned runtime and optional verification tools
+inputs:
+  backend:
+    default: "false"
+    description: Generate the Linux Prisma client
+  audio:
+    default: "false"
+    description: Build the pinned audio validator
+  print:
+    default: "false"
+    description: Install the verified print font
+  browser:
+    default: "false"
+    description: Install Chromium and its system dependencies
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      with:
+        node-version-file: .node-version
+    - shell: bash
+      run: echo "TIMENOOK_CI_REPORT_DIR=$RUNNER_TEMP/timenook-ci-report" >> "$GITHUB_ENV"
+    - shell: bash
+      run: node scripts/ci/run.mjs pnpm-setup npm install --global pnpm@10.34.7
+    - shell: bash
+      run: node scripts/ci/run.mjs pnpm-install pnpm install --frozen-lockfile
+    - if: inputs.audio == 'true'
+      shell: bash
+      run: |
+        node scripts/ci/run.mjs audio-tools bash scripts/setup-audio-tools.sh "$RUNNER_TEMP/timenook-ffmpeg"
+        echo "$RUNNER_TEMP/timenook-ffmpeg/bin" >> "$GITHUB_PATH"
+    - if: inputs.backend == 'true'
+      shell: bash
+      run: node scripts/ci/run.mjs prisma-generate pnpm db:generate
+    - if: inputs.print == 'true'
+      shell: bash
+      run: node scripts/ci/run.mjs print-font pnpm setup:print-font
+    - if: inputs.browser == 'true'
+      shell: bash
+      run: node scripts/ci/run.mjs browser-install pnpm exec playwright install --with-deps chromium
