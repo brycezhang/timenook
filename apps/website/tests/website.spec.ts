@@ -126,3 +126,14 @@ test("页面品牌、图片和版面完整，没有脚本错误或横向溢出",
     path: `/tmp/timenook-website-${testInfo.project.name}-viewport.png`,
   });
 });
+
+test("公开预览保留禁止索引声明与robots文件", async ({ page, request }) => {
+  await page.goto("/");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+    "content",
+    "noindex, nofollow",
+  );
+  const robots = await request.get("/robots.txt");
+  expect(robots.status()).toBe(200);
+  expect(await robots.text()).toBe("User-agent: *\nDisallow: /\n");
+});

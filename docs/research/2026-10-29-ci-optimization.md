@@ -1,6 +1,6 @@
 # TimeNook CI 提速建议
 
-日期：2026-10-29。第一阶段已获用户授权实施，范围为文档分流、完整回归并行与耗时报告；当前实现规则见[持续集成](../development.md#持续集成)，实际 Actions 结果见 [#73](https://github.com/brycezhang/timenook/issues/73)。下文保留调研时的基线与后续建议，按影响范围选测、fixture 语义简化、缓存和 CI/CD 门槛调整尚未采纳。现有合并和发布门槛保持。
+日期：2026-10-29。第一阶段的完整回归并行及耗时报告已交付，实际结果见 [#73](https://github.com/brycezhang/timenook/issues/73)。第二阶段已实现 PR 官网独立分流，main 每次 push 完整回归；执行规则见[持续集成](../development.md#持续集成)，实际验收见[第二阶段记录](../delivery/2026-10-29/ci-phase2.md)及 [#76](https://github.com/brycezhang/timenook/issues/76)。下文保留调研时的基线；API/admin/小程序选测、fixture 语义简化、缓存及 CD 门槛迁移尚未采纳。最终 PR CI/独立审查和合并后 main 全绿门槛保持。
 
 ## 判断与证据
 
