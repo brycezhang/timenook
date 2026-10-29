@@ -1596,6 +1596,10 @@ test("assisted decisions serialize on the project and persistence faults roll ba
   assert.deepEqual(outcomes.map((r) => r.statusCode).sort(), [201, 409]);
   const q = await project();
   const initial = await state(q, q.buyer.token);
+  const initialCreation = data(
+    await request("GET", `/v1/orders/${q.orderId}`, q.buyer.token),
+    200,
+  ).project.terms.creation;
   const key = randomUUID();
   const command = { ...body, evidenceRef: `synthetic:${randomUUID()}` };
   await db.$executeRawUnsafe(
@@ -1617,10 +1621,10 @@ test("assisted decisions serialize on the project and persistence faults roll ba
       ).statusCode,
       500,
     );
-    assert.equal(
-      (await state(q, q.buyer.token)).accessEpoch,
-      initial.accessEpoch,
-    );
+    const afterFailure = await state(q, q.buyer.token);
+    assert.equal(afterFailure.accessEpoch, initial.accessEpoch);
+    assert.deepEqual(afterFailure.consent, initial.consent);
+    assert.equal(afterFailure.canCollect, false);
     assert.deepEqual(
       data(
         await request(
@@ -1632,10 +1636,10 @@ test("assisted decisions serialize on the project and persistence faults roll ba
       ).sessions,
       [],
     );
-    assert.equal(
+    assert.deepEqual(
       data(await request("GET", `/v1/orders/${q.orderId}`, q.buyer.token), 200)
-        .project.terms.creation.startsAt,
-      null,
+        .project.terms.creation,
+      initialCreation,
     );
   } finally {
     await db.$executeRawUnsafe(
