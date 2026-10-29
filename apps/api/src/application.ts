@@ -1,3 +1,4 @@
+import { validateInternalMediaConfig } from "./media/product-runtime";
 import { PrivacyRights } from "./care/privacy-rights";
 import {
   Deletions,
@@ -268,9 +269,20 @@ export async function createApplication(
         "Book rendering requires explicit isolated synthetic specification and provenance",
       );
   }
+  const internalMedia = config.recording?.mode === "internal-acceptance";
+  if (internalMedia) {
+    try {
+      validateInternalMediaConfig(config);
+    } catch {
+      throw new ConfigurationError(
+        "Internal media requires explicit product OSS, ASR and DeepSeek configuration",
+      );
+    }
+  }
   const generation = config.generation;
   if (
     generation &&
+    !internalMedia &&
     (config.environment !== "test" ||
       !config.recording ||
       !config.participation ||
@@ -296,6 +308,7 @@ export async function createApplication(
     );
   if (
     config.photos &&
+    !internalMedia &&
     (config.environment !== "test" ||
       config.photos.mode !== "synthetic-local" ||
       !config.recording ||
@@ -309,6 +322,7 @@ export async function createApplication(
     );
   if (
     config.transcription &&
+    !internalMedia &&
     (config.environment !== "test" ||
       !config.recording ||
       config.transcription.mode !== "synthetic-local" ||
@@ -334,6 +348,7 @@ export async function createApplication(
     );
   if (
     config.recording &&
+    !internalMedia &&
     (config.environment !== "test" ||
       config.recording.mode !== "synthetic-local" ||
       !config.participation ||

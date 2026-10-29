@@ -1,3 +1,4 @@
+import { readProjectAdmissionIn } from "../projects/project-admission";
 import { PrivacyRights } from "../care/privacy-rights";
 import { Followups } from "../followups/followups";
 import { Books } from "../books/books";
@@ -203,12 +204,8 @@ export class ProductionTasks implements OnModuleDestroy {
     );
   }
   private async budget(tx: Prisma.TransactionClient, projectId: string) {
-    const p = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
-    const order = await tx.paymentOrder.findUniqueOrThrow({
-      where: { id: p.orderId! },
-    });
-    const admission = (order.packageSnapshot as Prisma.JsonObject).admission as
-      Prisma.JsonObject | undefined;
+    const { snapshot } = await readProjectAdmissionIn(tx, projectId);
+    const admission = snapshot.admission as Prisma.JsonObject | undefined;
     const d04 = admission?.d04 as Prisma.JsonObject | undefined;
     const raw = d04?.providerBudget as Prisma.JsonObject | undefined;
     const count = (key: string, unit: string) => {

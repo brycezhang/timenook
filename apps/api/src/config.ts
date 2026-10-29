@@ -1,3 +1,4 @@
+import { readInternalMediaConfig } from "./media/product-runtime";
 import {
   readOrdinaryMerchantConfig,
   type WechatPayConfig,
@@ -40,16 +41,16 @@ export interface ApiConfig {
     maxPhotoBytes?: number;
   };
   photos?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     placement: { widthMm: number; heightMm: number };
   };
   recording?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     storageRoot: string;
     oss?: ProbeOssConfig;
   };
   transcription?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     configVersion: string;
     doubao: import("./probe/ai-providers").DoubaoConfig;
     pollIntervalMs: number;
@@ -57,7 +58,7 @@ export interface ApiConfig {
     deadlineMs: number;
   };
   generation?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     configVersion: string;
     deepseek: DeepSeekConfig;
     submissionReservationFen: number;
@@ -365,7 +366,9 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
       key: env.PRIVACY_JOURNAL_KEY,
     };
   }
+  const internalMedia = readInternalMediaConfig(env);
   return {
+    ...internalMedia,
     acceptance:
       env.INTERNAL_ACCEPTANCE_ENABLED === "1"
         ? {

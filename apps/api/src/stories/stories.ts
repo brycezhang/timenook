@@ -1,3 +1,5 @@
+import { readSessionContextIn } from "../identity/identity-access";
+import { readProjectAdmissionIn } from "../projects/project-admission";
 import {
   Injectable,
   Optional,
@@ -32,7 +34,7 @@ import {
   IsArray,
   IsBoolean,
   Matches,
-  Equals,
+  IsIn,
 } from "class-validator";
 import { Prisma, ProductionTask } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
@@ -104,8 +106,12 @@ class StoryDecisionDto {
   @ApiProperty() @IsInt() @Min(1) expectedVersion!: number;
   @ApiProperty() @IsBoolean() confirmed!: boolean;
   @ApiProperty() @IsBoolean() allowInBook!: boolean;
-  @ApiProperty() @Equals("synthetic-d08-v1") noticeVersion!: string;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @IsIn(["synthetic-d08-v1", "internal-participation-v1"])
+  noticeVersion!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic|internal):[^\r\n]{3,160}$/)
+  evidenceRef!: string;
   @ApiProperty({ required: false, format: "uuid" })
   @IsOptional()
   @IsUUID()
@@ -156,6 +162,15 @@ export class Stories {
     private readonly participation: Participation,
     @Optional() private readonly photos?: Photos,
   ) {}
+  validateNotice(body: { noticeVersion: string; evidenceRef: string }) {
+    const internal = !!this.config.acceptance;
+    if (
+      body.noticeVersion !==
+        (internal ? "internal-participation-v1" : "synthetic-d08-v1") ||
+      !body.evidenceRef.startsWith(internal ? "internal:" : "synthetic:")
+    )
+      throw new BadRequestException("Current participation notice is required");
+  }
   async organize(
     projectId: string,
     body: OrganizeDto,
@@ -232,14 +247,8 @@ export class Stories {
         });
         if ((story?.version ?? 0) !== body.baseVersion)
           throw new ConflictException();
-        const project = await tx.project.findUniqueOrThrow({
-            where: { id: projectId },
-          }),
-          order = await tx.paymentOrder.findUniqueOrThrow({
-            where: { id: project.orderId! },
-          }),
-          admission = (order.packageSnapshot as Prisma.JsonObject)
-            .admission as Prisma.JsonObject,
+        const { snapshot } = await readProjectAdmissionIn(tx, projectId),
+          admission = snapshot.admission as Prisma.JsonObject,
           d04 = admission.d04 as Prisma.JsonObject,
           quotaKind = body.baseVersion === 0 ? "organization" : "regeneration",
           quota = (d04.userQuotas as Prisma.JsonObject)[
@@ -497,6 +506,7 @@ export class Stories {
   ) {
     if (!key || !/^[-A-Za-z0-9_:]{8,128}$/.test(key))
       throw new BadRequestException();
+    this.validateNotice(body);
     return this.participation.withPlanAccess(
       projectId,
       authorization,
@@ -529,8 +539,10 @@ export class Stories {
         }
         if (!body.confirmed && body.allowInBook)
           throw new BadRequestException();
-        const payloadDeleted =
-          await this.participation.activeDataDeletedIn(tx, projectId);
+        const payloadDeleted = await this.participation.activeDataDeletedIn(
+          tx,
+          projectId,
+        );
         if (payloadDeleted) {
           if (body.confirmed && body.allowInBook)
             throw new ForbiddenException(
@@ -612,9 +624,17 @@ export class Stories {
             });
           assistedEvidenceId = evidence.id;
         }
+        const self = assistedEvidenceId
+          ? null
+          : await readSessionContextIn(tx, authorization);
+        const evidenceRef = this.config.acceptance
+          ? assistedEvidenceId
+            ? `assisted:${assistedEvidenceId}:${body.evidenceRef}`
+            : `${self!.method}:${self!.sessionId}:${body.evidenceRef}`
+          : body.evidenceRef;
         if (
           await tx.storyDecision.findFirst({
-            where: { projectId, evidenceRef: body.evidenceRef },
+            where: { projectId, evidenceRef },
           })
         )
           throw new ConflictException("Fresh decision evidence required");
@@ -629,10 +649,10 @@ export class Stories {
             operatorUserId: actor.userId,
             bindingVersion: actor.bindingVersion,
             accessEpoch: actor.accessEpoch,
-            method: assistedEvidenceId ? "assisted" : "self_wechat",
+            method: assistedEvidenceId ? "assisted" : self!.method,
             assistedEvidenceId,
             noticeVersion: body.noticeVersion,
-            evidenceRef: body.evidenceRef,
+            evidenceRef,
             confirmed: body.confirmed,
             allowInBook: body.allowInBook,
             idempotencyKey: key,

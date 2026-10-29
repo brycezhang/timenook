@@ -1,3 +1,4 @@
+import { readSessionContextIn } from "../identity/identity-access";
 import {
   Injectable,
   Controller,
@@ -24,7 +25,7 @@ import {
   IsInt,
   Min,
   Matches,
-  Equals,
+  IsIn,
   IsISO8601,
   IsOptional,
 } from "class-validator";
@@ -41,8 +42,12 @@ class StoryCareDto {
   @ApiProperty() @Matches(/^[a-f0-9]{64}$/) contentHash!: string;
   @ApiProperty() @IsInt() @Min(1) expectedVersion!: number;
   @ApiProperty() @IsISO8601() expiresAt!: string;
-  @ApiProperty() @Equals("synthetic-d08-v1") noticeVersion!: string;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @IsIn(["synthetic-d08-v1", "internal-participation-v1"])
+  noticeVersion!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic|internal):[^\r\n]{3,160}$/)
+  evidenceRef!: string;
   @ApiProperty({ required: false })
   @IsOptional()
   @IsUUID()
@@ -61,6 +66,7 @@ export class StoryCare {
     authorization: string | undefined,
     key: string,
   ) {
+    this.stories.validateNotice(body);
     return this.participation.withPlanAccess(
       projectId,
       authorization,
@@ -117,6 +123,15 @@ export class StoryCare {
           if (prior.requestHash !== requestHash) throw new ConflictException();
           return prior;
         }
+        const self =
+          actor.subjectDecision === "self"
+            ? await readSessionContextIn(tx, authorization)
+            : null;
+        const evidenceRef = body.evidenceRef.startsWith("internal:")
+          ? self
+            ? `${self.method}:${self.sessionId}:${body.evidenceRef}`
+            : `assisted:${body.assistedSessionId}:${body.evidenceRef}`
+          : body.evidenceRef;
         return tx.storyCareGrant.create({
           data: {
             caseId: care.id,
@@ -129,7 +144,7 @@ export class StoryCare {
             accessEpoch: actor.accessEpoch,
             expiresAt: new Date(body.expiresAt),
             noticeVersion: body.noticeVersion,
-            evidenceRef: body.evidenceRef,
+            evidenceRef,
             requestHash,
           },
         });
