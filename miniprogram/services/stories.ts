@@ -37,6 +37,7 @@ export const storyClient = {
       contentHash: string;
       expectedVersion: number;
       evidenceRef: string;
+      noticeVersion?: string;
       expiresAt: string;
       assistedSessionId?: string;
     },
@@ -48,7 +49,7 @@ export const storyClient = {
       expiresAt: string;
     }>(`/projects/${projectId}/stories/${id}/care-access`, {
       key,
-      data: { ...input, noticeVersion: "synthetic-d08-v1" },
+      data: { noticeVersion: "synthetic-d08-v1", ...input },
     });
   },
   async revise(
@@ -75,6 +76,7 @@ export const storyClient = {
       confirmed: boolean;
       allowInBook: boolean;
       evidenceRef: string;
+      noticeVersion?: string;
       assistedSessionId?: string;
     },
     key: string,
@@ -84,7 +86,7 @@ export const storyClient = {
         `/projects/${projectId}/stories/${id}/decisions`,
         {
           key,
-          data: { ...input, noticeVersion: "synthetic-d08-v1" },
+          data: { noticeVersion: "synthetic-d08-v1", ...input },
         },
       ),
       projectId,

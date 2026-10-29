@@ -153,7 +153,7 @@ async function projectsScreen(owner: number) {
     }
   }
 }
-async function productScreen(owner: number, projectId: string) {
+async function productScreen(owner: number, initialPage: string) {
   if (!currentSession) return;
   screen(
     '<a class="product-home" href="/app/projects">我的故事书</a><section id="phone"><header id="native-header"><div class="navbar"><button id="back" aria-label="返回">‹</button><span id="nav-title">岁月成书</span></div></header><div id="page"></div><div id="overlay"></div></section>',
@@ -173,7 +173,7 @@ async function productScreen(owner: number, projectId: string) {
   const client = installCookieProductSession(currentSession);
   const stopRuntime = mountMiniProgram({
     product: true,
-    initialPage: `project?projectId=${projectId}`,
+    initialPage,
     onExit: () => location.assign("/app/projects"),
   });
   const stopOwner = client.onInvalidated(() => {
@@ -414,7 +414,17 @@ async function start() {
     const project = /^\/app\/project\/([a-f0-9-]{36})\/?$/.exec(
       location.pathname,
     );
-    if (project) await productScreen(owner, project[1]);
+    const audio = /^\/app\/audio\/([A-Za-z0-9_-]{22})\/?$/.exec(
+      location.pathname,
+    );
+    const invitation = /^\/app\/invitation\/([A-Za-z0-9_-]{43})\/?$/.exec(
+      location.pathname,
+    );
+    if (project) await productScreen(owner, `project?projectId=${project[1]}`);
+    else if (audio)
+      await productScreen(owner, `original-audio?entryId=${audio[1]}`);
+    else if (invitation)
+      await productScreen(owner, `welcome?token=${invitation[1]}`);
     else {
       history.replaceState(null, "", "/app/projects");
       await projectsScreen(owner);

@@ -48,7 +48,7 @@
         <button class="btn secondary section" data-value="true" bindtap="chooseInclusion">{{includeChoice===true?'已选：':''}}允许这版入书</button>
         <button class="btn secondary section" data-value="false" bindtap="chooseInclusion">{{includeChoice===false?'已选：':''}}暂不入书／撤回入书许可</button>
         <view class="section">本次独立说明</view><textarea class="decision-evidence" value="{{evidence}}" bindinput="decisionEvidence" maxlength="160" auto-height="{{true}}" placeholder="请记录本人本次核对和选择的说明" />
-        <view class="live-source-label">当前为本地合成政策验证；此说明仅提交到本次选择。</view>
+        <view class="live-source-label">{{noticeText}}</view>
         <button class="btn section" bindtap="decideLive" disabled="{{busy}}">保存本人这次的两项决定</button>
         <view class="section">申请限时人工校对</view><view>请本人明确选择授权有效期和本次独立说明。运营校对后的故事仍需本人确认。</view>
         <input class="decision-evidence" value="{{careExpiry}}" data-field="careExpiry" bindinput="correctionInput" placeholder="ISO 有效期，如 YYYY-MM-DDTHH:mm:ss+08:00" maxlength="40" />
