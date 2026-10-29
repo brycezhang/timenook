@@ -5,7 +5,7 @@ date: 2026-10-28
 
 # TimeNook 独立域名入口
 
-TimeNook 与 deed 共用 ECS，API 使用独立域名 `https://timenookapi.threeminreading.com/api/v1`，官网预留 `https://sgl.wootoon.cn`。主机与应用隔离要求见 [ADR 0009](0009-shared-ecs-api-path.md)。项目处于开发阶段，方案直接更新为当前配置，无旧域名、旧路径或开发版本的兼容与迁移要求。
+TimeNook 与 deed 共用 ECS，API 使用独立域名 `https://timenookapi.threeminreading.com/api/v1`，官网使用 `https://sgl.wootoon.cn`。主机与应用隔离要求见 [ADR 0009](0009-shared-ecs-api-path.md)。项目处于开发阶段，方案直接更新为当前配置，无旧域名、旧路径或开发版本的兼容与迁移要求。
 
 Nginx 将 `/api/` 剥离一次，转发回环端口 4310。以下是统一目标配置，运行结果单独见[域名配置记录](../delivery/2026-10-28/domain-ingress.md)。
 
@@ -20,4 +20,4 @@ Nginx 将 `/api/` 剥离一次，转发回环端口 4310。以下是统一目标
 
 管理端 `ADMIN_ORIGIN` 为 `https://timenookapi.threeminreading.com`，API 和 Cookie Path 为 `/api/v1/admin`。支付采用普通商户直连，支付与退款通知分别使用上表地址。微信合法域名、用户客户端和受控素材入口按同一 API 域名配置。
 
-公开文档入口拒绝访问。官网尚未开发，当前只预留 DNS/TLS 入口并返回 503。当前云端 release 仍是受控联调版本；管理静态页、同源 API/Cookie、支付通知及书中原声/打印探针入口须按上表完成实现与验证。T29 验收目标部署配置，T30 验收真实项目与实物；域名健康检查只证明对应入口可达。
+公开文档入口拒绝访问。官网已作为独立静态应用部署于 `sgl.wootoon.cn`，Nginx 的 Web 根目录为 `/data/server/timenook-website/current`；当前为展示预览，下单尚未开放，实际验证见[官网发布记录](../delivery/2026-10-28/website-online.md)。当前云端 release 仍是受控联调版本；管理静态页、同源 API/Cookie、支付通知及书中原声/打印探针入口须按上表完成实现与验证。T29 验收目标部署配置，T30 验收真实项目与实物；域名健康检查只证明对应入口可达。
