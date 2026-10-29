@@ -37,6 +37,7 @@ import {
   IsString,
   MaxLength,
   IsUUID,
+  IsIn,
   ValidateIf,
 } from "class-validator";
 import {
@@ -58,11 +59,14 @@ import type {
   PlanDirectory,
   PhotoMaterials,
   BookCoverSettings,
+  BookConfirmationContext,
 } from "@timenook/contracts";
 import { API_CONFIG, ApiConfig } from "../config";
 import { Participation } from "../identity/participation";
 import { ProjectPlans, ProjectPlanError } from "../projects/project-plans";
 import { ProjectServiceTerms } from "../projects/service-terms";
+import { readProjectAdmissionIn } from "../projects/project-admission";
+import { readSelfMethodIn } from "../identity/identity-access";
 import { probeStorageScope } from "../probe/storage-scope";
 import type { ProbeObjects } from "../probe/local-objects";
 import { renderBook } from "./render-book";
@@ -111,6 +115,17 @@ class BookDirectoryDto {
   @IsArray()
   chapters!: PlanDirectory["chapters"];
 }
+class ConfirmBookContentDto {
+  @ApiProperty({ enum: ["narrator", "initiator"] })
+  @IsIn(["narrator", "initiator"])
+  role!: "narrator" | "initiator";
+  @ApiProperty() @IsUUID() bookVersionId!: string;
+  @ApiProperty() @Matches(/^[a-f0-9]{64}$/) snapshotHash!: string;
+  @ApiProperty() @Matches(/^[a-f0-9]{64}$/) pdfHash!: string;
+  @ApiProperty() @IsString() @MaxLength(80) noticeVersion!: string;
+  @ApiProperty() @Matches(/^[^\r\n]{3,160}$/) evidenceRef!: string;
+}
+type BookActor = Parameters<Parameters<Participation["withPlanAccess"]>[3]>[1];
 @Injectable()
 export class Books implements OnModuleDestroy {
   private readonly plans: ProjectPlans;
@@ -218,12 +233,8 @@ export class Books implements OnModuleDestroy {
   // Current edits and permissions still invalidate frozen books.
   private async inputIn(tx: Prisma.TransactionClient, projectId: string) {
     const terms = await this.bookTerms(tx, projectId);
-    const project = await tx.project.findUniqueOrThrow({
-        where: { id: projectId },
-      }),
-      order = await tx.paymentOrder.findUniqueOrThrow({
-        where: { id: project.orderId! },
-      }),
+    const admission = await readProjectAdmissionIn(tx, projectId),
+      project = admission.project,
       subject = await tx.projectSubject.findUniqueOrThrow({
         where: { projectId },
       }),
@@ -356,7 +367,9 @@ export class Books implements OnModuleDestroy {
     const snapshot: BookSnapshot = {
       schemaVersion: "t20-v1",
       cover: {
-        title: project.bookTitle ?? order.bookTitle ?? "资料已删除",
+        title:
+          project.bookTitle ??
+          String(admission.snapshot.bookTitle ?? "资料已删除"),
         template: "t20-a5-v3",
         version: cover.version,
         salutation: cover.salutation,
@@ -375,7 +388,10 @@ export class Books implements OnModuleDestroy {
         heightMm: 210,
         bleedMm: 0,
         productionReady: false,
-        status: "synthetic-unfrozen",
+        status:
+          admission.source === "internal-acceptance"
+            ? "internal-acceptance-candidate"
+            : "synthetic-unfrozen",
       },
       provenance: {
         version: this.config.books!.provenanceVersion,
@@ -670,10 +686,11 @@ export class Books implements OnModuleDestroy {
     projectId: string,
     accessExpiresAt: string | null,
   ): Promise<BookContext> {
-    const row = await tx.bookVersion.findFirst({
-      where: { projectId },
-      orderBy: { version: "desc" },
-    });
+    const admission = await readProjectAdmissionIn(tx, projectId),
+      row = await tx.bookVersion.findFirst({
+        where: { projectId },
+        orderBy: { version: "desc" },
+      });
     const readable = await this.readableInputIn(
         tx,
         projectId,
@@ -722,6 +739,7 @@ export class Books implements OnModuleDestroy {
         ? await this.viewIn(tx, row, readable.inputHash, accessExpiresAt)
         : null,
       accessExpiresAt,
+      physicalProduction: admission.source === "paid",
     };
   }
   context(projectId: string, authorization?: string) {
@@ -730,6 +748,136 @@ export class Books implements OnModuleDestroy {
       authorization,
       undefined,
       (tx, actor) => this.contextIn(tx, projectId, actor.accessExpiresAt),
+    );
+  }
+  private async confirmationsIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    actor: BookActor,
+  ): Promise<BookConfirmationContext> {
+    const admission = await readProjectAdmissionIn(tx, projectId),
+      context = await this.contextIn(tx, projectId, actor.accessExpiresAt),
+      subject = await tx.projectSubject.findUniqueOrThrow({
+        where: { projectId },
+      }),
+      book = context.current,
+      role =
+        admission.initiatorUserId === actor.userId ? "initiator" : "narrator",
+      confirmations = { narrator: false, initiator: false };
+    for (const who of ["narrator", "initiator"] as const) {
+      const row = await tx.bookConfirmation.findFirst({
+        where: { projectId, role: who },
+        orderBy: { sequence: "desc" },
+      });
+      confirmations[who] = !!(
+        row &&
+        book?.state === "ready" &&
+        book.pdf &&
+        row.bookId === book.id &&
+        row.snapshotHash === book.snapshotHash &&
+        row.pdfHash === book.pdf.sha256 &&
+        row.subjectId === subject.id &&
+        row.bindingVersion === subject.bindingVersion &&
+        row.accessEpoch === admission.project.accessEpoch
+      );
+    }
+    return {
+      projectId,
+      bookVersionId: book?.id ?? null,
+      snapshotHash: book?.snapshotHash ?? null,
+      pdfHash: book?.pdf?.sha256 ?? null,
+      role,
+      canConfirm:
+        book?.state === "ready" &&
+        (role === "initiator" || subject.boundUserId === actor.userId),
+      confirmations,
+      noticeVersion:
+        admission.source === "internal-acceptance"
+          ? "internal-book-confirmation-v1"
+          : "synthetic-d08-v1",
+      physicalProduction: admission.source === "paid",
+      accessExpiresAt: actor.accessExpiresAt,
+    };
+  }
+  confirmations(projectId: string, authorization?: string) {
+    return this.participation.withPlanAccess(
+      projectId,
+      authorization,
+      undefined,
+      (tx, actor) => this.confirmationsIn(tx, projectId, actor),
+    );
+  }
+  confirmContent(
+    projectId: string,
+    body: ConfirmBookContentDto,
+    authorization?: string,
+    key?: string,
+  ) {
+    key = this.key(key);
+    return this.participation.withPlanAccess(
+      projectId,
+      authorization,
+      undefined,
+      async (tx, actor) => {
+        await this.participation.requireMaterialIn(tx, projectId, "activeData");
+        const context = await this.confirmationsIn(tx, projectId, actor),
+          where = {
+            projectId,
+            actorId: actor.userId,
+            action: "confirm-content",
+            key: key!,
+          },
+          requestHash = digest(body),
+          prior = await tx.bookCommand.findUnique({
+            where: { projectId_actorId_action_key: where },
+          });
+        if (prior) {
+          if (prior.requestHash !== requestHash) throw new ConflictException();
+          return context;
+        }
+        if (body.role !== context.role || !context.canConfirm)
+          throw new ForbiddenException();
+        if (
+          body.bookVersionId !== context.bookVersionId ||
+          body.snapshotHash !== context.snapshotHash ||
+          body.pdfHash !== context.pdfHash ||
+          body.noticeVersion !== context.noticeVersion
+        )
+          throw new ConflictException(
+            "Current complete PDF and notice required",
+          );
+        if (
+          await tx.bookConfirmation.findFirst({
+            where: { projectId, evidenceRef: body.evidenceRef },
+          })
+        )
+          throw new ConflictException("Fresh confirmation evidence required");
+        const id = randomUUID();
+        await tx.bookConfirmation.create({
+          data: {
+            id,
+            projectId,
+            role: body.role,
+            bookId: body.bookVersionId,
+            snapshotHash: body.snapshotHash,
+            pdfHash: body.pdfHash,
+            subjectId: actor.subjectId,
+            actorId: actor.userId,
+            bindingVersion: actor.bindingVersion,
+            accessEpoch: actor.accessEpoch,
+            method:
+              body.role === "initiator"
+                ? "initiator"
+                : await readSelfMethodIn(tx, authorization),
+            noticeVersion: body.noticeVersion,
+            evidenceRef: body.evidenceRef,
+          },
+        });
+        await tx.bookCommand.create({
+          data: { ...where, requestHash, resultId: id },
+        });
+        return this.confirmationsIn(tx, projectId, actor);
+      },
     );
   }
   saveCover(
@@ -1407,6 +1555,35 @@ export class BooksController {
   ) {
     return {
       data: await this.books.context(id, req.headers.authorization),
+      meta: { requestId: req.id },
+    };
+  }
+  @Get("confirmations")
+  @Header("Cache-Control", "no-store")
+  async confirmations(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.books.confirmations(id, req.headers.authorization),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post("confirmations")
+  @Header("Cache-Control", "no-store")
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  async confirmContent(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() body: ConfirmBookContentDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.books.confirmContent(
+        id,
+        body,
+        req.headers.authorization,
+        req.headers["idempotency-key"] as string,
+      ),
       meta: { requestId: req.id },
     };
   }

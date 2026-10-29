@@ -9,6 +9,7 @@ import {
   type DeepSeekConfig,
 } from "./probe/ai-providers";
 import { validOssKeyPrefix, type ProbeOssConfig } from "./probe/oss-objects";
+import { readInternalBookConfig } from "./books/book-config";
 
 export interface ApiConfig {
   environment: "development" | "test" | "production";
@@ -32,7 +33,7 @@ export interface ApiConfig {
   participation?: { mode: "synthetic-d08" };
   privacyJournal?: { root: string; key: string };
   books?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     storageRoot: string;
     entryBaseUrl: string;
     specificationVersion: string;
@@ -369,6 +370,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
   const internalMedia = readInternalMediaConfig(env);
   return {
     ...internalMedia,
+    books: readInternalBookConfig(env),
     acceptance:
       env.INTERNAL_ACCEPTANCE_ENABLED === "1"
         ? {

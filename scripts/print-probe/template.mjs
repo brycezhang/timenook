@@ -27,6 +27,10 @@ figcaption, .photo-caption { font-size: 10px; color: #718178; }
 
 // Executed in fixed Chromium; only textContent and prevalidated local data URLs enter DOM.
 export function paginate({ book, guesses }) {
+  const product = [
+    "synthetic-product-book",
+    "internal-acceptance-book",
+  ].includes(book.scope);
   document.body.replaceChildren();
   const pages = [],
     entries = [];
@@ -35,10 +39,7 @@ export function paginate({ book, guesses }) {
     sheet.className = "page";
     const header = document.createElement("div");
     header.className = "header";
-    header.textContent =
-      book.scope === "synthetic-product-book"
-        ? "书稿预览 · 制作规格待核验"
-        : "本地合成样书";
+    header.textContent = product ? "书稿预览 · 制作规格待核验" : "本地合成样书";
     const content = document.createElement("div");
     content.className = "content";
     const footer = document.createElement("div");
@@ -107,7 +108,7 @@ export function paginate({ book, guesses }) {
       content = page();
     }
   }
-  if (book.scope === "synthetic-product-book") {
+  if (product) {
     const cover = document.createElement("div"),
       title = text("h1", book.title);
     title.className = "cover-title";
@@ -161,9 +162,7 @@ export function paginate({ book, guesses }) {
       img,
       text(
         "figcaption",
-        book.scope === "synthetic-product-book"
-          ? "本人原声入口 · 访问需授权"
-          : "合成原声入口 · 需测试身份",
+        product ? "本人原声入口 · 访问需授权" : "合成原声入口 · 需测试身份",
       ),
     );
     block(figure);
@@ -175,7 +174,7 @@ export function paginate({ book, guesses }) {
     content.append(heading);
     if (!fits(heading)) throw Error("BLOCK_TOO_LARGE");
     entries.push({ title: chapter.title, page: pages.length });
-    if (book.scope === "synthetic-product-book") {
+    if (product) {
       if (chapter.provenance) block(text("p", chapter.provenance));
       if (chapter.qr) originalEntry(chapter);
     }
@@ -189,7 +188,7 @@ export function paginate({ book, guesses }) {
       img.style.width = `${photo.widthMm}mm`;
       img.style.height = `${photo.heightMm}mm`;
       figure.append(img);
-      if (book.scope === "synthetic-product-book" && photo.caption) {
+      if (product && photo.caption) {
         figure.style.marginBottom = "0";
         block(figure);
         flowText(photo.caption, "photo-caption");
@@ -198,11 +197,9 @@ export function paginate({ book, guesses }) {
         block(figure);
       }
     }
-    if (chapter.qr && book.scope !== "synthetic-product-book")
-      originalEntry(chapter);
+    if (chapter.qr && !product) originalEntry(chapter);
     for (const note of chapter.notes ?? []) flowText(note);
-    if (chapter.provenance && book.scope !== "synthetic-product-book")
-      block(text("p", chapter.provenance));
+    if (chapter.provenance && !product) block(text("p", chapter.provenance));
     if (pages.length > 128) throw Error("PAGE_LIMIT");
   }
   if (book.provenanceNotice) {

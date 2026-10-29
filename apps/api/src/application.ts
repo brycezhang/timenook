@@ -240,6 +240,7 @@ export async function createApplication(
       "Refund scheduling and clock overrides require isolated tests",
     );
   if (config.books) {
+    const internal = config.books.mode === "internal-acceptance";
     let url: URL;
     try {
       url = new URL(config.books.entryBaseUrl);
@@ -247,26 +248,33 @@ export async function createApplication(
       throw new ConfigurationError("Book original-entry URL is invalid");
     }
     if (
-      config.environment !== "test" ||
-      config.books.mode !== "synthetic-local" ||
+      (internal
+        ? !config.acceptance ||
+          config.environment === "production" ||
+          config.books.specificationVersion !== "internal-a5-candidate-v1" ||
+          config.books.provenanceVersion !== "internal-provenance-v1" ||
+          url.origin !== config.web?.origin ||
+          url.pathname !== "/app/audio/"
+        : config.environment !== "test" ||
+          config.books.mode !== "synthetic-local" ||
+          !/^synthetic-/.test(config.books.specificationVersion) ||
+          !/^synthetic-/.test(config.books.provenanceVersion) ||
+          !url.hostname.endsWith(".invalid") ||
+          url.pathname !== "/timenook/audio/") ||
       !config.recording ||
       !config.books.storageRoot.startsWith("/") ||
-      !/^synthetic-/.test(config.books.specificationVersion) ||
-      !/^synthetic-/.test(config.books.provenanceVersion) ||
       (config.books.maxPhotoBytes !== undefined &&
         (!Number.isSafeInteger(config.books.maxPhotoBytes) ||
           config.books.maxPhotoBytes < 1 ||
           config.books.maxPhotoBytes > 33554432)) ||
       url.protocol !== "https:" ||
-      !url.hostname.endsWith(".invalid") ||
-      url.pathname !== "/timenook/audio/" ||
       url.username ||
       url.password ||
       url.search ||
       url.hash
     )
       throw new ConfigurationError(
-        "Book rendering requires explicit isolated synthetic specification and provenance",
+        "Book rendering requires an explicit internal acceptance or isolated synthetic configuration",
       );
   }
   const internalMedia = config.recording?.mode === "internal-acceptance";
@@ -500,16 +508,20 @@ export async function createApplication(
             StoriesController,
             ...(config.books
               ? [
-                  QualityCareController,
-                  AdminQualityCareController,
                   BooksController,
-                  CompleteExportsController,
-                  AdminCompleteExportsController,
                   BookAudioController,
-                  FirstCopyController,
-                  FulfillmentController,
-                  AdminFulfillmentController,
-                  AdminFirstCopyController,
+                  ...(config.books.mode === "synthetic-local"
+                    ? [
+                        QualityCareController,
+                        AdminQualityCareController,
+                        CompleteExportsController,
+                        AdminCompleteExportsController,
+                        FirstCopyController,
+                        FulfillmentController,
+                        AdminFulfillmentController,
+                        AdminFirstCopyController,
+                      ]
+                    : []),
                 ]
               : []),
             FollowupsController,
@@ -566,12 +578,11 @@ export async function createApplication(
         ? [
             ...(config.books
               ? [
-                  QualityCare,
                   Books,
-                  FirstCopies,
-                  CompleteExports,
-                  Fulfillment,
                   BookAudio,
+                  ...(config.books.mode === "synthetic-local"
+                    ? [QualityCare, FirstCopies, CompleteExports, Fulfillment]
+                    : []),
                   {
                     provide: BOOK_OBJECTS,
                     useValue:

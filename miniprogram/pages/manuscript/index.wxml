@@ -18,8 +18,18 @@
         </view>
       </view>
       <view class="note section">{{version.snapshot.provenance.notice}}</view>
-      <view class="note section">合成测试规格 {{version.snapshot.specification.widthMm}} × {{version.snapshot.specification.heightMm}} mm，尚未开放正式生产。</view>
-      <button class="btn section" bindtap="print" disabled="{{busy || version.state !== 'ready'}}">核对本版确认与首本制作</button>
+      <view class="note section">{{version.snapshot.specification.status === 'internal-acceptance-candidate' ? '内部验收候选规格' : '合成测试规格'}} {{version.snapshot.specification.widthMm}} × {{version.snapshot.specification.heightMm}} mm，尚未开放正式生产。</view>
+      <view wx:if="{{confirmations}}" class="section card">
+        <view class="section-title">核对本版完整 PDF</view>
+        <view class="note section">讲述者：{{confirmations.confirmations.narrator ? '已确认本版' : '待确认'}} · 发起人：{{confirmations.confirmations.initiator ? '已确认本版' : '待确认'}}</view>
+        <view wx:if="{{!confirmations.physicalProduction}}" class="note section">本次仅确认书稿内容，无付款、收货地址或实体书生产义务。</view>
+        <block wx:if="{{confirmations.canConfirm}}">
+          <button class="check-row section" bindtap="chooseContentConfirmation" disabled="{{busy}}"><view class="check-box {{confirmChecked ? 'on' : ''}}"><image class="icon" src="/assets/icons/check-light.svg" /></view><text>我已逐页核对本版完整 PDF，确认文字、照片与原声入口</text></button>
+          <label class="section">本次核对说明<input value="{{confirmationEvidence}}" bindinput="contentEvidence" maxlength="160" disabled="{{busy}}" placeholder="请用自己的话记录本次核对结果" /></label>
+          <button class="btn section" bindtap="confirmContent" disabled="{{busy || !confirmChecked}}">以{{confirmations.role === 'narrator' ? '讲述者' : '发起人'}}身份确认本版</button>
+        </block>
+      </view>
+      <button wx:if="{{version.snapshot.specification.status !== 'internal-acceptance-candidate'}}" class="btn section" bindtap="print" disabled="{{busy || version.state !== 'ready'}}">核对本版确认与首本制作</button>
     </block>
     <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">重新核对本版状态</button>
     <button class="btn secondary section" bindtap="book">返回成书总览</button>

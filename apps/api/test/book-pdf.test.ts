@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { PrismaClient } from "@prisma/client";
 import { Books } from "../src/books/books";
+import { renderBook } from "../src/books/render-book";
 import { ProjectStreams } from "../src/media/project-streams";
 import {
   PrivacyJournal,
@@ -396,6 +397,94 @@ async function confirmedStory(
   );
   return { ...p, story };
 }
+test("PDF content confirmation is independent of first-copy rights and invalidates after edits; internal scope renders a real candidate PDF", async () => {
+  const p = await confirmedStory(),
+    base = `/v1/projects/${p.projectId}/book`,
+    context = data(await request("GET", base, p.narrator.token), 200),
+    book = data(
+      await request("POST", base + "/versions", p.narrator.token, {
+        expectedInputHash: context.inputHash,
+      }),
+      202,
+    );
+  await app.get(ProductionTasks).run(book.task.id);
+  const ready = data(
+    await request("GET", base + `/versions/${book.id}`, p.narrator.token),
+    200,
+  );
+  assert.equal(ready.state, "ready", JSON.stringify(ready.task));
+  const binding = {
+    bookVersionId: ready.id,
+    snapshotHash: ready.snapshotHash,
+    pdfHash: ready.pdf.sha256,
+    noticeVersion: "synthetic-d08-v1",
+  };
+  for (const [role, token] of [
+    ["narrator", p.narrator.token],
+    ["initiator", p.buyer.token],
+  ]) {
+    const current = data(
+      await request("GET", base + "/confirmations", token),
+      200,
+    );
+    assert.equal(current.role, role);
+    assert.equal(current.canConfirm, true);
+    const body = {
+        ...binding,
+        role,
+        evidenceRef: `synthetic:本次逐页核对-${role}-${randomUUID()}`,
+      },
+      key = randomUUID(),
+      saved = data(
+        await request("POST", base + "/confirmations", token, body, key),
+      );
+    assert.equal(saved.confirmations[role], true);
+    data(await request("POST", base + "/confirmations", token, body, key));
+  }
+  assert.deepEqual(
+    data(await request("GET", base + "/confirmations", p.buyer.token), 200)
+      .confirmations,
+    { narrator: true, initiator: true },
+  );
+  assert.equal(
+    await db.firstCopyOrder.count({ where: { projectId: p.projectId } }),
+    0,
+  );
+  const snapshot = structuredClone(ready.snapshot);
+  snapshot.specification.status = "internal-acceptance-candidate";
+  const candidate = await renderBook(
+    snapshot,
+    {},
+    join(root, `internal-candidate-${randomUUID()}`),
+    ready.snapshotHash,
+  );
+  assert.equal(candidate.manifest.scope, "internal-acceptance-book");
+  assert.equal(candidate.manifest.productionReady, false);
+  assert.ok(candidate.bytes > 0 && candidate.pageCount > 0);
+  data(
+    await request("POST", base + "/cover", p.buyer.token, {
+      expectedVersion: 0,
+      salutation: "写给一路同行的你",
+      photoAssetId: null,
+    }),
+  );
+  const stale = data(
+    await request("GET", base + "/confirmations", p.buyer.token),
+    200,
+  );
+  assert.deepEqual(stale.confirmations, { narrator: false, initiator: false });
+  assert.equal(stale.canConfirm, false);
+  assert.equal(
+    (
+      await request("POST", base + "/confirmations", p.narrator.token, {
+        ...binding,
+        role: "narrator",
+        evidenceRef: `synthetic:旧稿不沿用-${randomUUID()}`,
+      })
+    ).statusCode,
+    403,
+  );
+});
 test("generation freezes one current permitted revision and stable original-audio entry under concurrent replay", async () => {
   const p = await confirmedStory(),
     base = `/v1/projects/${p.projectId}/book`;

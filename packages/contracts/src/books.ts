@@ -52,7 +52,7 @@ export interface BookSnapshot {
     heightMm: number;
     bleedMm: number;
     productionReady: false;
-    status: "synthetic-unfrozen";
+    status: "synthetic-unfrozen" | "internal-acceptance-candidate";
   };
   provenance: { version: string; notice: string };
 }
@@ -91,6 +91,21 @@ export interface BookContext {
     title: string;
   }[];
   current: BookVersionView | null;
+  accessExpiresAt: string | null;
+  /** Internal acceptance produces a review PDF without print or payment rights. */
+  physicalProduction?: boolean;
+}
+
+export interface BookConfirmationContext {
+  projectId: string;
+  bookVersionId: string | null;
+  snapshotHash: string | null;
+  pdfHash: string | null;
+  role: "initiator" | "narrator";
+  canConfirm: boolean;
+  confirmations: { narrator: boolean; initiator: boolean };
+  noticeVersion: string;
+  physicalProduction: boolean;
   accessExpiresAt: string | null;
 }
 

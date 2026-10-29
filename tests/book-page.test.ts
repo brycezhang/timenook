@@ -222,6 +222,58 @@ function context(current: any = version()): any {
 }
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
+test("internal manuscript confirms the same PDF as each participant without entering first-copy production", async () => {
+  for (const role of ["narrator", "initiator"]) {
+    const h = harness("manuscript"),
+      current = version(),
+      confirmation = {
+        projectId,
+        bookVersionId: versionId,
+        snapshotHash: "b".repeat(64),
+        pdfHash: "f".repeat(64),
+        role,
+        canConfirm: true,
+        confirmations: { narrator: false, initiator: false },
+        noticeVersion: "internal-book-confirmation-v1",
+        physicalProduction: false,
+        accessExpiresAt: null,
+      };
+    current.snapshot.specification.status = "internal-acceptance-candidate";
+    h.page.onLoad({ projectId, versionId });
+    const show = h.page.onShow();
+    h.respond(0, current);
+    await tick();
+    assert.equal(
+      h.requests[1].url,
+      `${base}/projects/${projectId}/book/confirmations`,
+    );
+    h.respond(1, confirmation);
+    await show;
+    h.page.chooseContentConfirmation();
+    h.page.contentEvidence({
+      detail: { value: `本人已核对本版完整书稿-${role}` },
+    });
+    const saving = h.page.confirmContent();
+    assert.equal(
+      h.requests[2].url,
+      `${base}/projects/${projectId}/book/confirmations`,
+    );
+    assert.equal(h.requests[2].data.role, role);
+    assert.equal(h.requests[2].data.bookVersionId, versionId);
+    assert.equal(h.requests[2].data.pdfHash, "f".repeat(64));
+    h.respond(2, {
+      ...confirmation,
+      confirmations: { ...confirmation.confirmations, [role]: true },
+    });
+    await saving;
+    assert.equal(h.page.data.confirmations.confirmations[role], true);
+    assert.equal(h.page.data.confirmChecked, false);
+    assert.equal(h.routes.length, 0);
+    h.page.onHide();
+    assert.equal(h.page.data.confirmations, null);
+  }
+});
+
 test("a ready live manuscript and Book overview lead to first-copy confirmation for their exact version", async () => {
   for (const name of ["book", "manuscript"]) {
     const h = harness(name);
