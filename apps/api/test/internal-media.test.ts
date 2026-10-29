@@ -201,7 +201,7 @@ const notice = () => ({
   noticeVersion: "internal-participation-v1",
   evidenceRef: `internal:${randomUUID()}`,
 });
-test("one unpaid Cookie project records, seals, transcribes, composes and confirms the same sourced story", async () => {
+test("one unpaid Cookie project records, seals, transcribes, confirms its story and produces one PDF confirmed by both participants", async () => {
   const owner = await login(),
     narrator = await login(),
     project = await createInternalProject(config, {
@@ -325,6 +325,80 @@ test("one unpaid Cookie project records, seals, transcribes, composes and confir
   );
   assert.equal(confirmed.decision.confirmed, true);
   assert.equal(confirmed.decision.allowInBook, true);
+  const bookBase = `${base}/book`,
+    bookContext = data(await request("GET", bookBase, narrator), 200);
+  assert.equal(bookContext.physicalProduction, false);
+  assert.equal(bookContext.eligibleStories.length, 1);
+  const book = data(
+      await request("POST", bookBase + "/versions", narrator, {
+        expectedInputHash: bookContext.inputHash,
+      }),
+      202,
+    ),
+    pdfRuntime = await startProductionWorker(app);
+  try {
+    await waitForWorkerJobs(pdfRuntime.worker, async (expect) => {
+      expect([book.task.id]);
+      await pdfRuntime.recoverDue();
+    });
+  } finally {
+    await pdfRuntime.close();
+  }
+  const ready = data(
+    await request("GET", bookBase + `/versions/${book.id}`, narrator),
+    200,
+  );
+  assert.equal(ready.state, "ready", JSON.stringify(ready.task));
+  assert.equal(
+    ready.snapshot.specification.status,
+    "internal-acceptance-candidate",
+  );
+  assert.equal(
+    ready.snapshot.chapters[0].stories[0].revisionId,
+    story.revision.id,
+  );
+  for (const [role, actor] of [
+    ["narrator", narrator],
+    ["initiator", owner],
+  ] as const) {
+    const pdf = await request(
+      "GET",
+      bookBase + `/versions/${book.id}/pdf`,
+      actor,
+    );
+    assert.equal(pdf.statusCode, 200, pdf.body);
+    assert.equal(
+      createHash("sha256").update(pdf.rawPayload).digest("hex"),
+      ready.pdf.sha256,
+    );
+    const context = data(
+      await request("GET", bookBase + "/confirmations", actor),
+      200,
+    );
+    assert.equal(context.role, role);
+    const saved = data(
+      await request("POST", bookBase + "/confirmations", actor, {
+        role,
+        bookVersionId: ready.id,
+        snapshotHash: ready.snapshotHash,
+        pdfHash: ready.pdf.sha256,
+        noticeVersion: context.noticeVersion,
+        evidenceRef: `internal:本人逐页核对本版-${role}-${randomUUID()}`,
+      }),
+    );
+    assert.equal(saved.confirmations[role], true);
+  }
+  const both = data(
+    await request("GET", bookBase + "/confirmations", narrator),
+    200,
+  );
+  assert.deepEqual(both.confirmations, { narrator: true, initiator: true });
+  const pdfDecision = await db.bookConfirmation.findFirstOrThrow({
+    where: { projectId: project.projectId, role: "narrator" },
+  });
+  assert.equal(pdfDecision.method, "self_web");
+  assert.match(pdfDecision.evidenceRef!, /^self_web:[a-f0-9-]{36}:internal:/);
+  assert.equal(await db.firstCopyOrder.count(), 0);
   const decision = await db.storyDecision.findFirstOrThrow({
     where: { projectId: project.projectId },
   });

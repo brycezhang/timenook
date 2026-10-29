@@ -66,7 +66,7 @@ import { Participation } from "../identity/participation";
 import { ProjectPlans, ProjectPlanError } from "../projects/project-plans";
 import { ProjectServiceTerms } from "../projects/service-terms";
 import { readProjectAdmissionIn } from "../projects/project-admission";
-import { readSelfMethodIn } from "../identity/identity-access";
+import { readSessionContextIn } from "../identity/identity-access";
 import { probeStorageScope } from "../probe/storage-scope";
 import type { ProbeObjects } from "../probe/local-objects";
 import { renderBook } from "./render-book";
@@ -846,9 +846,11 @@ export class Books implements OnModuleDestroy {
           throw new ConflictException(
             "Current complete PDF and notice required",
           );
+        const session = await readSessionContextIn(tx, authorization),
+          evidenceRef = `${session.method}:${session.sessionId}:${body.evidenceRef}`;
         if (
           await tx.bookConfirmation.findFirst({
-            where: { projectId, evidenceRef: body.evidenceRef },
+            where: { projectId, evidenceRef },
           })
         )
           throw new ConflictException("Fresh confirmation evidence required");
@@ -865,12 +867,9 @@ export class Books implements OnModuleDestroy {
             actorId: actor.userId,
             bindingVersion: actor.bindingVersion,
             accessEpoch: actor.accessEpoch,
-            method:
-              body.role === "initiator"
-                ? "initiator"
-                : await readSelfMethodIn(tx, authorization),
+            method: body.role === "initiator" ? "initiator" : session.method,
             noticeVersion: body.noticeVersion,
-            evidenceRef: body.evidenceRef,
+            evidenceRef,
           },
         });
         await tx.bookCommand.create({

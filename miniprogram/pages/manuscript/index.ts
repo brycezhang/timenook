@@ -344,6 +344,8 @@ Page({
       evidenceRef = this.data.confirmationEvidence.trim();
     if (
       !context?.canConfirm ||
+      this.data.version?.state !== "ready" ||
+      context.bookVersionId !== this.data.version.id ||
       !this.data.confirmChecked ||
       !context.bookVersionId ||
       !context.snapshotHash ||
@@ -394,7 +396,13 @@ Page({
   async onShow() {
     if (dataMode() === "live") {
       this.clearCover();
-      this.setData({ live: true, version: null });
+      this.setData({
+        live: true,
+        version: null,
+        confirmations: null,
+        confirmChecked: false,
+        confirmationEvidence: "",
+      });
       this.stopSessionWatch?.();
       this.stopSessionWatch = sessionClient.onInvalidated(() => {
         this.onHide();

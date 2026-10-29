@@ -13,7 +13,10 @@ export async function startProductionWorker(app: NestFastifyApplication) {
     tasks = app.get(ProductionTasks),
     rights = app.get(PrivacyRights),
     deletions = app.get(Deletions),
-    exports = config.books ? app.get(CompleteExports) : null;
+    exports =
+      config.books?.mode === "synthetic-local"
+        ? app.get(CompleteExports)
+        : null;
   await rights.assertHealthy();
   const prefix = `${config.redisKeyPrefix ?? "timenook"}:production`;
   const producer = new Redis(config.redisUrl, {
