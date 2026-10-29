@@ -67,10 +67,10 @@ main 每次 push 固定执行 `full`，包括纯说明文档和官网变更。PR
 
 官网还消费 `miniprogram/domain/model.ts`、`miniprogram/assets/`、`design/brand/` 和 `tools/vite-private-artifacts.ts`；这些是共享输入，变更仍全量。可执行位、符号链接、代码移出/移入白名单、未知事件均保守全量；重命名同时检查旧、新路径。空差异走完整检查，无法读取差异直接失败。
 
-轻量检查只需要 Git 和 Node：检查 `git diff --check`、仓库内 Markdown 文件链接及 `tickets.json` 对应的票据标题、验收清单、测试/依赖章节、Issue 与依赖一致性，不固定票据总数或依赖条数。新增断链、删除被引用文件会失败；原有未解决链接单独计数，不追认通过。Git 忽略的本地证据、个人绝对路径和外部 URL 不做可用性探测；标题锚点不在本轮检查范围。票据状态仍以 GitHub 为准，轻量检查不代替规格审查或平台验收。
+文档检查只需要 Git 和 Node：检查 `git diff --check`、仓库内 Markdown 文件链接及 `tickets.json` 对应的票据标题、验收清单、测试/依赖章节、Issue 与依赖一致性，不固定票据总数或依赖条数。新增断链、删除被引用文件会失败；原有未解决链接单独计数，不追认通过。Git 忽略的本地证据、个人绝对路径和外部 URL 不做可用性探测；标题锚点不在本轮检查范围。公共 CI 工具回归另使用 runner 的 Bash/curl/shasum 和本机 HTTP fixture 验证工具下载，不访问外网或数据库。票据状态仍以 GitHub 为准，轻量检查不代替规格审查或平台验收。
 
 ```bash
-node --test tests/ci/check.test.mjs tests/ci/shards.test.mjs tests/ci/audit.test.mjs tests/ci/website-package.test.mjs
+node --test tests/ci/check.test.mjs tests/ci/shards.test.mjs tests/ci/audit.test.mjs tests/ci/website-package.test.mjs tests/ci/audio-tools.test.mjs
 node scripts/ci/check.mjs classify BASE_COMMIT HEAD_COMMIT
 node scripts/ci/check.mjs docs BASE_COMMIT HEAD_COMMIT
 ```
@@ -83,6 +83,8 @@ node scripts/ci/check.mjs docs BASE_COMMIT HEAD_COMMIT
 - `website`：在 `full` 与 `website` 路径中复用，独立完成文档、官网类型、生产构建、全部三种视口测试、预览打包和清单校验。以官方发现结果重新核对每个 project/case，不启动数据库或 API。官网类型与生产构建还在 `build` 中验证。
 
 每个 API/浏览器 runner 有独立 PostgreSQL/Redis 服务和临时目录，文件内部沿用原 schema/key prefix 与资源隔离。固定 Node/pnpm、镜像 digest、真实数据库唯一性/锁/恢复、固定音频工具和字体均保持。Linux 自动检查不替代微信原生编译或其他人工验收。
+
+FFmpeg 保持 8.1.1 和原最小编译参数。`scripts/setup-audio-tools.sh` 首选原 release 归档，仅传输失败时回退到官方 `FFmpeg/FFmpeg` 镜像的固定发布提交归档；两个来源各有固定 SHA256，成功下载后的摘要错误直接阻断，HTTP/证书错误也不触发回退。下载有界，全部来源不可用仍失败；不使用浮动标签、未校验的系统工具或测试重试。此次下载阻塞及修复证据见 [#86](https://github.com/brycezhang/timenook/issues/86)。
 
 `scripts/ci/tests.mjs` 保存每组预期文件；浏览器文件及各 project 用例从 Playwright 官方 `--list` 发现结果生成，保持其递归、后缀和配置规则；完整汇总安装依赖、生成 Prisma 并编译 contracts/API fixture 后再次独立发现并核对用例。Node/Playwright reporter 只保存相对文件名、用例名、状态、耗时和候选 SHA，不收集错误正文、stdout、请求、页面、附件或凭据。`scripts/ci/run.mjs` 保留命令输出及失败退出状态，将各阶段耗时写入 runner 临时目录的 `phases.json` 与 Actions job summary；失败也上传已经生成的报告。临时报告不进入工作区和候选包。
 
