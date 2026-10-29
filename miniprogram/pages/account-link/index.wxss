@@ -1,0 +1,17 @@
+.link-input {
+  border: 1rpx solid #d8ccbc;
+  background: #fffcf7;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  margin: 30rpx 0;
+}
+.link-code {
+  font-size: 60rpx;
+  letter-spacing: 12rpx;
+  margin: 32rpx 0;
+  color: #566348;
+}
+.account-id {
+  word-break: break-all;
+  font-size: 26rpx;
+}

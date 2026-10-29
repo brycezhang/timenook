@@ -67,7 +67,10 @@ export class WebAccess implements OnModuleDestroy {
     )
       throw new ForbiddenException();
   }
-  async limit(source: string) {
+  async limit(
+    source: string,
+    maximum = this.config.loginLimitPerMinute ?? 120,
+  ) {
     let count: unknown;
     try {
       if (this.redis.status !== "ready") {
@@ -84,8 +87,7 @@ export class WebAccess implements OnModuleDestroy {
     } catch {
       throw new ServiceUnavailableException();
     }
-    if (Number(count) > (this.config.loginLimitPerMinute ?? 120))
-      throw new HttpException("Rate limited", 429);
+    if (Number(count) > maximum) throw new HttpException("Rate limited", 429);
   }
   async exchange(ticket: string, previousToken?: string) {
     const token = randomBytes(32).toString("base64url"),
@@ -182,7 +184,7 @@ export class WebAccess implements OnModuleDestroy {
     const route = request.routeOptions.url;
     if (
       !route?.startsWith("/v1/") ||
-      /^\/v1\/(?:web|admin|webhooks|probes)(?:\/|$)/.test(route) ||
+      /^\/v1\/(?:web|wechat-links|admin|webhooks|probes)(?:\/|$)/.test(route) ||
       route === "/v1/sessions/wechat" ||
       !request.cookies[WEB_COOKIE]
     )

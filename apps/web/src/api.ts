@@ -13,9 +13,11 @@ export class WebApiError extends Error {
     super(
       status === 401
         ? "登录链接无效或已失效，请重新获取。"
-        : status === 429
-          ? "操作较频繁，请稍后再试。"
-          : "服务暂不可用，请稍后重试。",
+        : status === 409
+          ? "关联已失效、核对码不符或微信身份已有其他账号；请重新发起，不会自动合并账号。"
+          : status === 429
+            ? "操作较频繁，请稍后再试。"
+            : "服务暂不可用，请稍后重试。",
     );
   }
 }
@@ -73,6 +75,37 @@ async function mutateSession<T>(action: () => Promise<T>): Promise<T> {
   return await navigator.locks.request("timenook-web-session", action);
 }
 export const webApi = {
+  async linkAvailability(): Promise<boolean> {
+    const result = (await request("/web/wechat-link")) as {
+      available?: boolean;
+    };
+    if (typeof result?.available !== "boolean") throw new WebApiError(0);
+    return result.available;
+  },
+  async createLink(csrf: string): Promise<AccountLinkCreated> {
+    const result = await request("/web/wechat-link", "POST", {}, csrf);
+    if (
+      !isAccountLinkResult(result) ||
+      !/^\d{8}$/.test((result as AccountLinkCreated).challenge.code)
+    )
+      throw new WebApiError(0);
+    return result as AccountLinkCreated;
+  },
+  async link(
+    id: string,
+    action = "status",
+    csrf?: string,
+    verificationCode?: string,
+  ): Promise<AccountLinkResult> {
+    const result = await request(
+      `/web/wechat-link/${id}${action === "confirm" ? "/confirm" : ""}`,
+      action === "status" ? "GET" : action === "cancel" ? "DELETE" : "POST",
+      action === "confirm" ? { verificationCode } : undefined,
+      csrf,
+    );
+    if (!isAccountLinkResult(result)) throw new WebApiError(0);
+    return result;
+  },
   async login(ticket: string) {
     return mutateSession(async () =>
       session(await request("/web/session", "POST", { ticket })),
@@ -113,3 +146,8 @@ export const webApi = {
     return result.projects;
   },
 };
+import type {
+  AccountLinkCreated,
+  AccountLinkResult,
+} from "../../../packages/contracts/src/account-link";
+import { isAccountLinkResult } from "../../../packages/contracts/src/account-link";
