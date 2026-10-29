@@ -298,7 +298,7 @@ Page({
     go("story", "id=" + e.currentTarget.dataset.id);
   },
   invite() {
-    go("invite");
+    go("invite", dataMode() === "live" ? `projectId=${this.projectId}` : "");
   },
   project() {
     if (dataMode() === "live") {

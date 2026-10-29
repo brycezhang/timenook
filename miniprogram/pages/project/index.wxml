@@ -8,6 +8,8 @@
   <button class="btn secondary section" bindtap="settings">修改书名</button>
  </view>
  <view wx:if="{{participation}}" class="section">
+  <view wx:if="{{participation.policyStatus === 'internal-acceptance'}}" class="section">内部功能验收 · 无付款及实体书生产</view>
+  <button wx:if="{{participation.role === 'initiator'}}" class="btn secondary section" bindtap="invite">邀请与参与授权</button>
   <button class="btn" bindtap="record" disabled="{{busy || !participation.canCollect}}">开始一段讲述</button>
   <button wx:if="{{participation.canRead}}" class="btn secondary section" bindtap="plan">个人大纲与问题</button>
   <view wx:if="{{!participation.canCollect}}" class="section">当前不能新录音；已保存资料仍按当前用途与期限恢复。</view>

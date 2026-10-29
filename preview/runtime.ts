@@ -300,6 +300,20 @@ export function mountMiniProgram(
     showToast({ title }: any) {
       toast(title);
     },
+    setClipboardData(o: any) {
+      void navigator.clipboard.writeText(o.data).then(
+        () => {
+          const result = { errMsg: "setClipboardData:ok" };
+          o.success?.(result);
+          o.complete?.(result);
+        },
+        () => {
+          const result = { errMsg: "setClipboardData:fail" };
+          o.fail?.(result);
+          o.complete?.(result);
+        },
+      );
+    },
     showModal: modal,
     setNavigationBarTitle({ title }: any) {
       document.querySelector("#nav-title")!.textContent = title;
