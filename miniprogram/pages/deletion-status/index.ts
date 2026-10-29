@@ -148,7 +148,7 @@ Page({
                 return [`${layers[layer]}本层已核验完成`];
               return [
                 layer === "backup"
-                  ? "备份待到期或核验"
+                  ? "备份清理待核验"
                   : layer === "supplier"
                     ? "外部副本待确认"
                     : "历史版本待核验",
@@ -177,7 +177,7 @@ Page({
               : item.state === "running"
                 ? "本层清理中"
                 : item.layer === "backup"
-                  ? "备份待到期或核验"
+                  ? "备份清理待核验"
                   : item.layer === "supplier"
                     ? "外部副本待确认"
                     : item.layer === "object_history"

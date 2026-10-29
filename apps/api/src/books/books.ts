@@ -1508,11 +1508,7 @@ export class BooksController {
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
-    const fence = await this.streams.userFence(
-      id,
-      req.headers.authorization,
-      "bookPdf",
-    );
+    const fence = await this.streams.userFence(id, req.headers.authorization);
     const bytes = await this.books.download(
       id,
       versionId,
@@ -1535,8 +1531,6 @@ export class BooksController {
           () => this.books.read(id, versionId, req.headers.authorization),
           req.headers.authorization,
           fence.sequence,
-          undefined,
-          "bookPdf",
         ),
       );
   }

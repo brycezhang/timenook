@@ -119,7 +119,7 @@ export class Deletions implements OnModuleDestroy {
     return this.running;
   }
   onModuleInit() {
-    // W01 opens account access, not the legacy product maintenance runtime.
+    // Account-only access has no product revocation/deletion processing to schedule.
     // Explicit operator maintenance and existing product assemblies keep their rules.
     if (
       this.config.web &&

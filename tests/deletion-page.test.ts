@@ -148,7 +148,7 @@ test("verified deletion purges controlled downloaded media while retaining origi
   assert.equal(h.storage.get("original-recording"), "local-original");
   assert.equal(h.storage.get("rights-intent"), "new-intent");
   assert.match(h.page.data.summary, /不可逆/);
-  assert.match(h.page.data.rows[0].state, /待到期或核验/);
+  assert.match(h.page.data.rows[0].state, /清理待核验/);
   assert.match(h.page.data.rows[0].deadline, /仍待核实/);
   h.page.onHide();
 });

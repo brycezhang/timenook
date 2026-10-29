@@ -26,7 +26,6 @@ import {
   type PublishedPrivacyEvent,
 } from "../privacy-journal/privacy-journal";
 import { ERASURE_REGISTRY } from "./erasure-registry";
-import { probeStorageScope } from "../probe/storage-scope";
 export const privacyAuthorityId = (
   databaseUrl: string,
   installation: string,
@@ -156,7 +155,7 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
   }
   /** Integrity/checkpoint check usable inside a caller's project transaction.
    * It never starts replay or waits for another transaction holding that project. */
-  async assertReplayed(projectId?: string, scope?: "bookPdf") {
+  async assertReplayed(projectId?: string) {
     if (!this.journal || this.failed) throw new ServiceUnavailableException();
     let snapshot;
     try {
