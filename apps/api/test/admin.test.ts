@@ -161,7 +161,7 @@ test("whitelisted Feishu login directly issues a rotated protected session witho
   assert.equal(current.json().data.operator.username, auth.account.username);
   assert.equal(auth.response.headers.location, "/admin/");
 });
-test("OAuth state binds browser and PKCE, grants no pre-callback authority, and is consumed once", async () => {
+test("OAuth state binds the browser, grants no pre-callback authority, and is consumed once", async () => {
   const account = createFeishuAccount(config),
     flow = await beginFeishu(config, app);
   assert.equal(
@@ -173,7 +173,17 @@ test("OAuth state binds browser and PKCE, grants no pre-callback authority, and 
     origin + "/api/v1/admin/feishu/callback",
   );
   assert.equal(flow.url.searchParams.get("client_id"), syntheticFeishu.appId);
-  assert.equal(flow.url.searchParams.get("code_challenge_method"), "S256");
+  for (const field of [
+    "code_challenge",
+    "code_challenge_method",
+    "code_verifier",
+    "client_secret",
+  ])
+    assert.equal(
+      flow.url.searchParams.has(field),
+      false,
+      `authorization URL omits ${field}`,
+    );
   assert.equal(flow.url.searchParams.get("scope"), null);
   assert.match(String(flow.response.headers["set-cookie"]), /SameSite=Lax/);
   assert.equal((await runtime(flow.cookie)).statusCode, 401);
@@ -196,6 +206,47 @@ test("OAuth state binds browser and PKCE, grants no pre-callback authority, and 
   const replay = await callback(flow, code(account));
   assert.equal(replay.headers.location, "/admin/?login_error=denied");
   assert.equal(adminCookie(replay), "");
+});
+test("confidential client exchanges the code at v3 with its server secret and exact callback, without PKCE", async () => {
+  let tokenRequest:
+    | { url: string; body: Record<string, unknown>; init?: RequestInit }
+    | undefined;
+  const target = await createApplication(config, {
+    feishuFetch: async (input, init) => {
+      if (String(input) === "https://accounts.feishu.cn/oauth/v3/token")
+        tokenRequest = {
+          url: String(input),
+          body: JSON.parse(String(init?.body)),
+          init,
+        };
+      return syntheticFeishuFetch(input, init);
+    },
+  });
+  try {
+    const account = createFeishuAccount(config),
+      flow = await beginFeishu(config, target);
+    const result = await callback(flow, code(account), flow.flowCookie, target);
+    assert.ok(tokenRequest, "the current v3 endpoint receives the exchange");
+    assert.deepEqual(
+      Object.keys(tokenRequest.body).sort(),
+      [
+        "grant_type",
+        "client_id",
+        "client_secret",
+        "code",
+        "redirect_uri",
+      ].sort(),
+    );
+    assert.equal(tokenRequest.body.client_secret, syntheticFeishu.appSecret);
+    assert.equal(
+      tokenRequest.body.redirect_uri,
+      flow.url.searchParams.get("redirect_uri"),
+    );
+    assert.equal(result.headers.location, "/admin/");
+    assert.equal((await runtime(adminCookie(result), target)).statusCode, 200);
+  } finally {
+    await target.close();
+  }
 });
 test("unapproved, disabled, foreign-tenant, wrong-application identities cannot sign in", async () => {
   for (const kind of ["unknown", "disabled", "tenant", "app"] as const) {

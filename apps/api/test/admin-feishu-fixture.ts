@@ -17,7 +17,27 @@ export const syntheticFeishuFetch: typeof fetch = async (input, init) => {
     const body = JSON.parse(String(init?.body));
     assert.equal(body.grant_type, "authorization_code");
     assert.equal(body.client_id, syntheticFeishu.appId);
-    assert.ok(body.code_verifier);
+    assert.equal(body.client_secret, syntheticFeishu.appSecret);
+    assert.equal(
+      body.redirect_uri,
+      "https://localhost:3443/api/v1/admin/feishu/callback",
+    );
+    assert.deepEqual(
+      Object.keys(body).sort(),
+      [
+        "grant_type",
+        "client_id",
+        "client_secret",
+        "code",
+        "redirect_uri",
+      ].sort(),
+    );
+    assert.equal(init?.method, "POST");
+    assert.equal(init?.redirect, "error");
+    assert.equal(
+      new Headers(init?.headers).get("content-type"),
+      "application/json",
+    );
     return new Response(JSON.stringify({ code: 0, access_token: body.code }));
   }
   assert.equal(

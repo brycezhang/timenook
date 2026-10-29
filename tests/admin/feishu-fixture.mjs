@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
 export const syntheticFeishu = {
@@ -23,6 +24,29 @@ export async function syntheticFeishuFetch(input, init) {
   const url = String(input);
   if (url === "https://accounts.feishu.cn/oauth/v3/token") {
     const body = JSON.parse(String(init?.body));
+    assert.deepEqual(
+      Object.keys(body).sort(),
+      [
+        "grant_type",
+        "client_id",
+        "client_secret",
+        "code",
+        "redirect_uri",
+      ].sort(),
+    );
+    assert.equal(body.grant_type, "authorization_code");
+    assert.equal(body.client_id, syntheticFeishu.appId);
+    assert.equal(body.client_secret, syntheticFeishu.appSecret);
+    assert.equal(
+      body.redirect_uri,
+      "https://localhost:3443/api/v1/admin/feishu/callback",
+    );
+    assert.equal(init?.method, "POST");
+    assert.equal(init?.redirect, "error");
+    assert.equal(
+      new Headers(init?.headers).get("content-type"),
+      "application/json",
+    );
     return Response.json({
       code: 0,
       access_token: body.code,
@@ -60,7 +84,26 @@ export async function installFeishuAuthorization(page, identity, options = {}) {
   const pattern = "https://accounts.feishu.cn/open-apis/authen/v1/authorize?**";
   const handler = async (route) => {
     const authorization = new URL(route.request().url());
+    assert.equal(
+      authorization.searchParams.get("client_id"),
+      syntheticFeishu.appId,
+    );
+    for (const field of [
+      "code_challenge",
+      "code_challenge_method",
+      "code_verifier",
+      "client_secret",
+    ])
+      assert.equal(
+        authorization.searchParams.has(field),
+        false,
+        `authorization URL omits ${field}`,
+      );
     const callback = new URL(authorization.searchParams.get("redirect_uri"));
+    assert.equal(
+      callback.href,
+      "https://localhost:3443/api/v1/admin/feishu/callback",
+    );
     callback.searchParams.set("state", authorization.searchParams.get("state"));
     if (options.cancel) callback.searchParams.set("error", "access_denied");
     else

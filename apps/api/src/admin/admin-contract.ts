@@ -32,7 +32,7 @@ export class AdminFeishuLoginDto implements AdminFeishuLogin {
   @ApiProperty({
     format: "uri",
     description:
-      "Fixed Feishu authorization origin with one-time browser-bound state and PKCE",
+      "Fixed Feishu authorization origin with one-time browser-bound state",
   })
   authorizationUrl!: string;
 }
