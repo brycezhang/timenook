@@ -44,4 +44,4 @@ CI 为官网单独提供 `timenook-website-preview-<commit>` artifact。包可�
 
 ## 持续集成分流
 
-PR 仅改本 README 等普通说明文档时走文档检查；仅改声明的官网独立路径时，执行文档、官网类型、生产构建、全部三视口测试、打包与候选清单/报告校验。依赖、公共契约、共享素材/示例数据、迁移或未知路径继续整仓；main 每次 push 完整回归。官网独立路径只发布已验证的官网预览包。执行边界见[持续集成](../../docs/development.md#持续集成)，第二阶段实际运行见 [#76](https://github.com/brycezhang/timenook/issues/76)，基线见[第一阶段验收](../../docs/delivery/2026-10-29/ci-phase1.md)。
+PR 仅改本 README 等普通说明文档时走文档检查；仅改声明的官网独立路径时，执行文档、官网类型、生产构建、全部三视口测试、打包与候选清单/报告校验。依赖、公共契约、共享素材/示例数据、迁移或未知路径继续整仓；main 每次 push 完整回归。官网独立路径只发布已验证的官网预览包。执行边界见[持续集成](../../docs/development.md#持续集成)，第二阶段实际运行见[验收记录](../../docs/delivery/2026-10-29/ci-phase2.md)与 [#76](https://github.com/brycezhang/timenook/issues/76)，基线见[第一阶段验收](../../docs/delivery/2026-10-29/ci-phase1.md)。
