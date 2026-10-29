@@ -1,6 +1,6 @@
 # 两端共用的分步讲述
 
-对应 [W03 #98](https://github.com/brycezhang/timenook/issues/98) 与[父规格](delivery/2026-10-29/mobile-web-spec.md)。本轮是基于已合入 T14 等公开契约的客户端工程切片，不代表 W02 内测项目装配、真实网页供应商链路或 W03 整票已完成。
+客户端工程票 [W03a #103](https://github.com/brycezhang/timenook/issues/103)，归属 [W03 #98](https://github.com/brycezhang/timenook/issues/98) 与[父规格](delivery/2026-10-29/mobile-web-spec.md)。本轮是基于已合入 T14 等公开契约的客户端工程切片，不代表 W02 内测项目装配、真实网页供应商链路或 W03 整票已完成。
 
 小程序 live 采访页和复用其页面源码的浏览器入口采用同一控制器：选题／照片 → 准备 → 录制 → 本机回听与提交 → 保存处理与可选追问。故事校对、本人版本确认及入书许可继续使用既有故事页面与服务端规则。demo 模式保留明确标注的本机示例。
 
