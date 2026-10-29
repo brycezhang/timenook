@@ -501,9 +501,9 @@ async function wakeStory(
   id: string,
   otherId?: string,
 ) {
-  await waitForWorkerJobs(runtime.worker, async () => {
+  await waitForWorkerJobs(runtime.worker, async (declareExpected) => {
+    declareExpected([id, ...(otherId ? [otherId] : [])]);
     await runtime.recoverDue();
-    return [id, ...(otherId ? [otherId] : [])];
   });
 }
 test("the actual Worker waits for the final transcript then composes the complete sourced immutable story", async () => {
@@ -686,18 +686,22 @@ test("a full waiting-input batch yields to a later ready story without resetting
     assert.equal(new Set(waiting).size, 102);
     const tasks = app.get(ProductionTasks),
       due = tasks.due.bind(tasks);
-    let selected: string[] = [];
-    t.mock.method(tasks, "due", async () => {
-      selected = await due();
-      return selected;
-    });
     async function scan() {
+      let selected: string[] = [];
       await waitForWorkerJobs(
         runtime.worker,
-        async () => {
-          const count = await runtime.recoverDue();
-          assert.equal(selected.length, count);
-          return selected;
+        async (declareExpected) => {
+          const selection = t.mock.method(tasks, "due", async () => {
+            selected = await due();
+            declareExpected(selected);
+            return selected;
+          });
+          try {
+            const count = await runtime.recoverDue();
+            assert.equal(selected.length, count);
+          } finally {
+            selection.mock.restore();
+          }
         },
         10000,
       );

@@ -17,11 +17,12 @@ export interface WorkerCompletionEvents {
 /** Wait for a finite real scheduling frontier, failing on stalled or failed work. */
 export async function waitForWorkerJobs(
   worker: WorkerCompletionEvents,
-  wake: () => Promise<readonly string[]>,
+  wake: (declareExpected: (ids: readonly string[]) => void) => Promise<unknown>,
   idleMs = 5000,
 ) {
   const completed = new Set<string>();
   let pending: Set<string> | undefined;
+  let closed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let resolveDone!: () => void;
   let rejectStopped!: (error: Error) => void;
@@ -36,17 +37,26 @@ export async function waitForWorkerJobs(
     timer = setTimeout(() => {
       rejectStopped(
         new Error(
-          `Worker made no progress: ${pending ? [...pending].join(",") : "scheduling"}`,
+          `Worker made no progress: ${pending ? (pending.size ? [...pending].join(",") : "dispatch") : "scheduling"}`,
         ),
       );
     }, idleMs);
+  }
+  function declareExpected(ids: readonly string[]) {
+    if (closed) throw new Error("Worker wait has stopped");
+    if (pending) throw new Error("Worker frontier is already declared");
+    if (ids.some((id) => !id))
+      throw new Error("Expected task IDs must be non-empty");
+    pending = new Set(ids.filter((id) => !completed.has(id)));
+    arm();
+    if (!pending.size) resolveDone();
   }
   function onCompleted(job: Job) {
     if (!job.id) return;
     completed.add(job.id);
     if (pending?.delete(job.id)) {
+      arm();
       if (pending.size === 0) resolveDone();
-      else arm();
     }
   }
   function onFailed(job: Job | undefined, error: Error) {
@@ -62,14 +72,13 @@ export async function waitForWorkerJobs(
   worker.on("error", onError);
   arm();
   try {
-    const expected = await Promise.race([wake(), stopped]);
-    if (expected.some((id) => !id))
-      throw new Error("Expected task IDs must be non-empty");
-    pending = new Set(expected.filter((id) => !completed.has(id)));
+    await Promise.race([wake(declareExpected), stopped]);
+    if (!pending)
+      throw new Error("Worker scheduling did not declare expected tasks");
     if (!pending.size) return;
-    arm();
     await Promise.race([done, stopped]);
   } finally {
+    closed = true;
     clearTimeout(timer);
     worker.off("completed", onCompleted);
     worker.off("failed", onFailed);
