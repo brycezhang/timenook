@@ -6,7 +6,7 @@
 
 浏览器需要安全上下文、`getUserMedia`、`AudioContext`、`AudioWorklet` 和模块 Worker。录制时建立并核实实际 16kHz 的 AudioContext；MediaStreamAudioSourceNode 将设备实际采样率转换到该 context。Worklet 按实际输入 block 和通道下混、夹限、量化成单声道 Int16 PCM，每批最多 1152 样本，通过独立 MessagePort 交给编码 Worker。主线程不执行 MP3 编码。
 
-Worker 使用固定 `@breezystack/lamejs@1.2.7`，参数单声道／16kHz／48kbps。它动态导入原样独立 ESM asset；应用构建不把库内联或压缩进主线程／Worker。来源、版权、完整 LGPL v3／GPL v3 和对应源码归档见 [第三方说明](../../third-party/lamejs-1.2.7/NOTICE.md)。浏览器产物同目录发布 `third-party/lamejs-1.2.7/`；开发预览也可读取该路径。
+Worker 使用固定 `@breezystack/lamejs@1.2.7`，参数单声道／16kHz／48kbps。它动态导入原样独立 ESM asset；应用构建不把库内联或压缩进主线程／Worker。来源、版权、完整 LGPL v3／GPL v3 和对应源码归档见 [第三方说明](../third-party/lamejs-1.2.7/NOTICE.md)。浏览器产物同目录发布 `third-party/lamejs-1.2.7/`；开发预览也可读取该路径。
 
 暂停先排空当前 PCM 批次并确认，再报告暂停；暂停期间不采样，也不 flush MP3。继续沿用同一 encoder 与实际问题，仍须经页面授权检查。停止将最后 PCM 和 finish 依次发到同一 FIFO 通道，收到完整 MP3 后清理设备，再发 Stop。停止处理期间立即显示“正在处理并保存”，文件与清单真正持久化后才显示已在本机保存。退出、切账号、失权及后台结束复用此设备生命周期；尚在内存中的片段不保证系统强杀恢复。
 
