@@ -25,7 +25,7 @@ import { privacyAuthorityId } from "../src/care/privacy-rights";
 import { ProductionTasks } from "../src/tasks/tasks";
 import {
   syntheticFeishu,
-  syntheticFeishuFetch,
+  createSyntheticFeishuFetch,
   createFeishuAccount,
   authenticateFeishu,
 } from "./admin-feishu-fixture";
@@ -569,7 +569,10 @@ async function historicalUpgradeScenario(
       challengeTtlSeconds: 300,
       feishu: { ...syntheticFeishu },
     };
-    options = { ...options, feishuFetch: syntheticFeishuFetch };
+    options = {
+      ...options,
+      feishuFetch: createSyntheticFeishuFetch(fixture.config.admin.origin),
+    };
     let currentAdminHeaders: Record<string, string>;
     const provisionCurrentOperator = async (
       expectedActors = oldAdminActors,

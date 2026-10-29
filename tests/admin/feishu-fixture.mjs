@@ -20,67 +20,75 @@ export function feishuIdentity(openId = `ou_${randomUUID()}`) {
 }
 
 /** External Feishu transport only. Production application code has no fixture mode. */
-export async function syntheticFeishuFetch(input, init) {
-  const url = String(input);
-  if (url === "https://accounts.feishu.cn/oauth/v3/token") {
-    const body = JSON.parse(String(init?.body));
-    assert.deepEqual(
-      Object.keys(body).sort(),
-      [
-        "grant_type",
-        "client_id",
-        "client_secret",
-        "code",
-        "redirect_uri",
-      ].sort(),
-    );
-    assert.equal(body.grant_type, "authorization_code");
-    assert.equal(body.client_id, syntheticFeishu.appId);
-    assert.equal(body.client_secret, syntheticFeishu.appSecret);
-    assert.equal(
-      body.redirect_uri,
-      "https://localhost:3443/api/v1/admin/feishu/callback",
-    );
-    assert.equal(init?.method, "POST");
-    assert.equal(init?.redirect, "error");
-    assert.equal(
-      new Headers(init?.headers).get("content-type"),
-      "application/json",
-    );
-    return Response.json({
-      code: 0,
-      access_token: body.code,
-      token_type: "Bearer",
-      expires_in: 7200,
-    });
-  }
-  if (url === "https://open.feishu.cn/open-apis/authen/v1/user_info") {
-    const authorization = new Headers(init?.headers).get("authorization") ?? "";
-    let identity;
-    try {
-      identity = JSON.parse(
-        Buffer.from(authorization.slice(7), "base64url").toString("utf8"),
+export function createSyntheticFeishuFetch(adminOrigin) {
+  const callback = new URL("/api/v1/admin/feishu/callback", adminOrigin).href;
+  return async (input, init) => {
+    const url = String(input);
+    if (url === "https://accounts.feishu.cn/oauth/v3/token") {
+      const body = JSON.parse(String(init?.body));
+      assert.deepEqual(
+        Object.keys(body).sort(),
+        [
+          "grant_type",
+          "client_id",
+          "client_secret",
+          "code",
+          "redirect_uri",
+        ].sort(),
       );
-    } catch {
-      return Response.json(
-        { code: 999, msg: "synthetic invalid user" },
-        { status: 401 },
+      assert.equal(body.grant_type, "authorization_code");
+      assert.equal(body.client_id, syntheticFeishu.appId);
+      assert.equal(body.client_secret, syntheticFeishu.appSecret);
+      assert.equal(body.redirect_uri, callback);
+      assert.equal(init?.method, "POST");
+      assert.equal(init?.redirect, "error");
+      assert.equal(
+        new Headers(init?.headers).get("content-type"),
+        "application/json",
       );
+      return Response.json({
+        code: 0,
+        access_token: body.code,
+        token_type: "Bearer",
+        expires_in: 7200,
+      });
     }
-    return Response.json({
-      code: 0,
-      data: {
-        open_id: identity.feishuOpenId,
-        tenant_key: identity.tenantKey,
-        name: "合成运营人员",
-      },
-    });
-  }
-  throw new Error("Unexpected Feishu fixture network request");
+    if (url === "https://open.feishu.cn/open-apis/authen/v1/user_info") {
+      const authorization =
+        new Headers(init?.headers).get("authorization") ?? "";
+      let identity;
+      try {
+        identity = JSON.parse(
+          Buffer.from(authorization.slice(7), "base64url").toString("utf8"),
+        );
+      } catch {
+        return Response.json(
+          { code: 999, msg: "synthetic invalid user" },
+          { status: 401 },
+        );
+      }
+      return Response.json({
+        code: 0,
+        data: {
+          open_id: identity.feishuOpenId,
+          tenant_key: identity.tenantKey,
+          name: "合成运营人员",
+        },
+      });
+    }
+    throw new Error("Unexpected Feishu fixture network request");
+  };
 }
 
 /** Exercise the real browser redirect and callback, substituting Feishu's page only. */
 export async function installFeishuAuthorization(page, identity, options = {}) {
+  // Bind before leaving the application; never derive this from the provider request.
+  const application = new URL(page.url());
+  assert.equal(application.protocol, "https:");
+  const expectedCallback = new URL(
+    "/api/v1/admin/feishu/callback",
+    application.origin,
+  ).href;
   const pattern = "https://accounts.feishu.cn/open-apis/authen/v1/authorize?**";
   const handler = async (route) => {
     const authorization = new URL(route.request().url());
@@ -100,10 +108,7 @@ export async function installFeishuAuthorization(page, identity, options = {}) {
         `authorization URL omits ${field}`,
       );
     const callback = new URL(authorization.searchParams.get("redirect_uri"));
-    assert.equal(
-      callback.href,
-      "https://localhost:3443/api/v1/admin/feishu/callback",
-    );
+    assert.equal(callback.href, expectedCallback);
     callback.searchParams.set("state", authorization.searchParams.get("state"));
     if (options.cancel) callback.searchParams.set("error", "access_denied");
     else

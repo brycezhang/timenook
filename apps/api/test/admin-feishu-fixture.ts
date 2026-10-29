@@ -12,47 +12,50 @@ export const syntheticFeishu = {
   appSecret: "synthetic-admin-secret",
   tenantKey: "synthetic-admin-tenant",
 };
-export const syntheticFeishuFetch: typeof fetch = async (input, init) => {
-  if (String(input) === "https://accounts.feishu.cn/oauth/v3/token") {
-    const body = JSON.parse(String(init?.body));
-    assert.equal(body.grant_type, "authorization_code");
-    assert.equal(body.client_id, syntheticFeishu.appId);
-    assert.equal(body.client_secret, syntheticFeishu.appSecret);
+export function createSyntheticFeishuFetch(adminOrigin: string): typeof fetch {
+  const callback = new URL("/api/v1/admin/feishu/callback", adminOrigin).href;
+  return async (input, init) => {
+    if (String(input) === "https://accounts.feishu.cn/oauth/v3/token") {
+      const body = JSON.parse(String(init?.body));
+      assert.equal(body.grant_type, "authorization_code");
+      assert.equal(body.client_id, syntheticFeishu.appId);
+      assert.equal(body.client_secret, syntheticFeishu.appSecret);
+      assert.equal(body.redirect_uri, callback);
+      assert.deepEqual(
+        Object.keys(body).sort(),
+        [
+          "grant_type",
+          "client_id",
+          "client_secret",
+          "code",
+          "redirect_uri",
+        ].sort(),
+      );
+      assert.equal(init?.method, "POST");
+      assert.equal(init?.redirect, "error");
+      assert.equal(
+        new Headers(init?.headers).get("content-type"),
+        "application/json",
+      );
+      return new Response(JSON.stringify({ code: 0, access_token: body.code }));
+    }
     assert.equal(
-      body.redirect_uri,
-      "https://localhost:3443/api/v1/admin/feishu/callback",
+      String(input),
+      "https://open.feishu.cn/open-apis/authen/v1/user_info",
     );
-    assert.deepEqual(
-      Object.keys(body).sort(),
-      [
-        "grant_type",
-        "client_id",
-        "client_secret",
-        "code",
-        "redirect_uri",
-      ].sort(),
+    const token = new Headers(init?.headers).get("authorization")!.slice(7);
+    const identity = JSON.parse(Buffer.from(token, "base64url").toString());
+    return new Response(
+      JSON.stringify({
+        code: 0,
+        data: {
+          open_id: identity.feishuOpenId,
+          tenant_key: identity.tenantKey,
+        },
+      }),
     );
-    assert.equal(init?.method, "POST");
-    assert.equal(init?.redirect, "error");
-    assert.equal(
-      new Headers(init?.headers).get("content-type"),
-      "application/json",
-    );
-    return new Response(JSON.stringify({ code: 0, access_token: body.code }));
-  }
-  assert.equal(
-    String(input),
-    "https://open.feishu.cn/open-apis/authen/v1/user_info",
-  );
-  const token = new Headers(init?.headers).get("authorization")!.slice(7);
-  const identity = JSON.parse(Buffer.from(token, "base64url").toString());
-  return new Response(
-    JSON.stringify({
-      code: 0,
-      data: { open_id: identity.feishuOpenId, tenant_key: identity.tenantKey },
-    }),
-  );
-};
+  };
+}
 
 /** Only external identity requests are substituted; sessions/CLI/DB/Redis remain real. */
 export const createAdminApplication: typeof createApplication = (
@@ -62,8 +65,8 @@ export const createAdminApplication: typeof createApplication = (
   if (config.admin && !config.admin.feishu)
     config.admin.feishu = { ...syntheticFeishu };
   return createApplication(config, {
-    ...(config.environment === "test"
-      ? { feishuFetch: syntheticFeishuFetch }
+    ...(config.environment === "test" && config.admin
+      ? { feishuFetch: createSyntheticFeishuFetch(config.admin.origin) }
       : {}),
     ...options,
   });

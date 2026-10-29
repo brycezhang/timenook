@@ -60,6 +60,7 @@ test.beforeAll(async () => {
     fixture = apiRequire("./dist-test/test/book-fixture.js");
     await fixture.startBookFixture();
     fixture.config.admin.origin = adminOrigin;
+    await fixture.restartBookApplication();
     project = await fixture.project();
     const { paymentAdmin } = apiRequire(
       "./dist-test/test/payment-admin-fixture.js",

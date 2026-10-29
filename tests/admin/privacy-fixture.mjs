@@ -1,4 +1,7 @@
-import { syntheticFeishu, syntheticFeishuFetch } from "./feishu-fixture.mjs";
+import {
+  syntheticFeishu,
+  createSyntheticFeishuFetch,
+} from "./feishu-fixture.mjs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
@@ -19,7 +22,9 @@ export async function createPrivacyFixtureApplication(config, options) {
   await bootPrivacyFixture(config);
   try {
     const app = await createApplication(config, {
-      feishuFetch: syntheticFeishuFetch,
+      ...(config.admin
+        ? { feishuFetch: createSyntheticFeishuFetch(config.admin.origin) }
+        : {}),
       ...options,
     });
     configurations.set(app, config);
