@@ -38,3 +38,5 @@ TIMENOOK_PRODUCT_DEEPSEEK_MODEL=deepseek-flash
 定向集成覆盖真实 PostgreSQL／Redis、Cookie 登录、无付款项目、两账号邀请和用途授权、原件封存、ASR／整理协议、实际生产 Worker、确定故事确认与 `self_web` 记录；其中 OSS 传输和 AI 网络由明确替身承接。原有保存后处理、等待全部转录及内容确认可拒绝入书的相关用例继续通过。
 
 真实供应商效果、手机设备录制、同域部署及完整 PDF 验收必须在实际运行记录中单独列出，不能由上述替身测试推定完成。
+
+目标ECS的实际连接诊断发现Node默认网络族尝试很快以ETIMEDOUT结束；同一服务用户、systemd约束和DeepSeek适配器在`NODE_OPTIONS="--network-family-autoselection-attempt-timeout=1500"`下返回正常JSON。该配置已进入目标私有环境并重启API/Worker，保留20秒HTTP总超时与原任务不确定结果。实际修复后业务结果见[运行验收](delivery/2026-10-29/mobile-web-online.md)。
