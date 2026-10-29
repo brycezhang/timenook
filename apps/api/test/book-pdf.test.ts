@@ -397,6 +397,25 @@ async function confirmedStory(
   );
   return { ...p, story };
 }
+test("fixed CJK PDF extraction preserves the confirmed 青菜 sentence", async () => {
+  const text = "我们先买两块豆腐，再挑一把青菜。",
+    p = await confirmedStory(undefined, false, false, text),
+    base = `/v1/projects/${p.projectId}/book`,
+    context = data(await request("GET", base, p.narrator.token), 200),
+    book = data(
+      await request("POST", base + "/versions", p.narrator.token, {
+        expectedInputHash: context.inputHash,
+      }),
+      202,
+    );
+  await app.get(ProductionTasks).run(book.task.id);
+  const ready = data(
+    await request("GET", base + `/versions/${book.id}`, p.narrator.token),
+    200,
+  );
+  assert.equal(ready.state, "ready", JSON.stringify(ready.task));
+  assert.deepEqual(ready.snapshot.chapters[0].stories[0].paragraphs, [text]);
+});
 test("PDF content confirmation is independent of first-copy rights and invalidates after edits; internal scope renders a real candidate PDF", async () => {
   const p = await confirmedStory(),
     base = `/v1/projects/${p.projectId}/book`,

@@ -12,6 +12,7 @@ const normalized = (s: string) =>
     .replace(/⻓/g, "长")
     .replace(/⻚/g, "页")
     .replace(/⻔/g, "门")
+    .replace(/⻘/g, "青")
     .replace(/\s/g, "");
 /** T04 owns pagination, fonts, Chromium and PDF inspection. This adapter supplies only a frozen product snapshot. */
 export async function renderBook(
