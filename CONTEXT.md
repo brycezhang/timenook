@@ -19,6 +19,7 @@
 - 业务语言：[GLOSSARY.md](GLOSSARY.md)。
 - CI：2026-10-29 第一阶段采用说明文档轻量分流及完整回归并行，API 四片、管理端浏览器两片，保留全部验证与 PR/main 合并门槛；执行与报告规则见[持续集成](docs/development.md#持续集成)，实际 Actions 验收见[第一阶段记录](docs/delivery/2026-10-29/ci-phase1.md)与 [#73](https://github.com/brycezhang/timenook/issues/73)。
 - T30：2026-10-29 已整理不依赖微信小程序/支付配置的[验收清单与证据缺口](docs/delivery/2026-10-29/t30-acceptance-preparation.md)、[负责人确认事项](docs/delivery/2026-10-29/t30-owner-confirmations.md)及[执行记录模板](docs/delivery/2026-10-29/t30-run-record-template.md)。本轮仅完成准备；目标用户、同一真实内部项目、实物与付费试点未执行，T29 正式环境及前序真实条件继续保留。
+- 成书与线下履约：系统自动产物止于生产 PDF，由运营人工导出并线下对接印厂；主流程为“PDF 书稿完成 → 已生产 → 已发货/物流”，后两项人工核实登记。已生产指完成印制，当前 `in_production` 仅为确认接单，主状态及物流/微信字段仍有[待对齐的实现差异](docs/delivery/2026-10-29/t30-acceptance-preparation.md#系统边界与设计核实)；本轮仅核实并明确设计，未改业务代码。无需印厂/物流自动接口，线下实物验收与系统功能分别记录。
 - 2026-10-26 本地工程已推进到 T21：书稿稳定入口可按固定故事版本解析原声，经当前授权网关下载并清理临时播放文件；仍使用隔离合成配置，正式小程序码、双端真机与纸书验收未完成，见[书中原声入口](docs/development-book-audio.md)与[T21证据](docs/delivery/2026-10-22/evidence/T21.md)。
 - 2026-10-26 T22 本地实现：双方确认同一书稿/PDF，发起人另确认地址；服务端唯一预留首本权益，审核重验同一条件，到期进入共享人工工单。仅验证隔离合成政策与规格，真实付款、商业参数、真机和实际生产仍待验收，见[首本制作](docs/development-first-copy.md)与[T22证据](docs/delivery/2026-10-22/evidence/T22.md)。
 - 2026-10-26 T23 本地实现：固定生产尝试与交接编号，本人限时授权 PDF/地址，未知接单保持待核实，确认接单才消费权益；人工记录取消、物流及唯一交付事实。仅用于隔离合成验证，实际印厂、物流和微信发货管理仍待验收，见[人工交接与物流](docs/development-fulfillment.md)与[T23证据](docs/delivery/2026-10-22/evidence/T23.md)。
