@@ -4,7 +4,9 @@ import { posix } from "node:path";
 const git = (...args) =>
   execFileSync("git", args, { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
 const docsPath = (path) =>
-  /^(?:docs\/.*|README|CONTEXT|GLOSSARY|AGENTS)\.md$/.test(path);
+  /^(?:docs\/.*|apps\/[^/]+\/README|README|CONTEXT|GLOSSARY|AGENTS)\.md$/.test(
+    path,
+  );
 function changed(base, head) {
   // Disable rename detection so a code file renamed to .md still includes its old path.
   return git("diff", "--no-renames", "--name-only", "-z", base, head, "--")

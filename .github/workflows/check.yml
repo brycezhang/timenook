@@ -11,6 +11,10 @@ concurrency:
 env:
   CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
   CHECK_HEAD: ${{ github.sha }}
+  NODE_ENV: test
+  DATABASE_URL: postgresql://timenook:local-development-only@127.0.0.1:54329/timenook?connect_timeout=2&pool_timeout=2
+  REDIS_URL: redis://127.0.0.1:63791
+  TIMENOOK_CI_ROOT: ${{ github.workspace }}
 jobs:
   changes:
     runs-on: ubuntu-24.04
@@ -24,7 +28,7 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-      - run: node --test tests/ci/*.test.mjs
+      - run: node --test tests/ci/check.test.mjs tests/ci/shards.test.mjs tests/ci/audit.test.mjs
       - id: route
         run: |
           mode=$(node scripts/ci/check.mjs classify "$CHECK_BASE" "$CHECK_HEAD")
@@ -42,11 +46,13 @@ jobs:
         with:
           node-version-file: .node-version
       - run: node scripts/ci/check.mjs docs "$CHECK_BASE" "$CHECK_HEAD"
-  full:
+  build:
     needs: changes
     if: needs.changes.outputs.mode == 'full'
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 20
+    env:
+      TIMENOOK_CI_SUITE: build
     services:
       postgres:
         image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
@@ -64,53 +70,244 @@ jobs:
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 2s --health-timeout 2s --health-retries 30
-    env:
-      NODE_ENV: test
-      DATABASE_URL: postgresql://timenook:local-development-only@127.0.0.1:54329/timenook?connect_timeout=2&pool_timeout=2
-      REDIS_URL: redis://127.0.0.1:63791
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: ./.github/actions/ci-setup
         with:
-          node-version-file: .node-version
-      - run: node scripts/ci/check.mjs docs "$CHECK_BASE" "$CHECK_HEAD"
-      - run: npm install --global pnpm@10.34.7
-      - run: pnpm install --frozen-lockfile
-      - name: Build pinned audio validator
-        run: |
-          bash scripts/setup-audio-tools.sh "$RUNNER_TEMP/timenook-ffmpeg"
-          echo "$RUNNER_TEMP/timenook-ffmpeg/bin" >> "$GITHUB_PATH"
-      - run: pnpm db:generate
-      - run: pnpm db:migrate
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm setup:print-font
-      - run: pnpm check
-      - run: pnpm api:openapi
-      - run: pnpm test:admin-browser
-      - run: pnpm test:website
-      - name: Package independent website preview
-        run: pnpm package:website "$RUNNER_TEMP/timenook-website-release"
+          backend: "true"
+          print: "true"
+          browser: "true"
+      - run: node scripts/ci/run.mjs database-migrate pnpm db:migrate
+      - run: node scripts/ci/run.mjs docs node scripts/ci/check.mjs docs "$CHECK_BASE" "$CHECK_HEAD"
+      - run: node scripts/ci/run.mjs ci-report-tests node --test tests/ci/reporters.test.mjs
+      - run: node scripts/ci/run.mjs typecheck pnpm typecheck
+      - run: node scripts/ci/run.mjs frontend-tests node scripts/ci/tests.mjs frontend
+      - run: node scripts/ci/run.mjs print-tests node scripts/ci/tests.mjs print
+      - run: node scripts/ci/run.mjs release-tests node scripts/ci/tests.mjs release
+      - run: node scripts/ci/run.mjs build pnpm build
+      - run: node scripts/ci/run.mjs openapi pnpm api:openapi
+      - run: node scripts/ci/run.mjs prisma-runtime pnpm --filter @timenook/api exec prisma -v
+      - run: node scripts/ci/run.mjs candidate-package pnpm release:candidate --platform linux --output "$RUNNER_TEMP/timenook-release"
+      - run: node scripts/ci/run.mjs candidate-verify node scripts/release/package.mjs verify --root "$RUNNER_TEMP/timenook-release" --platform linux
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: timenook-website-preview-${{ github.sha }}
-          path: ${{ runner.temp }}/timenook-website-release/
-          if-no-files-found: error
-          retention-days: 7
-      - name: Inspect Linux Prisma runtime and package candidate release
-        run: |
-          pnpm --filter @timenook/api exec prisma -v
-          pnpm release:candidate --platform linux --output "$RUNNER_TEMP/timenook-release"
-          node scripts/release/package.mjs verify --root "$RUNNER_TEMP/timenook-release" --platform linux
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: timenook-candidate-${{ github.sha }}
+          name: ci-candidate-${{ github.sha }}
           path: |
             ${{ runner.temp }}/timenook-release.tgz
             ${{ runner.temp }}/timenook-release.tgz.sha256
           if-no-files-found: error
           retention-days: 7
+          overwrite: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: ci-report-build
+          path: |
+            ${{ runner.temp }}/timenook-ci-report/phases.json
+            ${{ runner.temp }}/timenook-ci-report/*-plan.json
+            ${{ runner.temp }}/timenook-ci-report/*.jsonl
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+  api:
+    needs: changes
+    if: needs.changes.outputs.mode == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      TIMENOOK_CI_SUITE: api-${{ matrix.shard }}
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
+        env:
+          POSTGRES_USER: timenook
+          POSTGRES_PASSWORD: local-development-only
+          POSTGRES_DB: timenook
+        ports: ["54329:5432"]
+        options: >-
+          --health-cmd "pg_isready -U timenook -d timenook"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+      redis:
+        image: redis:7-alpine@sha256:8b81dd37ff027bec4e516d41acfbe9fe2460070dc6d4a4570a2ac5b9d59df065
+        ports: ["63791:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/ci-setup
+        with:
+          backend: "true"
+          audio: "true"
+          print: "true"
+          browser: "true"
+      - run: node scripts/ci/run.mjs database-migrate pnpm db:migrate
+      - run: node scripts/ci/run.mjs contracts-build pnpm --filter @timenook/contracts build
+      - run: node scripts/ci/run.mjs test-compile pnpm --filter @timenook/api exec tsc -p tsconfig.test.json
+      - run: node scripts/ci/run.mjs api-tests node scripts/ci/tests.mjs api ${{ matrix.shard }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: ci-report-api-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/timenook-ci-report/phases.json
+            ${{ runner.temp }}/timenook-ci-report/*-plan.json
+            ${{ runner.temp }}/timenook-ci-report/*.jsonl
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+  browser:
+    needs: changes
+    if: needs.changes.outputs.mode == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      TIMENOOK_CI_SUITE: browser-${{ matrix.shard }}
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
+        env:
+          POSTGRES_USER: timenook
+          POSTGRES_PASSWORD: local-development-only
+          POSTGRES_DB: timenook
+        ports: ["54329:5432"]
+        options: >-
+          --health-cmd "pg_isready -U timenook -d timenook"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+      redis:
+        image: redis:7-alpine@sha256:8b81dd37ff027bec4e516d41acfbe9fe2460070dc6d4a4570a2ac5b9d59df065
+        ports: ["63791:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/ci-setup
+        with:
+          backend: "true"
+          audio: "true"
+          print: "true"
+          browser: "true"
+      - run: node scripts/ci/run.mjs database-migrate pnpm db:migrate
+      - run: node scripts/ci/run.mjs contracts-build pnpm --filter @timenook/contracts build
+      - run: node scripts/ci/run.mjs test-compile pnpm --filter @timenook/api exec tsc -p tsconfig.test.json
+      - run: node scripts/ci/run.mjs api-build pnpm --filter @timenook/api build
+      - run: node scripts/ci/run.mjs admin-tests node scripts/ci/tests.mjs admin ${{ matrix.shard }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: ci-report-browser-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/timenook-ci-report/phases.json
+            ${{ runner.temp }}/timenook-ci-report/*-plan.json
+            ${{ runner.temp }}/timenook-ci-report/*.jsonl
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+  website:
+    needs: changes
+    if: needs.changes.outputs.mode == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      TIMENOOK_CI_SUITE: website
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/ci-setup
+        with:
+          browser: "true"
+      - run: node scripts/ci/run.mjs website-tests node scripts/ci/tests.mjs website
+      - run: node scripts/ci/run.mjs website-package pnpm package:website "$RUNNER_TEMP/timenook-website-release"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ci-website-preview-${{ github.sha }}
+          path: ${{ runner.temp }}/timenook-website-release/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: ci-report-website
+          path: |
+            ${{ runner.temp }}/timenook-ci-report/phases.json
+            ${{ runner.temp }}/timenook-ci-report/*-plan.json
+            ${{ runner.temp }}/timenook-ci-report/*.jsonl
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+  full:
+    needs: [changes, build, api, browser, website]
+    if: ${{ always() && needs.changes.outputs.mode == 'full' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - name: Install test discovery dependencies
+        run: |
+          npm install --global pnpm@10.34.7
+          pnpm install --frozen-lockfile
+          pnpm db:generate
+          pnpm --filter @timenook/contracts build
+          pnpm --filter @timenook/api exec tsc -p tsconfig.test.json
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: ci-report-*
+          path: ${{ runner.temp }}/timenook-ci-reports
+      - run: node scripts/ci/audit.mjs "$RUNNER_TEMP/timenook-ci-reports"
+        env:
+          CHECK_JOB_RESULTS: ${{ toJSON(needs) }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: timenook-ci-report-${{ github.sha }}
+          path: ${{ runner.temp }}/timenook-ci-reports/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ci-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/validated-candidate
+      - name: Validate candidate checksum
+        working-directory: ${{ runner.temp }}/validated-candidate
+        run: sha256sum --check timenook-release.tgz.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: timenook-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/validated-candidate/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ci-website-preview-${{ github.sha }}
+          path: ${{ runner.temp }}/validated-website
+      - name: Validate website checksum
+        working-directory: ${{ runner.temp }}/validated-website
+        run: sha256sum --check website.tgz.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: timenook-website-preview-${{ github.sha }}
+          path: ${{ runner.temp }}/validated-website/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
   check:
     needs: [changes, docs, full]
     if: ${{ always() }}
