@@ -41,3 +41,7 @@ shasum -a 256 -c website.tgz.sha256
 CI 为官网单独提供 `timenook-website-preview-<commit>` artifact。包可部署到 `sgl.wootoon.cn` 的独立静态发布目录，并用独立 `current` 软链接切换版本和回滚；无需替换 API/Admin 的发布包。具体生产切换沿用 [ADR 0015](../../docs/adr/0015-dedicated-domain-ingress.md) 和正式验收安排，本次未操作服务器。
 
 对外推广前完成：正式小程序进入方案、真实套餐与购买验收，随后更新下单行为、取消预览的索引限制，并验证目标域名。构建成功或预览可访问不代替这些运行验收。
+
+## 持续集成分流
+
+仅修改本 README 等白名单内普通说明文档时，CI 执行文档链接与票据结构检查。官网代码、素材、依赖或构建配置变化仍执行整仓完整回归；官网检查与 API、管理端浏览器并行，候选产物只在完整汇总通过后发布。执行规则见[持续集成](../../docs/development.md#持续集成)，实际耗时与完整用例计数见[第一阶段验收](../../docs/delivery/2026-10-29/ci-phase1.md)。
