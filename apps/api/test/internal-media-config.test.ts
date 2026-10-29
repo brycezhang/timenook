@@ -9,6 +9,8 @@ const base = {
 };
 const media = {
   INTERNAL_ACCEPTANCE_ENABLED: "1",
+  WEB_ORIGIN: "https://sgl.wootoon.cn",
+  WEB_SESSION_KEY: Buffer.alloc(32, 7).toString("base64"),
   TIMENOOK_PRODUCT_STORAGE_ROOT: "/tmp/timenook-internal-media",
   TIMENOOK_PRODUCT_OSS_BUCKET: "timenook",
   TIMENOOK_PRODUCT_OSS_REGION: "cn-shanghai",
@@ -33,6 +35,8 @@ test("product media stays off by default and explicit internal config uses indep
   assert.equal(config.recording!.oss!.keyPrefix, "timenook/product/internal");
   assert.equal(config.transcription!.doubao.resourceId, "volc.seedasr.auc");
   assert.equal(config.generation!.deepseek.baseUrl, "https://cf.api.fan/v1");
+  assert.equal(config.books!.mode, "internal-acceptance");
+  assert.equal(config.books!.entryBaseUrl, "https://sgl.wootoon.cn/app/audio/");
   assert.equal(config.payments, undefined);
   validateInternalMediaConfig(config);
   assert.throws(() =>
