@@ -17,7 +17,7 @@ export async function readProjectAdmissionIn(
     if (!order || order.state !== "paid" || project.createdBy !== order.buyerId)
       throw new NotFoundException();
     return {
-      project,
+      project: { ...project, bookTitle: project.bookTitle ?? order.bookTitle },
       source: "paid" as const,
       initiatorUserId: order.buyerId,
       snapshot: order.packageSnapshot as Prisma.JsonObject,

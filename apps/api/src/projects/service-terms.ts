@@ -190,7 +190,10 @@ export class ProjectServiceTerms {
     return {
       policyStatus: "lifetime",
       creation,
-      firstCopyAction: creation.state === "active" ? "available" : "blocked",
+      firstCopyAction:
+        !row.internalAdmissionId && creation.state === "active"
+          ? "available"
+          : "blocked",
       playback: available("originalAudio"),
       exportRequests: available("activeData"),
       retention: Object.fromEntries(

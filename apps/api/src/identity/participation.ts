@@ -108,12 +108,12 @@ function careView(
   };
 }
 class ParticipationNoticeDto {
-  @ApiProperty({ enum: ["synthetic-d08-v1"] })
+  @ApiProperty({ enum: ["synthetic-d08-v1", INTERNAL_NOTICE_VERSION] })
   @IsIn(["synthetic-d08-v1", INTERNAL_NOTICE_VERSION])
   noticeVersion!: string;
   @ApiProperty({
     description:
-      "Isolated synthetic evidence only; no real identity verification",
+      "Explicit current notice choice; internal runtime records evidence from the actual authenticated session",
   })
   @IsString()
   @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
@@ -1867,8 +1867,11 @@ export class Participation
       !["story", "book"].includes(command.content.kind) ||
       !/^[-a-f0-9]{36}$/.test(command.content.versionId) ||
       !/^([a-f0-9]{64})$/.test(command.content.hash) ||
-      command.noticeVersion !== "synthetic-d08-v1" ||
-      !/^synthetic:[^\r\n]{3,160}$/.test(command.evidenceRef) ||
+      command.noticeVersion !==
+        (this.config.acceptance
+          ? INTERNAL_NOTICE_VERSION
+          : "synthetic-d08-v1") ||
+      !/^(?:synthetic:|internal:)[^\r\n]{3,160}$/.test(command.evidenceRef) ||
       !/^[-A-Za-z0-9_:]{8,128}$/.test(command.idempotencyKey)
     )
       throw new BadRequestException();

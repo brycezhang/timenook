@@ -13,6 +13,7 @@ import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { ProjectPlans } from "../src/projects/project-plans";
 import { ProjectServiceTerms } from "../src/projects/service-terms";
 import { Deletions } from "../src/care/deletions";
+import { internalSnapshot } from "../src/projects/internal-profile";
 import { PrivacyRights } from "../src/care/privacy-rights";
 
 const schema = `web_${randomUUID().replaceAll("-", "")}`;
@@ -685,29 +686,21 @@ test("web-only startup and explicit maintenance preserve an existing lifetime pr
   const plans = new ProjectPlans(config.databaseUrl),
     terms = new ProjectServiceTerms(config.databaseUrl);
   const projectId = randomUUID(),
-    draftId = randomUUID(),
-    versionId = randomUUID();
+    admissionId = randomUUID();
   try {
     await plans.createProject({ projectId, createdBy: account.user.id });
-    const snapshot = JSON.parse(
-      await readFile(
-        join(__dirname, "../../test/fixtures/catalog-synthetic.json"),
-        "utf8",
-      ),
-    );
+    const snapshot = internalSnapshot("internal-acceptance-v1");
     const anchor = new Date(Date.now() - 1000 * 86400000);
-    await db.packageDraft.create({
-      data: { id: draftId, realm: "local", ...snapshot },
-    });
-    await db.packageVersion.create({
+    await db.internalProjectAdmission.create({
       data: {
-        id: versionId,
-        realm: "local",
-        purpose: "local_preview",
-        draftId,
-        draftRevision: 1,
+        id: admissionId,
+        projectId,
+        initiatorUserId: account.user.id,
+        provisionKey: `web-lifetime-${projectId}`,
+        requestHash: "a".repeat(64),
+        profileVersion: "internal-acceptance-v1",
         snapshot,
-        publicOffer: {},
+        createdAt: anchor,
       },
     });
     await db.project.update({
@@ -715,7 +708,7 @@ test("web-only startup and explicit maintenance preserve an existing lifetime pr
       data: { bookTitle: "合成内测保留书名" },
     });
     await db.$transaction((tx) =>
-      terms.activate(tx, projectId, versionId, snapshot, anchor),
+      terms.activateInternal(tx, projectId, admissionId, snapshot, anchor),
     );
     await terms.recordFact({
       projectId,
