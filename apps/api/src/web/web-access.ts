@@ -208,7 +208,8 @@ export class WebAccess implements OnModuleDestroy {
         await this.identity.current(`Bearer ${current.token}`, tx);
         await tx.$queryRaw`SELECT id FROM projects WHERE id=${candidate.id}::uuid FOR SHARE`;
         await this.rights.assertReplayed(candidate.id);
-        if (await this.rights.deletedIn(tx, candidate.id)) return null;
+        if (await this.rights.deletedIn(tx, candidate.id, "activeData"))
+          return null;
         const project = await tx.project.findUnique({
           where: { id: candidate.id },
         });

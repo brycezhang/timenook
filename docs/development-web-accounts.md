@@ -47,7 +47,7 @@ node apps/api/dist/web/web-cli.js revoke --input-file /absolute/private/revoke.j
 
 ## 工程验证
 
-测试只使用隔离的真实 PostgreSQL schema、Redis 前缀、临时独立台账和合成数据，不访问云端库或真实微信。公开 CLI／HTTP 回归覆盖 10 项：无效链接、签发兑换及恢复、来源校验、Cookie 桥接与退出、链接撤销、并发单次消费及重启、限流、过期、跨账号证明隔离，以及 web-only 启动不触发旧期限清理但显式维护仍有效。
+测试只使用隔离的真实 PostgreSQL schema、Redis 前缀、临时独立台账和合成数据，不访问云端库或真实微信。公开 CLI／HTTP 回归覆盖 11 项：无效链接、签发兑换及恢复、来源校验、Cookie 桥接与退出、链接撤销、并发单次消费及重启、限流、过期、跨账号证明隔离，以及 activeData 删除台账生效即停止暴露书名、web-only 启动不触发旧期限清理但显式维护仍有效。
 
 ```sh
 pnpm --filter @timenook/api db:generate
@@ -57,4 +57,4 @@ pnpm --filter @timenook/api exec tsc -p tsconfig.test.json
 node --env-file-if-exists=../../.env --test dist-test/test/web-account.test.js dist-test/test/identity.test.js dist-test/test/ai-config.test.js dist-test/test/oss-config.test.js
 ```
 
-上述相关回归 25 项通过；API 类型及生产构建通过。W01 实际 HTTPS 浏览器、最终提交 CI 与双轴审查由本票集成记录接续，不以本说明代替目标环境或微信真机验收。
+W01 首轮含 AI／OSS 配置的相关回归 25 项通过；独立审查发现 activeData 删除后的列表遮罩缺口，补充“拒绝依据已提交但私人书名仍在库中”的 HTTP 回归后，网页账号与既有身份相关回归 22 项通过。API 类型及生产构建通过。W01 实际 HTTPS 浏览器、最终提交 CI 与双轴审查由本票集成记录接续，不以本说明代替目标环境或微信真机验收。

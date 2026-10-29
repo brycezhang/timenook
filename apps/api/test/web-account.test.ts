@@ -13,6 +13,7 @@ import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { ProjectPlans } from "../src/projects/project-plans";
 import { ProjectServiceTerms } from "../src/projects/service-terms";
 import { Deletions } from "../src/care/deletions";
+import { PrivacyRights } from "../src/care/privacy-rights";
 
 const schema = `web_${randomUUID().replaceAll("-", "")}`;
 const origin = "https://localhost:3447";
@@ -453,6 +454,61 @@ test("session credentials and CSRF proofs cannot be mixed between accounts", asy
   );
 });
 
+test("the project list hides active-data deletion immediately before payload erasure", async () => {
+  const { account, cookie } = await signedIn();
+  const db = new PrismaClient({ datasourceUrl: config.databaseUrl });
+  const plans = new ProjectPlans(config.databaseUrl);
+  const projectId = randomUUID();
+  try {
+    await plans.createProject({ projectId, createdBy: account.user.id });
+    await db.project.update({
+      where: { id: projectId },
+      data: { bookTitle: "合成待清理私人书名" },
+    });
+    const list = () =>
+      app.inject({
+        method: "GET",
+        url: "/v1/web/projects",
+        headers: { cookie },
+      });
+    assert.deepEqual((await list()).json().data.projects, [
+      { id: projectId, bookTitle: "合成待清理私人书名", role: "initiator" },
+    ]);
+    const now = new Date().toISOString();
+    await db.$transaction((tx) =>
+      app.get(PrivacyRights).publishIn(tx, {
+        eventId: randomUUID(),
+        projectId,
+        kind: "deletion",
+        occurredAt: now,
+        payload: {
+          operation: "erase",
+          requestId: null,
+          trigger: "retention_expiry",
+          categories: ["activeData"],
+          effectiveAt: now,
+          accessEpoch: 0,
+          targets: [],
+          taskFences: [],
+          targetAttemptId: null,
+        },
+      }),
+    );
+    // Fixture checkpoint: the denial has committed but no erasure worker ran.
+    const retained = await db.project.findUniqueOrThrow({
+      where: { id: projectId },
+    });
+    assert.equal(retained.bookTitle, "合成待清理私人书名");
+    const response = await list();
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json().data, { projects: [] });
+    assert.doesNotMatch(response.body, /合成待清理私人书名/);
+  } finally {
+    await plans.close();
+    await db.$disconnect();
+  }
+});
+
 test("web-only startup does not start legacy retention erasure while serving an existing project", async () => {
   const { account, cookie } = await signedIn();
   await app.close();
@@ -528,9 +584,9 @@ test("web-only startup does not start legacy retention erasure while serving an 
       { id: projectId, bookTitle: "合成内测保留书名", role: "initiator" },
     ]);
     await app.get(Deletions).sweep();
-    assert.equal(
-      (await list()).json().data.projects[0]?.bookTitle,
-      "人生故事书",
+    assert.deepEqual(
+      (await list()).json().data.projects,
+      [],
       "explicit maintenance still applies existing deletion rules",
     );
   } finally {
