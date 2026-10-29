@@ -19,6 +19,7 @@ import { ProductionTasks } from "../src/tasks/tasks";
 import { before, after, test } from "node:test";
 import {
   adminRequest,
+  exportVerificationScope,
   acceptedBook,
   anotherAcceptedExport,
   pausedZip,
@@ -73,6 +74,7 @@ test("a new product ZIP request cannot use pre-refusal export authority after sa
       `/v1/admin/care-requests/${exp.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(exp.id, admin)),
         expectedBindingVersion: current.bindingVersion,
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
@@ -149,6 +151,7 @@ test("a new product ZIP request cannot use pre-refusal export authority after sa
       `/v1/admin/care-requests/${pending.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(pending.id, admin)),
         expectedBindingVersion: denied.bindingVersion,
         expectedAccessEpoch: denied.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
@@ -181,6 +184,7 @@ test("a new product ZIP request cannot use pre-refusal export authority after sa
       `/v1/admin/care-requests/${next.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(next.id, admin)),
         expectedBindingVersion: denied.bindingVersion,
         expectedAccessEpoch: denied.accessEpoch,
         noticeVersion: "synthetic-d08-v1",

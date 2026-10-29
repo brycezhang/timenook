@@ -17,6 +17,7 @@ import { readyFirstCopyBook } from "./first-copy-fixture";
 import { paymentAdmin } from "./payment-admin-fixture";
 import { Deletions } from "../src/care/deletions";
 import { PrivacyJournal } from "../src/privacy-journal/privacy-journal";
+import { exportVerificationScope } from "./complete-export-fixture";
 before(startBookFixture);
 after(stopBookFixture);
 test("completed export packages have no business expiry and survive maintenance and orphan cleanup beyond 2099", async (t) => {
@@ -52,6 +53,7 @@ test("completed export packages have no business expiry and survive maintenance 
     );
     data(
       await admin(`/v1/admin/care-requests/${opened.id}/verify`, {
+        ...(await exportVerificationScope(opened.id, headers)),
         expectedBindingVersion: current.bindingVersion,
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",

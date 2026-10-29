@@ -42,9 +42,11 @@
 
 ## 客服替代交付的独立安全授权
 
-无微信替代交付使用不可变 `ExportStaffGrant`，与资料包长期资格分别存储。首次受理只消费原本人核验事实，从原 verifiedAt 起最多30分钟；延迟受理、重复accept、工单completed或客服重新飞书登录不延长它。原核验客服以外的人不能取得或使用该授权。
+无微信替代交付使用不可变 `ExportStaffGrant`，与资料包长期资格分别存储。首次核验须携带工单详情 `verificationScope.accessSequence` 对应的 `expectedAccessSequence`，在项目锁内比对并保存 `verificationAccessSequence`。首次受理只消费这份原核验事实，重验相同序列及从原 verifiedAt 起最多30分钟的有效期；延迟受理、重复accept、工单completed或客服重新飞书登录不延长它。原核验客服以外的人不能取得或使用该授权。
 
 过期后由原核验客服沿 `POST /v1/admin/care-requests/:caseId/export/access-verification` 记录新的受控本人核验：须匹配本项目D08身份流程和本人确认渠道，核对当前讲述者/绑定/epoch、具体接收人和渠道，并记录告知版本、完整资料交付用途、本次明确同意和新的受限核验记录引用。服务端最多30分钟，后台选择15分钟。登录或单独提供未来日期不能续签；同键只返回原授权，旧核验记录换键也不能复用。授权表只保存主体/操作人、范围、时间及证据/接收引用hash等最少事实，原受限核验记录仍由既有运营流程保管。
+
+续签也须携带导出详情 `staffAccess.accessSequence` 对应的 `expectedAccessSequence`。缺少序列不会采用当前值；撤回再同意后迟到的旧请求返回409，首次受理也不能把旧核验升级成新序列。页面查询观察到范围变化时清空此前核验记录与本人同意勾选，须实际重新核验。
 
 领取在文件I/O前后和流中持续重验当前授权、原核验人、binding/epoch/撤回序号和有效期，并固定首次捕获的grant ID。新的授权不会接续旧活动流；撤回、换绑和安全授权到期停止私有字节。后台取包后重查同一grant及包hash，使用staffAccess.expiresAt，不再把包的expiresAt=null当成下载失败。普通用户领取不要求客服授权，也不恢复任何业务到期日。
 

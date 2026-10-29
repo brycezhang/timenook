@@ -972,7 +972,7 @@ test("expired or superseded invitations cannot apply or approve, and D08 is fail
   assert.equal((await state(p, p.buyer.token)).bindingVersion, 0);
   assert.equal(
     data(await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token), 200)
-      .project.terms.creation.startsAt,
+      .project.terms.creation.expiresAt,
     null,
   );
   const unconfigured = await createApplication(
@@ -1553,6 +1553,14 @@ test("unbound subject rights requests recover through Care and verified withdraw
         ...notice(),
         expectedBindingVersion: 0,
         expectedAccessEpoch: after.accessEpoch,
+        expectedAccessSequence: data(
+          await app.inject({
+            method: "GET",
+            url: `/v1/admin/care-requests/${exported.id}`,
+            headers: operator,
+          }),
+          200,
+        ).verificationScope.accessSequence,
       },
     }),
   );

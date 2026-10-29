@@ -46,17 +46,34 @@ async function perform(
       emit("expired");
     } else
       error.value =
-        code === "FORBIDDEN"
-          ? "本工单或当前本人授权已变化，请重新核验。"
+        code === "FORBIDDEN" || code === "CONFLICT"
+          ? "本工单或当前本人授权已变化，请重新查询并重新核验本人。"
           : "处理未完成，请核对资料、范围及原申请后重试。";
   } finally {
     if (id === props.care.id && g === generation) busy.value = false;
   }
 }
+function applyCurrent(row: CompleteExportView | null) {
+  const previous = value.value?.staffAccess,
+    next = row?.staffAccess;
+  if (
+    previous?.accessSequence !== next?.accessSequence ||
+    previous?.bindingVersion !== next?.bindingVersion ||
+    previous?.accessEpoch !== next?.accessEpoch
+  ) {
+    // A newly observed scope is not a new subject encounter. Clear the old
+    // human proof/consent so refresh cannot silently upgrade that encounter.
+    identityVerified.value = false;
+    subjectConsented.value = false;
+    verificationRef.value = "";
+    intent = null;
+  }
+  value.value = row;
+}
 const refresh = () =>
   perform(async (id, g) => {
     const row = await completeExportApi.read(id);
-    if (id === props.care.id && g === generation) value.value = row;
+    if (id === props.care.id && g === generation) applyCurrent(row);
   });
 watch(
   () => [props.care.id, props.care.state],
@@ -100,7 +117,7 @@ async function command(action: "accept" | "pack" | "delivery") {
     if (id !== props.care.id || g !== generation) return;
     const current = await completeExportApi.read(id);
     if (id !== props.care.id || g !== generation) return;
-    value.value = current;
+    applyCurrent(current);
     intent = null;
   });
 }
@@ -129,6 +146,7 @@ async function verifyAccess() {
         body: {
           expectedBindingVersion: scope.bindingVersion,
           expectedAccessEpoch: scope.accessEpoch,
+          expectedAccessSequence: scope.accessSequence,
           purpose: "complete_export_delivery",
           noticeVersion: "synthetic-d08-v1",
           identityVerified: true,
@@ -149,7 +167,7 @@ async function verifyAccess() {
     if (id !== props.care.id || g !== generation) return;
     const current = await completeExportApi.read(id);
     if (id !== props.care.id || g !== generation) return;
-    value.value = current;
+    applyCurrent(current);
     intent = null;
     identityVerified.value = false;
     subjectConsented.value = false;

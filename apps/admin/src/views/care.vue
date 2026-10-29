@@ -235,6 +235,7 @@ async function verify() {
       evidence: evidence.value,
       version: care.sourceBindingVersion,
       epoch: care.sourceAccessEpoch,
+      sequence: care.verificationScope?.accessSequence,
     });
     if (intent?.input !== input) intent = { input, key: crypto.randomUUID() };
     await careApi.verify(care, evidence.value, intent.key, props.csrf);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import {
   startBookFixture,
   stopBookFixture,
@@ -9,6 +9,7 @@ import {
   db,
   data,
   project,
+  state,
 } from "./book-fixture";
 import {
   alternativeExport,
@@ -19,6 +20,7 @@ import {
   assistedExportChoice,
   largeExportSources,
   acceptAlternativeCase,
+  exportVerificationScope,
 } from "./complete-export-fixture";
 import { authenticateFeishu } from "./admin-feishu-fixture";
 import { paymentAdmin } from "./payment-admin-fixture";
@@ -48,15 +50,14 @@ async function verification(
   p: Awaited<ReturnType<typeof alternativeExport>>,
   expiresAt = new Date(Date.now() + 15 * 60000).toISOString(),
 ) {
-  const subject = await db.projectSubject.findUniqueOrThrow({
-    where: { projectId: p.projectId },
-  });
-  const project = await db.project.findUniqueOrThrow({
-    where: { id: p.projectId },
-  });
+  const scope = data(
+    await adminRequest("GET", p.base, p.admin),
+    200,
+  ).staffAccess;
   return {
-    expectedBindingVersion: subject.bindingVersion,
-    expectedAccessEpoch: project.accessEpoch,
+    expectedBindingVersion: scope.bindingVersion,
+    expectedAccessEpoch: scope.accessEpoch,
+    expectedAccessSequence: scope.accessSequence,
     purpose: "complete_export_delivery",
     noticeVersion: "synthetic-d08-v1",
     identityVerified: true,
@@ -96,6 +97,7 @@ test("a completed alternative export requires fresh recorded subject verificatio
   t.mock.timers.enable({ apis: ["Date"], now: future });
   try {
     const headers = await relogin(p);
+    p.admin = headers;
     assert.equal(
       (await adminRequest("GET", p.base + "/download", headers)).statusCode,
       403,
@@ -118,6 +120,7 @@ test("a completed alternative export requires fresh recorded subject verificatio
       key = randomUUID(),
       url = p.base + "/access-verification";
     for (const bad of [
+      { expectedAccessSequence: undefined },
       { subjectConsented: false },
       { identityVerified: false },
       { noticeVersion: "obsolete" },
@@ -187,6 +190,228 @@ test("a completed alternative export requires fresh recorded subject verificatio
     assert.equal(
       (await adminRequest("GET", p.base + "/download", other)).statusCode,
       403,
+    );
+  } finally {
+    t.mock.timers.reset();
+  }
+});
+test("a staff verification prepared before withdrawal cannot acquire a later authorization sequence", async () => {
+  const p = await alternativeExport();
+  const body = await verification(p),
+    key = randomUUID();
+  data(await assistedExportChoice(p, "collection", false));
+  data(await assistedExportChoice(p, "collection", true));
+  assert.equal(
+    (await adminRequest("GET", p.base + "/download", p.admin)).statusCode,
+    403,
+  );
+  assert.equal(
+    (
+      await adminRequest(
+        "POST",
+        p.base + "/access-verification",
+        p.admin,
+        body,
+        key,
+      )
+    ).statusCode,
+    409,
+  );
+  assert.equal(
+    (await adminRequest("GET", p.base + "/download", p.admin)).statusCode,
+    403,
+  );
+  data(
+    await adminRequest(
+      "POST",
+      p.base + "/access-verification",
+      p.admin,
+      await verification(p),
+    ),
+  );
+  const renewed = await adminRequest("GET", p.base + "/download", p.admin);
+  assert.equal(renewed.statusCode, 200);
+  assert.equal(
+    createHash("sha256").update(renewed.rawPayload).digest("hex"),
+    p.packed.sha256,
+  );
+});
+test("first acceptance cannot upgrade a subject verification recorded before withdrawal", async () => {
+  const p = await project();
+  data(await assistedExportChoice(p, "collection", true));
+  const admin = await paymentAdmin(config, app, ["care:write"]);
+  const current = await state(p, p.buyer.token);
+  const exp = data(
+    await adminRequest(
+      "POST",
+      `/v1/admin/projects/${p.projectId}/care-requests`,
+      admin,
+      {
+        kind: "export",
+        expectedBindingVersion: current.bindingVersion,
+      },
+    ),
+  );
+  const body = {
+    expectedBindingVersion: current.bindingVersion,
+    expectedAccessEpoch: current.accessEpoch,
+    noticeVersion: "synthetic-d08-v1",
+    evidenceRef: "synthetic:撤回前本人核验和完整范围",
+    ...(await exportVerificationScope(exp.id, admin)),
+  };
+  const verificationKey = randomUUID();
+  data(
+    await adminRequest(
+      "POST",
+      `/v1/admin/care-requests/${exp.id}/verify`,
+      admin,
+      body,
+      verificationKey,
+    ),
+  );
+  data(await assistedExportChoice(p, "collection", false));
+  data(await assistedExportChoice(p, "collection", true));
+  assert.equal(
+    (
+      await adminRequest(
+        "POST",
+        `/v1/admin/care-requests/${exp.id}/verify`,
+        admin,
+        body,
+        verificationKey,
+      )
+    ).statusCode,
+    409,
+  );
+  const base = `/v1/admin/care-requests/${exp.id}/export`;
+  assert.equal(
+    (
+      await adminRequest("POST", base + "/accept", admin, {
+        dueAt: new Date(Date.now() + 86400000).toISOString(),
+        evidenceRef: "synthetic:迟到的受理不等于重新本人核验",
+        recipientRef: "synthetic:本人指定的替代接收人和渠道",
+      })
+    ).statusCode,
+    409,
+  );
+});
+test("an initial subject verification request cannot cross withdrawal and regrant, and missing sequence is never inferred", async () => {
+  const p = await project();
+  data(await assistedExportChoice(p, "collection", true));
+  const admin = await paymentAdmin(config, app, ["care:write"]);
+  const current = await state(p, p.buyer.token);
+  const exp = data(
+    await adminRequest(
+      "POST",
+      `/v1/admin/projects/${p.projectId}/care-requests`,
+      admin,
+      {
+        kind: "export",
+        expectedBindingVersion: current.bindingVersion,
+      },
+    ),
+  );
+  const url = `/v1/admin/care-requests/${exp.id}/verify`;
+  const body = {
+    expectedBindingVersion: current.bindingVersion,
+    expectedAccessEpoch: current.accessEpoch,
+    noticeVersion: "synthetic-d08-v1",
+    evidenceRef: "synthetic:撤回前已完成但请求尚未送达的本人核验",
+    ...(await exportVerificationScope(exp.id, admin)),
+  };
+  const key = randomUUID();
+  assert.equal(
+    (
+      await adminRequest("POST", url, admin, {
+        ...body,
+        expectedAccessSequence: undefined,
+      })
+    ).statusCode,
+    409,
+  );
+  data(await assistedExportChoice(p, "collection", false));
+  data(await assistedExportChoice(p, "collection", true));
+  assert.equal(
+    (await adminRequest("POST", url, admin, body, key)).statusCode,
+    409,
+  );
+  const fresh = {
+    ...body,
+    ...(await exportVerificationScope(exp.id, admin)),
+    evidenceRef: "synthetic:重新同意后实际重新核验本人",
+  };
+  assert.notEqual(fresh.expectedAccessSequence, body.expectedAccessSequence);
+  data(await adminRequest("POST", url, admin, fresh));
+  const base = `/v1/admin/care-requests/${exp.id}/export`;
+  data(
+    await adminRequest("POST", base + "/accept", admin, {
+      dueAt: new Date(Date.now() + 86400000).toISOString(),
+      evidenceRef: "synthetic:新本人核验后受理",
+      recipientRef: "synthetic:本人指定的替代接收人和渠道",
+    }),
+  );
+  const view = data(await adminRequest("GET", base, admin), 200);
+  assert.equal(view.staffAccess.available, true);
+  assert.equal(view.staffAccess.accessSequence, fresh.expectedAccessSequence);
+  const care = data(
+    await adminRequest("GET", `/v1/admin/care-requests/${exp.id}`, admin),
+    200,
+  );
+  assert.equal(care.verification.accessSequence, fresh.expectedAccessSequence);
+});
+test("first acceptance cannot renew an expired initial subject verification", async (t) => {
+  const p = await project();
+  data(await assistedExportChoice(p, "collection", true));
+  const admin = await paymentAdmin(config, app, ["care:write"]);
+  const current = await state(p, p.buyer.token);
+  const exp = data(
+    await adminRequest(
+      "POST",
+      `/v1/admin/projects/${p.projectId}/care-requests`,
+      admin,
+      {
+        kind: "export",
+        expectedBindingVersion: current.bindingVersion,
+      },
+    ),
+  );
+  data(
+    await adminRequest(
+      "POST",
+      `/v1/admin/care-requests/${exp.id}/verify`,
+      admin,
+      {
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+        ...(await exportVerificationScope(exp.id, admin)),
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:核验当时本人同意但受理已迟到",
+      },
+    ),
+  );
+  const care = data(
+    await adminRequest("GET", `/v1/admin/care-requests/${exp.id}`, admin),
+    200,
+  );
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: Date.parse(care.verification.createdAt) + 30 * 60000,
+  });
+  try {
+    assert.equal(
+      (
+        await adminRequest(
+          "POST",
+          `/v1/admin/care-requests/${exp.id}/export/accept`,
+          admin,
+          {
+            dueAt: new Date(Date.now() + 86400000).toISOString(),
+            evidenceRef: "synthetic:期限不重置本人核验时间",
+            recipientRef: "synthetic:本人指定的替代接收人和渠道",
+          },
+        )
+      ).statusCode,
+      409,
     );
   } finally {
     t.mock.timers.reset();

@@ -162,6 +162,15 @@ export class CareRequestDto {
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
 }
 export class VerifyCareDto extends ParticipationNoticeDto {
+  @ApiProperty({
+    minimum: 0,
+    required: false,
+    description: "Required for export subject verification",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedAccessSequence?: number;
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedAccessEpoch!: number;
 }
@@ -517,6 +526,27 @@ export class Participation
       );
     }
     return record.granted && record.method === "self_wechat";
+  }
+  /** The caller holds the project lock; a verification may only consume the
+   * exact authorization sequence observed during that subject encounter. */
+  async exportAccessSequenceIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ) {
+    await this.rights.assertReplayed(projectId);
+    await this.rights.requireAvailableIn(tx, projectId);
+    const latest = await tx.projectAccessRevocation.findFirst({
+      where: {
+        projectId,
+        OR: [
+          { reason: { not: "assisted" } },
+          { purpose: { in: ["collection", "sharing", "all", "binding"] } },
+        ],
+      },
+      orderBy: { sequence: "desc" },
+      select: { sequence: true },
+    });
+    return latest?.sequence ?? 0;
   }
   private async collectionStampIn(
     tx: Prisma.TransactionClient,
@@ -990,6 +1020,17 @@ export class Participation
     // Operational review and production cases are not D08 subject-right requests.
     if (["production_handoff", "quality"].includes(care.kind))
       throw new ConflictException();
+    const verificationAccessSequence =
+      care.kind === "export"
+        ? await this.exportAccessSequenceIn(tx, p.id)
+        : null;
+    if (
+      care.kind === "export" &&
+      body.expectedAccessSequence !== verificationAccessSequence
+    )
+      throw new ConflictException(
+        "Subject authorization changed; verify the subject again",
+      );
     const hash = digest(JSON.stringify(body));
     const result = () => ({
       id,
@@ -1050,6 +1091,7 @@ export class Participation
         state: "verified",
         verifiedBy: operatorId,
         verifiedAt: new Date(),
+        verificationAccessSequence,
         verificationKey: key,
         verificationHash: hash,
         verificationEvidence: payloadDeleted ? null : body.evidenceRef,
@@ -1094,14 +1136,21 @@ export class Participation
           verifiedAt: true,
           verificationEvidence: true,
           verificationNotice: true,
+          verificationAccessSequence: true,
           revokedAccessEpoch: true,
         },
       });
       if (!row) throw new NotFoundException();
-      const payloadDeleted = await this.activeDataDeletedIn(
-        tx,
-        row.projectId,
-      );
+      const payloadDeleted = await this.activeDataDeletedIn(tx, row.projectId);
+      // Page context is observed now. The later command must return this exact
+      // sequence, never have the server upgrade an old verification body.
+      let verificationScope: { accessSequence: number } | undefined;
+      if (row.kind === "export" && !payloadDeleted) {
+        await this.project(tx, row.projectId, true);
+        verificationScope = {
+          accessSequence: await this.exportAccessSequenceIn(tx, row.projectId),
+        };
+      }
       const changes: CareBindingChangeView[] = (
         await tx.bindingChange.findMany({
           where: { supportCaseId: id },
@@ -1126,6 +1175,7 @@ export class Participation
       }));
       return {
         ...careView(row),
+        ...(verificationScope ? { verificationScope } : {}),
         supportCaseRef: `record:${id}`,
         correctionGrant: await tx.storyCareGrant.findUnique({
           where: { caseId: id },
@@ -1139,6 +1189,7 @@ export class Participation
               noticeVersion: payloadDeleted ? null : row.verificationNotice,
               method: "care_verified",
               accessEpoch: row.revokedAccessEpoch,
+              accessSequence: row.verificationAccessSequence,
             }
           : null,
         changes,
@@ -1277,10 +1328,7 @@ export class Participation
       };
     });
   }
-  async activeDataDeletedIn(
-    tx: Prisma.TransactionClient,
-    projectId: string,
-  ) {
+  async activeDataDeletedIn(tx: Prisma.TransactionClient, projectId: string) {
     if (await this.rights.deletedIn(tx, projectId, "activeData")) return true;
     const terms = await this.terms.read(projectId, tx);
     return terms.retention?.activeData?.state === "deleted";

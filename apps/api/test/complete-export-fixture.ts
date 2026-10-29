@@ -35,6 +35,18 @@ export async function adminRequest(
   });
 }
 
+/** Capture once during the actual subject encounter, before sending verify. */
+export async function exportVerificationScope(
+  id: string,
+  admin: Record<string, string>,
+) {
+  const care = data(
+    await adminRequest("GET", `/v1/admin/care-requests/${id}`, admin),
+    200,
+  );
+  return { expectedAccessSequence: care.verificationScope.accessSequence };
+}
+
 export async function requestedBook() {
   const p = await readyFirstCopyBook();
   const exp = data(
@@ -64,6 +76,7 @@ export async function requestedBook() {
       `/v1/admin/care-requests/${exp.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(exp.id, admin)),
         expectedBindingVersion: current.bindingVersion,
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
@@ -124,6 +137,7 @@ export async function anotherAcceptedExport(
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
         evidenceRef: "synthetic:核验本次本人和完整范围",
+        ...(await exportVerificationScope(exp.id, p.admin)),
       },
     ),
   );
@@ -317,6 +331,7 @@ export async function acceptAlternativeCase(
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
         evidenceRef: "synthetic:核验本人及替代交付完整范围",
+        ...(await exportVerificationScope(exp.id, admin)),
       },
     ),
   );
@@ -457,6 +472,14 @@ export async function recordAlternativeStaffVerification(p: {
   const row = await db.careExport.findUniqueOrThrow({
     where: { id: p.exp.id },
   });
+  const scope = data(
+    await adminRequest(
+      "GET",
+      `/v1/admin/care-requests/${p.exp.id}/export`,
+      p.admin,
+    ),
+    200,
+  ).staffAccess;
   return data(
     await adminRequest(
       "POST",
@@ -465,6 +488,7 @@ export async function recordAlternativeStaffVerification(p: {
       {
         expectedBindingVersion: current.bindingVersion,
         expectedAccessEpoch: current.accessEpoch,
+        expectedAccessSequence: scope.accessSequence,
         purpose: "complete_export_delivery",
         noticeVersion: "synthetic-d08-v1",
         identityVerified: true,

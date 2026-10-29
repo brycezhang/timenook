@@ -83,6 +83,7 @@ export class ExportReceiptDto {
   @ApiProperty() @Matches(/^[a-f0-9]{64}$/) sha256!: string;
 }
 export class ExportStaffVerificationDto {
+  @ApiProperty() @IsInt() @Min(0) expectedAccessSequence!: number;
   @ApiProperty() @IsInt() @Min(0) expectedBindingVersion!: number;
   @ApiProperty() @IsInt() @Min(0) expectedAccessEpoch!: number;
   @ApiProperty() @IsISO8601() expiresAt!: string;
@@ -554,7 +555,10 @@ export class CompleteExports implements OnModuleDestroy {
       where: { caseId: p.care.id },
       orderBy: { sequence: "desc" },
     });
-    const fence = await this.streams.fence(p.project.id);
+    const accessSequence = await this.participation.exportAccessSequenceIn(
+      tx,
+      p.project.id,
+    );
     const available = !!(
       row &&
       p.contentAllowed !== false &&
@@ -563,7 +567,7 @@ export class CompleteExports implements OnModuleDestroy {
       row.subjectId === p.subject.id &&
       row.bindingVersion === p.subject.bindingVersion &&
       row.accessEpoch === p.project.accessEpoch &&
-      row.accessSequence === fence.sequence &&
+      row.accessSequence === accessSequence &&
       row.recipientHash === digest(p.row.recipientRef) &&
       row.expiresAt.getTime() > Date.now()
     );
@@ -580,6 +584,7 @@ export class CompleteExports implements OnModuleDestroy {
           this.verificationPolicy(p).confirmationChannelRef,
         bindingVersion: p.subject.bindingVersion,
         accessEpoch: p.project.accessEpoch,
+        accessSequence,
       },
     };
   }
@@ -592,10 +597,21 @@ export class CompleteExports implements OnModuleDestroy {
     if (
       !p.care.verifiedAt ||
       !p.care.verificationNotice ||
-      !p.care.verificationEvidence
+      !p.care.verificationEvidence ||
+      p.care.verificationAccessSequence === null
     )
       throw new ForbiddenException();
-    const fence = await this.streams.fence(p.project.id);
+    const accessSequence = await this.participation.exportAccessSequenceIn(
+      tx,
+      p.project.id,
+    );
+    if (
+      p.care.verificationAccessSequence !== accessSequence ||
+      p.care.verifiedAt.getTime() + STAFF_ACCESS_MS <= Date.now()
+    )
+      throw new ConflictException(
+        "A fresh recorded subject verification is required",
+      );
     await tx.exportStaffGrant.create({
       data: {
         id: randomUUID(),
@@ -605,7 +621,7 @@ export class CompleteExports implements OnModuleDestroy {
         adminId,
         bindingVersion: p.subject.bindingVersion,
         accessEpoch: p.project.accessEpoch,
-        accessSequence: fence.sequence,
+        accessSequence: p.care.verificationAccessSequence,
         key: "initial-case-verification",
         requestHash: digest({
           verificationHash: p.care.verificationHash,
@@ -645,6 +661,14 @@ export class CompleteExports implements OnModuleDestroy {
       body.noticeVersion !== p.care.verificationNotice
     )
       throw new ForbiddenException();
+    const accessSequence = await this.participation.exportAccessSequenceIn(
+      tx,
+      p.project.id,
+    );
+    if (body.expectedAccessSequence !== accessSequence)
+      throw new ConflictException(
+        "Subject authorization changed; verify the subject again",
+      );
     const prior = await tx.exportStaffGrant.findUnique({
       where: { caseId_key: { caseId: id, key } },
     });
@@ -673,7 +697,6 @@ export class CompleteExports implements OnModuleDestroy {
       expiresAt.getTime() > now.getTime() + STAFF_ACCESS_MS
     )
       throw new BadRequestException();
-    const fence = await this.streams.fence(p.project.id);
     const row = await tx.exportStaffGrant
       .create({
         data: {
@@ -684,7 +707,7 @@ export class CompleteExports implements OnModuleDestroy {
           adminId,
           bindingVersion: p.subject.bindingVersion,
           accessEpoch: p.project.accessEpoch,
-          accessSequence: fence.sequence,
+          accessSequence: body.expectedAccessSequence,
           key,
           requestHash: digest(body),
           source: "renewed_verification",

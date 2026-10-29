@@ -81,6 +81,7 @@ export interface CareCase {
   createdAt: string;
   supportCaseRef?: string;
   changes?: CareBindingChangeView[];
+  verificationScope?: { accessSequence: number };
   verification?: {
     operatorAdminId: string;
     createdAt: string;
@@ -88,6 +89,7 @@ export interface CareCase {
     noticeVersion: string | null;
     method: string;
     accessEpoch: number | null;
+    accessSequence: number | null;
   } | null;
 }
 export interface ProjectCareRequestView {

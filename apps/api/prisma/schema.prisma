@@ -568,6 +568,7 @@ model CareRequest {
   targetUserId         String?   @map("target_user_id") @db.Uuid
   sourceBindingVersion Int      @map("source_binding_version")
   sourceAccessEpoch Int @map("source_access_epoch")
+  verificationAccessSequence Int? @map("verification_access_sequence")
   verificationKey String? @map("verification_key")
   verificationHash String? @map("verification_hash") @db.Char(64)
   verificationEvidence String? @map("verification_evidence")

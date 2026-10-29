@@ -1,3 +1,7 @@
+-- Export identity verification records the sequence seen by that encounter.
+ALTER TABLE care_requests ADD COLUMN verification_access_sequence integer;
+ALTER TABLE care_requests ADD CONSTRAINT export_verification_sequence_required
+ CHECK(kind<>'export' OR state='open' OR verification_access_sequence IS NOT NULL);
 CREATE TABLE export_staff_grants (
  id uuid PRIMARY KEY, sequence bigserial UNIQUE,
  project_id uuid NOT NULL REFERENCES projects(id), case_id uuid NOT NULL,

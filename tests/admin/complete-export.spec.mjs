@@ -448,6 +448,10 @@ test("alternative delivery records a fresh subject verification before renewing 
         {
           expectedBindingVersion: subject.bindingVersion,
           expectedAccessEpoch: 0,
+          expectedAccessSequence: fixture.data(
+            await e.adminRequest("GET", p.base, adminHeaders),
+            200,
+          ).staffAccess.accessSequence,
           purpose: "complete_export_delivery",
           noticeVersion: "synthetic-d08-v1",
           identityVerified: true,
@@ -494,10 +498,53 @@ test("alternative delivery records a fresh subject verification before renewing 
       exact: true,
     })
     .check();
+  await expect(renew).toBeEnabled();
+  // The filled form describes the encounter before withdrawal. Observing a
+  // later scope cannot silently carry that human verification forward.
+  try {
+    process.chdir(resolve("apps/api"));
+    const e = apiRequire("./dist-test/test/complete-export-fixture.js");
+    fixture.data(await e.assistedExportChoice(p, "collection", false));
+    fixture.data(await e.assistedExportChoice(p, "collection", true));
+  } finally {
+    process.chdir(previous);
+  }
+  await admin
+    .getByRole("button", { name: "查询导出进展", exact: true })
+    .click();
+  await expect(
+    admin.getByLabel("临时领取核验记录", { exact: true }),
+  ).toHaveValue("");
+  await expect(
+    admin.getByLabel("已按指定流程重新核验本人身份", { exact: true }),
+  ).not.toBeChecked();
+  await expect(
+    admin.getByLabel("已告知用途、接收范围、15分钟权限并取得本人本次明确同意", {
+      exact: true,
+    }),
+  ).not.toBeChecked();
+  await expect(renew).toBeDisabled();
+  await admin
+    .getByLabel("临时领取核验记录", { exact: true })
+    .fill("record:synthetic-browser-after-regrant-verification");
+  await admin
+    .getByLabel("已按指定流程重新核验本人身份", { exact: true })
+    .check();
+  await admin
+    .getByLabel("已告知用途、接收范围、15分钟权限并取得本人本次明确同意", {
+      exact: true,
+    })
+    .check();
+  const sending = admin.waitForRequest(
+    (r) => r.method() === "POST" && r.url().endsWith("/access-verification"),
+  );
   await command(
     admin,
     "记录本人核验并取得临时领取权限",
     "/access-verification",
+  );
+  expect((await sending).postDataJSON().expectedAccessSequence).toBeGreaterThan(
+    0,
   );
   await expect(
     admin.getByRole("button", { name: "按核验渠道领取资料包", exact: true }),

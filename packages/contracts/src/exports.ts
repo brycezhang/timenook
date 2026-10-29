@@ -31,6 +31,7 @@ export interface CompleteExportView {
     confirmationChannelRef: string;
     bindingVersion: number;
     accessEpoch: number;
+    accessSequence: number;
   };
 }
 export interface CompleteExportContext {

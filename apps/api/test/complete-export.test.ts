@@ -32,6 +32,7 @@ import { before, after, test } from "node:test";
 import {
   requestedBook,
   adminRequest,
+  exportVerificationScope,
   acceptedBook,
   anotherAcceptedExport,
   photoDeadline,
@@ -260,6 +261,7 @@ test("only an explicitly authorized initiator receives the package and download 
       `/v1/admin/care-requests/${exp.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(exp.id, admin)),
         expectedBindingVersion: current.bindingVersion,
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",
@@ -380,6 +382,7 @@ test("without-WeChat export uses a separately verified subject recipient and lea
       `/v1/admin/care-requests/${care.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(care.id, admin)),
         expectedBindingVersion: 0,
         expectedAccessEpoch: 0,
         noticeVersion: "synthetic-d08-v1",
@@ -521,6 +524,7 @@ test("incomplete original transcript is reported in the shared case instead of o
       `/v1/admin/care-requests/${exp.id}/verify`,
       admin,
       {
+        ...(await exportVerificationScope(exp.id, admin)),
         expectedBindingVersion: current.bindingVersion,
         expectedAccessEpoch: current.accessEpoch,
         noticeVersion: "synthetic-d08-v1",

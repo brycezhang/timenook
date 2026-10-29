@@ -315,6 +315,9 @@ export const careApi = {
           evidenceRef,
           expectedBindingVersion: care.sourceBindingVersion,
           expectedAccessEpoch: care.sourceAccessEpoch,
+          ...(care.kind === "export"
+            ? { expectedAccessSequence: care.verificationScope?.accessSequence }
+            : {}),
         },
         { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
       )
