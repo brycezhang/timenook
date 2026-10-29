@@ -45,6 +45,7 @@ export function internalSnapshot(version: string): Prisma.JsonObject {
           recordingPerClip: quantity(120, "seconds"),
           recordingTotal: quantity(1200, "seconds"),
           photos: quantity(10, "count"),
+          followUps: quantity(10, "count"),
           storyOrganizations: quantity(10, "count"),
           activeRegenerations: quantity(3, "count"),
         },
