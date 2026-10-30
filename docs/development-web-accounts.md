@@ -1,12 +1,12 @@
 # W01 网页内测账号与会话
 
-对应 [W01 #96](https://github.com/brycezhang/timenook/issues/96)；范围为网页入口所需的账号、一次性登录链接、会话及本人项目列表。共用内部 `User`，不创建虚构微信身份；网页与小程序双端确认关联已由 [W02a](development-wechat-link.md) 实现，正式微信配置及真机结果仍待验；无付款内测项目与内容链路由后续票据接入。
+对应 [W01 #96](https://github.com/brycezhang/timenook/issues/96)；范围为网页入口所需的账号、登录链接、会话及本人项目列表。共用内部 `User`，不创建虚构微信身份；网页与小程序双端确认关联已由 [W02a](development-wechat-link.md) 实现，正式微信配置及真机结果仍待验；无付款内测项目与内容链路由后续票据接入。
 
 ## 配置与运行边界
 
 默认关闭。服务端配置 `WEB_ORIGIN`（HTTPS origin，无路径）、`WEB_SESSION_KEY`（随机 32 字节 base64）、`WEB_LOGIN_TTL_SECONDS`（1–900，默认 900）和 `WEB_SESSION_TTL_SECONDS`（1–43200，默认 43200）。目标 origin 为 `https://sgl.wootoon.cn`。这些字段不打包到浏览器；只有 origin 是公开信息。
 
-2026-10-30 用户确认验证期间账号不要过期。显式 `INTERNAL_ACCEPTANCE_ENABLED=1` 时，新登录链接与网页会话不按时间到期，沿用必填日期契约以 `9999-12-31T23:59:59.999Z` 表示；常规模式仍使用上述有界时效。登录链接仍是一次性凭据，消费或撤销后不能重放。已有未过期网页会话在核对当前账号时自动升级，恢复接口同时刷新持久 Cookie，以适应浏览器自身的 Cookie 保留上限。主动退出、撤销会话及会话密钥轮换继续生效；清除浏览器 Cookie 后需要新的未使用登录链接。此决定只适用于内部验证登录，小程序、后台与私人文件授权继续按各自时效执行。
+2026-10-30 用户确认验证期间账号不要过期。显式 `INTERNAL_ACCEPTANCE_ENABLED=1` 时，验收登录链接可反复登录，链接与网页会话不按时间到期，沿用必填日期契约以 `9999-12-31T23:59:59.999Z` 表示；常规模式仍使用上述有界时效。用户进一步明确链接不能因使用一次就失效；内部验收链接每次明确登录都能建立会话，直到受控命令手动撤销。`consumedAt` 在此模式记录最近一次兑换时间，不阻止再次登录。常规模式仍为一次性消费。已有未过期网页会话在核对当前账号时自动升级，恢复接口同时刷新持久 Cookie，以适应浏览器自身的 Cookie 保留上限。主动退出、撤销会话及会话密钥轮换继续生效；清除浏览器 Cookie 或主动退出后，可再次使用同一验收链接登录。此决定只适用于内部验证登录，小程序、后台与私人文件授权继续按各自时效执行。
 
 启用网页账号要求已正确装配、初始化的独立隐私台账。按[独立台账说明](development-deletion-ledger.md)配置，运行不自动建立或重置台账；台账失效时私人入口拒绝访问。
 
@@ -28,7 +28,7 @@ node apps/api/dist/web/web-cli.js revoke --input-file /absolute/private/revoke.j
 | --- | --- | --- |
 | `create` | `{}` | `{user:{id}}`，预建没有微信身份的产品账号 |
 | `issue` | `{userId}` | `{ticket:{id,expiresAt},url}`，签发指定内部用户的登录链接 |
-| `revoke` | `{ticketId}` | `{revoked:true}`，撤销尚未消费的链接；不代替已建立会话的退出 |
+| `revoke` | `{ticketId}` | `{revoked:true}`，撤销登录链接，含已使用的内部验收链接；不代替已建立会话的退出 |
 
 登录链接形如 `https://sgl.wootoon.cn/app/login#ticket=…`，票据只在签发时写明文，数据库保存摘要。该链接是账号登录凭据，与项目邀请及讲述者本人授权分开；通过私下方式交付给对应内测参与者，不粘贴到公开工单、日志或截图。
 
@@ -38,7 +38,7 @@ node apps/api/dist/web/web-cli.js revoke --input-file /absolute/private/revoke.j
 
 | 方法及路径 | 行为 |
 | --- | --- |
-| `POST /v1/web/session` | 显式提交 `{ticket}`，要求精确 `Origin` 与 `X-Timenook-Web: 1`；原子消费未过期、未撤销且未使用的票据，并撤销请求 Cookie 所指的原网页会话，返回 201 |
+| `POST /v1/web/session` | 显式提交 `{ticket}`，要求精确 `Origin` 与 `X-Timenook-Web: 1`；常规模式原子消费未过期、未撤销且未使用的票据；内部验收链接可重复兑换，撤销后拒绝；两者均撤销请求 Cookie 所指的原网页会话，返回 201 |
 | `GET /v1/web/session` | 从 Cookie 恢复当前账号；匿名、过期、已撤销或密钥已变更时 401 |
 | `DELETE /v1/web/session` | 要求同源及 `X-CSRF-Token`，撤销当前会话并清 Cookie，返回 204 |
 | `GET /v1/web/projects` | 只返回当前创建人／绑定讲述者获准的项目，检查独立拒绝依据、删除和当前共享授权；空列表为 `{projects:[]}` |

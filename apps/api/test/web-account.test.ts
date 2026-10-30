@@ -683,7 +683,7 @@ test("the project list hides active-data deletion immediately before payload era
   }
 });
 
-test("internal acceptance keeps login links and sessions usable beyond normal timeouts and preserves logout", async (t) => {
+test("internal acceptance links remain reusable across browsers and logout until revoked", async (t) => {
   const previous = await signedIn();
   config.acceptance = {
     mode: "internal-acceptance",
@@ -729,18 +729,18 @@ test("internal acceptance keeps login links and sessions usable beyond normal ti
       ).statusCode,
       200,
     );
+    const secondBrowser = await app.inject({
+      method: "POST",
+      url: "/v1/web/session",
+      headers,
+      payload: { ticket },
+    });
     assert.equal(
-      (
-        await app.inject({
-          method: "POST",
-          url: "/v1/web/session",
-          headers,
-          payload: { ticket },
-        })
-      ).statusCode,
-      401,
-      "link stays single-use",
+      secondBrowser.statusCode,
+      201,
+      "same link opens another browser",
     );
+    assert.deepEqual(secondBrowser.json().data.user, login.json().data.user);
     const logout = await app.inject({
       method: "DELETE",
       url: "/v1/web/session",
@@ -760,6 +760,30 @@ test("internal acceptance keeps login links and sessions usable beyond normal ti
         })
       ).statusCode,
       401,
+    );
+    const afterLogout = await app.inject({
+      method: "POST",
+      url: "/v1/web/session",
+      headers,
+      payload: { ticket },
+    });
+    assert.equal(
+      afterLogout.statusCode,
+      201,
+      "same link signs in after logout",
+    );
+    await provisionWebAccount(config, "revoke", { ticketId: issued.ticket.id });
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/v1/web/session",
+          headers,
+          payload: { ticket },
+        })
+      ).statusCode,
+      401,
+      "explicit revocation disables the reusable link",
     );
   } finally {
     t.mock.restoreAll();

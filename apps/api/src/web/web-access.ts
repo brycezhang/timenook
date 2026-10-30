@@ -100,7 +100,11 @@ export class WebAccess implements OnModuleDestroy {
       const changed = await tx.webLoginTicket.updateMany({
         where: {
           tokenHash: webDigest(ticket),
-          consumedAt: null,
+          // Internal acceptance links remain reusable until explicitly revoked.
+          consumedAt:
+            this.config.acceptance?.mode === "internal-acceptance"
+              ? undefined
+              : null,
           revokedAt: null,
           expiresAt: { gt: now },
         },
