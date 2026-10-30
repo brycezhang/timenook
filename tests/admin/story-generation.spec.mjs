@@ -874,6 +874,23 @@ test("the shared story screen displays transcribed text when no story was formed
       exact: true,
     });
     await expect(timeline).toBeEnabled();
+    const track = await timeline.boundingBox();
+    await page.mouse.move(
+      track.x + track.width * 0.25,
+      track.y + track.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      track.x + track.width * 0.6,
+      track.y + track.height / 2,
+      { steps: 4 },
+    );
+    await page.mouse.up();
+    const draggedPosition = Number(await timeline.inputValue());
+    expect(draggedPosition).toBeGreaterThan(0.3);
+    await expect
+      .poll(() => page.evaluate(() => window.realPlayback.player.currentTime))
+      .toBeCloseTo(draggedPosition, 1);
     await timeline.press("Home");
     await timeline.press("ArrowRight");
     await expect

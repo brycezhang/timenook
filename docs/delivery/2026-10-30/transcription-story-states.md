@@ -53,3 +53,10 @@
 同日用户要求长录音可拖动进度并显示时长。故事详情返回录音封存时已验证的总时长；两端共用卡片在播放前显示总时长，播放后显示已播放时间与可拖动进度。暂停时仍可调整位置，再次播放从新位置继续。拖动中的预览不会被播放进度更新抢回；进度事件只更新播放器区域，保留正文节点。超过一小时使用时:分:秒。
 
 网页 slider 适配为原生 range，调用实际音频 seek；小程序使用原生 slider 和 InnerAudioContext。初次播放前进度条禁用，避免在原声尚未读取时触发跳转；总时长可见。故事页 22 项、故事整理 PostgreSQL/Redis 31 项及实际浏览器进度调整回归通过；相关类型检查、构建和官方 wcc/wcsc 各 26 页通过。发布结果随后记录。
+
+
+### 进度与时长发布
+
+候选 `dd2f197a57fe23832946db7d38b62c61ef7c21cf` 已部署 API／Worker 至 `/data/server/timenook/releases/20261030-audio-timeline-dd2f197`，网页至 `/data/server/timenook-web/releases/20261030-audio-timeline-dd2f197/app`。318 文件完整性校验通过，锁文件及 schema 与原环境一致，未改配置或数据库结构。API 包 SHA-256 `e51b5b4b8d5af129250e06e6af7381c0f609dcc995b9d71e69782f58e7f77e44`，网页包 SHA-256 `28e547b27f0ba8e98b69e350471123c76ffe7eed13ffdfbe1cd63288695ca113`；公网入口 `index-DABhkJ5o.js` 与本地摘要一致（`b6ea31b0ce6bc8fc83a48d320fe6dc9ce6f214e9350cfde7c07f27b0691bf320`）。两服务 active，公网 ready 200。
+
+原问题 Chrome 页面实际显示总时长；试听后暂停、调整到中段，时间与滑块同步变化，仍保留继续试听状态。浏览器回归实际使用鼠标拖动 range 及键盘微调，并核对真实音频 currentTime；相关页面 84 项与 API 31 项回归通过。小程序源码和编译产物同步，微信上传与真机验证仍未执行。
