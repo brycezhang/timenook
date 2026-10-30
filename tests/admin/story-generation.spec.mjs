@@ -422,6 +422,7 @@ async function openPage(
         destroyed: 0,
         removed: [],
       };
+      window.browserAudioFactory = window.wx.createInnerAudioContext;
       window.wx.createInnerAudioContext = () => ({
         src: "",
         onEnded() {},
@@ -645,6 +646,7 @@ test("real story Page submits, leaves and restores the same task then renders ev
     await expect(
       page.getByRole("button", { name: "先核对待确认事项", exact: true }),
     ).toBeEnabled();
+    await expect(page.locator(".live-error")).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "确认这版内容", exact: true }),
     ).toBeDisabled();
@@ -838,6 +840,47 @@ test("the shared story screen displays transcribed text when no story was formed
       }),
     ).toBeVisible();
     await expect(page.locator(".live-transcripts .paragraph")).toHaveCount(2);
+    await expect(page.locator(".live-audio-button")).toHaveCount(2);
+    await expect(page.locator(".live-sources")).toHaveCount(0);
+    await page.evaluate(() => {
+      window.playbackParagraph = document.querySelector(
+        ".live-transcripts .paragraph",
+      );
+      window.realPlayback = { players: 0, player: null };
+      window.wx.createInnerAudioContext = () => {
+        const player = window.browserAudioFactory();
+        window.realPlayback.players++;
+        window.realPlayback.player = player;
+        return player;
+      };
+    });
+    await page
+      .getByRole("button", { name: "回听第 1 段原声", exact: true })
+      .click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.realPlayback.player?.currentTime ?? 0),
+      )
+      .toBeGreaterThan(0);
+    await page.locator(".live-audio-button").first().click();
+    await expect
+      .poll(() => page.evaluate(() => window.realPlayback.player.paused))
+      .toBe(true);
+    const pausedAt = await page.evaluate(
+      () => window.realPlayback.player.currentTime,
+    );
+    await page.locator(".live-audio-button").first().click();
+    await expect
+      .poll(() => page.evaluate(() => window.realPlayback.player.currentTime))
+      .toBeGreaterThan(pausedAt);
+    expect(await page.evaluate(() => window.realPlayback.players)).toBe(1);
+    expect(
+      await page.evaluate(() => window.playbackParagraph.isConnected),
+    ).toBe(true);
+    await page.locator(".live-audio-button").first().click();
+    await expect(
+      page.getByRole("button", { name: "继续回听第 1 段原声", exact: true }),
+    ).toBeEnabled();
     await expect(
       page.locator(".live-transcripts .paragraph").first(),
     ).toHaveText("我那一年第一次出门，后来家门口的树长高了。");
@@ -846,6 +889,7 @@ test("the shared story screen displays transcribed text when no story was formed
     ).toHaveCount(0);
     await page.reload();
     await expect(page.getByText("已识别的内容", { exact: true })).toBeVisible();
+    await expect(page.locator(".live-error")).toHaveCount(0);
     await page.setViewportSize({ width: 320, height: 844 });
     expect(
       await page.evaluate(

@@ -562,8 +562,7 @@ export function mountMiniProgram(
       checkbox: "input",
     };
     const out = document.createElement(mapped[el.tagName] || el.tagName);
-    if (["input", "textarea", "checkbox"].includes(el.tagName))
-      out.dataset.renderKey = key;
+    out.dataset.renderKey = key;
     if (el.tagName === "checkbox") (out as HTMLInputElement).type = "checkbox";
     for (const attr of Array.from(el.attributes)) {
       if (attr.name.startsWith("wx:") || attr.name === "xmlns:wx") continue;
@@ -662,11 +661,62 @@ export function mountMiniProgram(
     renderChildren(el, scope, out, key);
     parent.appendChild(out);
   }
+  function updateChildren(parent: Node, next: Node) {
+    const children = Array.from(next.childNodes);
+    children.forEach((fresh, index) => {
+      const previous = parent.childNodes[index];
+      if (!previous) {
+        parent.appendChild(fresh);
+        return;
+      }
+      if (
+        previous.nodeType === Node.TEXT_NODE &&
+        fresh.nodeType === Node.TEXT_NODE
+      ) {
+        if (previous.textContent !== fresh.textContent)
+          previous.textContent = fresh.textContent;
+        return;
+      }
+      if (
+        previous instanceof HTMLElement &&
+        fresh instanceof HTMLElement &&
+        previous.tagName === fresh.tagName &&
+        previous.dataset.renderKey === fresh.dataset.renderKey &&
+        !(fresh instanceof HTMLImageElement && !fresh.hasAttribute("src"))
+      ) {
+        for (const attr of Array.from(previous.attributes))
+          if (!fresh.hasAttribute(attr.name))
+            previous.removeAttribute(attr.name);
+        for (const attr of Array.from(fresh.attributes))
+          if (previous.getAttribute(attr.name) !== attr.value)
+            previous.setAttribute(attr.name, attr.value);
+        if (
+          (previous instanceof HTMLInputElement &&
+            fresh instanceof HTMLInputElement) ||
+          (previous instanceof HTMLTextAreaElement &&
+            fresh instanceof HTMLTextAreaElement)
+        ) {
+          if (previous.value !== fresh.value) previous.value = fresh.value;
+          if (
+            previous instanceof HTMLInputElement &&
+            fresh instanceof HTMLInputElement
+          )
+            previous.checked = fresh.checked;
+        }
+        updateChildren(previous, fresh);
+      } else parent.replaceChild(fresh, previous);
+    });
+    while (parent.childNodes.length > children.length)
+      parent.lastChild?.remove();
+  }
   function render() {
     scheduled = false;
     if (!current || !template || composing) return;
     const active = document.activeElement as HTMLInputElement,
-      field = root.contains(active) ? active?.dataset?.renderKey : undefined,
+      field =
+        root.contains(active) && ["INPUT", "TEXTAREA"].includes(active?.tagName)
+          ? active?.dataset?.renderKey
+          : undefined,
       caret = field ? active.selectionStart : null,
       end = field ? active.selectionEnd : null,
       direction = field ? active.selectionDirection : null,
@@ -674,7 +724,7 @@ export function mountMiniProgram(
     const fragment = document.createDocumentFragment();
     try {
       renderChildren(template, current.data, fragment);
-      root.replaceChildren(fragment);
+      updateChildren(root, fragment);
       if (field) {
         const next = root.querySelector<HTMLInputElement>(
           `[data-render-key="${field}"]`,
@@ -682,8 +732,8 @@ export function mountMiniProgram(
         next?.focus({ preventScroll: true });
         if (caret !== null && end !== null)
           next?.setSelectionRange(caret, end, direction ?? undefined);
-        root.scrollTop = scroll;
       }
+      root.scrollTop = scroll;
     } catch (e) {
       console.error(e);
       root.innerHTML =

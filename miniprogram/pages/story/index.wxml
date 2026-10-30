@@ -4,7 +4,21 @@
     <view class="title story-title">{{story && story.revision ? story.revision.title : '整理这段讲述'}}</view>
     <view class="live-stage">{{stage}}</view>
     <view wx:if="{{saveWarning}}" class="live-error">{{saveWarning}}</view>
-    <view wx:if="{{context}}" class="live-save">{{context.clipCount}} 段原声云端已保存</view>
+    <view wx:if="{{story && story.task && story.task.sources.length}}" class="live-audio-list">
+      <button wx:for="{{story.task.sources}}" wx:key="clipId"
+        class="live-audio-button {{playingClipId === item.clipId ? 'is-playing' : ''}}"
+        aria-label="{{playingClipId === item.clipId ? '暂停回听' : pausedClipId === item.clipId ? '继续回听第 ' + (index+1) + ' 段原声' : '回听第 ' + (index+1) + ' 段原声'}}"
+        bindtap="playLive" data-id="{{item.clipId}}" disabled="{{busy || audioBusy || privateError}}">
+        <view class="live-audio-icon"><image src="/assets/icons/{{playingClipId === item.clipId ? 'pause-light' : 'play-light'}}.svg" /></view>
+        <view class="live-audio-copy">
+          <text class="live-audio-label">{{loadingClipId === item.clipId ? '正在加载原声…' : playingClipId === item.clipId ? '暂停试听' : pausedClipId === item.clipId ? '继续试听' : story.task.sources.length > 1 ? '试听第 ' + (index+1) + ' 段原声' : '试听原声'}}</text>
+          <text class="live-audio-status">{{playingClipId === item.clipId ? '正在播放 · 点击暂停' : pausedClipId === item.clipId ? '已暂停 · 点击继续' : '云端已保存'}}</text>
+        </view>
+        <view class="live-audio-wave" aria-hidden="true"><view /><view /><view /><view /><view /><view /><view /></view>
+      </button>
+    </view>
+    <view wx:if="{{context && context.clipCount && (!story || !story.task)}}" class="live-save">{{context.clipCount}} 段原声已保存，整理后可试听</view>
+    <view wx:if="{{audioError}}" class="live-error">{{audioError}}</view>
     <view wx:if="{{error}}" class="live-error">{{error}}</view>
     <view wx:if="{{privateError}}" class="live-error">{{privateError}}</view>
     <view wx:if="{{liveTranscripts.length}}" class="live-transcripts">
@@ -63,13 +77,6 @@
         <button class="btn secondary section" bindtap="requestCorrection" disabled="{{busy}}">按所选期限申请人工校对</button><view wx:if="{{careStatus}}" class="live-stage">{{careStatus}}</view></block>
       </view>
     </block>
-    <view wx:if="{{story && story.task && (showAudio || !story.revision)}}" class="live-sources">
-      <view class="title section-title">已保存的原声</view>
-      <view wx:if="{{audioError}}" class="live-error">{{audioError}}</view>
-      <view wx:for="{{story.task.sources}}" wx:key="clipId" class="live-source-row">第 {{index+1}} 段 · 云端已保存
-        <button wx:if="{{!privateError}}" class="btn secondary section" bindtap="playLive" data-id="{{item.clipId}}" disabled="{{busy || audioBusy}}">{{playingClipId === item.clipId ? '停止回听' : '回听第 ' + (index+1) + ' 段原声'}}</button>
-      </view>
-    </view>
   </view>
 </block>
 <block wx:else="">

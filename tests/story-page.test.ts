@@ -109,13 +109,17 @@ function harness(
         const player = {
           src: "",
           plays: 0,
+          pauses: 0,
+          currentTime: 0,
           destroyed: false,
           stops: 0,
           destroys: 0,
           play() {
             this.plays++;
           },
-          pause() {},
+          pause() {
+            this.pauses++;
+          },
           stop() {
             this.stops++;
           },
@@ -505,6 +509,31 @@ async function showAudioStory(
   await showing;
 }
 const audioEvent = { currentTarget: { dataset: { id: source.clipId } } };
+test("background story polling keeps the current text visible while requests are pending", async () => {
+  const h = harness();
+  await showAudioStory(h);
+  const previous = h.page.data.story;
+  const refresh = h.page.refreshLive(
+    h.page.generation,
+    h.page.ownerContext,
+    true,
+  );
+  await turn();
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.page.data.story, previous);
+  h.respond(2, {
+    interviewId,
+    clipCount: 1,
+    cloudSaved: true,
+    story: previous,
+  });
+  await turn();
+  assert.equal(h.page.data.story, previous);
+  assert.equal(h.page.data.liveParagraphs[0].text, "原账号私人正文");
+  h.respond(3, previous);
+  await refresh;
+  h.page.onHide();
+});
 test("saved source playback uses its recording intent, validates downloaded hash and only removes temporary audio", async () => {
   const h = harness();
   await showAudioStory(h);
@@ -513,6 +542,7 @@ test("saved source playback uses its recording intent, validates downloaded hash
   ]);
   const playing = h.page.playLive(audioEvent);
   await turn();
+  assert.equal(h.page.data.loadingClipId, source.clipId);
   assert.ok(h.requests[2].url.endsWith(`/clips/${source.intentId}`));
   h.respond(2, recording);
   await turn();
@@ -525,6 +555,25 @@ test("saved source playback uses its recording intent, validates downloaded hash
   await playing;
   assert.equal(h.players[0].src, "private-audio");
   assert.equal(h.players[0].plays, 1);
+  assert.equal(h.page.data.loadingClipId, "");
+  assert.equal(h.page.data.playingClipId, source.clipId);
+  h.players[0].currentTime = 4.2;
+  await h.page.playLive(audioEvent);
+  assert.equal(h.page.data.playingClipId, "");
+  assert.equal(h.page.data.pausedClipId, source.clipId);
+  assert.equal(h.players[0].pauses, 1);
+  assert.equal(h.players[0].destroyed, false);
+  const resumed = h.page.playLive(audioEvent);
+  await turn();
+  h.respond(3, recording);
+  await resumed;
+  assert.equal(h.players[0].plays, 2);
+  assert.equal(h.players[0].currentTime, 4.2);
+  assert.equal(
+    h.downloads.length,
+    1,
+    "resume rechecks access without downloading again",
+  );
   h.page.onHide();
   await turn();
   assert.equal(h.players[0].destroyed, true);

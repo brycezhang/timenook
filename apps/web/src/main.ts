@@ -48,12 +48,12 @@ async function verifyVisibleSession() {
   if (!proof || checkingOwner === proof) return;
   checkingOwner = proof;
   const main = root.querySelector<HTMLElement>("main")!;
-  main.style.visibility = "hidden";
+  const wasHidden = main.style.visibility === "hidden";
   const status = document.createElement("p");
   status.className = "session-checking";
   status.setAttribute("role", "status");
   status.textContent = "正在核对账号…";
-  root.append(status);
+  if (wasHidden) root.append(status);
   try {
     await withWebSession(proof, async () => {});
     if (currentSession === proof && generation === owner)

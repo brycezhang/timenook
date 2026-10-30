@@ -2,7 +2,11 @@ import { watchProjectAccess } from "../../services/project-access";
 import { dataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
 import { storyClient } from "../../services/stories";
-import { clearStoryAudio, privateStoryAudio } from "../../services/story-audio";
+import {
+  clearStoryAudio,
+  privateStoryAudio,
+  requireStoryAudioAccess,
+} from "../../services/story-audio";
 import { recordingPartition } from "../../services/interview-recording";
 import { paymentKey } from "../../services/payments";
 import { projectOverviewClient } from "../../services/project-overview";
@@ -91,6 +95,8 @@ Page({
     audioBusy: false,
     audioError: "",
     playingClipId: "",
+    pausedClipId: "",
+    loadingClipId: "",
     liveParagraphs: [] as { text: string; sourceLabel: string }[],
     liveTranscripts: [] as { clipId: string; label: string; text: string }[],
     saveWarning: "",
@@ -288,23 +294,24 @@ Page({
       error: error instanceof Error ? error.message : fallback,
     });
   },
-  async refreshLive(generation?: number, context?: string) {
+  async refreshLive(generation?: number, context?: string, background = false) {
     generation ??= this.generation;
     context ??= this.ownerContext;
     if (this.poll) clearTimeout(this.poll);
-    this.setData({
-      busy: true,
-      error: "",
-      decisionReady: false,
-      canDecide: false,
-      confirmedChoice: null,
-      includeChoice: null,
-      evidence: "",
-      careEvidence: "",
-      careExpiry: "",
-      decisionStatus: "",
-      careStatus: "",
-    });
+    if (!background)
+      this.setData({
+        busy: true,
+        error: "",
+        decisionReady: false,
+        canDecide: false,
+        confirmedChoice: null,
+        includeChoice: null,
+        evidence: "",
+        careEvidence: "",
+        careExpiry: "",
+        decisionStatus: "",
+        careStatus: "",
+      });
     try {
       let loaded: StoryView | undefined;
       if (this.storyId) {
@@ -325,11 +332,17 @@ Page({
             this.assistedSessionId || undefined,
           );
       if (!this.currentLive(generation, context)) return;
-      this.setData({
+      const view = {
         context: result,
         story: loaded ?? result?.story ?? null,
-        liveParagraphs: [],
-        liveTranscripts: [],
+        liveParagraphs: [] as { text: string; sourceLabel: string }[],
+        liveTranscripts: [] as {
+          clipId: string;
+          label: string;
+          text: string;
+        }[],
+        privateError: "",
+        needsReview: false,
         pendingLocal,
         stage: stage(loaded ?? result?.story ?? null),
         saveWarning:
@@ -343,14 +356,14 @@ Page({
           (!result.story?.task ||
             ["obsolete", "succeeded"].includes(result.story.task.state) ||
             result.clipCount !== result.story.task.sources.length),
-      });
+      };
       if (loaded || result?.story) {
         try {
           const full =
             loaded ??
             (await storyClient.read(this.projectId, result!.story!.id));
           if (!this.currentLive(generation, context)) return;
-          this.setData({
+          Object.assign(view, {
             story: full,
             needsReview: !!full.revision?.reviewItems.some(
               (item) =>
@@ -395,7 +408,7 @@ Page({
           if (full.task?.state === "failed") {
             const task = await storyClient.task(this.projectId, full.task.id);
             if (this.currentLive(generation, context))
-              this.setData({ retryable: task.retryable });
+              view.retryable = task.retryable;
           }
         } catch (error) {
           if (
@@ -403,13 +416,15 @@ Page({
             error.status === 403 &&
             this.currentLive(generation, context)
           ) {
-            this.setData({
+            Object.assign(view, {
               story: result?.story ?? null,
               privateError: "正文暂时不可查看，请核对讲述者的共享授权",
             });
           } else throw error;
         }
       }
+      if (!this.currentLive(generation, context)) return;
+      this.setData(view);
       if (
         this.currentLive(generation, context) &&
         this.data.story?.task &&
@@ -418,13 +433,13 @@ Page({
         )
       )
         this.poll = setTimeout(
-          () => void this.refreshLive(generation, context),
+          () => void this.refreshLive(generation, context, true),
           2000,
         );
     } catch (error) {
       this.liveFailure(generation, context, error, "查询失败，请重试");
     } finally {
-      if (this.currentLive(generation, context, true))
+      if (!background && this.currentLive(generation, context, true))
         this.setData({ busy: false });
     }
   },
@@ -443,7 +458,7 @@ Page({
         else if (tapIndex === 1) this.editLivePhotos();
         else if (tapIndex === 2) {
           this.setData({ showAudio: true });
-          wx.pageScrollTo?.({ selector: ".live-sources", duration: 200 });
+          wx.pageScrollTo?.({ selector: ".live-audio-list", duration: 200 });
         } else if (tapIndex === 3) void this.submitLive();
         else if (tapIndex === 4) {
           this.setData({ showCare: true });
@@ -726,10 +741,17 @@ Page({
   },
   async stopLiveAudio() {
     ++this.audioSequence;
-    this.liveAudio?.stop();
-    this.liveAudio?.destroy();
+    const player = this.liveAudio;
     this.liveAudio = null;
-    this.setData({ playingClipId: "", audioBusy: false, audioError: "" });
+    player?.stop();
+    player?.destroy();
+    this.setData({
+      playingClipId: "",
+      pausedClipId: "",
+      loadingClipId: "",
+      audioBusy: false,
+      audioError: "",
+    });
     await clearStoryAudio();
   },
   async playLive(e: E) {
@@ -745,12 +767,33 @@ Page({
       !this.currentLive(generation, context)
     )
       return;
-    const stopping = this.data.playingClipId === id;
     try {
+      if (this.liveAudio && this.data.playingClipId === id) {
+        this.liveAudio.pause();
+        this.setData({ playingClipId: "", pausedClipId: id });
+        return;
+      }
+      if (this.liveAudio && this.data.pausedClipId === id) {
+        const player = this.liveAudio,
+          sequence = this.audioSequence;
+        this.setData({ audioBusy: true, loadingClipId: id });
+        await requireStoryAudioAccess(
+          this.projectId,
+          source,
+          () =>
+            this.currentLive(generation, context) &&
+            sequence === this.audioSequence,
+        );
+        if (!this.currentLive(generation, context) || this.liveAudio !== player)
+          return;
+        this.setData({ playingClipId: id, pausedClipId: "" });
+        player.play();
+        return;
+      }
       await this.stopLiveAudio();
-      if (stopping || !this.currentLive(generation, context)) return;
+      if (!this.currentLive(generation, context)) return;
       const sequence = ++this.audioSequence;
-      this.setData({ audioBusy: true });
+      this.setData({ audioBusy: true, loadingClipId: id });
       const path = await privateStoryAudio(
         this.projectId,
         source,
@@ -794,7 +837,7 @@ Page({
       }
     } finally {
       if (this.currentLive(generation, context))
-        this.setData({ audioBusy: false });
+        this.setData({ audioBusy: false, loadingClipId: "" });
     }
   },
   recoverInterview() {
