@@ -63,6 +63,17 @@ Page({
     photo: "",
     permission: false,
     playingId: "",
+    questionPicker: false,
+    customQuestion: false,
+    clipPicker: false,
+    followupEditing: false,
+    questionHint: "",
+    reviewClip: null as (ProbeLocalClip & { durationLabel: string }) | null,
+    processingTitle: "这段声音，留下来了",
+    processingMessage: "",
+    processingReady: false,
+    processingError: false,
+    processingRetryable: false,
   },
   localAudio: null as WechatMiniprogram.InnerAudioContext | null,
   followupPoll: undefined as ReturnType<typeof setTimeout> | undefined,
@@ -73,6 +84,7 @@ Page({
   projectId: "",
   assistedSessionId: "",
   requestedInterviewId: "",
+  draftId: "",
   generation: 0,
   liveRecorder: null as InterviewRecorder | null,
   context: null as RecordingContext | null,
@@ -93,7 +105,10 @@ Page({
   onLoad(q) {
     if (dataMode() === "live") {
       this.projectId = q.projectId ?? "";
-      this.requestedInterviewId = q.interviewId ?? "";
+      this.draftId = /^[a-f0-9-]{36}$/.test(q.draftId ?? "")
+        ? q.draftId || ""
+        : "";
+      this.requestedInterviewId = q.interviewId || "";
       this.assistedSessionId = q.assistedSessionId ?? "";
       this.setData({
         mode: "live",
@@ -120,6 +135,13 @@ Page({
         timer: min + ":" + sec,
         error: s.error,
         permission: s.state === "error" && !recorder.hasPending,
+        ...flowView(
+          s.state === "saved"
+            ? "review"
+            : ["recording", "requesting", "saving"].includes(s.state)
+              ? "record"
+              : "prepare",
+        ),
       });
     });
     if (q.photo === "1") this.pickPhoto();
@@ -178,6 +200,11 @@ Page({
         customIntent: "",
         busy: false,
         canRecord: false,
+        questionPicker: false,
+        clipPicker: false,
+        customQuestion: false,
+        reviewClip: null,
+        followupEditing: false,
       });
       return;
     }
@@ -237,6 +264,8 @@ Page({
       this.setData({
         canRecord: result.canRecord,
         interviews: result.interviews,
+        questionHint:
+          result.plan.defaultQuestion?.optionalContext?.join("，") ?? "",
         question:
           result.plan.defaultQuestion?.text ??
           "想从哪里讲起？可以自由讲述、看照片或自拟问题。",
@@ -254,11 +283,17 @@ Page({
             )
           : [],
       });
+      const partition = recordingPartition(this.projectId);
       const active =
         this.requestedInterviewId ||
-        wx.getStorageSync(`${recordingPartition(this.projectId)}:active`);
+        (this.draftId
+          ? wx.getStorageSync(`${partition}:draft:${this.draftId}`)
+          : wx.getStorageSync(`${partition}:active`));
       let selected =
-        result.interviews.find((i) => i.id === active) ?? result.interviews[0];
+        result.interviews.find((i) => i.id === active) ??
+        (this.requestedInterviewId || this.draftId
+          ? undefined
+          : result.interviews[0]);
       if (
         !selected &&
         typeof active === "string" &&
@@ -269,6 +304,9 @@ Page({
           active,
           this.assistedSessionId || undefined,
         );
+      if (!selected && this.current(generation, context)) {
+        this.setData({ ...flowView("choose"), state: "idle", status: "" });
+      }
       if (selected && this.current(generation, context)) {
         await this.attach(selected, generation, context);
         if (
@@ -309,6 +347,14 @@ Page({
       interview: value,
       question: (value.currentQuestion ?? value.actualQuestion).snapshot.text,
       state: "idle",
+      questionHint:
+        "optionalContext" in
+        (value.currentQuestion ?? value.actualQuestion).snapshot
+          ? (
+              (value.currentQuestion ?? value.actualQuestion)
+                .snapshot as import("../../../packages/contracts/src").PlanQuestion
+            ).optionalContext.join("，")
+          : "",
     });
     device.subscribe((snapshot) => {
       if (snapshot.stage !== "recording" && this.timerHandle) {
@@ -316,6 +362,7 @@ Page({
         this.timerHandle = undefined;
       }
       if (this.current(generation, context)) {
+        const priorStep = this.data.flowStep;
         this.setData({
           ...flowView(
             savedRecordingStep(
@@ -326,8 +373,11 @@ Page({
           state: snapshot.stage,
           status: snapshot.message,
           localClips: snapshot.clips,
+          reviewClip: this.reviewSelection(snapshot.clips),
           timer: recordingTime(snapshot.clips, device.elapsedRecordingMs()),
         });
+        if (priorStep !== this.data.flowStep) this.scrollToTop();
+        this.updateProcessingView();
         if (snapshot.stage === "recording" && !this.timerHandle)
           this.timerHandle = setInterval(() => {
             if (this.current(generation, context))
@@ -442,6 +492,7 @@ Page({
                       : "转写中；原声已保存，可以离开，返回后继续查询。",
       }));
       this.setData({ taskRows, taskError: "" });
+      this.updateProcessingView();
       if (
         rows.some((row) =>
           ["queued", "waiting_provider", "submitting"].includes(row.state),
@@ -471,8 +522,9 @@ Page({
           (error.status === 401 || error.status === 403)
             ? []
             : this.data.taskRows,
-        taskError: "转写状态未能确认；原声仍保留，请重新查询。",
+        taskError: "暂时无法更新处理进度，已保存的声音不会丢失。",
       });
+      this.updateProcessingView();
     }
   },
   async retryTranscription(e: E) {
@@ -543,11 +595,12 @@ Page({
       this.selection = {
         input,
         key: paymentKey(),
-        clientInterviewId: recordingId(),
+        clientInterviewId:
+          !this.data.interview && this.draftId ? this.draftId : recordingId(),
       };
     const generation = this.generation,
       context = sessionClient.context();
-    this.setData({ busy: true, status: "正在确定本次实际问题" });
+    this.setData({ busy: true, status: "正在确定本次实际问题", error: "" });
     try {
       const selected = await interviewRecordingClient.start(
         this.projectId,
@@ -565,10 +618,27 @@ Page({
       if (!ids.includes(selected.id)) ids.push(selected.id);
       wx.setStorageSync(`${partition}:index`, ids);
       wx.setStorageSync(`${partition}:active`, selected.id);
+      if (this.draftId)
+        wx.setStorageSync(`${partition}:draft:${this.draftId}`, selected.id);
       this.selection = null;
       this.setData({ pendingInterviews: ids });
       await this.attach(selected, generation, context);
-      if (kind === "photo") this.photos();
+      this.setData({ questionPicker: false, customQuestion: false });
+      this.scrollToTop();
+      if (kind === "photo") {
+        this.photos();
+        return;
+      }
+      if (
+        this.requestedInterviewId &&
+        !this.draftId &&
+        selected.id !== this.requestedInterviewId
+      ) {
+        wx.redirectTo({
+          url: `/pages/interview/index?projectId=${this.projectId}&interviewId=${selected.id}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+        });
+        return;
+      }
     } catch (error) {
       if (generation === this.generation && dataMode() === "live") {
         if (
@@ -594,11 +664,191 @@ Page({
         this.setData({
           status:
             error instanceof Error ? error.message : "本次问题未确认，请重试",
+          error:
+            error instanceof Error ? error.message : "本次问题未确认，请重试",
         });
       }
     } finally {
       if (this.current(generation, context)) this.setData({ busy: false });
     }
+  },
+  moreActions() {
+    wx.showActionSheet({
+      itemList: [
+        "再补充一段",
+        "查看照片或事后补图",
+        "回听已保存片段",
+        "查看保存进度",
+        "返回项目",
+      ],
+      success: ({ tapIndex }) => {
+        if (tapIndex === 0) this.prepareCurrent();
+        else if (tapIndex === 1) this.photos();
+        else if (tapIndex === 2) this.reviewCurrent();
+        else if (tapIndex === 3) this.showProcessing();
+        else void this.finish();
+      },
+    });
+  },
+  scrollToTop() {
+    wx.pageScrollTo?.({ scrollTop: 0, duration: 0 });
+  },
+  reviewSelection(clips: ProbeLocalClip[]) {
+    const chosen = clips.find(
+      (c) => c.clientClipId === this.data.reviewClip?.clientClipId,
+    );
+    const added = clips.some(
+      (c) =>
+        !this.data.localClips.some(
+          (old) => old.clientClipId === c.clientClipId,
+        ),
+    );
+    const clip =
+      chosen && !chosen.sealed && !added
+        ? chosen
+        : ([...clips].reverse().find((c) => !c.sealed) ??
+          clips[clips.length - 1]);
+    return clip ? { ...clip, durationLabel: recordingTime([clip]) } : null;
+  },
+  updateProcessingView() {
+    const { state, taskRows, taskError, localClips, interview } = this.data;
+    const uploadFailed = state === "upload-error" || state === "seal-error";
+    const working = state === "uploading" || state === "sealing";
+    const failed = taskRows.find(
+      (row) =>
+        ["failed", "manual_review", "invalidated", "no_speech"].includes(
+          row.state,
+        ) || row.errorCode === "AI_AUTHORIZATION_REQUIRED",
+    );
+    const transcribing = taskRows.some((row) =>
+      ["queued", "submitting", "waiting_provider", "waiting_inputs"].includes(
+        row.state,
+      ),
+    );
+    const saved =
+      localClips.some((c) => c.sealed) ||
+      !!interview?.clips.some((c) => c.state === "sealed");
+    this.setData({
+      processingTitle: uploadFailed
+        ? "这段声音还没传好"
+        : working
+          ? "正在保存这段声音"
+          : taskError
+            ? "稍后再更新进度"
+            : failed
+              ? "这段声音需要再看一看"
+              : transcribing
+                ? "正在把声音变成文字"
+                : "这段声音，留下来了",
+      processingMessage: uploadFailed
+        ? "录音仍在这台设备上，可以接着上传，无需重录。"
+        : working
+          ? "本机已经保存好，请稍等片刻。"
+          : taskError ||
+            failed?.label ||
+            (transcribing
+              ? "声音已保存。你可以先休息，回来再继续。"
+              : "慢慢说的这些往事，现在可以整理成故事了。"),
+      processingReady:
+        saved && !working && !uploadFailed && !failed && !taskError,
+      processingError: uploadFailed || !!failed || !!taskError,
+      processingRetryable:
+        uploadFailed || !!taskError || taskRows.some((row) => row.retryable),
+    });
+  },
+  async startSpeaking() {
+    if (dataMode() !== "live") {
+      await this.record();
+      return;
+    }
+    if (this.data.busy || !this.data.canRecord) return;
+    const owner = sessionClient.context();
+    if (!this.data.interview) await this.selectQuestion();
+    if (
+      owner === sessionClient.context() &&
+      this.data.interview &&
+      !this.data.busy &&
+      ["choose", "prepare"].includes(this.data.flowStep)
+    )
+      await this.record();
+  },
+  closeQuestionPicker() {
+    const question =
+      this.data.interview?.currentQuestion ??
+      this.data.interview?.actualQuestion;
+    this.setData({
+      questionPicker: false,
+      customQuestion: false,
+      question:
+        question?.snapshot.text ??
+        this.context?.plan.defaultQuestion?.text ??
+        this.data.question,
+    });
+  },
+  writeQuestion() {
+    this.setData({ customQuestion: true });
+  },
+  showClips() {
+    this.setData({ clipPicker: true });
+  },
+  closeClips() {
+    this.setData({ clipPicker: false });
+  },
+  selectReviewClip(e: E) {
+    const clip = this.data.localClips.find(
+      (c) => c.clientClipId === e.currentTarget.dataset.id,
+    );
+    if (clip)
+      this.setData({
+        reviewClip: { ...clip, durationLabel: recordingTime([clip]) },
+        clipPicker: false,
+      });
+  },
+  async submitReview() {
+    if (dataMode() !== "live") {
+      this.example();
+      return;
+    }
+    if (this.data.reviewClip?.sealed) {
+      this.showProcessing();
+      return;
+    }
+    if (this.data.reviewClip) {
+      this.closePlayback();
+      this.scrollToTop();
+      await this.upload({
+        currentTarget: { dataset: { id: this.data.reviewClip.clientClipId } },
+        detail: { value: "" },
+      });
+    }
+  },
+  async retryProcessing() {
+    if (["upload-error", "seal-error"].includes(this.data.state)) {
+      const clip = this.data.localClips.find((c) => !c.sealed);
+      if (clip)
+        await this.upload({
+          currentTarget: { dataset: { id: clip.clientClipId } },
+          detail: { value: "" },
+        });
+    } else {
+      const task = this.data.taskRows.find((row) => row.retryable);
+      if (task)
+        await this.retryTranscription({
+          currentTarget: { dataset: { id: task.id } },
+          detail: { value: "" },
+        });
+      else await this.refreshTasks();
+    }
+  },
+  async moreQuestion() {
+    this.scrollToTop();
+    await this.requestFollowup();
+  },
+  async organizeAfterFollowup() {
+    if (await this.skipFollowup()) this.openStory();
+  },
+  editFollowup() {
+    this.setData({ followupEditing: !this.data.followupEditing });
   },
   async resumeLocal(e: E) {
     if (
@@ -621,6 +871,7 @@ Page({
         this.assistedSessionId || undefined,
       );
       if (this.current(generation, context)) {
+        this.setData({ questionPicker: false });
         wx.setStorageSync(`${recordingPartition(this.projectId)}:active`, id);
         await this.attach(selected, generation, context);
       }
@@ -806,7 +1057,9 @@ Page({
     this.setData({
       ...flowView("prepare"),
       question: currentQuestion.snapshot.text,
+      questionPicker: false,
     });
+    this.scrollToTop();
   },
   chooseAnother() {
     if (
@@ -818,7 +1071,8 @@ Page({
       return;
     this.closePlayback();
     this.setData({
-      ...flowView("choose"),
+      questionPicker: true,
+      customQuestion: false,
       question:
         this.context?.plan.defaultQuestion?.text ??
         "想从哪里讲起？可以自由讲述、看照片或自拟问题。",
@@ -834,7 +1088,9 @@ Page({
     )
       return;
     this.closePlayback();
-    this.setData(flowView("processing"));
+    this.setData({ ...flowView("processing"), questionPicker: false });
+    this.updateProcessingView();
+    this.scrollToTop();
   },
   reviewCurrent() {
     if (
@@ -843,7 +1099,11 @@ Page({
       ["recording", "paused", "requesting", "saving"].includes(this.data.state)
     )
       return;
-    this.setData(flowView("review"));
+    this.setData({
+      ...flowView("review"),
+      reviewClip: this.reviewSelection(this.data.localClips),
+    });
+    this.scrollToTop();
   },
   async togglePause() {
     if (this.data.busy || !this.liveRecorder || dataMode() !== "live") return;
@@ -905,6 +1165,7 @@ Page({
         }
         this.setData({
           status: error instanceof Error ? error.message : "不能开始录音",
+          error: error instanceof Error ? error.message : "不能开始录音",
         });
       }
     } finally {
@@ -934,6 +1195,7 @@ Page({
   },
   async retry() {
     if (dataMode() === "live") {
+      this.setData({ error: "" });
       if (this.liveRecorder?.snapshot().hasPendingSave)
         await this.liveRecorder.retrySave();
       else await this.liveRecorder?.restore();
@@ -1138,8 +1400,10 @@ Page({
       context = sessionClient.context(),
       sequence = ++this.followupSequence;
     this.setData({
+      ...flowView("followup"),
       busy: true,
-      followupStatus: "正在请求可选追问；已有原声仍可整理",
+      followupEditing: false,
+      followupStatus: "正在准备一个小问题…",
     });
     try {
       const view = await optionalFollowupClient.request(
@@ -1194,7 +1458,7 @@ Page({
               ? "可以先讲到这里，已有原声可以直接整理。"
               : view.task?.state === "obsolete"
                 ? "旧建议已失效；当前问题和已保存原声仍保留。"
-                : "可选追问状态已确认；可以继续讲、换题或整理。",
+                : "想到了就再说一点，也可以先讲到这里。",
     });
     if (waiting)
       this.followupPoll = setTimeout(() => void this.refreshFollowup(), 2000);
@@ -1297,7 +1561,7 @@ Page({
     this.clearFollowup();
     go(
       "story",
-      `projectId=${this.projectId}&interviewId=${interview.id}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+      `projectId=${this.projectId}&interviewId=${interview.id}&organize=1${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
     );
   },
   async finish() {
@@ -1314,7 +1578,7 @@ Page({
       )
         return;
       if (this.data.interview && !(await this.skipFollowup())) return;
-      go("welcome", `projectId=${this.projectId}`);
+      wx.reLaunch({ url: `/pages/project/index?projectId=${this.projectId}` });
       return;
     }
     home();

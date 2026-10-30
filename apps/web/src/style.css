@@ -541,3 +541,6 @@ h2 {
     border-right: 1px solid var(--line);
   }
 }
+
+/* A focused native page uses its own navigation bar, just as in WeChat. */
+.product-shell:has(.interview-focus) > .product-home { display: none; }

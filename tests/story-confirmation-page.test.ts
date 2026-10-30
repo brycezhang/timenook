@@ -580,9 +580,11 @@ test("project page distinguishes real optional-followup, transcription, story an
     `/pages/interview/index?projectId=${projectId}&interviewId=${interviewId}`,
   );
   h.page.record();
-  assert.equal(
+  assert.match(
     h.routes[h.routes.length - 1],
-    `/pages/interview/index?projectId=${projectId}`,
+    new RegExp(
+      `/pages/interview/index\\?projectId=${projectId}&draftId=[a-f0-9-]{36}$`,
+    ),
   );
   h.page.onUnload();
 });
@@ -811,9 +813,11 @@ test("denied story sharing keeps the authorized collection path available withou
   assert.equal(h.page.data.participation.canCollect, true);
   assert.match(h.page.data.status, /共享|授权/);
   h.page.record();
-  assert.equal(
+  assert.match(
     h.routes[h.routes.length - 1],
-    `/pages/interview/index?projectId=${projectId}`,
+    new RegExp(
+      `/pages/interview/index\\?projectId=${projectId}&draftId=[a-f0-9-]{36}$`,
+    ),
   );
   h.page.assisted();
   assert.equal(

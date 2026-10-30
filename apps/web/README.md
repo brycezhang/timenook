@@ -27,3 +27,7 @@
 W01 提供登录、会话和本人项目列表；W02b 进一步接通 `/app/project/:projectId` 的共用业务页面和 Cookie 媒体传输，见[实现与验证边界](../../docs/development-web-product.md)。W02–W06 已接通显式受控的无付款项目、真实网页授权渠道、内容处理和PDF，实际部署与同一项目的运行结果见[网页验收记录](../../docs/delivery/2026-10-29/mobile-web-online.md)。微信身份和真机结果单独保留。
 
 静态开发服务器沿用仓库私人文件拒绝列表。真实登录链接、配置、录音、故事和 PDF 保持在 Git 外；私有响应由后端返回 `no-store`，部署不能将其纳入静态缓存。
+
+## 小程序 UI 源码共用
+
+业务页直接使用 `miniprogram/pages` 的 WXML、WXSS 和 Page；`preview/runtime.ts` 将原生组件与 API 映射到浏览器，`apps/web` 仅提供登录入口与浏览器能力。修改讲述 UI 应直接修改小程序页面，避免另写网页实现。录音、回听提交、保存处理、可选追问分别聚焦当前任务；首屏展示大麦克风。

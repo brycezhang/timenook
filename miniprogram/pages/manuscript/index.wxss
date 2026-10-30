@@ -48,7 +48,7 @@
   padding-bottom: 64rpx;
 }
 .live-manuscript .manuscript-body {
-  font-size: 34rpx;
+  font-size: 40rpx;
   margin: 20rpx 0;
 }
 .live-manuscript .btn {

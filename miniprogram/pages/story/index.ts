@@ -61,6 +61,7 @@ Page({
   confirmationSessionId: "",
   generation: 0,
   visible: false,
+  autoOrganize: false,
   ownerContext: "",
   audioSequence: 0,
   liveAudio: null as WechatMiniprogram.InnerAudioContext | null,
@@ -70,6 +71,8 @@ Page({
   decisionCommand: null as { input: string; key: string } | null,
   careCommand: null as { input: string; key: string } | null,
   data: {
+    showAudio: false,
+    showCare: false,
     careExpiry: "",
     careEvidence: "",
     careStatus: "",
@@ -104,6 +107,7 @@ Page({
   },
   onLoad(q) {
     if (dataMode() === "live") {
+      this.autoOrganize = q.organize === "1";
       this.projectId = q.projectId || "";
       this.interviewId = q.interviewId || "";
       this.storyId = q.storyId || "";
@@ -169,6 +173,17 @@ Page({
         return;
       }
       await this.refreshLive(generation, context);
+      if (
+        this.currentLive(generation, context) &&
+        this.autoOrganize &&
+        this.data.canOrganize &&
+        (!this.data.story?.task ||
+          this.data.story.task.state === "obsolete" ||
+          this.data.context?.clipCount !== this.data.story.task.sources.length)
+      ) {
+        this.autoOrganize = false;
+        await this.submitLive();
+      }
       if (this.currentLive(generation, context) && this.data.story) {
         this.stopProjectWatch?.();
         this.stopProjectWatch = watchProjectAccess(
@@ -385,6 +400,30 @@ Page({
       if (this.currentLive(generation, context, true))
         this.setData({ busy: false });
     }
+  },
+  moreActions() {
+    wx.showActionSheet({
+      itemList: [
+        "修改故事文字",
+        "补充照片",
+        "回听已保存的原声",
+        "重新整理故事",
+        "申请人工校对",
+        "继续补充讲述",
+      ],
+      success: ({ tapIndex }) => {
+        if (tapIndex === 0) this.edit();
+        else if (tapIndex === 1) this.editLivePhotos();
+        else if (tapIndex === 2) {
+          this.setData({ showAudio: true });
+          wx.pageScrollTo?.({ selector: ".live-sources", duration: 200 });
+        } else if (tapIndex === 3) void this.submitLive();
+        else if (tapIndex === 4) {
+          this.setData({ showCare: true });
+          void this.prepareDecision();
+        } else this.recoverInterview();
+      },
+    });
   },
   async submitLive() {
     if (

@@ -287,6 +287,18 @@ export function mountMiniProgram(
         }
       })();
     },
+    pageScrollTo(options: any) {
+      if (options.selector)
+        root
+          .querySelector(options.selector)
+          ?.scrollIntoView({ block: "start" });
+      else root.scrollTop = options.scrollTop ?? 0;
+      options.success?.({ errMsg: "pageScrollTo:ok" });
+    },
+    redirectTo({ url }: any) {
+      history.replaceState(null, "", targetUrl(url));
+      void mount();
+    },
     navigateTo({ url }: any) {
       location.hash = targetUrl(url);
     },
@@ -316,6 +328,28 @@ export function mountMiniProgram(
       );
     },
     showModal: modal,
+    showActionSheet(options: any) {
+      overlay.replaceChildren();
+      const list = document.createElement("div");
+      list.className = "modal action-sheet";
+      options.itemList.forEach((label: string, tapIndex: number) => {
+        const button = document.createElement("button");
+        button.textContent = label;
+        button.onclick = () => {
+          overlay.replaceChildren();
+          options.success?.({ tapIndex });
+        };
+        list.append(button);
+      });
+      const cancel = document.createElement("button");
+      cancel.textContent = "取消";
+      cancel.onclick = () => {
+        overlay.replaceChildren();
+        options.fail?.({ errMsg: "showActionSheet:fail cancel" });
+      };
+      list.append(cancel);
+      overlay.append(list);
+    },
     setNavigationBarTitle({ title }: any) {
       document.querySelector("#nav-title")!.textContent = title;
     },

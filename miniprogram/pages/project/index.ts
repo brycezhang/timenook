@@ -1,3 +1,4 @@
+import { recordingId } from "../../services/local-audio-recorder";
 import { watchProjectAccess } from "../../services/project-access";
 import { dataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
@@ -268,7 +269,7 @@ Page({
       if (this.data.participation?.canCollect)
         go(
           "interview",
-          `projectId=${this.projectId}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+          `projectId=${this.projectId}&draftId=${recordingId()}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
         );
       return;
     }

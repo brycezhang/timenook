@@ -1,3 +1,4 @@
+import { recordingId } from "../../services/local-audio-recorder";
 import { participationClient } from "../../services/participation";
 import { type Project } from "../../domain/model";
 import { asset, go, home, read } from "../../services/store";
@@ -802,7 +803,7 @@ Page({
     go("settings", this.data.live ? `projectId=${this.projectId}` : "");
   },
   record() {
-    go("interview", this.data.live ? `projectId=${this.projectId}` : "");
+    go("interview", this.data.live ? `projectId=${this.projectId}&draftId=${recordingId()}` : "");
   },
   project() {
     if (this.data.live) {
