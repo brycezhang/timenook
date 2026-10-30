@@ -431,7 +431,7 @@ Page({
     p.consent = true;
     p.role = "narrator";
     save(p);
-    home();
+    home("interview");
   },
   async requestDelete() {
     const state = this.data.participation;

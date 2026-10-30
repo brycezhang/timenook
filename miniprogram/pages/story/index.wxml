@@ -132,7 +132,7 @@
     class="btn"
     disabled="{{s.confirmedVersion===s.version && s.included}}"
     bindtap="confirm"
-    >{{s.confirmedVersion===s.version&&s.included?'已确认，允许入书':'没问题，同意入书'}}</button
+    >{{s.confirmedVersion===s.version&&s.included?'已确认':'确认'}}</button
   ><view class="dock-note">修改文字或照片后，需要重新确认</view></view
 >
 

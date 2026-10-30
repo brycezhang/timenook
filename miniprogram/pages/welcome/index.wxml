@@ -59,49 +59,18 @@
   ><view class="subtitle"
     >跨设备邀请尚未接入。请先在本机体验创建一个项目。</view
   ><button class="btn section" bindtap="decline">前往首页</button></view
-><view wx:else="" class="page with-dock welcome"
-  ><view class="welcome-leaf"
-    ><image class="icon" src="/assets/icons/leaf.svg" /></view
-  ><view class="title large"
-    >你收到了一份<text class="line-break">{{'\n'}}</text>特别的礼物</view
-  ><view class="subtitle">TA想听听你的人生故事，把它写成一本书。</view
-  ><view class="letter section"
-    ><view class="small muted">来自{{p.buyer}}的心意</view
-    ><view class="letter-body serif"
-      >{{p.recipient}}，<text class="line-break">{{'\n'}}</text>想更了解你，<text
-        class="line-break"
-      >
-      </text
-      >也想把你的故事<text class="line-break">{{'\n'}}</text>留给我们。</view
-    ><view class="letter-heart"
-      ><image class="icon" src="/assets/icons/heart.svg" /></view></view
-  ><view class="welcome-steps section"
-    ><view
-      ><image class="icon" src="/assets/icons/mic.svg" /><text
-        >说一段往事</text
-      ></view
-    ><view
-      ><image class="icon" src="/assets/icons/clipboard-check.svg" /><text
-        >确认你的故事</text
-      ></view
-    ><view
-      ><image class="icon" src="/assets/icons/book-open.svg" /><text
-        >珍藏成一本书</text
-      ></view
-    ></view
-  ><view class="participation note"
-    >你的讲述、照片和故事会与赠礼的子女共享。哪些内容入书，由你决定；你可以暂停或退出。</view
-  ><button class="check-row" bindtap="agree"
-    ><view class="check-box {{agreed?'on':''}}"
-      ><image class="icon" src="/assets/icons/check-light.svg" /></view
-    ><text>我了解并愿意参与，保存我的讲述与照片</text></button
-  ><button class="link" bindtap="privacy">查看完整资料与隐私说明</button></view
-><view wx:if="{{!missing}}" class="dock"
-  ><button class="btn" disabled="{{!agreed}}" bindtap="accept"
-    >开始讲我的故事
-    <image class="icon" src="/assets/icons/arrow-right-light.svg" /></button
-  ><button class="link" bindtap="back">暂时不参加</button></view
->
+><view wx:else="" class="page welcome">
+  <view class="eyebrow">{{p.buyer}}，想听听你的故事</view>
+  <view class="title">准备好了，就慢慢说。</view>
+  <view class="consent-start">
+    <view class="subtitle">录音会保存并由 AI 整理成故事，和发起人一起核对。</view>
+    <button class="btn consent-start-action" bindtap="accept">确认并开始</button>
+    <button class="link consent-details-toggle" bindtap="toggleDetails" aria-expanded="{{showDetails}}">{{showDetails ? '收起资料使用说明' : '了解资料如何使用'}}</button>
+    <view wx:if="{{showDetails}}" class="consent-details"><view>讲述录音和照片会保存，用于转写、故事整理，并向发起人共享。以后可以调整用途、申请撤回或删除。</view></view>
+  </view>
+  <view class="demo-note section">本机演示 · 本页不会向服务端提交授权</view>
+  <button class="link section" bindtap="back">暂时不参加</button>
+</view>
 </block>
 
 <view wx:if="{{participation && showManagement}}" class="page withdrawal-status">
