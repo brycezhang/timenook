@@ -62,7 +62,7 @@ const screens = {
   ],
   consent: [
     "16 本人参与与资料用途",
-    "简短说明加一个「确认并开始」按钮，详情折叠。点击时再记录四项用途同意，不在打开页面时自动授权。",
+    "简短说明加一个「确认并开始」按钮，详情折叠。点击时记录现有三项用途，不新增独立入书用途。",
   ],
   plan: [
     "17 项目大纲与问题",
@@ -409,7 +409,6 @@ const pages = {
     return `${back("processing", "返回保存进度")}${step(4)}${heading("还想说一点吗？", "追问由你决定。想跳过，也完全可以。")}<div class="question-card mt"><p class="eyebrow">一条可选追问 · 示例</p><h3 class="question">外婆坐在树下择菜时，<br>你们会聊些什么？</h3>${link("按自己的问法改写", "rewrite-question")}</div><div class="stack mt">${btn("我想接着说", "followup-record")}${btn("跳过，整理这篇故事", "organize", "secondary")}</div><p class="footnote">只有已选片段全部转写就绪，才会一起整理。</p>`;
   },
   story() {
-    const permission = state.consents.book === "yes";
     return `${back()}<div class="row"><p class="eyebrow">童年的小城 / 示例整理稿</p><span class="pill ${state.confirmed ? "" : "pending"}">${state.confirmed ? (state.inclusion ? "已确认 · 允许入书" : "已确认 · 暂不入书") : "待本人确认"}</span></div>
       <h2 class="page-title mt-sm">${esc(state.title)}</h2><p class="meta">第 ${state.version} 版 · 原声保留，文字可以校对</p>
       <div class="reading-tools">${link("核对原声与转录", "transcript")}${link("校对这篇故事", "edit")}${link("照片与来源", "sources")}</div>
@@ -419,7 +418,7 @@ const pages = {
         .join("")}</article>
       <p class="sample-indicator">以上为项目既有虚构示例，经缩写用于版式评审。</p>
       <div class="decision-panel">
-        ${state.role === "narrator" ? `<p class="subtitle">${permission ? "确认后，这版故事将用于人生书。" : "确认这版内容，当前暂不用于人生书。"}</p><div class="mt">${btn(state.confirmed ? "已确认" : "确认", "decide", "primary", `style="width:100%" ${state.confirmed ? "disabled" : ""}`)}</div>` : `<div class="safe-note">${icon("shield-check")}<span>这版故事由讲述者本人确认。</span></div><div class="mt">${btn("邀请本人确认", "invite")}</div>`}
+        ${state.role === "narrator" ? `<div class="mt">${btn(state.confirmed ? "已确认" : "确认", "decide", "primary", `style="width:100%" ${state.confirmed ? "disabled" : ""}`)}</div>` : `<div class="safe-note">${icon("shield-check")}<span>这版故事由讲述者本人确认。</span></div><div class="mt">${btn("邀请本人确认", "invite")}</div>`}
         <p class="footnote">修改文字或照片后，需要重新确认。</p>
       </div>`;
   },
@@ -452,11 +451,11 @@ const pages = {
   consent() {
     const canConfirm = state.role === "narrator" || state.assisted;
     return `${back()}<div class="consent-start"><p class="eyebrow">小许，想听听你的故事</p>
-      ${heading("准备好了，就慢慢说。", "录音会保存并由 AI 整理成故事，和小许一起核对，确认后收入书中。")}
+      ${heading("准备好了，就慢慢说。", "录音会保存并由 AI 整理成故事，和小许一起核对。")}
       <div class="consent-start-action">${canConfirm ? btn("确认并开始", "save-consent", "primary", 'style="width:100%"') : btn("本人在场，协助开始", "assisted", "primary", 'style="width:100%"')}</div>
       <details class="consent-details"><summary>了解资料如何使用</summary>
         <p>讲述录音和照片会保存，用于 AI 转写、故事整理，并向本项目发起人共享。</p>
-        <p>故事经你确认后才会入书。以后也可以在资料服务中调整用途、申请撤回或删除。</p>
+        <p>以后也可以在资料服务中调整用途、申请撤回或删除。</p>
       </details></div>`;
   },
   plan() {
@@ -689,7 +688,7 @@ const actions = {
   decide() {
     if (state.role !== "narrator" || state.confirmed) return;
     state.confirmed = true;
-    state.inclusion = state.consents.book === "yes";
+    state.inclusion = true;
     state.narratorBook = false;
     state.initiatorBook = false;
     state.bookDirty = true;
@@ -760,7 +759,7 @@ const actions = {
       actions.assisted();
       return;
     }
-    state.consents = { collect: "yes", ai: "yes", share: "yes", book: "yes" };
+    state.consents = { collect: "yes", ai: "yes", share: "yes" };
     state.authorized = true;
     go("prepare");
   },
