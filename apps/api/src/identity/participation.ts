@@ -2168,7 +2168,15 @@ export class Participation
         accessEpoch:
           reason === "assisted" ? { lte: accessEpoch } : { lt: accessEpoch },
         kind: { in: kinds },
-        state: { notIn: ["succeeded", "no_speech", "invalidated", "obsolete"] },
+        state: {
+          notIn: [
+            "succeeded",
+            "no_speech",
+            "no_content",
+            "invalidated",
+            "obsolete",
+          ],
+        },
       },
       select: { id: true, fence: true },
     });
@@ -2269,7 +2277,13 @@ export class Participation
               id: target.id,
               fence: task.fence,
               state: {
-                notIn: ["succeeded", "no_speech", "invalidated", "obsolete"],
+                notIn: [
+                  "succeeded",
+                  "no_speech",
+                  "no_content",
+                  "invalidated",
+                  "obsolete",
+                ],
               },
             },
             data: {

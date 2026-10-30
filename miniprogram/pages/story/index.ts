@@ -28,14 +28,16 @@ function stage(story: StoryView | null) {
         : task.state === "succeeded"
           ? "故事已整理，待本人核对"
           : task.state === "no_speech"
-            ? "未识别到有效语音，请再录一段"
-            : task.state === "failed"
-              ? "整理失败，原声仍保留"
-              : task.state === "manual_review"
-                ? "需要人工协助，原声仍保留"
-                : task.state === "obsolete"
-                  ? "这次整理已失效，请保存补录后重新整理"
-                  : "处理中，可离开";
+            ? "未识别到语音，原声已保存，请回听后再录一段"
+            : task.state === "no_content"
+              ? "已识别到文字，暂未形成故事，可以继续补充讲述"
+              : task.state === "failed"
+                ? "整理失败，原声仍保留"
+                : task.state === "manual_review"
+                  ? "需要人工协助，原声仍保留"
+                  : task.state === "obsolete"
+                    ? "这次整理已失效，请保存补录后重新整理"
+                    : "处理中，可离开";
 }
 import type { Story } from "../../domain/model";
 import { confirmStory, touch } from "../../domain/model";
@@ -90,6 +92,7 @@ Page({
     audioError: "",
     playingClipId: "",
     liveParagraphs: [] as { text: string; sourceLabel: string }[],
+    liveTranscripts: [] as { clipId: string; label: string; text: string }[],
     saveWarning: "",
     canOrganize: false,
     live: false,
@@ -142,6 +145,7 @@ Page({
       this.setData({
         story: null,
         liveParagraphs: [],
+        liveTranscripts: [],
         canOrganize: false,
         context: null,
         error: "",
@@ -232,6 +236,7 @@ Page({
         decisionStatus: "",
         story: null,
         liveParagraphs: [],
+        liveTranscripts: [],
         canOrganize: false,
         context: null,
         busy: false,
@@ -324,6 +329,7 @@ Page({
         context: result,
         story: loaded ?? result?.story ?? null,
         liveParagraphs: [],
+        liveTranscripts: [],
         pendingLocal,
         stage: stage(loaded ?? result?.story ?? null),
         saveWarning:
@@ -354,6 +360,20 @@ Page({
             ),
             stage: stage(full),
             privateError: "",
+            liveTranscripts:
+              !full.revision || full.task?.state === "no_content"
+                ? (full.task?.sources ?? []).flatMap((source, index) =>
+                    source.transcript?.text.trim()
+                      ? [
+                          {
+                            clipId: source.clipId,
+                            label: `第 ${index + 1} 段原声`,
+                            text: source.transcript.text,
+                          },
+                        ]
+                      : [],
+                  )
+                : [],
             liveParagraphs: (full.revision?.paragraphs ?? []).map((p) => ({
               text: p.text,
               sourceLabel: p.sourceRefs

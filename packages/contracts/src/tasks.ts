@@ -6,6 +6,7 @@ export type ProductionTaskState =
   | "waiting_provider"
   | "succeeded"
   | "no_speech"
+  | "no_content"
   | "failed"
   | "manual_review"
   | "invalidated";

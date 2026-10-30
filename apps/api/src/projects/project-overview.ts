@@ -94,6 +94,7 @@ export class ProjectOverview {
             s.task.state,
           ),
       ),
+      needsMore = stories.some((s) => s.task?.state === "no_content"),
       waiting = stories.some(
         (s) =>
           s.task &&
@@ -141,11 +142,13 @@ export class ProjectOverview {
         ? "有故事需要恢复或人工协助，原声仍保留"
         : waiting
           ? "正在处理已保存的讲述，可离开后返回"
-          : pending
-            ? "请本人核对并确认故事，再单独决定是否入书"
-            : stories.length
-              ? "可继续讲述或查看已确认故事"
-              : "从一段讲述开始",
+          : needsMore
+            ? "已识别到文字，暂未形成故事，可继续补充讲述"
+            : pending
+              ? "请本人核对并确认故事，再单独决定是否入书"
+              : stories.length
+                ? "可继续讲述或查看已确认故事"
+                : "从一段讲述开始",
       accessExpiresAt: actor.accessExpiresAt,
     };
   }

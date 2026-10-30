@@ -7,6 +7,14 @@
     <view wx:if="{{context}}" class="live-save">{{context.clipCount}} 段原声云端已保存</view>
     <view wx:if="{{error}}" class="live-error">{{error}}</view>
     <view wx:if="{{privateError}}" class="live-error">{{privateError}}</view>
+    <view wx:if="{{liveTranscripts.length}}" class="live-transcripts">
+      <view class="title section-title">已识别的内容</view>
+      <view class="live-source-label">以下为语音转写，尚未整理成故事。</view>
+      <view wx:for="{{liveTranscripts}}" wx:key="clipId" class="live-transcript">
+        <view class="live-source-label">{{item.label}}</view>
+        <text class="paragraph" selectable="{{true}}">{{item.text}}</text>
+      </view>
+    </view>
     <view wx:if="{{!story || !story.revision}}" class="live-controls">
       <button wx:if="{{error}}" class="btn secondary" bindtap="refresh" disabled="{{busy}}">重新尝试</button>
       <button wx:if="{{canOrganize}}" class="btn" bindtap="submitLive" disabled="{{busy}}">{{story && story.version?'重新整理故事':'整理故事'}}</button>
@@ -55,7 +63,7 @@
         <button class="btn secondary section" bindtap="requestCorrection" disabled="{{busy}}">按所选期限申请人工校对</button><view wx:if="{{careStatus}}" class="live-stage">{{careStatus}}</view></block>
       </view>
     </block>
-    <view wx:if="{{showAudio && story && story.task}}" class="live-sources">
+    <view wx:if="{{story && story.task && (showAudio || !story.revision)}}" class="live-sources">
       <view class="title section-title">已保存的原声</view>
       <view wx:if="{{audioError}}" class="live-error">{{audioError}}</view>
       <view wx:for="{{story.task.sources}}" wx:key="clipId" class="live-source-row">第 {{index+1}} 段 · 云端已保存

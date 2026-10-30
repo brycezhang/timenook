@@ -186,6 +186,63 @@ function story(state = "waiting_inputs", version = 0) {
     },
   };
 }
+test("transcribed audio without a story shows its transcript and clears it when leaving", async () => {
+  const h = harness();
+  const result: any = story("no_content");
+  result.task.errorCode = "NO_CONTENT";
+  result.task.sources = [
+    { clipId: "one", sequence: 1, transcript: { text: "这是一次录音测试。" } },
+    { clipId: "two", sequence: 2, transcript: null },
+    { clipId: "three", sequence: 3, transcript: { text: "补充的测试内容。" } },
+  ];
+  h.page.onLoad({ projectId, interviewId });
+  const showing = h.page.onShow();
+  await turn();
+  h.respond(0, {
+    interviewId,
+    clipCount: 3,
+    pendingCount: 0,
+    cloudSaved: true,
+    story: result,
+  });
+  await turn();
+  h.respond(1, result);
+  await showing;
+  assert.equal(
+    h.page.data.stage,
+    "已识别到文字，暂未形成故事，可以继续补充讲述",
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(h.page.data.liveTranscripts)), [
+    { clipId: "one", label: "第 1 段原声", text: "这是一次录音测试。" },
+    { clipId: "three", label: "第 3 段原声", text: "补充的测试内容。" },
+  ]);
+  assert.equal(
+    h.page.poll,
+    undefined,
+    "a completed no-content task must not keep polling",
+  );
+  h.page.onHide();
+  assert.equal(h.page.data.liveTranscripts.length, 0);
+});
+test("unrecognized audio asks for another recording and does not show transcript content", async () => {
+  const h = harness();
+  h.page.onLoad({ projectId, interviewId });
+  const showing = h.page.onShow();
+  await turn();
+  h.respond(0, {
+    interviewId,
+    clipCount: 1,
+    pendingCount: 0,
+    cloudSaved: true,
+    story: story("no_speech"),
+  });
+  await turn();
+  h.respond(1, story("no_speech"));
+  await showing;
+  assert.equal(h.page.data.stage, "未识别到语音，原声已保存，请回听后再录一段");
+  assert.equal(h.page.data.liveTranscripts.length, 0);
+  h.page.onHide();
+});
 test("the live story Page restores its real HTTP task and shows the complete sourced text and review items", async () => {
   const h = harness();
   h.page.onLoad({ projectId, interviewId });

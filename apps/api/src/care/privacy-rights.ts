@@ -891,7 +891,15 @@ export class PrivacyRights implements OnModuleDestroy, OnApplicationShutdown {
     const tasks = await tx.productionTask.findMany({
       where: {
         projectId: input.projectId,
-        state: { notIn: ["succeeded", "no_speech", "invalidated", "obsolete"] },
+        state: {
+          notIn: [
+            "succeeded",
+            "no_speech",
+            "no_content",
+            "invalidated",
+            "obsolete",
+          ],
+        },
       },
       select: { id: true, fence: true },
     });

@@ -121,6 +121,20 @@
 .live-sources {
   margin-top: 40rpx;
 }
+.live-transcripts {
+  margin-top: 32rpx;
+  padding: 26rpx;
+  border: 2rpx solid #ded4c2;
+  border-radius: 16rpx;
+}
+.live-transcript {
+  margin-top: 24rpx;
+}
+.live-transcript .paragraph {
+  font-size: 34rpx;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .live-source-row {
   font-size: 38.5rpx;
   line-height: 1.7;

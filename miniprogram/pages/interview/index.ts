@@ -480,7 +480,7 @@ Page({
             : row.state === "succeeded"
               ? "转写完成；原声与正式转录已保存。"
               : row.state === "no_speech"
-                ? "无有效语音；可以回听原声、继续补录或换个问题。"
+                ? "未识别到语音；原声已保存，可以回听、继续补录或换个问题。"
                 : row.state === "failed"
                   ? row.retryable
                     ? "转写未完成；已保存原声，可以按原任务重试。"

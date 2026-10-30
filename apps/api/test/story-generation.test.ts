@@ -1147,6 +1147,101 @@ test("a participant revision appended through the shared authorized version owne
     providerTransport = original;
   }
 });
+for (const status of ["not_applicable", "declined"]) {
+  test(`${status} story content keeps successful transcription distinct from no speech`, async () => {
+    const p = await bound(),
+      i = await interview(p);
+    await sealedClip(p, i.id);
+    const original = providerTransport;
+    providerTransport = async (input, init) => {
+      if (!String(input).includes("deepseek.com")) return original(input, init);
+      return new Response(
+        JSON.stringify({
+          model: "synthetic-story",
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                role: "assistant",
+                content: JSON.stringify({
+                  status,
+                  title: null,
+                  theme: null,
+                  paragraphs: [],
+                  reviewItems: [],
+                }),
+              },
+            },
+          ],
+        }),
+      );
+    };
+    try {
+      const audio = data(
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/tasks`,
+          p.narrator.token,
+        ),
+        200,
+      )[0];
+      await app.get(ProductionTasks).run(audio.id);
+      await app.get(ProductionTasks).run(audio.id);
+      const story = data(
+        await request(
+          "POST",
+          `/v1/projects/${p.projectId}/stories/organize`,
+          p.narrator.token,
+          { interviewId: i.id, baseVersion: 0 },
+        ),
+        202,
+      );
+      await app.get(ProductionTasks).run(story.task.id);
+      const result = data(
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/stories/${story.id}`,
+          p.narrator.token,
+        ),
+        200,
+      );
+      assert.equal(result.task.state, "no_content");
+      assert.equal(result.task.errorCode, "NO_CONTENT");
+      assert.equal(result.revision, null);
+      assert.equal(result.task.sources[0].state, "succeeded");
+      assert.equal(
+        result.task.sources[0].transcript.text,
+        "那一年大概是八十年代。\n也可能更早。",
+      );
+      const task = data(
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/tasks/${story.task.id}`,
+          p.narrator.token,
+        ),
+        200,
+      );
+      assert.equal(task.state, "no_content");
+      assert.equal(task.nextAction, "continue");
+      assert.equal(task.retryable, false);
+      const overview = data(
+        await request(
+          "GET",
+          `/v1/projects/${p.projectId}/overview`,
+          p.narrator.token,
+        ),
+        200,
+      );
+      assert.equal(
+        overview.nextStep,
+        "已识别到文字，暂未形成故事，可继续补充讲述",
+      );
+    } finally {
+      providerTransport = original;
+    }
+  });
+}
 test("no-speech audio stays in the complete manifest and cannot produce a story or a DeepSeek attempt", async () => {
   const p = await bound(),
     i = await interview(p);

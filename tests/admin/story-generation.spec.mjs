@@ -35,6 +35,7 @@ let api,
   latestPage;
 const errors = [];
 let invalidComposition = false;
+let noContentComposition = false;
 const base = "http://127.0.0.1:5180";
 const data = (r, status = 201) => {
   expect(r.statusCode, r.body).toBe(status);
@@ -186,14 +187,25 @@ test.beforeAll(async () => {
                   message: {
                     role: "assistant",
                     content: JSON.stringify(
-                      invalidComposition
+                      noContentComposition
                         ? {
-                            ...output,
-                            paragraphs: [
-                              { text: "无来源正文", sourceRefs: ["invented"] },
-                            ],
+                            status: "not_applicable",
+                            title: null,
+                            theme: null,
+                            paragraphs: [],
+                            reviewItems: [],
                           }
-                        : output,
+                        : invalidComposition
+                          ? {
+                              ...output,
+                              paragraphs: [
+                                {
+                                  text: "无来源正文",
+                                  sourceRefs: ["invented"],
+                                },
+                              ],
+                            }
+                          : output,
                     ),
                   },
                 },
@@ -786,6 +798,74 @@ async function wakeBrowserTask(id) {
   await runtime.recoverDue();
   await completed;
 }
+test("the shared story screen displays transcribed text when no story was formed and preserves it after refresh", async ({
+  browser,
+}) => {
+  const interview = await savedInterview();
+  const { ProductionTasks } = apiRequire("./dist-test/src/tasks/tasks.js");
+  const audio = data(
+    await request("POST", `/v1/projects/${projectId}/tasks/status`, narrator, {
+      interviewId: interview.id,
+    }),
+  );
+  for (const task of audio) {
+    await api.get(ProductionTasks).run(task.id);
+    await api.get(ProductionTasks).run(task.id);
+  }
+  const story = data(
+    await request(
+      "POST",
+      `/v1/projects/${projectId}/stories/organize`,
+      narrator,
+      { interviewId: interview.id, baseVersion: 0 },
+    ),
+    202,
+  );
+  noContentComposition = true;
+  try {
+    await api.get(ProductionTasks).run(story.task.id);
+  } finally {
+    noContentComposition = false;
+  }
+  const page = await openPage(browser, narrator);
+  try {
+    await page.goto(
+      `${base}/#/story?projectId=${projectId}&interviewId=${interview.id}`,
+    );
+    await expect(
+      page.getByText("已识别到文字，暂未形成故事，可以继续补充讲述", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.locator(".live-transcripts .paragraph")).toHaveCount(2);
+    await expect(
+      page.locator(".live-transcripts .paragraph").first(),
+    ).toHaveText("我那一年第一次出门，后来家门口的树长高了。");
+    await expect(
+      page.getByText("未识别到有效语音，请再录一段", { exact: true }),
+    ).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByText("已识别的内容", { exact: true })).toBeVisible();
+    await page.setViewportSize({ width: 320, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({ path: "/tmp/timenook-story-no-content-320.png" });
+    await page
+      .getByRole("button", { name: "回采访页继续讲", exact: true })
+      .click();
+    await expect(page).toHaveURL(
+      new RegExp(
+        `/interview\\?projectId=${projectId}&interviewId=${interview.id}`,
+      ),
+    );
+    expect(errors).toEqual([]);
+  } finally {
+    await page.context().close();
+  }
+});
 test("the rendered failed story retries from its saved sources and recovers without another user intent", async ({
   browser,
 }) => {

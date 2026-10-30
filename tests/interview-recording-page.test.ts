@@ -1441,7 +1441,7 @@ test("the interview page restores transcription state, stops polling in backgrou
     201,
   );
   await tick();
-  assert.match(h.page.data.taskRows[0].label, /无有效语音.*补录/);
+  assert.match(h.page.data.taskRows[0].label, /未识别到语音.*原声已保存.*补录/);
   assert.equal(h.page.taskPollHandle, undefined);
   h.page.onUnload();
 });

@@ -178,7 +178,15 @@ export class ProductionTasks implements OnModuleDestroy {
       where: {
         id: task.id,
         fence: task.fence,
-        state: { notIn: ["succeeded", "no_speech", "invalidated", "obsolete"] },
+        state: {
+          notIn: [
+            "succeeded",
+            "no_speech",
+            "no_content",
+            "invalidated",
+            "obsolete",
+          ],
+        },
       },
       data: {
         state: task.kind !== "transcribe_audio" ? "obsolete" : "invalidated",
@@ -565,7 +573,7 @@ export class ProductionTasks implements OnModuleDestroy {
             : result.state === "unknown"
               ? "manual_review"
               : noContent
-                ? "no_speech"
+                ? "no_content"
                 : result.state,
           errorCode:
             result.state === "unknown"
@@ -1106,7 +1114,7 @@ export class ProductionTasks implements OnModuleDestroy {
                 task.state === "invalidated" ||
                 task.state === "obsolete"
               ? "contact_support"
-              : task.state === "succeeded"
+              : task.state === "succeeded" || task.state === "no_content"
                 ? "continue"
                 : "leave_and_return",
       submittedAt: task.submittedAt?.toISOString() ?? null,

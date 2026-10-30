@@ -27,6 +27,7 @@ const stateLabel = (state: string) =>
     waiting_provider: "等待供应商",
     succeeded: "处理完成",
     no_speech: "无有效语音",
+    no_content: "已转写，暂未形成故事",
     failed: "处理失败",
     obsolete: "内容已变化",
     waiting_inputs: "等待输入准备完成",
