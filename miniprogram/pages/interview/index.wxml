@@ -20,7 +20,7 @@
       <block wx:elif="{{state === 'saving'}}"><view class="saving-indicator"/><view class="record-label">正在保存声音…</view></block>
       <block wx:else=""><image class="state-icon" src="/assets/icons/mic.svg"/><button class="btn" bindtap="retry" disabled="{{busy}}">重试录音或保存</button></block>
     </view>
-    <view wx:if="{{error || (status && (!canRecord || state === 'device-error'))}}" class="focus-error" role="alert">{{error || status}}</view>
+    <view wx:if="{{error || (!busy && status && (!canRecord || state === 'device-error'))}}" class="focus-error" role="alert">{{error || status}}</view>
     <view wx:else="" class="microphone-note">{{flowStep === 'record' ? '录好后先听一听，再决定是否提交。' : '首次使用时，请允许使用麦克风。'}}</view>
     <view wx:if="{{flowStep !== 'record'}}" class="focus-bottom"><button class="focus-link" bindtap="chooseAnother" disabled="{{busy}}">换个问题</button></view>
   </block>

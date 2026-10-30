@@ -71,6 +71,7 @@ Page({
   decisionCommand: null as { input: string; key: string } | null,
   careCommand: null as { input: string; key: string } | null,
   data: {
+    needsReview: false,
     showAudio: false,
     showCare: false,
     careExpiry: "",
@@ -345,6 +346,12 @@ Page({
           if (!this.currentLive(generation, context)) return;
           this.setData({
             story: full,
+            needsReview: !!full.revision?.reviewItems.some(
+              (item) =>
+                !full.revision?.reviewResolutions?.some(
+                  (resolved) => resolved.item === item,
+                ),
+            ),
             stage: stage(full),
             privateError: "",
             liveParagraphs: (full.revision?.paragraphs ?? []).map((p) => ({

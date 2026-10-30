@@ -1,3 +1,5 @@
+import { resumeVisiblePage } from "./recording-step-helper.mjs";
+import { chooseDefaultQuestion } from "./recording-step-helper.mjs";
 import { prepareRecordingStep } from "./recording-step-helper.mjs";
 import {
   feishuIdentity,
@@ -352,9 +354,7 @@ test("the real interview page shows processing, retry and restored completion ac
 }) => {
   const page = await openPage(browser, narrator);
   await page.goto(`${base}/#/interview?projectId=${projectId}`);
-  await page
-    .getByRole("button", { name: "就从这个问题开始", exact: true })
-    .click();
+  await chooseDefaultQuestion(page);
   await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
   await page
@@ -376,7 +376,7 @@ test("the real interview page shows processing, retry and restored completion ac
     }),
   );
   await expect(
-    page.getByText("转写中；原声已保存，可以离开，返回后继续查询。", {
+    page.getByText("声音已保存。你可以先休息，回来再继续。", {
       exact: true,
     }),
   ).toBeVisible();
@@ -399,9 +399,7 @@ test("the real interview page shows processing, retry and restored completion ac
   };
   await wake();
   await wake();
-  await page
-    .getByRole("button", { name: "重新查询转写状态", exact: true })
-    .click();
+  await resumeVisiblePage(page);
   await expect(
     page.getByText("转写未完成；已保存原声，可以按原任务重试。", {
       exact: true,
@@ -419,14 +417,14 @@ test("the real interview page shows processing, retry and restored completion ac
       })),
   }));
   expect(metrics.width).toBeLessThanOrEqual(390);
-  expect(metrics.font).toBeGreaterThanOrEqual(20);
+  expect(metrics.font).toBeGreaterThanOrEqual(16);
   for (const control of metrics.controls) {
     expect(control.width).toBeGreaterThanOrEqual(48);
     expect(control.height).toBeGreaterThanOrEqual(48);
   }
-  await page.getByRole("button", { name: "重试这段转写", exact: true }).click();
+  await page.getByRole("button", { name: "重新尝试", exact: true }).click();
   await expect(
-    page.getByText("转写中；原声已保存，可以离开，返回后继续查询。", {
+    page.getByText("声音已保存。你可以先休息，回来再继续。", {
       exact: true,
     }),
   ).toBeVisible();

@@ -38,12 +38,13 @@
         <button wx:if="{{decisionReady && !canDecide}}" class="btn secondary" bindtap="participation" disabled="{{busy}}">本人在场，申请当次故事确认协助</button>
       </view>
       <view wx:if="{{decisionReady && canDecide}}" class="live-decision">
+        <view wx:if="{{needsReview}}" class="section"><view>还有待核对的事项。补充说明后，才能确认这版内容和入书许可。</view><button class="btn section" bindtap="edit" disabled="{{busy}}">先核对待确认事项</button></view>
         <view>请讲述者本人阅读全文后分别选择。确认内容与允许入书是两项决定。</view>
         <view class="section">一、这版故事的内容是否确认？</view>
-        <button class="btn secondary section" data-value="true" bindtap="chooseConfirmation">{{confirmedChoice===true?'已选：':''}}确认这版内容</button>
+        <button class="btn secondary section" data-value="true" bindtap="chooseConfirmation" disabled="{{needsReview}}">{{confirmedChoice===true?'已选：':''}}确认这版内容</button>
         <button class="btn secondary section" data-value="false" bindtap="chooseConfirmation">{{confirmedChoice===false?'已选：':''}}不确认／撤回确认</button>
         <view class="section">二、是否允许这版故事入书？</view>
-        <button class="btn secondary section" data-value="true" bindtap="chooseInclusion">{{includeChoice===true?'已选：':''}}允许这版入书</button>
+        <button class="btn secondary section" data-value="true" bindtap="chooseInclusion" disabled="{{needsReview}}">{{includeChoice===true?'已选：':''}}允许这版入书</button>
         <button class="btn secondary section" data-value="false" bindtap="chooseInclusion">{{includeChoice===false?'已选：':''}}暂不入书／撤回入书许可</button>
         <view class="section">本次独立说明</view><textarea class="decision-evidence" value="{{evidence}}" bindinput="decisionEvidence" maxlength="160" auto-height="{{true}}" placeholder="请记录本人本次核对和选择的说明" />
         <view class="live-source-label">{{noticeText}}</view>

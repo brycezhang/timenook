@@ -1,3 +1,5 @@
+import { chooseDefaultQuestion } from "./recording-step-helper.mjs";
+
 import { test, expect } from "@playwright/test";
 import { randomUUID, randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
@@ -6,6 +8,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
+import { get as httpsGet } from "node:https";
 import {
   createPrivacyFixtureApplication,
   closePrivacyFixtureApplication,
@@ -95,6 +98,23 @@ test.beforeAll(async () => {
       },
     },
   );
+  await expect
+    .poll(
+      () =>
+        new Promise((resolve) => {
+          const request = httpsGet(
+            origin + "/app/",
+            { rejectUnauthorized: false },
+            (response) => {
+              response.resume();
+              resolve(response.statusCode);
+            },
+          );
+          request.on("error", () => resolve(0));
+        }),
+      { timeout: 15000 },
+    )
+    .toBe(200);
 });
 test.afterAll(async () => {
   server?.kill("SIGTERM");
@@ -193,6 +213,7 @@ test("normal login, cancel or mock payment, project creation, invitation, consen
     await page
       .getByRole("button", { name: "已核对本人，确认绑定", exact: true })
       .click();
+    await expect(page.getByText(/已绑定。本人须分别授权/)).toBeVisible();
     await narrator
       .getByRole("button", { name: "重新查询参与状态", exact: true })
       .click();
@@ -235,9 +256,7 @@ test("normal login, cancel or mock payment, project creation, invitation, consen
     await narrator
       .getByRole("button", { name: "开始一段讲述", exact: true })
       .click();
-    await narrator
-      .getByRole("button", { name: "就从这个问题开始", exact: true })
-      .click();
+    await chooseDefaultQuestion(narrator);
     await expect(
       narrator.getByRole("button", { name: "开始说", exact: true }),
     ).toBeVisible();

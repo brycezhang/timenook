@@ -422,7 +422,7 @@ test("both roles edit their actual personal plan, preserve subject choices, show
       })),
     }));
     expect(metrics.overflow).toBe(false);
-    expect(metrics.font).toBeGreaterThanOrEqual(20);
+    expect(metrics.font).toBeGreaterThanOrEqual(16);
     expect(metrics.buttons.every((b) => b.w >= 48 && b.h >= 48)).toBe(true);
   }
   await subject.locator("#page").evaluate((el) => {

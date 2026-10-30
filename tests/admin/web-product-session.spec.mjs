@@ -1,3 +1,4 @@
+import { chooseDefaultQuestion } from "./recording-step-helper.mjs";
 import { test, expect } from "@playwright/test";
 import { prepareRecordingStep } from "./recording-step-helper.mjs";
 import {
@@ -672,10 +673,10 @@ test.describe("production shared pages", () => {
     await page
       .getByRole("button", { name: "开始一段讲述", exact: true })
       .click();
-    await page
-      .getByRole("button", { name: "就从这个问题开始", exact: true })
-      .click();
-    await expect(page.locator(".step-title")).toHaveText("准备开讲");
+    await chooseDefaultQuestion(page);
+    await expect(
+      page.getByRole("button", { name: "开始说", exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "开始说", exact: true }),
     ).toBeVisible();
@@ -863,4 +864,41 @@ test("continuous typing keeps focus and the full value in shared forms", async (
   await expect(page.locator(".question textarea").first()).toHaveValue(
     "小时候住在哪里？",
   );
+});
+
+test("new narration uses the shared native microphone screen even after an earlier interview was saved", async ({
+  page,
+}) => {
+  const link = await cli("issue", { userId: projectAccount });
+  await openLink(page, link.url);
+  await page.getByRole("button", { name: "进入我的故事书" }).click();
+  await page.getByRole("link", { name: "打开故事书", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "开始一段讲述", exact: true }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "开始一段讲述", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "开始说", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".processing-step")).toHaveCount(0);
+  await expect(page.locator("#page button:visible")).toHaveCount(2);
+  const route = page.url();
+  expect(route).toMatch(/draftId=[a-f0-9-]{36}/);
+  for (const width of [390, 320, 1280]) {
+    await page.setViewportSize({ width, height: width === 320 ? 760 : 844 });
+    const mic = await page.locator(".record-button").boundingBox();
+    expect(mic.width).toBeGreaterThanOrEqual(112);
+    expect(mic.height).toBeGreaterThanOrEqual(112);
+    expect(mic.y).toBeGreaterThanOrEqual(48);
+    expect(mic.y + mic.height).toBeLessThanOrEqual(width === 320 ? 760 : 844);
+    expect(await page.locator("#page").evaluate((n) => n.scrollTop)).toBe(0);
+    await page.screenshot({
+      path: `/tmp/timenook-native-recording-${width}.png`,
+    });
+  }
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "开始说", exact: true }),
+  ).toBeEnabled();
+  expect(page.url()).toBe(route);
 });

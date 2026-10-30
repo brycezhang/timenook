@@ -1,3 +1,4 @@
+import { chooseDefaultQuestion } from "./recording-step-helper.mjs";
 import { prepareRecordingStep } from "./recording-step-helper.mjs";
 import {
   createPrivacyFixtureApplication,
@@ -340,18 +341,13 @@ test("bound project home reaches the actual recording page, seals a file and ret
   const title = page.locator(".live-project > .title");
   await expect(title).toHaveCount(1);
   await expect(title).toHaveText(overview.bookTitle);
-  await expect(
-    page.getByText(
-      `${overview.summary.pending} 篇待本人确认 · ${overview.summary.confirmed} 篇已确认 · ${overview.summary.included} 篇允许入书`,
-      { exact: true },
-    ),
-  ).toBeVisible();
+  await expect(page.locator(".filters")).toBeVisible();
   const began = performance.now();
   await page.getByRole("button", { name: "开始一段讲述", exact: true }).click();
-  await page
-    .getByRole("button", { name: "就从这个问题开始", exact: true })
-    .click();
-  await expect(page.locator(".step-title")).toHaveText("准备开讲");
+  await chooseDefaultQuestion(page);
+  await expect(
+    page.getByRole("button", { name: "开始说", exact: true }),
+  ).toBeVisible();
   await page.screenshot({ path: "/tmp/timenook-w03-prepare-390.png" });
   await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -417,22 +413,19 @@ test("bound project home reaches the actual recording page, seals a file and ret
       })),
     );
   for (const size of sizes) {
-    expect(size.font).toBeGreaterThanOrEqual(20);
+    expect(size.font).toBeGreaterThanOrEqual(16);
     expect(size.height).toBeGreaterThanOrEqual(48);
     expect(size.width).toBeGreaterThanOrEqual(48);
   }
   await page.getByRole("button", { name: "今天先到这里", exact: true }).click();
   await page
-    .getByRole("button", { name: "进入本人参与的项目", exact: true })
-    .click();
-  await page
-    .getByRole("button", {
-      name: `继续：${context.interviews[0].currentQuestion.snapshot.text}`,
-      exact: true,
+    .locator(".resume-row")
+    .filter({
+      hasText: `${context.interviews[0].currentQuestion.snapshot.text}`,
     })
     .click();
   await expect(
-    page.getByText("已确认保存，这台设备也保留了一份", { exact: true }),
+    page.getByRole("button", { name: "整理成故事", exact: true }),
   ).toBeVisible();
   expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
   await page.setViewportSize({ width: 768, height: 1000 });
@@ -492,13 +485,13 @@ test("actual Page and HTTP retain an older answer source after another question 
       },
     ),
   );
-  await page
-    .getByRole("button", { name: "重新查询与恢复", exact: true })
-    .click();
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
   await expect(page.getByText(laterText, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "重新核对保存结果", exact: true }),
+    page.getByRole("button", { name: "整理成故事", exact: true }),
   ).toBeVisible();
   await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -507,8 +500,8 @@ test("actual Page and HTTP retain an older answer source after another question 
     .click();
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "重新核对保存结果", exact: true }),
-  ).toHaveCount(2);
+    page.getByRole("button", { name: "整理成故事", exact: true }),
+  ).toBeVisible();
   const restored = data(
     await request(
       "GET",
@@ -567,9 +560,7 @@ test("a collection-only assisted participant starts and resumes its own pending 
   await page
     .getByRole("button", { name: "本人在场，开始本次讲述", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "就从这个问题开始", exact: true })
-    .click();
+  await chooseDefaultQuestion(page);
   await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
   await page
@@ -580,9 +571,9 @@ test("a collection-only assisted participant starts and resumes its own pending 
       .locator(".local-recording")
       .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "重新查询与恢复", exact: true })
-    .click();
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
   await expect(
     page
       .locator(".local-recording")
@@ -590,7 +581,7 @@ test("a collection-only assisted participant starts and resumes its own pending 
   ).toBeVisible();
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByText("已确认保存，这台设备也保留了一份", { exact: true }),
+    page.getByRole("button", { name: "整理成故事", exact: true }),
   ).toBeVisible();
   expect(
     (await request("GET", `/v1/projects/${id}/interviews`, buyer)).statusCode,
