@@ -2,11 +2,17 @@
 
 手机优先的内部验收入口，部署目标为 `https://sgl.wootoon.cn/app/`，营销落地页继续位于根路径。范围与六票进度见[统一流程规格](../../docs/delivery/2026-10-29/mobile-web-spec.md)和[实施票据](../../docs/delivery/2026-10-29/mobile-web-tickets.md)。
 
+## 当前内测体验
+
+从 `/app/` 点击“微信登录”进入当前浏览器独立的内测账号，选择赠礼称呼、勾选说明、确认模拟支付，再填写主人公和书名创建真实内测项目。原有私发登录链接继续可用。重复登录可恢复相同 mock 账号；清除浏览器 Cookie 后会建立新的独立账号。
+
+模拟功能只在 `INTERNAL_ACCEPTANCE_ENABLED=1` 且未配置支付时提供。接口为 `GET /api/v1/web/experience`、`POST /api/v1/web/mock-session` 和 `POST /api/v1/web/mock-purchases`；不创建真实付款或实体书权益。模拟账号凭据仅放在 HttpOnly Cookie；sessionStorage 只暂存无凭据的未完成创建请求，以便刷新和幂等重试。本人用途与版本确认继续独立执行。界面与运行结果见[体验交付](../../docs/delivery/2026-10-30/web-experience.md)。
+
 ## 开发与验证
 
 在仓库根目录执行 `pnpm dev:web`、`pnpm typecheck:web`、`pnpm build:web`。开发默认监听 `127.0.0.1:4330`；独立构建产物位于本应用 `dist/`，静态资源基址为 `/app/`，部署须让产品深链返回本应用入口。
 
-接口使用同源 `/api/v1`，开发及预览通过 `TIMENOOK_WEB_API_TARGET` 指定回环后端，例如 `http://127.0.0.1:3417`。代理剥离一次 `/api`，不代理到其他项目。网页 Cookie 要求 HTTPS；本地可用 `TIMENOOK_WEB_TLS_CERT`、`TIMENOOK_WEB_TLS_KEY` 指向工作区外的测试证书文件。未配置后端时仍可检查公开入口与失败提示，不会回退到演示身份。
+接口使用同源 `/api/v1`，开发及预览通过 `TIMENOOK_WEB_API_TARGET` 指定回环后端，例如 `http://127.0.0.1:3417`。代理剥离一次 `/api`，不代理到其他项目。网页 Cookie 要求 HTTPS；本地可用 `TIMENOOK_WEB_TLS_CERT`、`TIMENOOK_WEB_TLS_KEY` 指向工作区外的测试证书文件。未配置后端时仍可检查公开入口与失败提示，不会在服务端未启用内测模式时提供模拟登录。
 
 `pnpm test:web` 复用仓库浏览器测试配置。测试自动创建隔离 PostgreSQL schema、Redis 前缀、隐私台账及临时 HTTPS，使用受控 CLI 预建账号、签发票据，再由真实浏览器点击兑换、恢复和退出。先生成 Prisma、构建 contracts/API，并编译 API 测试；固定运行时与本地服务沿用[开发说明](../../docs/development.md)。测试不读取微信、商户或 AI 凭据，自动截图／trace／录屏关闭。
 

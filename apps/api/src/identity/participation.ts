@@ -710,6 +710,11 @@ export class Participation
     const terms = await this.terms.read(p.id, tx);
     return {
       projectId: p.id,
+      bookTitle:
+        !deleted &&
+        (narrator || !subject.boundUserId || effective.sharing === true)
+          ? (p.bookTitle ?? undefined)
+          : undefined,
       subjectId: subject.id,
       bindingVersion: subject.bindingVersion,
       accessEpoch: p.accessEpoch,

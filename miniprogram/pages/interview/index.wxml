@@ -1,14 +1,13 @@
 <view wx:if="{{mode === 'live'}}" class="live-interview">
   <view class="step-progress">第 {{stepNumber}} 步 · 留下一段讲述</view>
   <view class="title step-title">{{stepTitle}}</view>
-  <view class="section" role="status">{{status}}</view>
+  <view wx:if="{{status}}" class="note section" role="status">{{status}}</view>
   <view wx:if="{{question}}" class="interview-question section">{{question}}</view>
 
   <view wx:if="{{flowStep === 'choose'}}" class="section">
     <view wx:if="{{canRecord}}">
       <button class="btn" bindtap="selectQuestion" disabled="{{busy}}">就从这个问题开始</button>
-      <button class="btn secondary section" data-kind="free-narration" bindtap="selectQuestion" disabled="{{busy}}">自由讲述</button>
-      <button class="btn secondary section" data-kind="photo" bindtap="selectQuestion" disabled="{{busy}}">看着照片讲一讲</button>
+      <view class="starter-options section"><button class="starter-option" data-kind="free-narration" bindtap="selectQuestion" disabled="{{busy}}"><image class="icon" src="/assets/icons/mic.svg"/>自由讲述</button><button class="starter-option" data-kind="photo" bindtap="selectQuestion" disabled="{{busy}}"><image class="icon" src="/assets/icons/image.svg"/>看着照片讲一讲</button></view>
       <view class="section">也可以写下这次想讲的问题</view>
       <textarea class="input section" placeholder="想讲的问题" value="{{customText}}" bindinput="customText" maxlength="2000" disabled="{{busy}}"/>
       <input class="input section" placeholder="想记录什么" value="{{customIntent}}" bindinput="customIntent" maxlength="500" disabled="{{busy}}"/>
@@ -18,11 +17,11 @@
     <button wx:for="{{pendingInterviews}}" wx:key="*this" class="btn secondary section" data-id="{{item}}" bindtap="resumeLocal" disabled="{{busy}}">恢复本机采访 {{index + 1}}</button>
   </view>
 
-  <view wx:if="{{interview && flowStep !== 'choose'}}" class="record-timer section">{{timer}}</view>
+  <view wx:if="{{interview && flowStep === 'record'}}" class="record-timer section center">{{timer}}</view>
   <view wx:if="{{interview && flowStep === 'prepare'}}" class="section">
     <view class="interview-hint">想好再开始。录音时可以暂停，说完后先听一听，再决定提交。</view>
     <button class="btn secondary section" bindtap="photos" disabled="{{busy}}">查看照片或事后补图</button>
-    <button class="btn section" bindtap="record" disabled="{{busy || !canRecord}}">开始说</button>
+    <view class="record-control"><button class="record-button" aria-label="开始说" bindtap="record" disabled="{{busy || !canRecord}}"><image class="record-icon" src="/assets/icons/mic-light.svg"/></button><view class="record-label">开始说</view></view>
     <button wx:if="{{localClips.length}}" class="btn secondary section" bindtap="reviewCurrent" disabled="{{busy}}">回听已保存片段</button>
     <button class="link section" bindtap="chooseAnother" disabled="{{busy}}">另选一个问题</button>
   </view>
@@ -30,7 +29,7 @@
   <view wx:if="{{interview && flowStep === 'record'}}" class="section recording-step">
     <view wx:if="{{state === 'paused'}}" class="interview-hint">已暂停，休息一下再继续。</view>
     <button wx:if="{{state === 'recording' || state === 'paused'}}" class="btn secondary section" bindtap="togglePause" disabled="{{busy}}">{{state === 'paused' ? '继续说' : '暂停一下'}}</button>
-    <button wx:if="{{state === 'recording' || state === 'paused' || state === 'requesting'}}" class="btn section" bindtap="record" disabled="{{busy}}">说完了，停止录音</button>
+    <view class="record-control"><button wx:if="{{state === 'recording' || state === 'paused' || state === 'requesting'}}" class="record-button {{state === 'recording' ? 'recording' : ''}}" aria-label="说完了，停止录音" bindtap="record" disabled="{{busy}}"><image class="record-icon" src="/assets/icons/square-light.svg"/></button><view class="record-label">说完了，点一下</view></view>
     <button wx:if="{{state === 'device-error'}}" class="btn secondary section" bindtap="retry" disabled="{{busy}}">重试录音或保存</button>
   </view>
 

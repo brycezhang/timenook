@@ -297,6 +297,9 @@ Page({
     }
     go("story", "id=" + e.currentTarget.dataset.id);
   },
+  participate() {
+    go("welcome", `projectId=${this.projectId}`);
+  },
   invite() {
     go("invite", dataMode() === "live" ? `projectId=${this.projectId}` : "");
   },

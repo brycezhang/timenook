@@ -1,6 +1,6 @@
 <view class="page assisted-page">
   <view class="title">本人在场，同机协助</view>
-  <view class="soft section">隔离合成验证：真实 D08 证据、核验渠道与时限待冻结。本页点击不能作为可靠本人核验。</view>
+  <view wx:if="{{participation && participation.policyStatus === 'internal-acceptance'}}" class="note section">内测体验。请由讲述者本人在场阅读或听取说明，再逐项选择。</view><view wx:else="" class="note section">请由讲述者本人在场选择当次用途。点击不代替可靠本人核验。</view>
   <view class="note section">请把说明读给讲述者听，由本人分别选择。发起人只负责操作设备，付款不能代替本人同意。</view>
   <view wx:if="{{busy}}" class="section" role="status">正在查询或保存，请稍候…</view>
   <view wx:if="{{status}}" class="soft section" role="alert">{{status}}</view>

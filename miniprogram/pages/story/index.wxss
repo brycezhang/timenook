@@ -149,3 +149,22 @@
   line-height: 1.7;
   margin: 20rpx 0;
 }
+
+.live-controls .btn {
+  font-size: 32rpx;
+}
+.live-story .live-stage,
+.live-story .live-save,
+.live-story .live-version,
+.live-story .live-source-label {
+  font-size: 27rpx;
+}
+.live-story .live-reviews,
+.live-story .live-review,
+.live-story .live-origin,
+.live-story .live-decision {
+  font-size: 32rpx;
+}
+.live-story .btn {
+  font-size: 34rpx;
+}

@@ -19,6 +19,7 @@ import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
 import { PrivacyRights } from "../care/privacy-rights";
 import { IdentityAccess } from "../identity/identity-access";
+import { createInternalProject } from "../projects/internal-project";
 import {
   PERSISTENT_WEB_EXPIRY,
   webCredentialExpiry,
@@ -27,6 +28,7 @@ import {
 
 export const WEB_COOKIE = "__Secure-timenook_web";
 export const WEB_COOKIE_PATH = "/api/v1";
+export const MOCK_ACCOUNT_COOKIE = "__Secure-timenook_mock";
 
 @Injectable()
 export class WebAccess implements OnModuleDestroy {
@@ -70,6 +72,53 @@ export class WebAccess implements OnModuleDestroy {
       request.headers["x-timenook-web"] !== "1"
     )
       throw new ForbiddenException();
+  }
+  mockEnabled() {
+    return (
+      this.config.acceptance?.mode === "internal-acceptance" &&
+      !this.config.payments
+    );
+  }
+  async mockLogin(request: FastifyRequest) {
+    if (!this.mockEnabled()) throw new ServiceUnavailableException();
+    this.requireOrigin(request);
+    await this.limit(request.ip);
+    let ticket = request.cookies[MOCK_ACCOUNT_COOKIE];
+    if (!ticket) {
+      ticket = randomBytes(32).toString("base64url");
+      await this.db.user.create({
+        data: {
+          id: randomUUID(),
+          webLoginTickets: {
+            create: {
+              id: randomUUID(),
+              tokenHash: webDigest(ticket),
+              expiresAt: new Date(PERSISTENT_WEB_EXPIRY),
+            },
+          },
+        },
+      });
+    }
+    const result = await this.exchange(ticket, request.cookies[WEB_COOKIE]);
+    return { ...result, ticket };
+  }
+  async mockPurchase(
+    request: FastifyRequest,
+    input: {
+      purchaseKey: string;
+      bookTitle: string;
+      subjectName: string;
+    },
+  ) {
+    if (!this.mockEnabled()) throw new ServiceUnavailableException();
+    const current = await this.requireMutation(request);
+    await this.limit(`purchase:${current.data.user.id}`, 20);
+    return createInternalProject(this.config, {
+      provisionKey: `web-mock:${current.data.user.id}:${input.purchaseKey}`,
+      initiatorUserId: current.data.user.id,
+      bookTitle: input.bookTitle,
+      subjectName: input.subjectName,
+    });
   }
   async limit(
     source: string,

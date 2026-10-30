@@ -1,19 +1,19 @@
 <view class="page plan-page">
   <view class="title">个人大纲与问题</view>
-  <view class="soft section">隔离合成验证 · 当前默认问题仅供工程测试，真实内容与本人核验规则待确认。</view>
-  <view class="note section">章节和问题都可以留空。不用答完；从默认问题、照片或自由讲述开始。录音采集将在讲述入口接入。</view>
+  <view class="subtitle">不用答完所有问题，从最想说的往事开始。</view>
+  <view class="note section">你们可以一起安排章节和问题。顺序随时调整，已经讲过的故事会保留下来。</view>
   <view wx:if="{{status}}" class="soft section" role="status">{{status}}</view>
   <button wx:if="{{!loggedIn}}" class="btn section" bindtap="login" disabled="{{busy}}">微信登录</button>
   <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">{{dirty ? '重新查询并放弃未保存修改' : '重新查询个人计划'}}</button>
   <view wx:if="{{plan && draft}}">
-    <view class="note section">编辑基于版本：{{draftVersion}} · 本人选择版本：{{plan.preferences.version}}</view>
+
     <view wx:if="{{plan.subjectDecision === 'assisted'}}" class="soft section">本人在场的当次协助许可有效；以下回答选择由本人明确决定。</view>
     <view wx:if="{{!plan.subjectDecision}}" class="note section">你可以编辑计划。稍后、跳过、不适用和禁问由本人选择；同机协助须先取得有效的当次本人许可。</view>
     <view wx:for="{{draft.chapters}}" wx:for-item="chapter" wx:for-index="ci" wx:key="key" class="paper section chapter">
-      <input class="input" placeholder="章节标题" value="{{chapter.title}}" data-chapter="{{ci}}" bindinput="chapterTitle" disabled="{{busy}}" />
+      <input class="input" aria-label="章节标题" placeholder="章节标题" value="{{chapter.title}}" data-chapter="{{ci}}" bindinput="chapterTitle" disabled="{{busy}}" />
       <view class="actions"><button class="btn secondary" data-chapter="{{ci}}" data-direction="-1" bindtap="moveChapter" disabled="{{busy || ci === 0}}">章节上移</button><button class="btn secondary" data-chapter="{{ci}}" data-direction="1" bindtap="moveChapter" disabled="{{busy || ci === draft.chapters.length - 1}}">章节下移</button><button class="btn secondary" data-chapter="{{ci}}" bindtap="removeChapter" disabled="{{busy}}">移出章节</button></view>
       <view wx:for="{{chapter.questions}}" wx:for-item="question" wx:for-index="qi" wx:key="key" class="question section">
-        <textarea class="input" auto-height="{{true}}" placeholder="自拟问题" value="{{question.text}}" data-chapter="{{ci}}" data-question="{{qi}}" bindinput="questionText" disabled="{{busy}}" />
+        <textarea class="input" aria-label="自拟问题" auto-height="{{true}}" placeholder="自拟问题" value="{{question.text}}" data-chapter="{{ci}}" data-question="{{qi}}" bindinput="questionText" disabled="{{busy}}" />
         <view class="actions"><button class="btn secondary" data-chapter="{{ci}}" data-question="{{qi}}" data-direction="-1" bindtap="moveQuestion" disabled="{{busy || qi === 0}}">问题上移</button><button class="btn secondary" data-chapter="{{ci}}" data-question="{{qi}}" data-direction="1" bindtap="moveQuestion" disabled="{{busy || qi === chapter.questions.length - 1}}">问题下移</button><button class="btn secondary" data-chapter="{{ci}}" data-question="{{qi}}" bindtap="removeQuestion" disabled="{{busy}}">移出问题</button></view>
         <view wx:for="{{plan.questionStates}}" wx:for-item="choice" wx:key="questionKey" class="note"><text wx:if="{{choice.questionKey === question.key}}">本人选择：{{choice.state === 'later' ? '稍后回答' : choice.state === 'skipped' ? '已跳过' : choice.state === 'not-applicable' ? '不适用' : '可回答'}}</text></view>
         <view wx:if="{{plan.subjectDecision && !savedQuestionKeys[question.key]}}" class="note section">请先保存这个新问题，再设置本人的回答选择。</view>
@@ -29,5 +29,5 @@
     <view wx:if="{{plan.actualQuestions.length}}" class="paper section"><view class="section-title">历史实际提问</view><view wx:for="{{plan.actualQuestions}}" wx:key="id" class="section"><view>{{item.snapshot.text}}</view><view class="note">{{item.answerRef ? '已有回答关联，移出计划仍保留' : '实际问法已保存'}}</view></view></view>
     <view class="note section">移出章节或问题只改变未来计划，已有回答继续保留。实际入书目录将在书稿流程单独确认。</view>
   </view>
-  <button class="link section" bindtap="back">返回本人参与页</button>
+  <button class="link section" bindtap="back">返回项目</button>
 </view>

@@ -130,44 +130,59 @@
 }
 
 .live-interview {
-  padding: 32rpx 40rpx 80rpx;
-  font-size: 40rpx;
-  line-height: 1.6;
+  padding: 32rpx 36rpx 80rpx;
+  font-size: 32rpx;
+  line-height: 1.7;
 }
-.live-interview .btn,
-.live-interview .link {
-  font-size: 40rpx;
-  min-height: 96rpx;
-  line-height: 1.5;
-  padding: 24rpx;
+.live-interview .section {
+  margin-top: 32rpx;
+}
+.live-interview .btn {
+  font-size: 34rpx;
+  min-height: 108rpx;
   white-space: normal;
 }
+.live-interview .link {
+  font-size: 28rpx;
+}
 .live-interview .input {
-  font-size: 40rpx;
-  min-height: 96rpx;
-  line-height: 1.6;
-  width: 100%;
-  box-sizing: border-box;
+  font-size: 32rpx;
+  min-height: 100rpx;
 }
 .live-interview textarea.input {
-  min-height: 200rpx;
+  min-height: 160rpx;
 }
-
 .step-progress {
-  font-size: 28rpx;
+  font-size: 25rpx;
   color: var(--muted);
-  margin-bottom: 16rpx;
+  margin-bottom: 18rpx;
 }
 .step-title {
   font-size: 48rpx;
   line-height: 1.5;
 }
 .live-interview .interview-question {
-  font-size: 46rpx;
+  font-family: "Songti SC", STSong, SimSun, serif;
+  font-size: 48rpx;
+  line-height: 1.65;
+  padding: 32rpx;
+  background: var(--surface);
+  border-left: 4rpx solid #b5bea2;
+  border-radius: 8rpx 20rpx 20rpx 8rpx;
 }
 .live-interview .interview-hint {
-  font-size: 36rpx;
+  font-size: 32rpx;
   margin-top: 24rpx;
+}
+.live-interview .record-control {
+  margin: 56rpx 0;
+}
+.live-interview .record-label {
+  font-size: 32rpx;
+  margin-top: 34rpx;
+}
+.live-interview .record-timer {
+  font-size: 48rpx;
 }
 .recording-step {
   text-align: center;
@@ -175,4 +190,21 @@
 }
 .local-recording .small {
   margin-top: 16rpx;
+}
+.starter-options {
+  display: flex;
+  gap: 20rpx;
+}
+.starter-option {
+  flex: 1;
+  min-height: 150rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18rpx;
+  background: var(--surface);
+  border: 1rpx solid var(--line);
+  border-radius: 20rpx;
+  font-size: 28rpx;
 }

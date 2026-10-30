@@ -47,7 +47,8 @@ export function mountMiniProgram(
     route = "",
     template: Element | null = null,
     serial = 0,
-    scheduled = false;
+    scheduled = false,
+    composing = false;
   const definitions: Record<string, any> = {};
   let registering = "";
   let pageLoad = Promise.resolve();
@@ -477,9 +478,11 @@ export function mountMiniProgram(
     const match = source.match(/^{{([\s\S]*)}}$/);
     return match ? evaluate(match[1], scope) : source;
   }
-  function renderChildren(node: Node, scope: any, parent: Node) {
+  function renderChildren(node: Node, scope: any, parent: Node, path = "root") {
+    let childIndex = 0;
     let conditional: boolean | null = null;
     for (const child of Array.from(node.childNodes)) {
+      const key = `${path}.${childIndex++}`;
       if (child.nodeType === 3) {
         parent.appendChild(
           document.createTextNode(interpolate(child.textContent || "", scope)),
@@ -507,14 +510,14 @@ export function mountMiniProgram(
             [el.getAttribute("wx:for-item") || "item"]: item,
             [el.getAttribute("wx:for-index") || "index"]: index,
           };
-          renderElement(el, local, parent);
+          renderElement(el, local, parent, `${key}.${index}`);
         });
-      } else renderElement(el, scope, parent);
+      } else renderElement(el, scope, parent, key);
     }
   }
-  function renderElement(el: Element, scope: any, parent: Node) {
+  function renderElement(el: Element, scope: any, parent: Node, key: string) {
     if (el.tagName === "block") {
-      renderChildren(el, scope, parent);
+      renderChildren(el, scope, parent, key);
       return;
     }
     const mapped: Record<string, string> = {
@@ -523,8 +526,34 @@ export function mountMiniProgram(
       image: "img",
     };
     const out = document.createElement(mapped[el.tagName] || el.tagName);
+    if (["input", "textarea"].includes(el.tagName)) out.dataset.renderKey = key;
     for (const attr of Array.from(el.attributes)) {
       if (attr.name.startsWith("wx:") || attr.name === "xmlns:wx") continue;
+      if (attr.name === "open-type" && attr.value === "share") {
+        out.addEventListener("click", () => {
+          const share = current?.onShareAppMessage?.();
+          if (!share) return;
+          const source = new URL(share.path, location.origin);
+          const token = source.searchParams.get("token");
+          const url =
+            options.product && token
+              ? new URL(`/app/invitation/${token}`, location.origin).href
+              : new URL(targetUrl(share.path), location.href).href;
+          if (navigator.share) {
+            void navigator.share({ title: share.title, url }).catch((error) => {
+              if (error.name !== "AbortError")
+                toast("分享未完成，请复制邀请链接后发送。");
+            });
+          } else {
+            wx.setClipboardData({
+              data: url,
+              success: () => toast("邀请链接已复制，可以发给讲述者。"),
+              fail: () => toast("复制未完成，请重试复制邀请链接。"),
+            });
+          }
+        });
+        continue;
+      }
       if (attr.name.startsWith("bind")) {
         const event =
           attr.name.slice(4) === "tap" ? "click" : attr.name.slice(4);
@@ -579,25 +608,30 @@ export function mountMiniProgram(
       }
       out.setAttribute(attr.name, v);
     }
-    renderChildren(el, scope, out);
+    renderChildren(el, scope, out, key);
     parent.appendChild(out);
   }
   function render() {
     scheduled = false;
-    if (!current || !template) return;
+    if (!current || !template || composing) return;
     const active = document.activeElement as HTMLInputElement,
-      field = active?.dataset?.field,
-      caret = field ? active.selectionStart : null;
+      field = root.contains(active) ? active?.dataset?.renderKey : undefined,
+      caret = field ? active.selectionStart : null,
+      end = field ? active.selectionEnd : null,
+      direction = field ? active.selectionDirection : null,
+      scroll = root.scrollTop;
     const fragment = document.createDocumentFragment();
     try {
       renderChildren(template, current.data, fragment);
       root.replaceChildren(fragment);
       if (field) {
         const next = root.querySelector<HTMLInputElement>(
-          `[data-field="${field}"]`,
+          `[data-render-key="${field}"]`,
         );
         next?.focus({ preventScroll: true });
-        if (caret !== null) next?.setSelectionRange(caret, caret);
+        if (caret !== null && end !== null)
+          next?.setSelectionRange(caret, end, direction ?? undefined);
+        root.scrollTop = scroll;
       }
     } catch (e) {
       console.error(e);
@@ -605,7 +639,20 @@ export function mountMiniProgram(
         '<div class="preview-error">页面渲染失败，请查看控制台。</div>';
     }
   }
+  const compositionStart = () => {
+    composing = true;
+  };
+  const compositionEnd = () => {
+    composing = false;
+    if (!scheduled) {
+      scheduled = true;
+      queueMicrotask(render);
+    }
+  };
+  root.addEventListener("compositionstart", compositionStart);
+  root.addEventListener("compositionend", compositionEnd);
   async function mount() {
+    composing = false;
     const ticket = ++serial;
     const hash =
       location.hash.replace(/^#\/?/, "") || options.initialPage || "home";
@@ -754,6 +801,8 @@ export function mountMiniProgram(
     root.replaceChildren();
     overlay.replaceChildren();
     observer.disconnect();
+    root.removeEventListener("compositionstart", compositionStart);
+    root.removeEventListener("compositionend", compositionEnd);
     cssTag.remove();
     window.removeEventListener("hashchange", onHashChange);
     document.removeEventListener("visibilitychange", onVisibility);

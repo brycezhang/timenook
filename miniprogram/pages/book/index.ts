@@ -70,7 +70,7 @@ Page({
       this.onHide();
       ++this.generation;
       this.projectId = q.projectId || projectOverviewClient.selected();
-      this.setData({ live: true });
+      this.setData({ live: true, bookImage: "/assets/book.jpg" });
     }
   },
   onHide() {

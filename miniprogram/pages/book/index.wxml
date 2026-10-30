@@ -1,9 +1,11 @@
 <block wx:if="{{live}}">
   <view class="page with-tabs live-book">
-    <view class="title">我的人生书</view>
+    <view class="title">我的人生书</view><view class="subtitle">把平凡的日子，装订成岁月的礼物</view>
     <view wx:if="{{status}}" class="section note">{{status}}</view>
     <block wx:if="{{context}}">
-      <view wx:if="{{draftAvailable}}" class="section">{{context.eligibleStories.length}} 篇故事已确认并允许入书</view>
+      <view wx:if="{{!version}}" class="book-empty-preview section"><image src="{{bookImage}}" mode="aspectFill"/><view class="caption">装帧效果示意 · 你的书稿将由实际故事生成</view></view>
+      <view wx:if="{{!version && !context.eligibleStories.length}}" class="empty"><view class="serif section-title">书的第一页，等你来讲。</view><view class="subtitle">先留下一段往事，确认后就能收进书里。</view><button class="btn section" bindtap="project">回到项目，开始第一篇故事</button></view>
+      <view wx:if="{{draftAvailable && context.eligibleStories.length}}" class="section">{{context.eligibleStories.length}} 篇故事已确认并允许入书</view>
       <view wx:if="{{sourceStatus}}" class="section note draft-access-status">{{sourceStatus}}</view>
       <view class="section book-status">{{stateLabel}}</view>
       <block wx:if="{{version}}">
@@ -30,7 +32,7 @@
         <button wx:if="{{version.state === 'failed'}}" class="btn section" bindtap="retry" disabled="{{busy || !draftAvailable}}">重试生成本版</button>
         <view class="note section">{{context.physicalProduction === false ? '内部功能验收书稿，无付款或实体书生产。' : '当前为合成测试规格，尚未开放正式生产。'}}</view>
       </block>
-      <button class="btn section" bindtap="generate" disabled="{{busy || !draftAvailable || dirty || coverDirty || !context.eligibleStories.length || (version && (version.state === 'queued' || version.state === 'rendering'))}}">生成完整书稿</button>
+      <button wx:if="{{version || context.eligibleStories.length}}" class="btn section" bindtap="generate" disabled="{{busy || !draftAvailable || dirty || coverDirty || !context.eligibleStories.length || (version && (version.state === 'queued' || version.state === 'rendering'))}}">生成完整书稿</button>
       <button class="btn secondary section" bindtap="editCover" disabled="{{busy || !draftAvailable}}">{{coverEditing ? '收起书封编辑' : '调整书封'}}</button>
       <view wx:if="{{draftAvailable && coverEditing && coverDraft}}" class="cover-editor section">
         <label>称呼<input class="cover-salutation" data-field="cover-salutation" value="{{coverDraft.salutation}}" bindinput="salutation" maxlength="120" placeholder="可留空，例如：写给一路同行的你" /></label>
@@ -66,7 +68,7 @@
     </block>
     <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">{{dirty || coverDirty ? '重新查询，放弃未保存修改' : '重新查询'}}</button>
   </view>
-  <view class="tabs live-tabs"><button class="tab" bindtap="project">项目</button><button class="tab active" bindtap="book">成书</button><button class="tab" bindtap="account">我的</button></view>
+  <view class="tabs live-tabs"><button class="tab" bindtap="project"><image class="icon" src="/assets/icons/book-open.svg"/><text class="tab-label">项目</text></button><button class="tab active" bindtap="book"><image class="icon" src="/assets/icons/file-text.svg"/><text>成书</text></button><button class="tab" bindtap="account"><image class="icon" src="/assets/icons/user.svg"/><text>我的</text></button></view>
 </block>
 <block wx:else="">
 <view class="book-page with-tabs"

@@ -826,3 +826,41 @@ test("shared recording submits its saved original through cookie and CSRF", asyn
   expect(downloaded.size).toBe(bytes.length);
   expect(downloaded.mime).toBe("audio/mpeg");
 });
+
+test("continuous typing keeps focus and the full value in shared forms", async ({
+  page,
+}) => {
+  const link = await cli("issue", { userId: projectAccount });
+  await openLink(page, link.url);
+  await page.getByRole("button", { name: "进入我的故事书" }).click();
+  await page.getByRole("link", { name: "打开故事书", exact: true }).click();
+  await page
+    .getByRole("button", { name: "个人大纲与问题", exact: true })
+    .click();
+  const title = page.locator(".chapter input").first();
+  await title.fill("");
+  await title.pressSequentially("我的童年", { delay: 60 });
+  await expect(title).toHaveValue("我的童年");
+  await expect(title).toBeFocused();
+  await title.press("ArrowLeft");
+  await title.pressSequentially("珍贵的", { delay: 60 });
+  await expect(title).toHaveValue("我的童珍贵的年");
+  const question = page.locator(".question textarea").first();
+  await question.fill("");
+  await question.pressSequentially("小时候住在哪里？", { delay: 60 });
+  await expect(question).toHaveValue("小时候住在哪里？");
+  await expect(question).toBeFocused();
+  await page.getByRole("button", { name: "保存个人计划", exact: true }).click();
+  await expect(
+    page.getByText("个人计划已保存；已回答内容和本人偏好继续保留。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".chapter input").first()).toHaveValue(
+    "我的童珍贵的年",
+  );
+  await expect(page.locator(".question textarea").first()).toHaveValue(
+    "小时候住在哪里？",
+  );
+});

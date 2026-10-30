@@ -145,6 +145,10 @@ Page({
     go("settings", this.data.live ? `projectId=${this.projectId}` : "");
   },
   invite() {
+    if (this.data.live && this.data.overview?.role === "narrator") {
+      go("welcome", `projectId=${this.projectId}`);
+      return;
+    }
     go("invite", this.data.live ? `projectId=${this.projectId}` : "");
   },
   service(e: E) {
