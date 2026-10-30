@@ -707,6 +707,7 @@ async function showInterview(h: ReturnType<typeof harness>) {
     plan: {
       revision: 1,
       defaultQuestion: { text: "私人采访问题" },
+      eligibleQuestions: [{ text: "私人采访问题" }],
       starters: [],
     },
   });

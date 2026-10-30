@@ -9,11 +9,11 @@
       <view class="question-hint">{{questionHint || '可以说说当时的人、记得的场景，或一件小事。'}}</view>
       <view class="question-actions">
         <button class="btn" bindtap="selectQuestion" disabled="{{busy}}">就从这个问题开始</button>
-        <button class="focus-link" bindtap="chooseAnother" disabled="{{busy}}">换个问题</button>
+        <button class="focus-link" bindtap="chooseAnother" disabled="{{busy}}">{{mode !== 'live' || hasOtherQuestions ? '换个问题' : '其他讲述方式'}}</button>
       </view>
     </view>
     <button class="list-row topic-choice" data-kind="photo" bindtap="selectQuestion" disabled="{{busy}}"><image class="icon" src="/assets/icons/image.svg"/><view class="grow">看着照片讲一讲<view class="note">从照片中说起，事后也能补图。</view></view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button>
-    <button class="list-row topic-choice" bindtap="chooseAnother" disabled="{{busy}}"><image class="icon" src="/assets/icons/mic.svg"/><view class="grow">我有自己想说的<view class="note">自由讲述，或写下自己的问题。</view></view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button>
+    <button class="list-row topic-choice" bindtap="openQuestionPicker" disabled="{{busy}}"><image class="icon" src="/assets/icons/mic.svg"/><view class="grow">我有自己想说的<view class="note">自由讲述，或写下自己的问题。</view></view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button>
     <view wx:if="{{mode !== 'live'}}" class="demo-note">本机演示，录音不会上传。</view>
   </block>
   <block wx:elif="{{flowStep === 'prepare' || flowStep === 'record'}}">
@@ -37,7 +37,7 @@
     </view>
     <view wx:if="{{error || (!busy && status && (!canRecord || state === 'device-error'))}}" class="focus-error" role="alert">{{error || status}}</view>
     <view wx:else="" class="microphone-note">{{flowStep === 'record' ? '录好后先听一听，再决定是否提交。' : '首次使用时，请允许使用麦克风。'}}</view>
-    <view wx:if="{{flowStep !== 'record'}}" class="focus-bottom"><button class="focus-link" bindtap="chooseAnother" disabled="{{busy}}">换个问题</button></view>
+    <view wx:if="{{flowStep !== 'record'}}" class="focus-bottom"><button class="focus-link" bindtap="chooseAnother" disabled="{{busy}}">{{mode !== 'live' || hasOtherQuestions ? '换个问题' : '其他讲述方式'}}</button></view>
   </block>
 
   <block wx:elif="{{flowStep === 'review'}}">
@@ -100,7 +100,7 @@
   <view class="sheet-heading"><view class="title section-title">想从哪里聊起？</view><button class="focus-link" bindtap="closeQuestionPicker">返回讲述</button></view>
   <block wx:if="{{mode === 'live'}}">
     <view wx:if="{{customQuestion}}" class="custom-question-form"><label class="label">这次想聊的问题<textarea class="input" data-field="customText" placeholder="想讲的问题" value="{{customText}}" bindinput="customText" maxlength="2000"/></label><label class="label section">想留下怎样的回忆<input class="input" data-field="customIntent" placeholder="想记录什么" value="{{customIntent}}" bindinput="customIntent" maxlength="500"/></label><button class="btn section" data-kind="custom" bindtap="selectQuestion" disabled="{{busy || !customText || !customIntent}}">从自拟问题开始</button></view>
-    <block wx:else=""><view class="question-preview">{{question}}</view><view class="question-actions"><button class="btn" bindtap="selectQuestion" disabled="{{busy}}">就从这个问题开始</button></view><view class="section"><button class="list-row" data-kind="free-narration" bindtap="selectQuestion" disabled="{{busy}}"><image class="icon" src="/assets/icons/mic.svg"/><view class="grow">自由讲述</view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button><button class="list-row" data-kind="photo" bindtap="selectQuestion" disabled="{{busy}}"><image class="icon" src="/assets/icons/image.svg"/><view class="grow">看着照片讲一讲</view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button><button class="list-row" bindtap="writeQuestion"><image class="icon" src="/assets/icons/pencil.svg"/><view class="grow">写下想聊的问题</view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button></view></block>
+    <block wx:else=""><view class="question-preview">{{question}}</view><view class="question-actions"><button class="btn" bindtap="selectQuestion" disabled="{{busy}}">就从这个问题开始</button><button wx:if="{{hasOtherQuestions}}" class="focus-link" bindtap="chooseAnother" disabled="{{busy}}">再换一个问题</button></view><view class="section"><button class="list-row" data-kind="free-narration" bindtap="selectQuestion" disabled="{{busy}}"><image class="icon" src="/assets/icons/mic.svg"/><view class="grow">自由讲述</view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button><button class="list-row" data-kind="photo" bindtap="selectQuestion" disabled="{{busy}}"><image class="icon" src="/assets/icons/image.svg"/><view class="grow">看着照片讲一讲</view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button><button class="list-row" bindtap="writeQuestion"><image class="icon" src="/assets/icons/pencil.svg"/><view class="grow">写下想聊的问题</view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button></view></block>
     <button wx:if="{{interview}}" class="focus-link section" bindtap="photos">查看照片或事后补图</button><button wx:if="{{interview}}" class="focus-link" bindtap="showProcessing">查看已保存的讲述</button><button wx:for="{{pendingInterviews}}" wx:key="*this" class="list-row" data-id="{{item}}" bindtap="resumeLocal">恢复本机讲述 {{index + 1}}</button>
   </block>
   <block wx:else=""><view class="question-preview">{{question}}</view><button class="btn" bindtap="change">再换一个问题</button><button class="focus-link" bindtap="closeQuestionPicker">就聊这个</button></block>

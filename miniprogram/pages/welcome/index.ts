@@ -8,6 +8,7 @@ import {
   withdrawalDisposition,
 } from "../../services/participation";
 import { paymentKey } from "../../services/payments";
+import { recordingId } from "../../services/local-audio-recorder";
 import {
   CONSENT_PURPOSES,
   type ConsentPurpose,
@@ -308,7 +309,10 @@ Page({
           ),
         )
       )
-        go("interview", `projectId=${state.projectId}`);
+        go(
+          "interview",
+          `projectId=${state.projectId}&draftId=${recordingId()}&prepare=1`,
+        );
       else this.setData({ status: "用途保存后仍未取得开始权限，请重新查询" });
     } catch (error) {
       if (this.recoverExpiredSession(error, generation, context)) return;

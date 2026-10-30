@@ -169,7 +169,12 @@ test("welcome visits do not authorize; an actual narrator start records three pu
     canProcessAi: true,
   });
   await starting;
-  assert.equal(routes[0], `/pages/interview/index?projectId=${projectId}`);
+  assert.match(
+    routes[0],
+    new RegExp(
+      `/pages/interview/index\\?projectId=${projectId}&draftId=[a-f0-9-]{36}&prepare=1$`,
+    ),
+  );
 });
 test("initiator cannot authorize the narrator by invoking the welcome start action", async () => {
   const { page, requests } = harness("welcome");

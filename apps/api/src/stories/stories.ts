@@ -1275,7 +1275,6 @@ export class Stories {
             projectId,
             storyId: id,
             subjectId: actor.subjectId,
-            bindingVersion: actor.bindingVersion,
           },
           orderBy: { sequence: "desc" },
           select: { allowInBook: true },
@@ -1284,6 +1283,7 @@ export class Stories {
           ...view,
           confirmation: {
             canDecide: actor.subjectDecision === "self",
+            // A binding changes the operator, not this subject's explicit refusal.
             allowInBook: previous?.allowInBook ?? true,
             noticeVersion: this.config.acceptance
               ? "internal-participation-v1"

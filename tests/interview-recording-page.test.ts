@@ -251,6 +251,10 @@ const context = {
       text: question.snapshot.text,
       intent: "具体场景",
     },
+    eligibleQuestions: [
+      { key: "place", text: question.snapshot.text, intent: "具体场景" },
+      { key: "memory", text: "还有哪一件小事让你记得很清楚？", intent: "回忆" },
+    ],
     starters: [],
   },
 };
@@ -323,10 +327,78 @@ test("step navigation shows the question that will actually be selected or recor
   h.page.data.interview = { ...interview, currentQuestion: changed };
   h.page.data.question = changed.snapshot.text;
   h.page.chooseAnother();
-  assert.equal(h.page.data.question, context.plan.defaultQuestion.text);
+  assert.equal(h.page.data.question, context.plan.eligibleQuestions[1].text);
   h.page.prepareCurrent();
   assert.equal(h.page.data.question, changed.snapshot.text);
   assert.equal(h.requests.length, 0);
+});
+
+test("changing the real plan question starts the displayed key rather than the default", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), context);
+  await showing;
+  h.page.chooseAnother();
+  assert.equal(h.page.data.question, context.plan.eligibleQuestions[1].text);
+  assert.equal(h.requests.length, 0, "browsing does not create interviews");
+  const selecting = h.page.selectQuestion();
+  assert.equal(h.requests[0].data.questionKey, "memory");
+  respond(
+    h.requests.shift(),
+    {
+      ...interview,
+      actualQuestion: {
+        ...question,
+        questionKey: "memory",
+        snapshot: context.plan.eligibleQuestions[1],
+      },
+    },
+    201,
+  );
+  await selecting;
+  assert.equal(h.page.data.question, context.plan.eligibleQuestions[1].text);
+  assert.equal(h.starts, 0);
+});
+
+test("welcome preparation uses a fresh draft and leaves old pending originals recoverable without starting the microphone", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const draftId = "77777777-7777-4777-8777-777777777777";
+  const partition = `timenook.recording.v1:${base}:synthetic-app:${login.user.id}:${projectId}`;
+  h.storage.set(`${partition}:active`, interviewId);
+  h.storage.set(`${partition}:index`, [interviewId]);
+  h.page.onLoad({ projectId, draftId, prepare: "1" });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        clips: [
+          { id: "88888888-8888-4888-8888-888888888888", state: "sealed" },
+        ],
+      },
+    ],
+  });
+  await showing;
+  assert.equal(h.page.data.flowStep, "prepare");
+  assert.equal(h.page.data.question, context.plan.defaultQuestion.text);
+  assert.equal(h.page.data.interview, null);
+  assert.deepEqual(Array.from(h.page.data.pendingInterviews), [interviewId]);
+  assert.equal(h.storage.get(`${partition}:active`), interviewId);
+  assert.equal(h.starts, 0);
+  assert.equal(h.requests.length, 0);
+  h.page.openQuestionPicker();
+  const restoring = h.page.resumeLocal({
+    currentTarget: { dataset: { id: interviewId } },
+  });
+  assert.match(h.requests[0].url, new RegExp(`/interviews/${interviewId}$`));
+  respond(h.requests.shift(), interview);
+  await restoring;
+  assert.equal(h.page.data.interview.id, interviewId);
+  assert.equal(h.starts, 0);
 });
 
 test("leaving while paused saves the same recording and clears its private page", async () => {

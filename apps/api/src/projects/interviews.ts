@@ -452,19 +452,19 @@ export class Interviews implements OnModuleDestroy {
         .filter((q) => q.state !== "ready")
         .map((q) => q.questionKey),
     );
-    const defaultQuestion =
-      plan.chapters
-        .flatMap((c) => c.questions)
-        .find(
-          (q) =>
-            !unavailable.has(q.key) &&
-            ![q.key, ...q.sensitivityTags].some((tag) =>
-              plan.preferences.blockedTopics.includes(tag),
-            ),
-        ) ?? null;
+    const eligibleQuestions = plan.chapters
+      .flatMap((c) => c.questions)
+      .filter(
+        (q) =>
+          !unavailable.has(q.key) &&
+          ![q.key, ...q.sensitivityTags].some((tag) =>
+            plan.preferences.blockedTopics.includes(tag),
+          ),
+      );
     return {
       revision: plan.revision,
-      defaultQuestion,
+      defaultQuestion: eligibleQuestions[0] ?? null,
+      eligibleQuestions,
       starters: plan.starters,
     };
   }

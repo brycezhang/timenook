@@ -58,6 +58,8 @@ Page({
     customIntent: "",
     question: questions[0],
     questionIndex: 0,
+    selectedQuestionKey: "",
+    hasOtherQuestions: false,
     state: "idle",
     timer: "00:00",
     error: "",
@@ -89,6 +91,7 @@ Page({
   requestedInterviewId: "",
   uploadingClipId: "",
   draftId: "",
+  prepareDraft: false,
   generation: 0,
   liveRecorder: null as InterviewRecorder | null,
   context: null as RecordingContext | null,
@@ -113,6 +116,7 @@ Page({
         ? q.draftId || ""
         : "";
       this.requestedInterviewId = q.interviewId || "";
+      this.prepareDraft = !!this.draftId && q.prepare === "1";
       this.assistedSessionId = q.assistedSessionId ?? "";
       this.setData({
         mode: "live",
@@ -197,6 +201,8 @@ Page({
       this.setData({
         ...flowView("choose"),
         question: "",
+        selectedQuestionKey: "",
+        hasOtherQuestions: false,
         interview: null,
         localClips: [],
         interviews: [],
@@ -276,6 +282,8 @@ Page({
       this.setData({
         canRecord: result.canRecord,
         interviews: result.interviews,
+        selectedQuestionKey: result.plan.defaultQuestion?.key ?? "",
+        hasOtherQuestions: result.plan.eligibleQuestions.length > 1,
         questionHint:
           result.plan.defaultQuestion?.optionalContext?.join("，") ?? "",
         question:
@@ -317,7 +325,13 @@ Page({
           this.assistedSessionId || undefined,
         );
       if (!selected && this.current(generation, context)) {
-        this.setData({ ...flowView("choose"), state: "idle", status: "" });
+        this.setData({
+          ...flowView(
+            this.prepareDraft && result.canRecord ? "prepare" : "choose",
+          ),
+          state: "idle",
+          status: "",
+        });
       }
       if (selected && this.current(generation, context)) {
         await this.attach(selected, generation, context);
@@ -358,6 +372,8 @@ Page({
       ...flowView("prepare"),
       interview: value,
       question: (value.currentQuestion ?? value.actualQuestion).snapshot.text,
+      selectedQuestionKey:
+        (value.currentQuestion ?? value.actualQuestion).questionKey ?? "",
       state: "idle",
       questionHint:
         "optionalContext" in
@@ -590,6 +606,9 @@ Page({
       return;
     this.clearFollowup();
     const kind = e?.currentTarget?.dataset.kind ?? "plan";
+    const selectedQuestion = this.context.plan.eligibleQuestions.find(
+      (question) => question.key === this.data.selectedQuestionKey,
+    );
     const source =
       kind === "custom"
         ? {
@@ -598,8 +617,8 @@ Page({
               intent: this.data.customIntent,
             },
           }
-        : kind === "plan" && this.context.plan.defaultQuestion
-          ? { questionKey: this.context.plan.defaultQuestion.key }
+        : kind === "plan" && selectedQuestion
+          ? { questionKey: selectedQuestion.key }
           : { starterKind: kind === "photo" ? "photo" : "free-narration" };
     const command = {
       expectedPlanRevision: this.context.plan.revision,
@@ -882,10 +901,8 @@ Page({
     this.setData({
       questionPicker: false,
       customQuestion: false,
-      question:
-        question?.snapshot.text ??
-        this.context?.plan.defaultQuestion?.text ??
-        this.data.question,
+      question: question?.snapshot.text ?? this.data.question,
+      ...(question ? { selectedQuestionKey: question.questionKey ?? "" } : {}),
     });
   },
   writeQuestion() {
@@ -1170,26 +1187,52 @@ Page({
     this.setData({
       ...flowView("prepare"),
       question: currentQuestion.snapshot.text,
+      selectedQuestionKey: currentQuestion.questionKey ?? "",
       questionPicker: false,
     });
     this.scrollToTop();
   },
-  chooseAnother() {
+  openQuestionPicker() {
     if (
       this.data.busy ||
       ["recording", "paused", "requesting", "saving", "device-error"].includes(
         this.data.state,
       )
     )
-      return;
+      return false;
     this.closePlayback();
+    const question =
+      this.context?.plan.eligibleQuestions.find(
+        (q) => q.key === this.data.selectedQuestionKey,
+      ) ?? this.context?.plan.defaultQuestion;
     this.setData({
       questionPicker: true,
       customQuestion: false,
-      question:
-        this.context?.plan.defaultQuestion?.text ??
-        "想从哪里讲起？可以自由讲述、看照片或自拟问题。",
+      ...(dataMode() === "live"
+        ? {
+            selectedQuestionKey: question?.key ?? "",
+            question:
+              question?.text ??
+              "想从哪里讲起？可以自由讲述、看照片或自拟问题。",
+          }
+        : {}),
     });
+    return true;
+  },
+  chooseAnother() {
+    if (!this.openQuestionPicker() || dataMode() !== "live" || !this.context)
+      return;
+    const questions = this.context.plan.eligibleQuestions;
+    const index = questions.findIndex(
+      (q) => q.key === this.data.selectedQuestionKey,
+    );
+    const question = questions[(index + 1) % questions.length];
+    if (question)
+      this.setData({
+        selectedQuestionKey: question.key,
+        question: question.text,
+        questionHint: question.optionalContext?.join("，") ?? "",
+      });
   },
   showProcessing() {
     if (
