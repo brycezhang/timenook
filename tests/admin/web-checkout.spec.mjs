@@ -78,6 +78,12 @@ test.beforeAll(async () => {
       { stdio: "ignore" },
     ).status,
   ).toBe(0);
+  const build = spawnSync(
+    process.execPath,
+    [resolve("node_modules/vite/bin/vite.js"), "build"],
+    { cwd: resolve("apps/web"), stdio: "pipe" },
+  );
+  expect(build.status, "production web build").toBe(0);
   server = spawn(
     process.execPath,
     [
@@ -224,19 +230,32 @@ test("normal login, cancel or mock payment, project creation, invitation, consen
       name: /查看本人的用途选择/,
     });
     if (await membership.isVisible()) await membership.click();
-    for (const text of [
-      "采集并保存讲述和照片",
-      "交由AI处理素材",
-      "向本项目发起人共享资料",
-    ]) {
-      await narrator
-        .locator(".paper")
-        .filter({ hasText: text })
-        .getByRole("button", { name: "同意此用途", exact: true })
-        .click();
-    }
+    const started = narrator.waitForResponse(
+      (response) =>
+        response.url().endsWith("/consents/start") &&
+        response.request().method() === "POST",
+    );
     await narrator
-      .getByRole("button", { name: "进入本人参与的项目", exact: true })
+      .getByRole("button", { name: "确认并开始", exact: true })
+      .click();
+    const consent = await started;
+    expect(consent.status()).toBe(201);
+    expect((await consent.json()).data.choices).toEqual([
+      { purpose: "collection", granted: true },
+      { purpose: "ai", granted: true },
+      { purpose: "sharing", granted: true },
+    ]);
+    await expect(
+      narrator.getByRole("button", { name: "开始说", exact: true }),
+    ).toBeEnabled();
+    await expect(
+      narrator.getByRole("button", { name: "说完了，停止录音", exact: true }),
+    ).toHaveCount(0);
+    await narrator
+      .getByRole("link", { name: "我的故事书", exact: true })
+      .click();
+    await narrator
+      .getByRole("link", { name: "打开故事书", exact: true })
       .click();
     await expect(narrator.locator(".live-project > .title")).toHaveText(
       "爸爸的时光手记",

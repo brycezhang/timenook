@@ -1310,6 +1310,12 @@ test("project progress keeps optional follow-up distinct while the same intervie
       .getByRole("button", { name: "提交这段讲述", exact: true })
       .click();
     await expect(page.locator(".processing-step")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "再聊一个问题", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "整理成故事", exact: true }),
+    ).toHaveCount(0);
     await expect
       .poll(
         async () => {
@@ -1333,6 +1339,10 @@ test("project progress keeps optional follow-up distinct while the same intervie
         { timeout: 20000 },
       )
       .toBe(true);
+    await page
+      .getByRole("button", { name: "重新查询转写状态", exact: true })
+      .click();
+    await expect(page.getByText("文字已转写", { exact: true })).toBeVisible();
     const followupResponse = page.waitForResponse((r) =>
       r.url().endsWith(`${path.slice(3)}/follow-up`),
     );
@@ -1368,6 +1378,7 @@ test("project progress keeps optional follow-up distinct while the same intervie
     await page.evaluate((url) => {
       location.hash = url;
     }, `#/project?projectId=${p.projectId}&assistedSessionId=${p.collection.id}`);
+    await page.getByRole("button", { name: /保存与处理详情/ }).click();
     await expect(
       page.locator(".live-task").filter({ hasText: "可选追问" }),
     ).toBeVisible();

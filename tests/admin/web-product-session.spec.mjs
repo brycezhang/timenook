@@ -780,7 +780,9 @@ test("shared recording submits its saved original through cookie and CSRF", asyn
   );
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByText("已在测试环境保存，真实云端保存仍待验证", { exact: true }),
+    page.getByText("录音已在测试环境保存；这不代表真实云端存储。", {
+      exact: true,
+    }),
   ).toBeVisible();
   const downloaded = await page.evaluate(
     async ({ projectId, sessionModule }) => {
@@ -878,10 +880,22 @@ test("new narration uses the shared native microphone screen even after an earli
   ).toBeEnabled();
   await page.getByRole("button", { name: "开始一段讲述", exact: true }).click();
   await expect(
+    page.getByRole("button", { name: "就从这个问题开始", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".processing-step, .review-player")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "就从这个问题开始", exact: true })
+    .click();
+  await expect(
     page.getByRole("button", { name: "开始说", exact: true }),
   ).toBeEnabled();
   await expect(page.locator(".processing-step")).toHaveCount(0);
-  await expect(page.locator("#page button:visible")).toHaveCount(2);
+  await expect(
+    page.getByRole("button", { name: "换个问题", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "说完了，停止录音", exact: true }),
+  ).toHaveCount(0);
   const route = page.url();
   expect(route).toMatch(/draftId=[a-f0-9-]{36}/);
   for (const width of [390, 320, 1280]) {
