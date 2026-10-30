@@ -7,3 +7,5 @@
 #page .focus-sheet { position:absolute; }
 
 .action-sheet { align-self:flex-end; padding:8px 20px; } .action-sheet button { display:block; width:100%; min-height:52px; background:transparent; color:#593b2c; border-bottom:1px solid #e8ded0; font-size:17px; } .action-sheet button:last-child { border:0; color:#817467; }
+/* Native checkboxes keep their checked indicator in the browser adapter. */
+#page input[type="checkbox"]{appearance:auto;accent-color:#566348;padding:0;border-radius:0}

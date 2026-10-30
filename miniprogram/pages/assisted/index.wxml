@@ -1,11 +1,10 @@
 <view class="page assisted-page">
-  <view class="title">本人在场，同机协助</view>
-  <view wx:if="{{participation && participation.policyStatus === 'internal-acceptance'}}" class="note section">内测体验。请由讲述者本人在场阅读或听取说明，再逐项选择。</view><view wx:else="" class="note section">请由讲述者本人在场选择当次用途。点击不代替可靠本人核验。</view>
-  <view class="note section">请把说明读给讲述者听，由本人分别选择。发起人只负责操作设备，付款不能代替本人同意。</view>
+  <view class="title">本人在场，一起开始</view>
+  <view class="note assisted-intro">请讲述者本人阅读或听取说明，确认这次讲述的用途。</view>
   <view wx:if="{{busy}}" class="section" role="status">正在查询或保存，请稍候…</view>
   <view wx:if="{{status}}" class="soft section" role="alert">{{status}}</view>
   <button wx:if="{{!loggedIn}}" class="btn section" disabled="{{busy}}" bindtap="login">发起人微信登录</button>
-  <button class="btn secondary section" disabled="{{busy}}" bindtap="refresh">重新查询协助与工单状态</button>
+  <button wx:if="{{status && !participation}}" class="btn secondary section" disabled="{{busy}}" bindtap="refresh">重新查询协助与工单状态</button>
   <block wx:if="{{participation}}">
     <view wx:if="{{storyPurpose || bookPurpose}}" class="paper section">
       <view class="section-title">{{qualityPurpose ? '仅本次质量售后资料授权协助' : bookPurpose ? '仅本次书稿确认协助' : '仅本次故事确认协助'}}</view>
@@ -14,13 +13,20 @@
       <button class="btn section" data-granted="true" bindtap="startStoryConfirmation" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">{{qualityPurpose ? '本人同意当次售后授权协助，返回售后' : bookPurpose ? '本人同意当次书稿确认协助，返回书稿确认' : '本人同意当次故事确认协助，返回故事'}}</button>
       <button class="btn secondary section" data-granted="false" bindtap="startStoryConfirmation" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">本人拒绝这次{{bookPurpose ? '书稿' : '故事'}}确认协助</button>
     </view>
-    <view class="note section">三项用途分别选择；可以拒绝或申请撤回。故事与书稿须在看过或听读实际版本后另行确认，每次重新留证。</view>
-    <view wx:for="{{purposes}}" wx:key="purpose" class="paper section">
-      <view class="section-title">{{item.label}}</view>
-      <button class="btn section" data-purpose="{{item.purpose}}" data-granted="true" bindtap="chooseAssisted" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">本人同意此用途，记录当次证据</button>
-      <button class="btn secondary section" data-purpose="{{item.purpose}}" data-granted="false" bindtap="chooseAssisted" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">本人拒绝此用途</button>
-    </view>
-    <button wx:if="{{sessions.length}}" class="btn section" bindtap="record" disabled="{{busy}}">本人在场，开始本次讲述</button>
+    <block wx:if="{{!storyPurpose && !bookPurpose}}">
+      <checkbox-group class="purpose-options" bindchange="choicesChanged">
+        <label wx:for="{{purposes}}" wx:key="purpose" class="purpose-choice">
+          <checkbox class="purpose-checkbox" value="{{item.purpose}}" checked="{{item.checked}}" color="#566348" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}"/>
+          <view><view class="purpose-label">{{item.label}}</view><view class="purpose-description">{{item.description}}</view></view>
+        </label>
+      </checkbox-group>
+      <view class="selection-note">可取消任一项，点击后才保存。故事内容和入书许可仍由本人另行确认。</view>
+      <button class="btn consent-submit" bindtap="submitChoices" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">{{busy ? '正在保存选择…' : purposes[0].checked ? '同意所选并开始讲述' : '保存用途选择'}}</button>
+    </block>
+    <button class="assisted-link section" bindtap="toggleDetails" disabled="{{busy}}">{{showDetails ? '收起其他操作' : '其他操作与本人权利'}}</button>
+    <block wx:if="{{showDetails}}">
+      <view class="note section">由本人分别选择。发起人只负责操作设备，付款不能代替本人同意。</view>
+      <button class="assisted-link" disabled="{{busy}}" bindtap="refresh">重新查询协助与工单状态</button>
   <view wx:for="{{sessions}}" wx:key="id" class="section paper">
       <view>{{item.purpose === 'collection' ? '采集保存' : item.purpose === 'ai' ? 'AI处理' : item.purpose === 'sharing' ? '向发起人共享' : '逐次内容确认'}}</view>
       <view class="note">{{item.state === 'active' ? '当次许可有效' : item.state === 'expired' ? '证据已过期，请取得新的当次证据' : item.state === 'rejected' ? '本人已拒绝' : '许可已撤销，请重新查询和取得证据'}}</view>
@@ -34,13 +40,14 @@
       <button class="btn secondary section" bindtap="requestRight" data-kind="delete" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">记录本人删除申请</button>
       <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="note">工单 record:{{item.id}}</view><view>{{item.kind === 'withdraw' ? '撤回' : item.kind === 'export' ? '资料导出' : item.kind === 'delete' ? '删除' : item.kind === 'correction' ? '故事限时校对' : item.kind === 'production_handoff' ? '生产交接' : item.kind === 'quality' ? '质量售后' : item.kind === 'refund' ? '退款' : '本人账号绑定'}}：{{item.state === 'open' ? '待客服核验' : item.kind === 'rebind' ? '账号绑定已完成' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : '已核验，后续交付或执行待完成'}}</view></view>
     </view>
-  </block>
   <button wx:if="{{participation}}" class="btn secondary section" bindtap="plan" disabled="{{busy}}">编辑个人大纲与问题</button>
   <button wx:if="{{loggedIn}}" class="btn secondary section" bindtap="deletion">查看资料删除进度</button>
-  <button class="btn secondary section" bindtap="back">返回本人参与页</button>
+    </block>
+  </block>
+  <button class="assisted-link section" bindtap="back">返回本人参与页</button>
 </view>
 
-<view wx:if="{{participation}}" class="page withdrawal-status">
+<view wx:if="{{participation && showDetails}}" class="page withdrawal-status">
   <button class="btn secondary section" bindtap="showWithdrawal" disabled="{{busy}}">查看撤回处置进度</button>
   <view wx:if="{{withdrawal}}" class="paper section">
     <view class="section-title">撤回与账号变更处置</view>

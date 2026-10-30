@@ -7,8 +7,8 @@ import {
   withdrawalDisposition,
 } from "../../services/participation";
 import { paymentKey } from "../../services/payments";
+import { recordingId } from "../../services/local-audio-recorder";
 import {
-  CONSENT_PURPOSES,
   type ConsentPurpose,
   type ParticipationState,
   type AssistedSessionView,
@@ -37,10 +37,26 @@ Page({
     bookPurpose: false,
     qualityPurpose: false,
     storyEvidence: "",
+    showDetails: false,
     purposes: [
-      { purpose: "collection", label: "采集并保存讲述和照片" },
-      { purpose: "ai", label: "交由 AI 处理素材" },
-      { purpose: "sharing", label: "向本项目发起人共享资料" },
+      {
+        purpose: "collection",
+        label: "采集并保存讲述和照片",
+        description: "留下这次讲述的声音与照片",
+        checked: true,
+      },
+      {
+        purpose: "ai",
+        label: "交由 AI 处理素材",
+        description: "将声音转成文字，整理成故事",
+        checked: true,
+      },
+      {
+        purpose: "sharing",
+        label: "向本项目发起人共享资料",
+        description: "让发起人查看并协助整理",
+        checked: true,
+      },
     ],
   },
   projectId: "",
@@ -55,6 +71,7 @@ Page({
   ownerContext: "",
   stopSessionWatch: undefined as (() => void) | undefined,
   intent: null as { input: string; key: string } | null,
+  choicesLoaded: false,
   onLoad(q) {
     this.projectId = q.projectId ?? "";
     this.storyId = q.storyId ?? "";
@@ -81,6 +98,7 @@ Page({
     this.stopSessionWatch?.();
     this.stopSessionWatch = undefined;
     this.intent = null;
+    this.choicesLoaded = false;
     this.setData({
       participation: null,
       sessions: [],
@@ -89,6 +107,7 @@ Page({
       loggedIn: false,
       targetUserId: "",
       storyEvidence: "",
+      showDetails: false,
     });
   },
   storyEvidence(e: { detail: { value: string } }) {
@@ -225,7 +244,21 @@ Page({
           expiresAtLabel: localTime(row.expiresAt),
         })),
         careRequests,
+        ...(!this.choicesLoaded
+          ? {
+              purposes: this.data.purposes.map((row) => {
+                const session = sessions.find(
+                  (session) => session.purpose === row.purpose,
+                );
+                return {
+                  ...row,
+                  checked: session ? session.state === "active" : true,
+                };
+              }),
+            }
+          : {}),
       });
+    if (this.current(generation, context)) this.choicesLoaded = true;
   },
   async perform(work: (generation: number, context: string) => Promise<void>) {
     if (this.data.busy) return;
@@ -300,10 +333,11 @@ Page({
     if (latest)
       go(
         "interview",
-        `projectId=${this.projectId}&assistedSessionId=${latest.id}`,
+        `projectId=${this.projectId}&draftId=${recordingId()}&assistedSessionId=${latest.id}`,
       );
   },
   async refresh() {
+    this.choicesLoaded = false;
     await this.perform(async (generation, context) => {
       this.setData({ participation: null, sessions: [], careRequests: [] });
       await this.load(generation, context);
@@ -332,47 +366,70 @@ Page({
       this.intent = { input, key: paymentKey() };
     return this.intent!.key;
   },
-  async chooseAssisted(e: E) {
+  choicesChanged(e: { detail: { value: string[] } }) {
+    if (this.data.busy) return;
+    this.setData({
+      purposes: this.data.purposes.map((row) => ({
+        ...row,
+        checked: e.detail.value.includes(row.purpose),
+      })),
+    });
+  },
+  toggleDetails() {
+    this.setData({ showDetails: !this.data.showDetails });
+  },
+  async submitChoices() {
     const current = this.data.participation;
-    const purpose = e.currentTarget.dataset.purpose as ConsentPurpose;
-    const granted = e.currentTarget.dataset.granted === "true";
     if (
       !current ||
       this.data.busy ||
-      (current.policyStatus !== "synthetic-only" &&
-        current.policyStatus !== "internal-acceptance") ||
-      !CONSENT_PURPOSES.includes(purpose)
+      !["synthetic-only", "internal-acceptance"].includes(current.policyStatus)
     )
       return;
-    const expectedSessionId = this.data.sessions.find(
-      (row) => row.purpose === purpose,
-    )?.id;
-    const key = this.key(
-      JSON.stringify({
-        expectedSessionId,
-        purpose,
-        granted,
-        epoch: current.accessEpoch,
-        binding: current.bindingVersion,
-      }),
-    );
+    const choices = this.data.purposes.map((row) => ({
+      purpose: row.purpose as ConsentPurpose,
+      granted: row.checked,
+    }));
     await this.perform(async (generation, context) => {
-      await participationClient.assisted(
-        current,
-        purpose,
-        granted,
-        key,
-        expectedSessionId,
-      );
+      let saved = 0;
+      try {
+        for (const choice of choices) {
+          if (!this.current(generation, context)) return;
+          const state = this.data.participation!;
+          const expectedSessionId = this.data.sessions.find(
+            (row) => row.purpose === choice.purpose,
+          )?.id;
+          const key = this.key(
+            JSON.stringify({
+              ...choice,
+              expectedSessionId,
+              epoch: state.accessEpoch,
+              binding: state.bindingVersion,
+            }),
+          );
+          await participationClient.assisted(
+            state,
+            choice.purpose,
+            choice.granted,
+            key,
+            expectedSessionId,
+          );
+          if (!this.current(generation, context)) return;
+          saved++;
+          this.intent = null;
+          await this.load(generation, context);
+        }
+      } catch (error) {
+        if (saved && this.current(generation, context))
+          throw new Error(
+            `已有 ${saved} 项选择保存，其余尚未完成，请重新查询后继续。`,
+          );
+        throw error;
+      }
       if (!this.current(generation, context)) return;
-      this.intent = null;
-      await this.load(generation, context);
-      if (this.current(generation, context))
-        this.setData({
-          status: granted
-            ? "当次协助许可已保存；录音功能待后续接入，故事和书稿仍须另行逐次确认"
-            : "本人拒绝已保存，该用途不能继续操作",
-        });
+      this.setData({ status: "用途选择已保存" });
+      if (choices.find((row) => row.purpose === "collection")?.granted)
+        this.record();
     });
   },
   async requestRight(e: E) {

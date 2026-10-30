@@ -558,9 +558,13 @@ export function mountMiniProgram(
       view: "div",
       text: "span",
       image: "img",
+      "checkbox-group": "div",
+      checkbox: "input",
     };
     const out = document.createElement(mapped[el.tagName] || el.tagName);
-    if (["input", "textarea"].includes(el.tagName)) out.dataset.renderKey = key;
+    if (["input", "textarea", "checkbox"].includes(el.tagName))
+      out.dataset.renderKey = key;
+    if (el.tagName === "checkbox") (out as HTMLInputElement).type = "checkbox";
     for (const attr of Array.from(el.attributes)) {
       if (attr.name.startsWith("wx:") || attr.name === "xmlns:wx") continue;
       if (attr.name === "open-type" && attr.value === "share") {
@@ -593,7 +597,16 @@ export function mountMiniProgram(
           attr.name.slice(4) === "tap" ? "click" : attr.name.slice(4);
         out.addEventListener(event, (ev) => {
           ev.stopPropagation();
-          const detail = { value: (ev.target as HTMLInputElement).value };
+          const detail = {
+            value:
+              el.tagName === "checkbox-group"
+                ? Array.from(
+                    out.querySelectorAll<HTMLInputElement>(
+                      'input[type="checkbox"]:checked',
+                    ),
+                  ).map((input) => input.value)
+                : (ev.target as HTMLInputElement).value,
+          };
           try {
             current?.[attr.value]?.({
               currentTarget: { dataset: (out as HTMLElement).dataset },
@@ -608,6 +621,10 @@ export function mountMiniProgram(
       }
       if (attr.name === "disabled") {
         (out as HTMLButtonElement).disabled = !!value(attr.value, scope);
+        continue;
+      }
+      if (attr.name === "checked") {
+        (out as HTMLInputElement).checked = !!value(attr.value, scope);
         continue;
       }
       const v = interpolate(attr.value, scope);

@@ -1250,6 +1250,9 @@ test("a real revoked Story download clears the active Assisted page including it
         exact: true,
       })
       .click();
+    await page
+      .getByRole("button", { name: "其他操作与本人权利", exact: true })
+      .click();
     await expect(
       page.getByText(`工单 record:${grant.caseId}`, { exact: true }),
     ).toBeVisible();
