@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>时光里 · UI 现状与实施清单</title>
+    <link rel="icon" href="assets/icons/book-open.svg" />
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      body {
+        background: var(--paper);
+      }
+      .report {
+        max-width: 1100px;
+        margin: auto;
+        padding: 50px 28px 80px;
+      }
+      .report-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 30px;
+      }
+      .report-header img {
+        width: 62px;
+        height: 62px;
+        object-fit: contain;
+      }
+      .report h1 {
+        font: 40px/1.6 var(--serif);
+        color: var(--title);
+        margin: 28px 0 15px;
+      }
+      .report h2 {
+        font: 27px/1.6 var(--serif);
+        color: var(--title);
+        margin: 44px 0 14px;
+      }
+      .report h3 {
+        font: 22px/1.6 var(--serif);
+        color: var(--title);
+        margin-bottom: 8px;
+      }
+      .report p,
+      .report li {
+        font-size: 15px;
+        line-height: 1.9;
+      }
+      .report p + p {
+        margin-top: 12px;
+      }
+      .report ol {
+        padding-left: 23px;
+      }
+      .report li {
+        padding-left: 7px;
+        margin-bottom: 10px;
+      }
+      .report table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13px;
+        line-height: 1.8;
+      }
+      .report th,
+      .report td {
+        text-align: left;
+        border-bottom: 1px solid var(--line);
+        padding: 15px 12px;
+        vertical-align: top;
+      }
+      .report th {
+        color: var(--title);
+        background: var(--sand);
+        font-weight: 500;
+      }
+      .evidence-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+      .evidence-card {
+        border: 1px solid var(--line);
+        background: var(--surface);
+        padding: 20px;
+        border-radius: 8px;
+      }
+      .evidence-card img {
+        width: 100%;
+        height: auto;
+        margin: 15px 0;
+        border: 1px solid var(--line);
+      }
+      .evidence-card p {
+        font-size: 13px;
+      }
+      .evidence-card small {
+        font-size: 11px;
+        color: var(--muted);
+        line-height: 1.8;
+      }
+      .compare {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+      .compare article {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 25px;
+      }
+      .compare p {
+        font-size: 14px;
+      }
+      .tag {
+        font-size: 11px;
+        color: var(--olive);
+        letter-spacing: 2px;
+      }
+      .table-scroll {
+        overflow-x: auto;
+      }
+      @media (max-width: 650px) {
+        .report {
+          padding: 25px 20px 60px;
+        }
+        .report h1 {
+          font-size: 30px;
+        }
+        .evidence-grid,
+        .compare {
+          grid-template-columns: 1fr;
+        }
+        .report-header .btn {
+          font-size: 12px;
+          padding: 10px 15px;
+        }
+        .report th,
+        .report td {
+          min-width: 120px;
+        }
+        .report-header img {
+          width: 48px;
+          height: 48px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="report">
+      <header class="report-header">
+        <div class="row">
+          <img src="assets/logo.jpg" alt="时光里原始 Logo" /><span
+            class="eyebrow"
+            >岁月成书 / 2026.10.30</span
+          >
+        </div>
+        <a class="btn primary" href="index.html">打开可点击方案</a>
+      </header>
+      <p class="eyebrow mt">设计提案 · 待评审</p>
+      <h1>保留温度，<br />把下一步说清楚。</h1>
+      <p>
+        品牌已有自己的样子。这次重点重新安排信息与操作：让讲述成为中心，让保存、核对和成书各有清楚的位置。
+      </p>
+      <div class="safe-note mt">
+        <span
+          >本轮已确认：可点击高保真方案 +
+          实施清单；延续纸张、宋体、橄榄绿。业务代码与线上环境未变更。</span
+        >
+      </div>
+      <h2>先调整这四件事</h2>
+      <div class="compare">
+        <article>
+          <span class="tag">01 / 项目首页</span>
+          <h3>今天做什么，一眼就知道。</h3>
+          <p>
+            当前行动、最近一段、待确认故事居前。历史任务进入详情，故障保留醒目入口。
+          </p>
+        </article>
+        <article>
+          <span class="tag">02 / 分步讲述</span>
+          <h3>每一步，只突出一件事。</h3>
+          <p>
+            选题、准备、录制、回听、保存、核对按阶段出现。照片、自拟与自由讲述不丢失。
+          </p>
+        </article>
+        <article>
+          <span class="tag">03 / 本人核对</span>
+          <h3>读过故事，一次确认。</h3>
+          <p>
+            原声与转录可对照；确认区只保留一个按钮，按当前入书用途记录本版决定。发起人走邀请或当次协助。
+          </p>
+        </article>
+        <article>
+          <span class="tag">04 / 书稿版本</span>
+          <h3>双方确认的是同一本书。</h3>
+          <p>
+            改稿提示生成新版；完整
+            PDF、同版双方确认、发起人地址逐项清楚。内测生产关闭。
+          </p>
+        </article>
+      </div>
+      <h2>本轮看到的现状</h2>
+      <p>
+        以下为这次实际捕获的界面。小程序截图来自最新源码的共源
+        demo；没有把它当作微信原生 live 或真机验收。
+      </p>
+      <div class="evidence-grid mt">
+        <article class="evidence-card">
+          <h3>01 网页项目页</h3>
+          <span class="pill pending">可用 · 层级待优化</span
+          ><a href="evidence/01-web-project.png"
+            ><img
+              src="evidence/01-web-project.png"
+              alt="本轮网页项目页现状，长标题与讲述主卡"
+          /></a>
+          <p>
+            品牌和主行动清楚。多个恢复入口、故事与历史任务纵向堆积，当前优先事项容易被淹没。
+          </p>
+          <small
+            >当前合成语音验收项目。任务列表来自同页可访问文本，截图展示首屏。</small
+          >
+        </article>
+        <article class="evidence-card">
+          <h3>02 网页已保存讲述</h3>
+          <span class="pill">主操作清楚</span
+          ><a href="evidence/02-web-saved.png"
+            ><img
+              src="evidence/02-web-saved.png"
+              alt="网页已保存讲述，显示这段声音留下来了"
+          /></a>
+          <p>
+            整理故事按钮明确。建议就近补充云端封存与转写状态，减少“留下来了”的理解成本。
+          </p>
+          <small>没有在此走查中提交故事确认或执行真实生产。</small>
+        </article>
+        <article class="evidence-card">
+          <h3>03 营销官网</h3>
+          <span class="pill">品牌表达良好</span
+          ><a href="evidence/03-website.png"
+            ><img
+              src="evidence/03-website.png"
+              alt="当前官网首屏，书籍图片和开始制作故事书按钮"
+          /></a>
+          <p>
+            配色、宋体、书籍效果图可保留。首屏“开始制作故事书”需就近说明是内测入口，避免被理解为已可正式购买。
+          </p>
+          <small>样书和套餐保留。内测说明与实际账号、销售装配需一致。</small>
+        </article>
+        <article class="evidence-card">
+          <h3>04 小程序共源项目页</h3>
+          <span class="pill neutral">demo · 非微信真机</span
+          ><a href="evidence/04-mini-project-demo.png"
+            ><img
+              src="evidence/04-mini-project-demo.png"
+              alt="390 宽的小程序共源 demo 项目页"
+          /></a>
+          <p>
+            温暖、直观，大问题卡值得保留。调整首屏密度，让最近讲述和待确认更早出现。
+          </p>
+          <small
+            >390 px 浏览器共源预览。live 故障与任务分组另外按源码梳理。</small
+          >
+        </article>
+        <article class="evidence-card">
+          <h3>05 小程序录音准备</h3>
+          <span class="pill neutral">demo · 非微信真机</span
+          ><a href="evidence/05-mini-record-demo.png"
+            ><img
+              src="evidence/05-mini-record-demo.png"
+              alt="小程序共源 demo 的问题和开始说按钮"
+          /></a>
+          <p>
+            问题与大录音按钮清楚。demo 尚不能表达当前 live
+            的暂停、回听和可靠保存全状态，设计采用最新统一规格。
+          </p>
+          <small
+            >未点击麦克风，没有采集用户声音；权限、中断与后台行为留待真机验证。</small
+          >
+        </article>
+      </div>
+      <h2>两端统一什么，分别适配什么</h2>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>统一</th>
+              <th>手机网页／桌面网页</th>
+              <th>微信小程序</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>页面目标、步骤、保存事实、版本确认与用途选择</td>
+              <td>
+                同源登录会话、浏览器录音权限、文件缓存与下载；桌面左导航，手机底导航
+              </td>
+              <td>
+                微信登录、原生导航和胶囊、安全区、RecorderManager、微信文件接口与分享
+              </td>
+            </tr>
+            <tr>
+              <td>纸色、橄榄绿、宋体标题、大字问题与故事、状态组件</td>
+              <td>宽屏内容分栏，故事区限制阅读宽度；手机变单列</td>
+              <td>
+                手机单列；触控区域与长辈阅读优先；真机验证原生键盘和切后台
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <h2>建议实施顺序</h2>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>批次</th>
+              <th>改动重点</th>
+              <th>验收重点</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>U01 / P0</td>
+              <td>共用 token、操作层级、保存与授权状态约定</td>
+              <td>两端同状态同事实；不能把本机保存写成云端已保存</td>
+            </tr>
+            <tr>
+              <td>U02 / P1</td>
+              <td>项目首页与分步讲述；同步网页独立 live 渲染</td>
+              <td>暂停继续、回听重录、弱网重试、恢复原录音、可选追问</td>
+            </tr>
+            <tr>
+              <td>U03 / P0</td>
+              <td>故事阅读、原声／转录、单按钮确认与操作记录</td>
+              <td>角色权限、本人证据、故事版本变化、旧确认失效</td>
+            </tr>
+            <tr>
+              <td>U04 / P1</td>
+              <td>成书、完整 PDF、同版确认、制作条件</td>
+              <td>实际 PDF、双方同版、唯一首本、生产未知和内测关闭</td>
+            </tr>
+            <tr>
+              <td>U05 / P1–P2</td>
+              <td>官网／登录、动态关系、邀请、大纲、我的、服务</td>
+              <td>内测与销售清楚；不退回父母二选一；服务与安全期限分开</td>
+            </tr>
+            <tr>
+              <td>U06 / P0</td>
+              <td>双端增量检查、官方编译与真实设备</td>
+              <td>320–430、键盘／大字、Safari／Chrome、微信录音中断与弱网</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="mt">
+        全部 25 条原生路由、具体源码、异常状态与批次依赖见仓库文档
+        <code>docs/frontend/ui-review-2026-10-30.md</code>，可从 Codex
+        交付的文件链接打开。
+      </p>
+      <h2>本轮反馈已调整</h2>
+      <p>
+        资料用途页现已简化为一句说明和「确认并开始」按钮，详情默认折叠。无需四组逐项选择，点击一次即可确认并进入录音准备。
+      </p>
+      <p>
+        故事确认去掉复选框和手填说明，只保留「确认」；选题的主、次操作上下分行。正式前端仍需适配单按钮的版本决定和操作记录。
+      </p>
+      <p>
+        保存与文字处理已核对 main 的
+        404a137：上传层支持成功／失败与封存结果，任务接口支持排队、处理、完成、失败等状态，当前没有上传或转写百分比。提案改为当前状态卡，不按时间自动完成；评审栏可切换状态查看。
+      </p>
+      <h2>证据与边界</h2>
+      <p>
+        最新源码核对至 main 的 404a137；当前工作区基于
+        afe149c，原有未提交改动保留。本轮新增提案，没有更新业务代码、GitHub
+        Issues 或部署。
+      </p>
+      <p>
+        截图无法证明完整无障碍合规；小程序共源预览无法替代原生设备。原型的音频、云端、授权、PDF
+        和制作只演示交互，服务弹层尚不是完整业务表单。目标长辈可用性与真实微信、供应商、资金和实物结果均需另留证。
+      </p>
+      <div class="divider"></div>
+      <a class="btn primary" href="index.html">回到高保真原型</a>
+    </main>
+  </body>
+</html>
