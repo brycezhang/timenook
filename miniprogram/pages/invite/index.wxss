@@ -11,3 +11,13 @@
   font-family: "Songti SC", serif;
   color: var(--brown);
 }
+
+.live-invite .letter-body {
+  font-size: 38rpx;
+  line-height: 1.85;
+  margin-top: 28rpx;
+  color: var(--brown-dark);
+}
+.live-invite .title {
+  font-size: 50rpx;
+}

@@ -597,6 +597,12 @@ for (const name of ["welcome", "invite"])
     assert.equal(page.data.participation, null);
   });
 
+function submitSingleChoice(page: any, purpose: string, checked: boolean) {
+  page.setData({
+    purposes: [{ purpose, checked, label: purpose, description: "synthetic" }],
+  });
+  return page.submitChoices();
+}
 test("actual assisted page separately records consent and refusal with fresh evidence then recovers rights requests", async () => {
   const { page, requests } = harness("assisted");
   page.onLoad({ projectId });
@@ -612,9 +618,7 @@ test("actual assisted page separately records consent and refusal with fresh evi
   await tick();
   respond(requests.shift()!, { requests: [] });
   await showing;
-  const chosen = page.chooseAssisted({
-    currentTarget: { dataset: { purpose: "collection", granted: "true" } },
-  });
+  const chosen = submitSingleChoice(page, "collection", true);
   const post = requests.shift()!;
   assert.equal(post.url, `${base}/projects/${projectId}/assisted-sessions`);
   const body = post.data as Record<string, unknown>;
@@ -655,9 +659,7 @@ test("actual assisted page separately records consent and refusal with fresh evi
   await chosen;
   assert.match(page.data.status, /已保存/);
   assert.equal(page.data.busy, false);
-  const refusal = page.chooseAssisted({
-    currentTarget: { dataset: { purpose: "ai", granted: "false" } },
-  });
+  const refusal = submitSingleChoice(page, "ai", false);
   const denied = requests.shift()!;
   assert.equal((denied.data as any).granted, false);
   assert.notEqual((denied.data as any).evidenceRef, body.evidenceRef);
@@ -791,9 +793,7 @@ test("assisted renewal sends the latest observed purpose session as its compare-
   await tick();
   respond(requests.shift()!, { requests: [] });
   await showing;
-  const choosing = page.chooseAssisted({
-    currentTarget: { dataset: { purpose: "collection", granted: "true" } },
-  });
+  const choosing = submitSingleChoice(page, "collection", true);
   const command = requests.shift()!;
   assert.equal((command.data as any).expectedSessionId, prior.id);
   respond(command, {}, 403);
@@ -981,4 +981,93 @@ test("internal notice enables native invitation and separate choices without cla
   );
   await choosing;
   assert.equal(welcome.page.data.participation.canCollect, true);
+});
+
+async function respondAssistedLoad(
+  h: ReturnType<typeof harness>,
+  sessions: unknown[] = [],
+) {
+  respond(h.requests.shift()!, {
+    ...current,
+    role: "initiator",
+    bindingVersion: 0,
+  });
+  await tick();
+  respond(h.requests.shift()!, { sessions });
+  await tick();
+  respond(h.requests.shift()!, { requests: [] });
+  await tick();
+}
+test("one submit saves three independent checkbox choices then opens a fresh recording only after all succeed", async () => {
+  const h = harness("assisted");
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  await respondAssistedLoad(h);
+  await showing;
+  assert.deepEqual(
+    Array.from(h.page.data.purposes, (row: any) => row.checked),
+    [true, true, true],
+  );
+  assert.equal(
+    h.requests.length,
+    0,
+    "defaults never grant permission before the click",
+  );
+  h.page.choicesChanged({ detail: { value: ["collection", "sharing"] } });
+  const submitting = h.page.submitChoices();
+  const sessions: any[] = [],
+    evidence = new Set<string>();
+  for (const [index, purpose] of ["collection", "ai", "sharing"].entries()) {
+    const request = h.requests.shift()!;
+    const body = request.data as any;
+    assert.equal(body.purpose, purpose);
+    assert.equal(body.granted, purpose !== "ai");
+    evidence.add(body.evidenceRef);
+    assert.equal(h.routes.length, 0, "wait for every independent choice");
+    assert.equal(h.page.data.busy, true);
+    const session = {
+      ...body,
+      projectId,
+      subjectId: current.subjectId,
+      operatorUserId: login.user.id,
+      bindingVersion: 0,
+      accessEpoch: current.accessEpoch,
+      createdAt: "2026-10-30T00:00:00Z",
+      id: `55555555-5555-4555-8555-55555555555${index}`,
+      purpose,
+      state: body.granted ? "active" : "rejected",
+      expiresAt: "2099-01-01T00:00:00Z",
+    };
+    sessions.unshift(session);
+    respond(request, session, 201);
+    await tick();
+    await respondAssistedLoad(h, sessions);
+  }
+  await submitting;
+  assert.equal(evidence.size, 3);
+  assert.match(
+    h.routes[0],
+    new RegExp(
+      `/pages/interview/index\\?projectId=${projectId}&draftId=[a-f0-9-]{36}&assistedSessionId=55555555-5555-4555-8555-555555555550$`,
+    ),
+  );
+  h.page.onUnload();
+});
+test("a failed later choice reports partial saving and never starts recording", async () => {
+  const h = harness("assisted");
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  await respondAssistedLoad(h);
+  await showing;
+  const submitting = h.page.submitChoices();
+  respond(h.requests.shift()!, {}, 201);
+  await tick();
+  await respondAssistedLoad(h);
+  respond(h.requests.shift()!, {}, 503);
+  await submitting;
+  assert.match(h.page.data.status, /已有 1 项选择保存/);
+  assert.equal(h.routes.length, 0);
+  assert.equal(h.page.data.busy, false);
+  assert.equal(h.requests.length, 0);
+  h.page.onUnload();
 });

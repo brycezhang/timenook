@@ -1232,6 +1232,13 @@ export class Stories {
             sources: await Promise.all(
               sources.map(async (source) => ({
                 ...source,
+                durationMs:
+                  (
+                    await tx.recordingAsset.findUnique({
+                      where: { id: source.assetId },
+                      select: { durationMs: true },
+                    })
+                  )?.durationMs ?? null,
                 question: canReadQuestions ? source.question : undefined,
                 state: (
                   await tx.productionTask.findUniqueOrThrow({

@@ -710,6 +710,11 @@ export class Participation
     const terms = await this.terms.read(p.id, tx);
     return {
       projectId: p.id,
+      bookTitle:
+        !deleted &&
+        (narrator || !subject.boundUserId || effective.sharing === true)
+          ? (p.bookTitle ?? undefined)
+          : undefined,
       subjectId: subject.id,
       bindingVersion: subject.bindingVersion,
       accessEpoch: p.accessEpoch,
@@ -2163,7 +2168,15 @@ export class Participation
         accessEpoch:
           reason === "assisted" ? { lte: accessEpoch } : { lt: accessEpoch },
         kind: { in: kinds },
-        state: { notIn: ["succeeded", "no_speech", "invalidated", "obsolete"] },
+        state: {
+          notIn: [
+            "succeeded",
+            "no_speech",
+            "no_content",
+            "invalidated",
+            "obsolete",
+          ],
+        },
       },
       select: { id: true, fence: true },
     });
@@ -2264,7 +2277,13 @@ export class Participation
               id: target.id,
               fence: task.fence,
               state: {
-                notIn: ["succeeded", "no_speech", "invalidated", "obsolete"],
+                notIn: [
+                  "succeeded",
+                  "no_speech",
+                  "no_content",
+                  "invalidated",
+                  "obsolete",
+                ],
               },
             },
             data: {

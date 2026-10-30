@@ -1441,7 +1441,7 @@ test("the interview page restores transcription state, stops polling in backgrou
     201,
   );
   await tick();
-  assert.match(h.page.data.taskRows[0].label, /无有效语音.*补录/);
+  assert.match(h.page.data.taskRows[0].label, /未识别到语音.*原声已保存.*补录/);
   assert.equal(h.page.taskPollHandle, undefined);
   h.page.onUnload();
 });
@@ -1755,7 +1755,7 @@ test("the story entry preserves the selected assisted interview and blocks recor
   h.page.openStory();
   assert.equal(
     h.navigation[0].url,
-    `/pages/story/index?projectId=${projectId}&interviewId=${interviewId}&assistedSessionId=${assistedSessionId}`,
+    `/pages/story/index?projectId=${projectId}&interviewId=${interviewId}&organize=1&assistedSessionId=${assistedSessionId}`,
   );
   await start(h);
   h.page.openStory();
@@ -2243,4 +2243,72 @@ test("the page passes the remaining server budget to the native recording bounda
     if (!maxDurationMs) assert.match(h.page.data.status, /额度未确认/);
     h.page.onUnload();
   }
+});
+
+test("a new draft ignores an old sealed interview and the microphone starts without a separate setup action", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const draftId = "77777777-7777-4777-8777-777777777777";
+  h.page.onLoad({ projectId, draftId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        clips: [
+          { id: "88888888-8888-4888-8888-888888888888", state: "sealed" },
+        ],
+      },
+    ],
+  });
+  await showing;
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.flowStep, "choose");
+  assert.equal(
+    h.requests.length,
+    0,
+    "new intent does not resume the old processing page",
+  );
+  const speaking = h.page.startSpeaking();
+  assert.equal(h.requests[0].data.clientInterviewId, draftId);
+  const actual = { ...question, answerRef: interviewId };
+  respond(h.requests.shift(), { ...interview, actualQuestion: actual }, 201);
+  await tick();
+  const authorization = h.requests.shift();
+  assert.match(
+    authorization.url,
+    new RegExp(`/interviews/${interviewId}/recording-start$`),
+  );
+  respond(
+    authorization,
+    {
+      allowed: true,
+      actualQuestionId: question.id,
+      questionVersion: 1,
+      maxDurationMs: 120000,
+    },
+    201,
+  );
+  await speaking;
+  assert.equal(h.starts, 1);
+  assert.equal(h.page.data.flowStep, "record");
+});
+
+test("reloading a draft that already started restores that exact interview without creating another", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const draftId = "77777777-7777-4777-8777-777777777777";
+  h.storage.set(
+    `timenook.recording.v1:${base}:synthetic-app:${login.user.id}:${projectId}:draft:${draftId}`,
+    interviewId,
+  );
+  h.page.onLoad({ projectId, draftId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [interview] });
+  await showing;
+  assert.equal(h.page.data.interview.id, interviewId);
+  assert.equal(h.page.data.flowStep, "prepare");
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.starts, 0);
 });

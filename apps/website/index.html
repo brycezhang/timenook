@@ -41,9 +41,9 @@
           <a href="#sample">看看样书</a><a href="#how">如何成书</a
           ><a href="#package">套餐与价格</a>
         </nav>
-        <button class="button small-button" data-order>
-          去微信小程序下单 <span aria-hidden="true">↗</span>
-        </button>
+        <a class="button small-button" data-order href="/app/">
+          开始制作故事书 <span aria-hidden="true">↗</span>
+        </a>
       </div>
     </header>
     <main id="main">
@@ -54,8 +54,8 @@
             那些听过的、还没听过的往事，<br />从一次轻松的讲述开始。
           </p>
           <div class="hero-actions">
-            <button class="button" data-order>
-              去微信小程序下单 <span aria-hidden="true">↗</span></button
+            <a class="button" data-order href="/app/">
+              开始制作故事书 <span aria-hidden="true">↗</span></a
             ><a class="button secondary" href="#sample"
               >先看看样书 <span aria-hidden="true">↓</span></a
             >
@@ -215,7 +215,7 @@
                 <div>
                   <h3>送出一份心意</h3>
                   <p>
-                    在微信小程序选择赠礼对象，购买套餐，为一位重要的人开启人生项目。
+                    选择赠礼对象与套餐，为一位重要的人开启人生项目。网页内测使用模拟登录与支付。
                   </p>
                 </div>
               </li>
@@ -271,10 +271,10 @@
           <p class="package-description">
             为一位讲述者记录人生，含完整数字资料导出服务。
           </p>
-          <button class="button light-button" data-order>
-            去微信小程序下单 <span aria-hidden="true">↗</span>
-          </button>
-          <p class="package-note">小程序即将上线，暂未开放下单</p>
+          <a class="button light-button" data-order href="/app/">
+            开始制作故事书 <span aria-hidden="true">↗</span>
+          </a>
+          <p class="package-note">网页内测已开放 · 登录与支付为模拟体验</p>
         </div>
       </section>
       <section
@@ -336,22 +336,9 @@
     </footer>
     <div class="mobile-order">
       <span><strong>999元</strong><small>含一本实体书</small></span
-      ><button class="button" data-order>
-        去微信小程序下单 <span aria-hidden="true">↗</span>
-      </button>
+      ><a class="button" data-order href="/app/">
+        开始制作故事书 <span aria-hidden="true">↗</span>
+      </a>
     </div>
-    <dialog
-      id="order-dialog"
-      aria-labelledby="order-title"
-      aria-describedby="order-description"
-    >
-      <button class="dialog-close" aria-label="关闭提示">×</button
-      ><img src="/assets/logo.jpg" alt="" width="96" height="96" />
-      <h2 id="order-title">岁月成书，即将与你见面。</h2>
-      <p id="order-description">
-        微信小程序即将上线，暂未开放下单。<br />你可以先翻翻样书，看看回忆成书的模样。
-      </p>
-      <button class="button" id="dialog-done">知道了</button>
-    </dialog>
   </body>
 </html>

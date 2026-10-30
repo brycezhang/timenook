@@ -302,3 +302,160 @@ test("two real web accounts invite, approve, authorize purposes, edit a plan and
   );
   assert.equal(context.statusCode, 201);
 });
+
+test("mock checkout creates an isolated account and one internal project without any real payment", async () => {
+  const mode = await app.inject({ method: "GET", url: "/v1/web/experience" });
+  assert.equal(mode.json().data.mockEnabled, true);
+  assert.equal(
+    (
+      await app.inject({
+        method: "POST",
+        url: "/v1/web/mock-session",
+        payload: {},
+      })
+    ).statusCode,
+    403,
+  );
+  const loggedIn = await app.inject({
+    method: "POST",
+    url: "/v1/web/mock-session",
+    headers,
+    payload: {},
+  });
+  assert.equal(loggedIn.statusCode, 201);
+  const cookies = (loggedIn.headers["set-cookie"] as string[]).map(
+    (value) => value.split(";")[0],
+  );
+  const cookie = cookies.join("; ");
+  const actor = loggedIn.json().data;
+  const payload = {
+    purchaseKey: randomUUID(),
+    bookTitle: "妈妈的一生",
+    subjectName: "妈妈",
+  };
+  const purchase = (body = payload) =>
+    app.inject({
+      method: "POST",
+      url: "/v1/web/mock-purchases",
+      headers: { ...headers, cookie, "x-csrf-token": actor.csrfToken },
+      payload: body,
+    });
+  assert.equal(
+    (
+      await app.inject({
+        method: "POST",
+        url: "/v1/web/mock-purchases",
+        headers: { ...headers, cookie },
+        payload,
+      })
+    ).statusCode,
+    403,
+  );
+  const [first, replay] = await Promise.all([purchase(), purchase()]);
+  assert.equal(first.statusCode, 201);
+  assert.equal(replay.statusCode, 201);
+  assert.deepEqual(first.json().data, replay.json().data);
+  assert.equal(first.json().data.source, "internal-acceptance");
+  const projectId = first.json().data.projectId;
+  assert.equal(
+    (await purchase({ ...payload, bookTitle: "不同的输入" })).statusCode,
+    409,
+  );
+  const list = await app.inject({
+    method: "GET",
+    url: "/v1/web/projects",
+    headers: { cookie },
+  });
+  assert.deepEqual(
+    list.json().data.projects.map((p: { id: string }) => p.id),
+    [projectId],
+  );
+  const db = new PrismaClient({ datasourceUrl: config.databaseUrl });
+  try {
+    assert.equal(
+      (await db.project.findUniqueOrThrow({ where: { id: projectId } }))
+        .createdBy,
+      actor.user.id,
+    );
+    assert.equal(
+      await db.paymentOrder.count({ where: { buyerId: actor.user.id } }),
+      0,
+    );
+    assert.equal(
+      await db.firstCopyEntitlement.count({ where: { projectId } }),
+      0,
+    );
+    assert.equal(
+      await db.wechatIdentity.count({ where: { userId: actor.user.id } }),
+      0,
+    );
+  } finally {
+    await db.$disconnect();
+  }
+  const logout = await app.inject({
+    method: "DELETE",
+    url: "/v1/web/session",
+    headers: { ...headers, cookie, "x-csrf-token": actor.csrfToken },
+  });
+  assert.equal(logout.statusCode, 204);
+  const again = await app.inject({
+    method: "POST",
+    url: "/v1/web/mock-session",
+    headers: {
+      ...headers,
+      cookie: cookies.find((value) =>
+        value.startsWith("__Secure-timenook_mock="),
+      ),
+    },
+    payload: {},
+  });
+  assert.equal(again.statusCode, 201);
+  assert.equal(again.json().data.user.id, actor.user.id);
+  const other = await app.inject({
+    method: "POST",
+    url: "/v1/web/mock-session",
+    headers,
+    payload: {},
+  });
+  assert.notEqual(other.json().data.user.id, actor.user.id);
+});
+
+test("normal mode never offers mock login or mock payment", async () => {
+  const regular = await createApplication({ ...config, acceptance: undefined });
+  try {
+    assert.equal(
+      (
+        await regular.inject({ method: "GET", url: "/v1/web/experience" })
+      ).json().data.mockEnabled,
+      false,
+    );
+    assert.equal(
+      (
+        await regular.inject({
+          method: "POST",
+          url: "/v1/web/mock-session",
+          headers,
+          payload: {},
+        })
+      ).statusCode,
+      503,
+    );
+    assert.equal(
+      (
+        await regular.inject({
+          method: "POST",
+          url: "/v1/web/mock-purchases",
+          headers,
+          payload: {
+            purchaseKey: randomUUID(),
+            bookTitle: "测试",
+            subjectName: "测试",
+          },
+        })
+      ).statusCode,
+      503,
+    );
+  } finally {
+    await regular.close();
+  }
+});

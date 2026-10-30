@@ -339,6 +339,6 @@ Page({
     }, true);
   },
   back() {
-    go("welcome", `projectId=${this.projectId}`);
+    go("project", `projectId=${this.projectId}`);
   },
 });

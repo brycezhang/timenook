@@ -272,6 +272,10 @@ test("buyer requests a refund and the shared support case approves, executes and
   // kind, keep both rights pages active, and retain the withdrawal proxy.
   for (const route of ["welcome", "assisted"]) {
     const rights = await openMini(browser, buyerSession, project, route);
+    if (route === "assisted")
+      await rights
+        .getByRole("button", { name: "其他操作与本人权利", exact: true })
+        .click();
     const label =
       route === "welcome"
         ? `退款工单：record:${refund.caseId}`

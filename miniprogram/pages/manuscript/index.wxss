@@ -33,7 +33,7 @@
 .manuscript-body {
   display: block;
   white-space: pre-wrap;
-  font-size: 36rpx;
+  font-size: 29rpx;
   line-height: 1.95;
 }
 .manuscript-photo {
@@ -41,8 +41,30 @@
   margin-top: 24rpx;
   border-radius: 8rpx;
 }
-.live-manuscript { font-size: 40rpx; line-height: 1.7; overflow-wrap: anywhere; padding-bottom: 64rpx; }
-.live-manuscript .manuscript-body { font-size: 40rpx; margin: 20rpx 0; }
-.live-manuscript .btn { font-size: 40rpx; min-width: 96rpx; min-height: 96rpx; line-height: 1.5; padding: 22rpx; white-space: normal; }
-.live-manuscript .note { font-size: 36rpx; }
-.book-cover-photo { display: block; width: 100%; height: 420rpx; margin: 20rpx auto; }
+.live-manuscript {
+  font-size: 34rpx;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  padding-bottom: 64rpx;
+}
+.live-manuscript .manuscript-body {
+  font-size: 40rpx;
+  margin: 20rpx 0;
+}
+.live-manuscript .btn {
+  font-size: 34rpx;
+  min-width: 96rpx;
+  min-height: 96rpx;
+  line-height: 1.5;
+  padding: 22rpx;
+  white-space: normal;
+}
+.live-manuscript .note {
+  font-size: 29rpx;
+}
+.book-cover-photo {
+  display: block;
+  width: 100%;
+  height: 420rpx;
+  margin: 20rpx auto;
+}

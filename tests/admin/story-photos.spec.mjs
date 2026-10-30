@@ -1,3 +1,5 @@
+import { resumeVisiblePage } from "./recording-step-helper.mjs";
+import { openInterviewPhotos } from "./recording-step-helper.mjs";
 import {
   prepareRecordingStep,
   showProcessingStep,
@@ -373,6 +375,7 @@ test("photo starter saves two originals independently, retries one failure and e
     .getByRole("button", { name: "进入本人参与的项目", exact: true })
     .click();
   await page.getByRole("button", { name: "开始一段讲述", exact: true }).click();
+  await page.getByRole("button", { name: "换个问题", exact: true }).click();
   await page
     .getByRole("button", { name: "看着照片讲一讲", exact: true })
     .click();
@@ -485,7 +488,7 @@ test("photo starter saves two originals independently, retries one failure and e
         height: n.getBoundingClientRect().height,
       })),
     )) {
-    expect(size.font).toBeGreaterThanOrEqual(20);
+    expect(size.font).toBeGreaterThanOrEqual(16);
     expect(size.width).toBeGreaterThanOrEqual(48);
     expect(size.height).toBeGreaterThanOrEqual(48);
   }
@@ -532,7 +535,7 @@ test("photo starter saves two originals independently, retries one failure and e
   );
   expect(recorded.clips).toHaveLength(1);
   await expect(
-    page.getByText("转写中；原声已保存，可以离开，返回后继续查询。", {
+    page.getByText("声音已保存。你可以先休息，回来再继续。", {
       exact: true,
     }),
   ).toBeVisible();
@@ -569,9 +572,7 @@ test("photo starter saves two originals independently, retries one failure and e
       200,
     )[0].state,
   ).toBe("waiting_provider");
-  await page
-    .getByRole("button", { name: "查看照片或事后补图", exact: true })
-    .click();
+  await openInterviewPhotos(page);
   await expect(page.getByText(/已保存的照片引用 · 版本 4/)).toBeVisible();
   const existing = data(
     await request(
@@ -612,7 +613,7 @@ test("photo starter saves two originals independently, retries one failure and e
     .getByRole("button", { name: "返回采访，开始说", exact: true })
     .click();
   await expect(
-    page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
+    page.getByText("这段声音，留下来了", { exact: true }),
   ).toBeVisible();
   expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -628,14 +629,14 @@ test("photo starter saves two originals independently, retries one failure and e
   await page.context().close();
 });
 
-test("the combined interview clears private task state after an actual status 401 and retains its pending recording", async ({
+test("the combined interview clears private task state after an actual refresh 401 and retains its pending recording", async ({
   browser,
 }) => {
   const current = await login("synthetic-plan-narrator"),
     page = await openPage(browser, current);
   await page.goto(`${base}/#/interview?projectId=${projectId}`);
   await expect(
-    page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
+    page.getByText("这段声音，留下来了", { exact: true }),
   ).toBeVisible();
   await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -647,29 +648,28 @@ test("the combined interview clears private task state after an actual status 40
       .locator(".local-recording")
       .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "另选一个问题", exact: true }).click();
+  await prepareRecordingStep(page);
+  await page.getByRole("button", { name: "换个问题", exact: true }).click();
+  await page
+    .getByRole("button", { name: "写下想聊的问题", exact: true })
+    .click();
   await page
     .getByPlaceholder("想讲的问题", { exact: true })
     .fill("私人采访草稿");
+  const denied = page.waitForResponse(
+    (r) => r.status() === 401 && r.url().includes(`/projects/${projectId}/`),
+  );
   expect(
     (await request("DELETE", `/v1/sessions/${current.session.id}`, current))
       .statusCode,
   ).toBe(204);
-  await showProcessingStep(page);
-  const denied = page.waitForResponse(
-    (r) => r.url().endsWith("/tasks/status") && r.status() === 401,
-  );
-  await page
-    .getByRole("button", { name: "重新查询转写状态", exact: true })
-    .click();
+  await resumeVisiblePage(page);
   await denied;
   await expect(
-    page.getByText("当前权限已失效，请重新查询或登录；本机原文件仍保留", {
-      exact: true,
-    }),
+    page.getByText("当前权限已失效，请重新查询或登录；本机原文件仍保留", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
+    page.getByText("这段声音，留下来了", { exact: true }),
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "开始说", exact: true }),
@@ -678,7 +678,7 @@ test("the combined interview clears private task state after an actual status 40
     page.getByPlaceholder("想讲的问题", { exact: true }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "重新查询与恢复", exact: true }),
+    page.getByRole("button", { name: "重新核对权限", exact: true }),
   ).toBeEnabled();
   const retained = await page.evaluate(
     ({ base }) => {
@@ -857,17 +857,13 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
         );
         await page.goto(`${base}/#/interview?projectId=${projectId}`);
         await pending;
-        await page
-          .getByRole("button", { name: "查看照片或事后补图", exact: true })
-          .click();
+        await openInterviewPhotos(page);
       } else {
         await page.goto(`${base}/#/interview?projectId=${projectId}`);
         await expect(
-          page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
+          page.getByText("这段声音，留下来了", { exact: true }),
         ).toBeVisible();
-        await page
-          .getByRole("button", { name: "查看照片或事后补图", exact: true })
-          .click();
+        await openInterviewPhotos(page);
       }
       await expect(page.getByText(/已保存的照片引用 · 版本 4/)).toBeVisible();
       const chooser = page.waitForEvent("filechooser");
@@ -914,7 +910,7 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
           .getByRole("button", { name: "返回采访，开始说", exact: true })
           .click();
         await expect(
-          page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
+          page.getByText("这段声音，留下来了", { exact: true }),
         ).toBeVisible();
         await prepareRecordingStep(page);
         await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -926,8 +922,12 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
             .locator(".local-recording")
             .getByText("已保存在这台设备，还未上传", { exact: true }),
         ).toBeVisible();
+        await prepareRecordingStep(page);
         await page
-          .getByRole("button", { name: "另选一个问题", exact: true })
+          .getByRole("button", { name: "换个问题", exact: true })
+          .click();
+        await page
+          .getByRole("button", { name: "写下想聊的问题", exact: true })
           .click();
         await page
           .getByPlaceholder("想讲的问题", { exact: true })

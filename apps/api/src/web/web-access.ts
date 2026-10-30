@@ -19,10 +19,16 @@ import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
 import { PrivacyRights } from "../care/privacy-rights";
 import { IdentityAccess } from "../identity/identity-access";
-import { webDigest } from "./web-provisioning";
+import { createInternalProject } from "../projects/internal-project";
+import {
+  PERSISTENT_WEB_EXPIRY,
+  webCredentialExpiry,
+  webDigest,
+} from "./web-provisioning";
 
 export const WEB_COOKIE = "__Secure-timenook_web";
 export const WEB_COOKIE_PATH = "/api/v1";
+export const MOCK_ACCOUNT_COOKIE = "__Secure-timenook_mock";
 
 @Injectable()
 export class WebAccess implements OnModuleDestroy {
@@ -67,6 +73,53 @@ export class WebAccess implements OnModuleDestroy {
     )
       throw new ForbiddenException();
   }
+  mockEnabled() {
+    return (
+      this.config.acceptance?.mode === "internal-acceptance" &&
+      !this.config.payments
+    );
+  }
+  async mockLogin(request: FastifyRequest) {
+    if (!this.mockEnabled()) throw new ServiceUnavailableException();
+    this.requireOrigin(request);
+    await this.limit(request.ip);
+    let ticket = request.cookies[MOCK_ACCOUNT_COOKIE];
+    if (!ticket) {
+      ticket = randomBytes(32).toString("base64url");
+      await this.db.user.create({
+        data: {
+          id: randomUUID(),
+          webLoginTickets: {
+            create: {
+              id: randomUUID(),
+              tokenHash: webDigest(ticket),
+              expiresAt: new Date(PERSISTENT_WEB_EXPIRY),
+            },
+          },
+        },
+      });
+    }
+    const result = await this.exchange(ticket, request.cookies[WEB_COOKIE]);
+    return { ...result, ticket };
+  }
+  async mockPurchase(
+    request: FastifyRequest,
+    input: {
+      purchaseKey: string;
+      bookTitle: string;
+      subjectName: string;
+    },
+  ) {
+    if (!this.mockEnabled()) throw new ServiceUnavailableException();
+    const current = await this.requireMutation(request);
+    await this.limit(`purchase:${current.data.user.id}`, 20);
+    return createInternalProject(this.config, {
+      provisionKey: `web-mock:${current.data.user.id}:${input.purchaseKey}`,
+      initiatorUserId: current.data.user.id,
+      bookTitle: input.bookTitle,
+      subjectName: input.subjectName,
+    });
+  }
   async limit(
     source: string,
     maximum = this.config.loginLimitPerMinute ?? 120,
@@ -96,7 +149,11 @@ export class WebAccess implements OnModuleDestroy {
       const changed = await tx.webLoginTicket.updateMany({
         where: {
           tokenHash: webDigest(ticket),
-          consumedAt: null,
+          // Internal acceptance links remain reusable until explicitly revoked.
+          consumedAt:
+            this.config.acceptance?.mode === "internal-acceptance"
+              ? undefined
+              : null,
           revokedAt: null,
           expiresAt: { gt: now },
         },
@@ -122,8 +179,9 @@ export class WebAccess implements OnModuleDestroy {
           id: randomUUID(),
           userId: issued.userId,
           tokenHash: webDigest(token),
-          expiresAt: new Date(
-            now.getTime() + this.config.web!.sessionTtlSeconds * 1000,
+          expiresAt: webCredentialExpiry(
+            this.config,
+            this.config.web!.sessionTtlSeconds,
           ),
           webSession: {
             create: { keyHash: webDigest(this.config.web!.sessionKey) },
@@ -158,6 +216,16 @@ export class WebAccess implements OnModuleDestroy {
       session.webSession?.keyHash !== webDigest(this.config.web!.sessionKey)
     )
       throw new UnauthorizedException();
+    if (
+      this.config.acceptance?.mode === "internal-acceptance" &&
+      session.expiresAt.toISOString() !== PERSISTENT_WEB_EXPIRY
+    ) {
+      session.expiresAt = new Date(PERSISTENT_WEB_EXPIRY);
+      await this.db.session.update({
+        where: { id: session.id },
+        data: { expiresAt: session.expiresAt },
+      });
+    }
     return { token, data: this.view(token, session) };
   }
   async requireMutation(request: FastifyRequest) {

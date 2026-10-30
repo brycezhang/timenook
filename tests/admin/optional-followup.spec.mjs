@@ -1,3 +1,4 @@
+import { chooseDefaultQuestion } from "./recording-step-helper.mjs";
 import {
   prepareRecordingStep,
   showProcessingStep,
@@ -394,10 +395,9 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
   browser,
 }) => {
   const page = await openPage(browser, narrator);
+  page.setDefaultTimeout(5000);
   await page.goto(`${base}/#/interview?projectId=${projectId}`);
-  await page
-    .getByRole("button", { name: "就从这个问题开始", exact: true })
-    .click();
+  await chooseDefaultQuestion(page);
   const record = async () => {
     await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -433,7 +433,7 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
       })
       .toBe(1);
     await page
-      .getByRole("button", { name: "请求一条可选追问", exact: true })
+      .getByRole("button", { name: "再聊一个问题", exact: true })
       .click();
     await expect
       .poll(async () => {
@@ -450,6 +450,9 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     expect(shown.actualQuestion.id).toBe(first.actualQuestion.id);
     expect(shown.currentQuestion.source.kind).toBe("follow-up");
     expect(shown.questionHistory).toHaveLength(2);
+    await page
+      .getByRole("button", { name: "换成自己的问法", exact: true })
+      .click();
     await page
       .locator(".optional-followup textarea")
       .fill("那一年您最记得哪件事？");
@@ -471,15 +474,6 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     expect(answered.clips.map((c) => c.actualQuestionId).sort()).toEqual(
       [first.actualQuestion.id, edited.currentQuestion.id].sort(),
     );
-    await showProcessingStep(page);
-    await page
-      .getByRole("button", { name: "跳过追问，继续原问题或整理", exact: true })
-      .click();
-    await expect(
-      page.getByText("已跳过追问；可以继续原问题、换题或直接整理。", {
-        exact: true,
-      }),
-    ).toBeVisible();
     await page.locator("#page").evaluate((n) => (n.scrollTop = 0));
     await page.screenshot({
       path: test.info().outputPath("optional-followup-390.png"),
@@ -494,7 +488,7 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
         })),
       );
     for (const size of sizes) {
-      expect(size.font).toBeGreaterThanOrEqual(20);
+      expect(size.font).toBeGreaterThanOrEqual(16);
       expect(size.width).toBeGreaterThanOrEqual(48);
       expect(size.height).toBeGreaterThanOrEqual(48);
     }
@@ -508,9 +502,7 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
       path: test.info().outputPath("optional-followup-outer768-content390.png"),
     });
     await showProcessingStep(page);
-    await page
-      .getByRole("button", { name: "整理或查看故事", exact: true })
-      .click();
+    await page.getByRole("button", { name: "整理成故事", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`story.*interviewId=${first.id}`));
     await page.goto(
       `${base}/#/interview?projectId=${projectId}&interviewId=${first.id}`,
@@ -543,7 +535,10 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     );
     await showProcessingStep(page);
     await page
-      .getByRole("button", { name: "跳过追问，继续原问题或整理", exact: true })
+      .getByRole("button", { name: "再聊一个问题", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "就讲到这里，整理故事", exact: true })
       .click();
     await expect(page.getByText(/当前权限已失效/)).toBeVisible();
     await expect(
@@ -568,11 +563,16 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
       JSON.stringify(
         {
           errors,
-          body: await page.locator("body").innerText(),
-          tasks: await db.productionTask.findMany({
-            where: { projectId },
-            select: { kind: true, state: true, errorCode: true },
-          }),
+          body: await page
+            .locator("body")
+            .innerText()
+            .catch(() => "closed"),
+          tasks: await db.productionTask
+            .findMany({
+              where: { projectId },
+              select: { kind: true, state: true, errorCode: true },
+            })
+            .catch(() => []),
         },
         null,
         2,
@@ -581,6 +581,9 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     throw error;
   } finally {
     await db.$disconnect();
-    await page.context().close();
+    await page
+      .context()
+      .close()
+      .catch(() => {});
   }
 });

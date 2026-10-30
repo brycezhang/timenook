@@ -50,6 +50,25 @@ export async function privateStoryAudio(
 ) {
   await clearStoryAudio();
   const context = sessionClient.context();
+  const expected = await requireStoryAudioAccess(projectId, source, current);
+  return privateAudioFile(
+    expected,
+    () =>
+      sessionClient.downloadRecording(
+        projectId,
+        source.interviewId,
+        source.intentId,
+      ),
+    () => context === sessionClient.context() && current(),
+  );
+}
+/** Resume retained audio only after rechecking the original source and current access. */
+export async function requireStoryAudioAccess(
+  projectId: string,
+  source: StorySourceView,
+  current: () => boolean,
+) {
+  const context = sessionClient.context();
   if (!context || !current()) throw Error("回听已取消");
   const clip = await sessionClient.request<RecordingClip>(
     `/projects/${projectId}/interviews/${source.interviewId}/clips/${source.intentId}`,
@@ -69,16 +88,7 @@ export async function privateStoryAudio(
     clip.asset.bytes < 1
   )
     throw Error("原声来源不匹配，请重新查询");
-  return privateAudioFile(
-    { bytes: clip.asset.bytes, sha256: source.inputHash },
-    () =>
-      sessionClient.downloadRecording(
-        projectId,
-        source.interviewId,
-        source.intentId,
-      ),
-    () => context === sessionClient.context() && current(),
-  );
+  return { bytes: clip.asset.bytes, sha256: source.inputHash };
 }
 /** Shared verified temporary playback file for story and printed-version audio. */
 export async function privateAudioFile(

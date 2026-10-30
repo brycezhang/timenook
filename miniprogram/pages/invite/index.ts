@@ -172,6 +172,10 @@ Page({
     go("settings");
   },
   project() {
+    if (dataMode() === "live") {
+      wx.reLaunch({ url: `/pages/project/index?projectId=${this.projectId}` });
+      return;
+    }
     home();
   },
   copyInvitation() {

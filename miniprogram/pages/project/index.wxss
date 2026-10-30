@@ -78,40 +78,29 @@
 }
 
 .live-project {
-  font-size: 40rpx;
-  line-height: 1.6;
+  font-size: 32rpx;
+  line-height: 1.7;
 }
-.live-project .btn {
-  font-size: 40rpx;
-  min-height: 96rpx;
-  line-height: 1.5;
-  white-space: normal;
-  padding: 24rpx;
-}
-.live-filters {
-  display: flex;
-  gap: 20rpx;
-  margin-top: 24rpx;
-  flex-wrap: wrap;
-}
-.live-filters .btn {
-  flex: 1;
-  min-width: 200rpx;
+.live-project > .title {
+  font-size: 50rpx;
 }
 .live-story-row {
-  text-align: left;
   overflow-wrap: anywhere;
+}
+.resume-row {
+  font-size: 30rpx;
 }
 .live-task {
-  padding: 24rpx;
-  border: 2rpx solid var(--line);
-  border-radius: 16rpx;
-  font-size: 40rpx;
-  line-height: 1.7;
-  overflow-wrap: anywhere;
+  margin-top: 20rpx;
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid var(--line);
 }
-.live-tabs .tab {
-  min-height: 96rpx;
-  min-width: 96rpx;
-  font-size: 32rpx;
+.project-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 24rpx;
+}
+.project-tools .link {
+  width: auto;
+  font-size: 26rpx;
 }

@@ -1,15 +1,15 @@
 .edit-body {
   min-height: 800rpx;
-  font-size: 36rpx;
+  font-size: 29rpx;
   line-height: 1.9;
 }
 .live-edit {
-  font-size: 40rpx;
+  font-size: 34rpx;
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
 .live-edit .btn {
-  font-size: 40rpx;
+  font-size: 34rpx;
   min-width: 96rpx;
   min-height: 96rpx;
   line-height: 1.5;
@@ -20,7 +20,7 @@
 .live-textarea {
   box-sizing: border-box;
   width: 100%;
-  font-size: 40rpx;
+  font-size: 34rpx;
   line-height: 1.7;
   padding: 22rpx;
   border: 2rpx solid #c7bb9e;

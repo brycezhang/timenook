@@ -11,7 +11,7 @@ import { ProjectPlans } from "./project-plans";
 import { ProjectServiceTerms } from "./service-terms";
 import { internalSnapshot } from "./internal-profile";
 
-/** Operator-only composition; never registered as an HTTP route. */
+/** Internal-only composition, shared by the operator CLI and mock checkout. */
 export async function createInternalProject(
   config: ApiConfig,
   input: Record<string, unknown>,

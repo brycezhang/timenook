@@ -114,6 +114,35 @@ export async function withWebSession<T>(
   });
 }
 export const webApi = {
+  async experience(): Promise<boolean> {
+    const result = (await request("/web/experience")) as {
+      mockEnabled?: boolean;
+    };
+    return result?.mockEnabled === true;
+  },
+  async mockLogin() {
+    return mutateSession(async () => {
+      const result = session(await request("/web/mock-session", "POST", {}));
+      notifySessionChange();
+      return result;
+    });
+  },
+  async mockPurchase(
+    expected: WebSession,
+    input: { purchaseKey: string; bookTitle: string; subjectName: string },
+  ) {
+    return withWebSession(expected, async () => {
+      const result = (await request(
+        "/web/mock-purchases",
+        "POST",
+        input,
+        expected.csrfToken,
+      )) as { projectId?: string };
+      if (!/^[0-9a-f-]{36}$/.test(result?.projectId ?? ""))
+        throw new WebApiError(0);
+      return result as { projectId: string };
+    });
+  },
   async linkAvailability(): Promise<boolean> {
     const result = (await request("/web/wechat-link")) as {
       available?: boolean;

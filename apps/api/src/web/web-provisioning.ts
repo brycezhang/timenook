@@ -5,6 +5,15 @@ import { type ApiConfig, validateWebConfig } from "../config";
 export const webDigest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 
+// Session/Ticket dates are required by the shared identity contract. Internal
+// acceptance uses this explicit no-timeout marker; revocation still applies.
+export const PERSISTENT_WEB_EXPIRY = "9999-12-31T23:59:59.999Z";
+export function webCredentialExpiry(config: ApiConfig, ttlSeconds: number) {
+  return config.acceptance?.mode === "internal-acceptance"
+    ? new Date(PERSISTENT_WEB_EXPIRY)
+    : new Date(Date.now() + ttlSeconds * 1000);
+}
+
 /** This operator-only capability is never registered as an HTTP controller. */
 export async function provisionWebAccount(
   config: ApiConfig,
@@ -46,7 +55,7 @@ export async function provisionWebAccount(
         id: randomUUID(),
         userId: input.userId,
         tokenHash: webDigest(token),
-        expiresAt: new Date(Date.now() + config.web.loginTtlSeconds * 1000),
+        expiresAt: webCredentialExpiry(config, config.web.loginTtlSeconds),
       },
     });
     const url = new URL("/app/login", config.web.origin);

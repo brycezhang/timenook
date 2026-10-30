@@ -118,13 +118,69 @@
 .live-review {
   margin-top: 24rpx;
 }
-.live-sources {
-  margin-top: 40rpx;
+.live-audio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin: 28rpx 0;
 }
-.live-source-row {
-  font-size: 38.5rpx;
-  line-height: 1.7;
-  margin: 20rpx 0;
+.live-audio-card {
+  padding: 22rpx 24rpx 14rpx;
+  border: 2rpx solid #dce1ce;
+  border-radius: 20rpx;
+  background: #eeefe5;
+}
+.live-audio-button {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  width: 100%;
+  min-height: 112rpx;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  line-height: 1.5;
+  color: #3e4931;
+}
+.live-audio-button::after { border: 0; }
+.live-audio-card.is-playing { background: #e4e8d8; }
+.live-audio-button[disabled] { opacity: 0.65; color: #3e4931; }
+.live-audio-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #697657;
+}
+.live-audio-icon image { width: 32rpx; height: 32rpx; }
+.live-audio-copy { flex: 1; min-width: 0; }
+.live-audio-label { display: block; font-size: 32rpx; font-weight: 500; }
+.live-audio-status { display: block; margin-top: 4rpx; font-size: 24rpx; color: #747c68; }
+.live-audio-wave { display: flex; align-items: center; gap: 5rpx; height: 40rpx; }
+.live-audio-wave view { width: 5rpx; height: 14rpx; border-radius: 4rpx; background: #899775; }
+.live-audio-wave view:nth-child(2n) { height: 28rpx; }
+.live-audio-wave view:nth-child(3n) { height: 40rpx; }
+.live-audio-timeline { margin-top: 8rpx; }
+.live-audio-slider { display: block; width: 100%; margin: 0; min-height: 44rpx; accent-color: #697657; }
+.live-audio-times { display: flex; justify-content: space-between; font-size: 24rpx; color: #747c68; font-variant-numeric: tabular-nums; }
+.live-transcripts {
+  margin-top: 32rpx;
+  padding: 26rpx;
+  border: 2rpx solid #ded4c2;
+  border-radius: 16rpx;
+}
+.live-transcript {
+  margin-top: 24rpx;
+}
+.live-transcript .paragraph {
+  font-size: 34rpx;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .live-story .btn {
   font-size: 40rpx;
@@ -149,3 +205,26 @@
   line-height: 1.7;
   margin: 20rpx 0;
 }
+
+.live-controls .btn {
+  font-size: 32rpx;
+}
+.live-story .live-stage,
+.live-story .live-save,
+.live-story .live-version,
+.live-story .live-source-label {
+  font-size: 27rpx;
+}
+.live-story .live-reviews,
+.live-story .live-review,
+.live-story .live-origin,
+.live-story .live-decision {
+  font-size: 32rpx;
+}
+.live-story .btn {
+  font-size: 34rpx;
+}
+
+.live-story .story-title { margin-top: 8rpx; }
+.live-story .story-body { margin-top: 36rpx; }
+.live-story .link { min-height: 96rpx; font-size: 32rpx; }

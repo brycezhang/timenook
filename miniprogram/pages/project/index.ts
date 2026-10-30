@@ -1,3 +1,4 @@
+import { recordingId } from "../../services/local-audio-recorder";
 import { watchProjectAccess } from "../../services/project-access";
 import { dataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
@@ -29,7 +30,8 @@ function taskLabels(task: ProductionTaskView) {
     submitting: "处理中",
     waiting_provider: "等待处理结果",
     succeeded: "已完成",
-    no_speech: "未识别到有效语音",
+    no_speech: "未识别到语音",
+    no_content: "已转写，暂未形成故事",
     failed: "失败",
     manual_review: "需要人工协助",
     invalidated: "授权或素材已变化",
@@ -268,7 +270,7 @@ Page({
       if (this.data.participation?.canCollect)
         go(
           "interview",
-          `projectId=${this.projectId}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+          `projectId=${this.projectId}&draftId=${recordingId()}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
         );
       return;
     }
@@ -296,6 +298,9 @@ Page({
       return;
     }
     go("story", "id=" + e.currentTarget.dataset.id);
+  },
+  participate() {
+    go("welcome", `projectId=${this.projectId}`);
   },
   invite() {
     go("invite", dataMode() === "live" ? `projectId=${this.projectId}` : "");

@@ -96,8 +96,11 @@ export function createAudio() {
     get duration() {
       return Number.isFinite(audio.duration) ? audio.duration : 0;
     },
+    get paused() {
+      return audio.paused;
+    },
     async play() {
-      const t = token;
+      const t = ++token;
       try {
         const resolved = await resolveBlob(src);
         if (t !== token) return;
@@ -107,11 +110,20 @@ export function createAudio() {
         }
         await audio.play();
       } catch {
-        audio.dispatchEvent(new Event("error"));
+        if (t === token) audio.dispatchEvent(new Event("error"));
       }
     },
     pause() {
+      token++;
       audio.pause();
+    },
+    seek(position: number) {
+      audio.currentTime = position;
+    },
+    stop() {
+      token++;
+      audio.pause();
+      audio.currentTime = 0;
     },
     destroy() {
       token++;
@@ -122,8 +134,9 @@ export function createAudio() {
   };
   for (const [method, event] of [
     ["onPlay", "play"],
-    ["onEnded", "ended"],
+    ["onCanplay", "loadedmetadata"],
     ["onTimeUpdate", "timeupdate"],
+    ["onSeeked", "seeked"],
     ["onEnded", "ended"],
     ["onError", "error"],
   ])
