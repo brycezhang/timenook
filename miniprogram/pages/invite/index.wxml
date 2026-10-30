@@ -1,5 +1,5 @@
 <view wx:if="{{mode === 'live'}}" class="page live-invite">
-  <view class="title">邀请家人，<text class="line-break">{{'\n'}}</text>一起写这本书</view><view class="invitation-card section"><view class="row"><image class="icon" src="/assets/icons/leaf.svg"/><text class="serif">时光里 · 岁月成书</text></view><view class="letter-body serif">想听听你的人生故事，<text class="line-break">{{'\n'}}</text>把它写成一本书，留给我们。</view></view>
+  <view class="title">邀请本人，<text class="line-break">{{'\n'}}</text>一起写这本书</view><view class="invitation-card section"><view class="row"><image class="icon" src="/assets/icons/leaf.svg"/><text class="serif">时光里 · 岁月成书</text></view><view class="letter-body serif">想听听你的人生故事，<text class="line-break">{{'\n'}}</text>把它写成一本书，留给我们。</view></view>
   <view wx:if="{{participation}}" class="soft section">{{participation.policyStatus === 'internal-acceptance' ? '内部功能验收 · 无付款，不发起实体书生产。' : '邀请和账号绑定不代替本人用途授权。'}}{{participation.noticeText}}</view>
   <view class="section note">请本人申请后，在线下核对账号再确认。付款和邀请转发都不会授予资料权限。</view>
   <view wx:if="{{status}}" class="soft section">{{status}}</view>

@@ -346,6 +346,12 @@ Page({
       ),
     });
   },
+  openCover() {
+    if (!this.canDraft() || this.data.busy) return;
+    this.setData({ coverEditing: true }, () =>
+      wx.pageScrollTo({ selector: ".cover-editor", duration: 200 }),
+    );
+  },
   editCover() {
     if (this.canDraft() && !this.data.busy)
       this.setData({ coverEditing: !this.data.coverEditing });
@@ -803,7 +809,12 @@ Page({
     go("settings", this.data.live ? `projectId=${this.projectId}` : "");
   },
   record() {
-    go("interview", this.data.live ? `projectId=${this.projectId}&draftId=${recordingId()}` : "");
+    go(
+      "interview",
+      this.data.live
+        ? `projectId=${this.projectId}&draftId=${recordingId()}`
+        : "",
+    );
   },
   project() {
     if (this.data.live) {

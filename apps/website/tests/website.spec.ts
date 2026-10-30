@@ -35,7 +35,7 @@ test("访客能切换讲述与整理稿，键盘也能操作", async ({ page }) 
 
 test("制作入口直接进入网页产品，不再停留在说明弹窗", async ({ page }) => {
   await page.goto("/");
-  const entries = page.getByRole("link", { name: "开始制作故事书" });
+  const entries = page.getByRole("link", { name: "进入内测体验" });
   await expect(page.locator("[data-order]")).toHaveCount(4);
   for (const entry of await entries.all())
     await expect(entry).toHaveAttribute("href", "/app/");

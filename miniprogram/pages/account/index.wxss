@@ -30,7 +30,7 @@
 }
 .account-brand {
   text-align: center;
-  font-size: 40rpx;
+  font-size: 30rpx;
   margin: 52rpx 0 12rpx;
   color: var(--brown);
 }

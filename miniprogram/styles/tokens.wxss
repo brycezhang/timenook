@@ -4,9 +4,11 @@ page {
   --sand: #f1e9de;
   --line: #e8ded0;
   --ink: #352d25;
-  --muted: #817467;
-  --brown: #986349;
+  --muted: #6e6256;
+  --brown: #593b2c;
   --brown-dark: #593b2c;
   --terracotta: #a7664e;
   --olive: #566348;
+  --soft: #edf0e7;
+  --danger: #984b39;
 }

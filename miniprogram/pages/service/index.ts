@@ -1,5 +1,10 @@
 import { type Project } from "../../domain/model";
 import { go, notify, read, toast } from "../../services/store";
+import { dataMode } from "../../services/mode";
+import { sessionClient } from "../../services/session";
+import { projectOverviewClient } from "../../services/project-overview";
+import { participationClient } from "../../services/participation";
+import type { ProjectCareRequestView } from "../../../packages/contracts/src";
 type E = {
   currentTarget: { dataset: Record<string, string> };
   detail: { value: string };
@@ -8,14 +13,29 @@ let audio: WechatMiniprogram.InnerAudioContext | null = null;
 Page({
   data: {
     kind: "privacy",
+    live: false,
+    busy: false,
+    status: "",
+    careRequests: [] as ProjectCareRequestView[],
     recordings: [] as Project["recordings"],
     playing: "",
     progress: 0,
     duration: 0,
   },
+  projectId: "",
+  generation: 0,
+  stopSessionWatch: undefined as (() => void) | undefined,
   onLoad(q) {
     const kind = q.kind || "privacy";
-    this.setData({ kind, recordings: read()?.recordings || [] });
+    const live = dataMode() === "live";
+    this.projectId = live
+      ? q.projectId || projectOverviewClient.selected()
+      : "";
+    this.setData({
+      kind,
+      live,
+      recordings: live ? [] : read()?.recordings || [],
+    });
     const titles: Record<string, string> = {
       privacy: "隐私与资料说明",
       terms: "服务与隐私说明",
@@ -25,11 +45,59 @@ Page({
     };
     wx.setNavigationBarTitle({ title: titles[kind] || "资料与帮助" });
   },
+  onShow() {
+    if (this.data.live) return this.refresh();
+  },
+  async refresh() {
+    if (!this.data.live || this.data.busy) return;
+    const generation = ++this.generation,
+      owner = sessionClient.context();
+    this.stopSessionWatch?.();
+    this.stopSessionWatch = sessionClient.onInvalidated(() => {
+      this.onHide();
+      this.setData({ status: "登录已失效，请重新登录" });
+    });
+    this.setData({ busy: true, status: "", careRequests: [] });
+    try {
+      if (!this.projectId)
+        throw new Error("请先打开一个人生项目，再查询资料服务");
+      const careRequests = await participationClient.careRequests(
+        this.projectId,
+      );
+      if (generation === this.generation && owner === sessionClient.context())
+        this.setData({ careRequests });
+    } catch (error) {
+      if (generation === this.generation && owner === sessionClient.context())
+        this.setData({
+          status: error instanceof Error ? error.message : "查询未完成，请重试",
+        });
+    } finally {
+      if (generation === this.generation && owner === sessionClient.context())
+        this.setData({ busy: false });
+    }
+  },
+  rights() {
+    if (this.projectId) go("welcome", `projectId=${this.projectId}&manage=1`);
+  },
+  completeExport() {
+    if (this.projectId) go("export", `projectId=${this.projectId}`);
+  },
+  deletion() {
+    if (this.projectId) go("deletion-status", `projectId=${this.projectId}`);
+  },
+  project() {
+    if (this.projectId) go("project", `projectId=${this.projectId}`);
+  },
   onHide() {
+    ++this.generation;
+    this.stopSessionWatch?.();
+    this.stopSessionWatch = undefined;
+    this.setData({ careRequests: [], busy: false });
     audio?.pause();
     this.setData({ playing: "" });
   },
   onUnload() {
+    this.onHide();
     audio?.destroy();
     audio = null;
   },

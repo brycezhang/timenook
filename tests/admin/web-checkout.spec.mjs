@@ -140,23 +140,26 @@ test("normal login, cancel or mock payment, project creation, invitation, consen
   test.setTimeout(120000);
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  const shots = "/tmp/timenook-web-ux";
+  const shots = "/tmp/timenook-ui3-123";
   await mkdir(shots, { recursive: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(async () => {
     await page.goto(`${origin}/app/`);
     await expect(
-      page.getByRole("button", { name: "微信登录", exact: true }),
+      page.getByRole("button", { name: "进入内测", exact: true }),
     ).toBeVisible();
   }).toPass();
   await page.screenshot({ path: `${shots}/login-mobile.png` });
-  await page.getByRole("button", { name: "微信登录", exact: true }).click();
+  await page.getByRole("button", { name: "进入内测", exact: true }).click();
   await page
     .getByRole("button", { name: "开始制作我的故事书", exact: true })
     .click();
   await page.getByRole("button", { name: "送给爸爸", exact: false }).click();
   await expect(page.getByRole("heading", { name: "爸爸的一生" })).toBeVisible();
-  const pay = page.getByRole("button", { name: "微信支付", exact: true });
+  const pay = page.getByRole("button", {
+    name: "模拟支付，创建项目",
+    exact: true,
+  });
   await expect(pay).toBeDisabled();
   await page.getByRole("checkbox").check();
   await pay.click();
@@ -202,7 +205,7 @@ test("normal login, cancel or mock payment, project creation, invitation, consen
     narrator.on("pageerror", (e) => errors.push(e.message));
     await narrator.goto(invitation);
     await narrator
-      .getByRole("button", { name: "微信登录", exact: true })
+      .getByRole("button", { name: "进入内测", exact: true })
       .click();
     await narrator
       .getByRole("button", { name: "已读说明，申请本人参与", exact: true })
@@ -271,7 +274,56 @@ test("normal login, cancel or mock payment, project creation, invitation, consen
     await page.getByRole("button", { name: "返回首页", exact: true }).click();
     await page.getByRole("button", { name: "成书", exact: true }).click();
     await expect(page.getByText("我的人生书", { exact: true })).toBeVisible();
-    await page.screenshot({ path: `${shots}/book-mobile.png` });
+    await page.getByRole("button", { name: "我的", exact: true }).click();
+    await expect(page.locator(".live-account .account-book")).toContainText(
+      "爸爸的时光手记",
+    );
+    for (const width of [320, 375, 390, 430, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(page.locator("#page")).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate(() => ({
+            document: document.documentElement.scrollWidth <= innerWidth,
+            content:
+              document.querySelector("#page").scrollWidth <=
+              document.querySelector("#page").clientWidth,
+          })),
+        )
+        .toEqual({ document: true, content: true });
+      if (width > 650) {
+        await expect(
+          page.getByRole("navigation", { name: "主导航", exact: true }),
+        ).toBeVisible();
+        expect(
+          (await page.locator("#phone").boundingBox()).width,
+        ).toBeGreaterThan(900);
+        await expect(page.locator(".live-account .tabs")).toHaveCount(0);
+        await expect(page.locator("#page .tabs")).toBeHidden();
+      } else {
+        await expect(page.locator("#page .tabs")).toBeVisible();
+        await expect(page.locator(".app-side")).toBeHidden();
+      }
+      await page.screenshot({ path: `${shots}/account-${width}.png` });
+    }
+    await page
+      .getByRole("button", { name: "资料用途与帮助", exact: true })
+      .click();
+    await expect(page.getByText("项目服务工单", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("暂无服务工单。", { exact: true }),
+    ).toBeVisible();
+    await page.screenshot({ path: `${shots}/service-desktop.png` });
+    await page
+      .getByRole("button", {
+        name: "返回项目，查看保存与处理详情",
+        exact: true,
+      })
+      .click();
+    await expect(page.locator(".live-project > .title")).toHaveText(
+      "爸爸的时光手记",
+    );
+    await expect(page.locator("#capsule")).toHaveCount(0);
   } finally {
     await narratorContext.close();
   }

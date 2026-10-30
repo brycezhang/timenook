@@ -74,7 +74,7 @@
   ><button class="check-row" bindtap="layout"
     ><view class="check-box {{layout?'on':''}}"
       ><image class="icon" src="/assets/icons/check-light.svg" /></view
-    ><text>购买子女：我已检查书名、文字和照片</text></button
+    ><text>发起人：我已检查书名、文字和照片</text></button
   ></view
 ><view class="dock"
   ><button

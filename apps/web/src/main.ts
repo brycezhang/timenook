@@ -82,7 +82,7 @@ function loginScreen(message?: string) {
   screen(
     `${mockEnabled && !validTicket ? `<img class="login-photo" src="${familyImage}" alt="家人相伴的温暖时刻，效果示意" />` : ""}<h1>${mockEnabled && !validTicket ? "把生命的故事，<br>温柔收藏" : "打开你的故事书"}</h1>
     <p class="description">${validTicket ? "点击下方按钮，进入本次内测。" : "请从内测登录链接进入。"}</p>
-    ${validTicket ? '<button class="primary" type="button">进入我的故事书</button>' : mockEnabled ? '<p class="login-intro">说一段往事，留一段原声。<br>和重要的人，慢慢写成一本人生书。</p><button class="primary mock-login" type="button">微信登录</button><p class="experience-note">内测体验：点击直接登录专属内测账号，无需微信授权。</p>' : '<p class="description">请向本次验收负责人获取登录链接。</p>'}`,
+    ${validTicket ? '<button class="primary" type="button">进入我的故事书</button>' : mockEnabled ? '<p class="login-intro">说一段往事，留一段原声。<br>和重要的人，慢慢写成一本人生书。</p><button class="primary mock-login" type="button">进入内测</button><p class="experience-note">点击进入专属内测账号，无需微信授权。</p>' : '<p class="description">请向本次验收负责人获取登录链接。</p>'}`,
     "login-screen",
   );
   if (mockEnabled && !validTicket) root.querySelector(".description")?.remove();
@@ -199,7 +199,7 @@ function purchaseScreen(owner: number) {
     <section class="package-paper"><img class="package-cover" src="${bookImage}" alt="故事书装帧效果示意" /><div><h2 class="recipient-book-title">妈妈的一生</h2><p>爱与岁月的故事</p></div><ul><li>语音讲述，整理人生故事</li><li>照片与原声，一起留下</li><li>专属故事书，长久珍藏</li></ul></section>
     <p class="description">每次说一小段，慢慢完成。故事经本人确认后，再收进书里。</p>
     <label class="agreement"><input type="checkbox" />我已了解服务内容与内测说明</label><p class="experience-note">内测模拟支付，不会扣款；创建真实内测项目，暂不制作实体书。</p>
-    <footer class="checkout-dock"><div class="checkout-price">¥999<small>一个项目 · 首本一本</small></div><button class="primary pay-button" type="button" disabled>微信支付</button></footer>`,
+    <footer class="checkout-dock"><div class="checkout-price">¥999<small>一个项目 · 首本一本</small></div><button class="primary pay-button" type="button" disabled>模拟支付，创建项目</button></footer>`,
     "purchase-screen",
   );
   let recipient = "妈妈";
@@ -243,7 +243,7 @@ function purchaseScreen(owner: number) {
     const dialog = document.createElement("dialog");
     dialog.className = "payment-dialog";
     dialog.innerHTML =
-      '<h2>微信支付</h2><p class="checkout-price">¥999.00</p><p class="description">内测模拟支付，不会产生真实扣款。</p><button class="primary confirm-pay" type="button">确认支付（模拟）</button><button class="quiet cancel-pay" type="button">取消支付</button>';
+      '<h2>内测模拟支付</h2><p class="checkout-price">¥999.00</p><p class="description">内测模拟支付，不会产生真实扣款。</p><button class="primary confirm-pay" type="button">确认支付（模拟）</button><button class="quiet cancel-pay" type="button">取消支付</button>';
     root.append(dialog);
     dialog.showModal();
     dialog.querySelector<HTMLButtonElement>(".cancel-pay")!.onclick = () =>
@@ -306,10 +306,26 @@ function createProjectScreen(
 async function productScreen(owner: number, initialPage: string) {
   if (!currentSession) return;
   screen(
-    '<a class="product-home" href="/app/projects">我的故事书</a><section id="phone"><header id="native-header"><div class="navbar"><button id="back" aria-label="返回">‹</button><span id="nav-title">岁月成书</span></div></header><div id="page"></div><div id="overlay"></div></section>',
+    `<nav class="app-side" aria-label="主导航"><p class="side-title">当前人生项目<br><strong id="current-project-title">正在打开…</strong></p>${[
+      ["project", "book-open", "故事书"],
+      ["book", "file-text", "成书"],
+      ["account", "user", "我的"],
+    ]
+      .map(
+        ([page, icon, label]) =>
+          `<a class="side-link" data-product-page="${page}"><img src="${new URL(`../../../miniprogram/assets/icons/${icon}.svg`, import.meta.url).href}" alt="">${label}</a>`,
+      )
+      .join(
+        "",
+      )}<div class="side-bottom">慢慢说，不必赶。<br>制作、回听与下载长期有效。</div></nav><section id="phone"><header id="native-header"><div class="navbar"><button id="back" aria-label="返回">‹</button><span id="nav-title">岁月成书</span></div></header><div id="page"></div><div id="overlay"></div></section>`,
     "product-shell",
   );
   document.body.classList.add("product-body");
+  const projectsLink = document.createElement("a");
+  projectsLink.className = "header-projects";
+  projectsLink.href = "/app/projects";
+  projectsLink.textContent = "我的故事书";
+  root.querySelector(".site-header")!.append(projectsLink);
   document.body.style.setProperty(
     "--site-header-height",
     `${root.querySelector(".site-header")!.getBoundingClientRect().height}px`,

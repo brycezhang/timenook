@@ -543,4 +543,297 @@ h2 {
 }
 
 /* A focused native page uses its own navigation bar, just as in WeChat. */
-.product-shell:has(.interview-focus) > .product-home { display: none; }
+.product-shell:has(.interview-focus) > .product-home {
+  display: none;
+}
+
+/* The product uses the same paper surface at every size; desktop is a reading workspace. */
+:root {
+  --muted: #6e6256;
+  --serif: "Songti SC", "STSong", "Noto Serif CJK SC", SimSun, serif;
+}
+.site-header {
+  max-width: none;
+  min-height: 74px;
+  padding: 16px 34px;
+  margin: 0;
+  align-items: center;
+}
+.site-header > span {
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+.header-projects {
+  margin-left: auto;
+  font-size: 13px;
+  text-decoration: none;
+  color: var(--muted);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.product-body {
+  overflow: hidden;
+}
+.product-body #app {
+  height: 100dvh;
+  min-height: 0;
+}
+.product-body .site-header {
+  margin: 0;
+  display: flex;
+}
+.product-body .product-shell {
+  max-width: none;
+  width: 100%;
+  height: calc(100dvh - var(--site-header-height));
+  display: flex;
+  flex-direction: row;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.app-side {
+  width: 196px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 30px 16px;
+  border-right: 1px solid var(--line);
+}
+.side-title {
+  margin: 0 0 16px;
+  padding: 0 14px;
+  font-size: 11px;
+  line-height: 1.9;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.side-title strong {
+  display: block;
+  font-weight: 400;
+}
+.side-link {
+  display: flex;
+  align-items: center;
+  min-height: 50px;
+  gap: 12px;
+  border-radius: 7px;
+  padding: 12px 14px;
+  font-size: 14px;
+  text-decoration: none;
+}
+.side-link img {
+  width: 21px;
+  height: 21px;
+}
+.side-link[aria-current="page"] {
+  background: #e9ecdf;
+  color: var(--olive);
+  font-weight: 600;
+}
+.side-bottom {
+  margin-top: auto;
+  padding: 16px 14px;
+  font-size: 11px;
+  line-height: 1.9;
+  color: var(--muted);
+}
+.product-body #phone {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  width: auto;
+}
+.product-body #native-header {
+  height: 50px;
+}
+.product-body .navbar {
+  justify-content: start;
+  padding: 0 62px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.product-body #back {
+  font-size: 28px;
+  padding: 0;
+  color: var(--brown);
+}
+.product-body #page {
+  height: calc(100% - 50px);
+}
+.product-body #page > .page {
+  max-width: 1060px;
+  margin: auto;
+  padding: 28px clamp(24px, 4vw, 56px) 70px;
+}
+.product-body #page:not([data-page="project"]):not([data-page="book"]) > .page {
+  max-width: 800px;
+}
+.product-body #page .with-tabs {
+  padding-bottom: 70px;
+}
+.product-body #page .tabs {
+  display: none;
+}
+.product-body #page .dock,
+.product-body #page .interview-footer {
+  left: 0;
+  right: 0;
+  max-width: 800px;
+  margin: auto;
+}
+.product-body #page .focus-sheet {
+  max-width: 740px;
+  left: 50%;
+  right: auto;
+  width: calc(100% - 48px);
+  transform: translateX(-50%);
+}
+.product-body #overlay .modal {
+  max-width: 480px;
+}
+.product-body .toast {
+  max-width: 520px;
+  margin: auto;
+}
+.login-screen {
+  max-width: 740px;
+  padding-top: clamp(40px, 10vh, 100px);
+}
+.login-screen h1 {
+  font-family: var(--serif);
+}
+.primary {
+  border-radius: 28px;
+}
+.quiet {
+  border-radius: 28px;
+  background: transparent;
+}
+.checkout-dock .primary {
+  background: var(--olive);
+}
+@media (min-width: 900px) {
+  .login-screen:has(.login-photo) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    max-width: 1100px;
+    column-gap: 60px;
+    align-content: center;
+  }
+  .login-screen .login-photo {
+    grid-column: 2;
+    grid-row: 1 / 7;
+    width: 100%;
+    height: 420px;
+    max-height: none;
+    object-fit: cover;
+    border-radius: 7px;
+  }
+  .product-body #page .book-hero {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(250px, 1fr);
+    gap: 42px;
+    align-items: center;
+  }
+  .product-body #page .book-summary {
+    padding: 12px 0;
+  }
+  .product-body #page .book-summary .title {
+    font-size: 34px;
+  }
+}
+@media (max-width: 650px) {
+  .site-header {
+    min-height: 62px;
+    padding: 12px 22px;
+  }
+  .site-header .brand {
+    font-size: 22px;
+  }
+  .site-header > span {
+    display: none;
+  }
+  .header-projects {
+    font-size: 12px;
+  }
+  .app-side {
+    display: none;
+  }
+  .product-body #page > .page {
+    padding: 28px 22px 50px;
+  }
+  .product-body #page .with-tabs {
+    padding-bottom: calc(108px + env(safe-area-inset-bottom));
+  }
+  .product-body #page .tabs {
+    display: flex;
+  }
+  .product-body #page .dock,
+  .product-body #page .interview-footer {
+    width: 100%;
+  }
+  .product-body .navbar {
+    justify-content: center;
+    padding: 0 50px;
+  }
+  .product-body #nav-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .product-body #page .focus-sheet {
+    width: 100%;
+    left: 0;
+    transform: none;
+  }
+  .section-heading {
+    align-items: start;
+  }
+  .section-heading h1 {
+    font-size: 28px;
+  }
+  .checkout-dock {
+    gap: 14px;
+    padding-inline: 20px;
+  }
+  .checkout-dock .primary {
+    padding: 12px 16px;
+    font-size: 14px;
+    white-space: normal;
+  }
+}
+
+.product-body .side-link {
+  color: var(--ink);
+}
+.product-body .side-link[aria-current="page"] {
+  color: var(--olive);
+}
+.product-body #page .focus-sheet {
+  top: 50px;
+  bottom: 0;
+}
+
+:root {
+  --brown: #593b2c;
+}
+.product-body #phone:has(#page[data-page="project"]) #native-header,
+.product-body #phone:has(#page[data-page="book"]) #native-header,
+.product-body #phone:has(#page[data-page="account"]) #native-header {
+  display: none;
+}
+.product-body #page[data-page="project"],
+.product-body #page[data-page="book"],
+.product-body #page[data-page="account"] {
+  height: 100%;
+}
+@media (min-width: 651px) {
+  .product-body #page[data-page="project"] > .page,
+  .product-body #page[data-page="book"] > .page,
+  .product-body #page[data-page="account"] > .page {
+    padding-top: 42px;
+  }
+}

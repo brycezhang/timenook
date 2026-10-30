@@ -107,7 +107,7 @@
         class="grow"
         ><view>书稿确认</view
         ><view class="small muted"
-          >{{ready?'本人内容与子女校对均已确认':'请先阅读并确认完整书稿'}}</view
+          >{{ready?'本人内容与发起人校对均已确认':'请先阅读并确认完整书稿'}}</view
         ></view
       ></view
     ><button class="link" bindtap="review"

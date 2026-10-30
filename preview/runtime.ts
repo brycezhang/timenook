@@ -63,12 +63,18 @@ export function mountMiniProgram(
       .replace(/\bimage(?=[\s:.#>+\[{,])/g, "img")
       .replace(
         /(-?[\d.]+)rpx/g,
-        (_, n) => `${(Number(n) * phone.clientWidth) / 750}px`,
+        (_, n) =>
+          `${(Number(n) * (options.product && window.innerWidth > 650 ? 390 : phone.clientWidth)) / 750}px`,
       )
       .replace(/100vh/g, "var(--phone-height)");
   }
   function updateStyles() {
     phone.style.setProperty("--phone-height", phone.clientHeight + "px");
+    if (options.product)
+      document.body.style.setProperty(
+        "--site-header-height",
+        `${document.querySelector(".site-header")!.getBoundingClientRect().height}px`,
+      );
     cssTag.textContent = css(
       String(styles["../miniprogram/styles/tokens.wxss"]) +
         String(styles["../miniprogram/app.wxss"]) +
@@ -733,6 +739,48 @@ export function mountMiniProgram(
     try {
       renderChildren(template, current.data, fragment);
       updateChildren(root, fragment);
+      root.dataset.page = route;
+      if (options.product) {
+        const projectId =
+          current.projectId ||
+          new URLSearchParams(
+            location.hash.split("?")[1] || options.initialPage?.split("?")[1],
+          ).get("projectId");
+        const activePage = [
+          "book",
+          "manuscript",
+          "print",
+          "production",
+          "quality",
+        ].includes(route)
+          ? "book"
+          : [
+                "account",
+                "settings",
+                "service",
+                "export",
+                "deletion-status",
+                "refunds",
+              ].includes(route)
+            ? "account"
+            : "project";
+        document
+          .querySelectorAll<HTMLAnchorElement>("[data-product-page]")
+          .forEach((link) => {
+            const page = link.dataset.productPage!;
+            link.href = `#/${page}${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`;
+            if (page === activePage) link.setAttribute("aria-current", "page");
+            else link.removeAttribute("aria-current");
+          });
+        const title = document.querySelector("#current-project-title");
+        if (title)
+          title.textContent =
+            current.data.overview?.bookTitle ||
+            current.data.version?.snapshot.cover.title ||
+            current.data.context?.bookTitle ||
+            current.data.context?.current?.snapshot.cover.title ||
+            "";
+      }
       if (field) {
         const next = root.querySelector<HTMLInputElement>(
           `[data-render-key="${field}"]`,

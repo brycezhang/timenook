@@ -152,7 +152,12 @@ Page({
     go("invite", this.data.live ? `projectId=${this.projectId}` : "");
   },
   service(e: E) {
-    go("service", "kind=" + e.currentTarget.dataset.kind);
+    go(
+      "service",
+      "kind=" +
+        e.currentTarget.dataset.kind +
+        (this.data.live ? `&projectId=${this.projectId}` : ""),
+    );
   },
   reset() {
     wx.showModal({
