@@ -323,13 +323,16 @@ test("bound project home reaches the actual recording page, seals a file and ret
 }) => {
   const page = await openPage(browser, narrator);
   await page.goto(`${base}/#/welcome?projectId=${projectId}`);
+  await page
+    .getByRole("button", { name: "调整用途与资料服务", exact: true })
+    .click();
   const overviewLoaded = page.waitForResponse(
     (response) =>
       response.request().method() === "GET" &&
       response.url().endsWith(`/v1/projects/${projectId}/overview`),
   );
   await page
-    .getByRole("button", { name: "进入本人参与的项目", exact: true })
+    .getByRole("button", { name: "返回本人参与的项目", exact: true })
     .click();
   const overviewResponse = await overviewLoaded;
   expect(overviewResponse.status()).toBe(200);
@@ -585,16 +588,29 @@ test("a collection-only assisted participant starts and resumes its own pending 
   const page = await openPage(browser, buyer);
   await page.goto(`${base}/#/welcome?projectId=${id}`);
   await page
-    .getByRole("button", { name: "无个人微信？本人在场同机协助", exact: true })
+    .getByRole("button", { name: "本人在场，协助开始", exact: true })
     .click();
   const choices = page.getByRole("checkbox");
   await expect(choices).toHaveCount(3);
+  await choices.nth(0).check();
   await choices.nth(1).uncheck();
   await choices.nth(2).uncheck();
+  const submittedChoices = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().endsWith("/assisted-sessions")) {
+      const { purpose, granted } = r.postDataJSON();
+      submittedChoices.push({ purpose, granted });
+    }
+  });
   await page
     .getByRole("button", { name: "同意所选并开始讲述", exact: true })
     .click();
   await chooseDefaultQuestion(page);
+  expect(submittedChoices).toEqual([
+    { purpose: "collection", granted: true },
+    { purpose: "ai", granted: false },
+    { purpose: "sharing", granted: false },
+  ]);
   await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
   await page

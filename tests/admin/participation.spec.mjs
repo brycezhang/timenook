@@ -662,9 +662,15 @@ test("assisted subject choices and Care manual intake preserve real actors, with
   await expect(buyer).toHaveURL(
     /interview.*draftId=[a-f0-9-]{36}.*assistedSessionId=/,
   );
+  await buyer
+    .getByRole("button", { name: "就从这个问题开始", exact: true })
+    .click();
   await expect(
     buyer.getByRole("button", { name: "开始说", exact: true }),
   ).toBeEnabled();
+  await expect(
+    buyer.getByRole("button", { name: "说完了，停止录音", exact: true }),
+  ).toHaveCount(0);
   expect(posts.map((row) => row.purpose)).toEqual([
     "collection",
     "ai",

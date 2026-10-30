@@ -247,6 +247,9 @@ async function pageFor(browser, session) {
   );
   await page.goto(`${base}/#/welcome?projectId=${projectId}`);
   await page
+    .getByRole("button", { name: "调整用途与资料服务", exact: true })
+    .click();
+  await page
     .getByRole("button", { name: "编辑个人大纲与问题", exact: true })
     .click();
   await expect(page.locator(".plan-page .title")).toBeVisible();
