@@ -104,3 +104,79 @@
   width: auto;
   font-size: 26rpx;
 }
+
+.live-project > .title {
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+.live-project .project-progress {
+  margin-top: 24rpx;
+}
+.live-project .next-story {
+  border-radius: 18rpx;
+  padding: 36rpx;
+}
+.live-project .prompt {
+  font-size: 48rpx;
+  margin: 22rpx 0 28rpx;
+}
+.live-project .resume-card {
+  border: 1rpx solid var(--line);
+  background: var(--surface);
+  padding: 30rpx;
+  border-radius: 18rpx;
+}
+.resume-row {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.resume-row .grow {
+  min-width: 0;
+}
+.recovery-tasks {
+  border-top: 1rpx solid var(--line);
+  padding-top: 32rpx;
+}
+.recovery-tasks .link {
+  justify-content: flex-start;
+  min-height: 44px;
+}
+.history-toggle {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 24rpx;
+  border-top: 1rpx solid var(--line);
+  border-bottom: 1rpx solid var(--line);
+  padding: 22rpx 0;
+  font-size: 30rpx;
+  color: var(--brown-dark);
+}
+.history-toggle text {
+  font-size: 26rpx;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.live-story-row {
+  white-space: normal;
+}
+.live-story-row .grow {
+  min-width: 0;
+}
+.live-project .filters {
+  gap: 32rpx;
+  flex-wrap: wrap;
+}
+.live-project .filter {
+  min-height: 48px;
+}
+
+.live-project { font-size: 16px; }
+.live-project > .title { font-size: 28px; }
+.live-project .prompt { font-size: 28px; }
+.live-project .resume-row, .live-project .story-name { font-size: 16px; }
+.live-project .small, .live-project .note { font-size: 14px; }
+.live-project .filter { font-size: 15px; }

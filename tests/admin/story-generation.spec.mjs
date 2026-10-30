@@ -425,8 +425,16 @@ async function openPage(
       window.browserAudioFactory = window.wx.createInnerAudioContext;
       window.wx.createInnerAudioContext = () => ({
         src: "",
+        currentTime: 0,
+        duration: 1.08,
+        onCanplay() {},
+        onTimeUpdate() {},
+        onSeeked() {},
         onEnded() {},
         onError() {},
+        seek(position) {
+          this.currentTime = position;
+        },
         pause() {},
         stop() {},
         play() {

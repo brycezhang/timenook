@@ -1,3 +1,4 @@
+import { recordingPartition } from "../../services/interview-recording";
 import { recordingId } from "../../services/local-audio-recorder";
 import { watchProjectAccess } from "../../services/project-access";
 import { dataMode } from "../../services/mode";
@@ -45,6 +46,21 @@ function taskLabels(task: ProductionTaskView) {
   }[task.nextAction];
   return { ...task, kindLabel, stateLabel, nextActionLabel };
 }
+type ResumeInterview = RecordingContext["interviews"][number] & {
+  resumeLabel: string;
+};
+function needsRecovery(task: ProductionTaskView) {
+  return (
+    [
+      "failed",
+      "manual_review",
+      "invalidated",
+      "no_speech",
+      "no_content",
+      "obsolete",
+    ].includes(task.state) || task.errorCode === "AI_AUTHORIZATION_REQUIRED"
+  );
+}
 Page({
   data: {
     mode: dataMode(),
@@ -54,6 +70,12 @@ Page({
       resumeLabel: string;
     })[],
     taskRows: [] as ReturnType<typeof taskLabels>[],
+    faultRows: [] as ReturnType<typeof taskLabels>[],
+    historyTaskRows: [] as ReturnType<typeof taskLabels>[],
+    recentInterview: null as ResumeInterview | null,
+    historyInterviews: [] as ResumeInterview[],
+    localRecoveryIds: [] as string[],
+    historyExpanded: false,
     live: null as RecordingContext | null,
     overview: null as ProjectOverview | null,
     liveStories: [] as ProjectOverview["stories"],
@@ -89,6 +111,12 @@ Page({
         overview: null,
         liveStories: [],
         taskRows: [],
+        faultRows: [],
+        historyTaskRows: [],
+        recentInterview: null,
+        historyInterviews: [],
+        localRecoveryIds: [],
+        historyExpanded: false,
         live: null,
         interviews: [],
         participation: null,
@@ -107,6 +135,12 @@ Page({
       overview: null,
       liveStories: [],
       taskRows: [],
+      faultRows: [],
+      historyTaskRows: [],
+      recentInterview: null,
+      historyInterviews: [],
+      localRecoveryIds: [],
+      historyExpanded: false,
       busy: true,
       live: null,
       interviews: [],
@@ -142,6 +176,7 @@ Page({
             pending: overview.summary.pending,
             confirmed: overview.summary.confirmed,
           });
+          this.updatePresentation();
           this.filterStories();
           if (overview.accessExpiresAt) {
             if (this.expiry) clearTimeout(this.expiry);
@@ -178,6 +213,12 @@ Page({
           overview: null,
           liveStories: [],
           taskRows: [],
+          faultRows: [],
+          historyTaskRows: [],
+          recentInterview: null,
+          historyInterviews: [],
+          localRecoveryIds: [],
+          historyExpanded: false,
           interviews: [],
           participation: collectionOnly ? this.data.participation : null,
           status: collectionOnly
@@ -190,6 +231,69 @@ Page({
     } finally {
       if (generation === this.generation) this.setData({ busy: false });
     }
+  },
+  updatePresentation() {
+    const { overview, interviews, taskRows } = this.data;
+    if (!overview) return;
+    const recentInterview =
+      interviews.find(
+        (interview) =>
+          !overview.stories.some(
+            (story) =>
+              story.interviewId === interview.id && story.decision?.confirmed,
+          ),
+      ) ?? null;
+    const partition = recordingPartition(this.projectId);
+    const index: unknown = wx.getStorageSync(`${partition}:index`);
+    const localRecoveryIds = Array.isArray(index)
+      ? index.filter((id) => {
+          if (typeof id !== "string" || !/^[a-f0-9-]{36}$/.test(id))
+            return false;
+          const clips: unknown = wx.getStorageSync(`${partition}:${id}`);
+          return (
+            Array.isArray(clips) &&
+            clips.some(
+              (clip) => clip && typeof clip.path === "string" && !clip.sealed,
+            )
+          );
+        })
+      : [];
+    this.setData({
+      recentInterview,
+      historyInterviews: interviews.filter(
+        (interview) => interview.id !== recentInterview?.id,
+      ),
+      faultRows: taskRows.filter(needsRecovery),
+      historyTaskRows: taskRows.filter((task) => !needsRecovery(task)),
+      localRecoveryIds,
+    });
+  },
+  toggleHistory() {
+    this.setData({ historyExpanded: !this.data.historyExpanded });
+  },
+  recoverTask(e: E) {
+    const task = this.data.taskRows.find(
+      (row) => row.id === e.currentTarget.dataset.id,
+    );
+    if (!task || !this.data.overview) return;
+    const story = this.data.overview.stories.find(
+      (story) => story.task?.id === task.id,
+    );
+    if (story) {
+      this.story({ ...e, currentTarget: { dataset: { id: story.id } } });
+      return;
+    }
+    if (task.kind === "render_book") {
+      this.book();
+      return;
+    }
+    const interview = this.data.interviews.find((interview) =>
+      interview.clips.some((clip) => clip.id === task.clipId),
+    );
+    go(
+      "interview",
+      `projectId=${this.projectId}${interview ? `&interviewId=${interview.id}` : ""}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+    );
   },
   resume(e: E) {
     if (dataMode() === "live")
@@ -248,9 +352,12 @@ Page({
   filterStories() {
     if (dataMode() === "live") {
       this.setData({
-        liveStories: (this.data.overview?.stories ?? []).filter(
-          (s) => this.data.filter === "all" || !s.decision?.confirmed,
-        ),
+        liveStories: (this.data.overview?.stories ?? [])
+          .filter((s) => this.data.filter === "all" || !s.decision?.confirmed)
+          .sort(
+            (a, b) =>
+              Number(!!a.decision?.confirmed) - Number(!!b.decision?.confirmed),
+          ),
       });
       return;
     }

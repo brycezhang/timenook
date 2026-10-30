@@ -8,7 +8,14 @@ import type {
   RecordingContext,
   RecordingInterview,
 } from "../../packages/contracts/src";
-import type { ProbeUploadForm } from "../../packages/contracts/src/audio-probe";
+import type {
+  ProbeLocalClip,
+  ProbeUploadForm,
+} from "../../packages/contracts/src/audio-probe";
+export type InterviewLocalClip = ProbeLocalClip & {
+  storage?: RecordingClip["storage"];
+};
+
 export function recordingPartition(projectId: string) {
   const account = sessionClient.context().split(":")[0];
   if (!account) throw new Error("请先登录");
@@ -181,7 +188,7 @@ export class InterviewRecorder extends LocalAudioRecorder {
   async upload(clientClipId: string) {
     this.currentContext();
     if (this.uploading || this.active || this.pending || this.saving) return;
-    const local = this.current.clips.find(
+    const local: InterviewLocalClip | undefined = this.current.clips.find(
       (c) => c.clientClipId === clientClipId,
     );
     if (!local) throw new Error("没有已保存的片段");
@@ -260,6 +267,7 @@ export class InterviewRecorder extends LocalAudioRecorder {
       )
         throw new Error("封存未确认");
       local.sealed = true;
+      local.storage = result.storage;
       this.commitClip(local);
       this.update(
         "sealed",
