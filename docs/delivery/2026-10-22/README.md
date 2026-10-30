@@ -178,7 +178,9 @@
 - X05：[T09](tickets/09-builtin-template.md)、[T13](tickets/13-personal-plan.md)、[T20](tickets/20-book-pdf.md)；T30 汇总实测。
 - X06：[T03](tickets/03-ai-provider-probe.md)、[T13](tickets/13-personal-plan.md)、[T17](tickets/17-optional-followup.md)、[T19](tickets/19-story-confirmation.md)、[T20](tickets/20-book-pdf.md)；T30 汇总实测。
 
-D01 由 T04 冻结；D02–D08 由 T05 冻结；D09 由 T09 冻结；D10 由 T08 冻结。T08 必需参数缺失则拒绝可售发布。T30 汇总全部参数、平台与实物证据。
+D01 由 T04 冻结；D02/D03 的长期服务规则已按 [ADR 0017](../../adr/0017-lifetime-service-and-retention.md) 确定，实现与实际执行另行验证，D04–D08 由 T05 核实冻结；D09 由 T09 冻结；D10 由 T08 冻结。T08 必需参数缺失则拒绝可售发布。T30 汇总全部参数、平台与实物证据。
+
+2026-10-29 的长期服务及后台重构见[规格草案](../2026-10-29/admin-vben-refactor-spec.md)和[拆票草案](../2026-10-29/admin-vben-refactor-tickets.md)。既有 T01–T30 的当前目标同步更新，历史有限期验证不证明新规则通过；新的重构票据待拆分确认后发布。
 
 ## 当前规格与验收归属
 
@@ -192,7 +194,7 @@ D01 由 T04 冻结；D02–D08 由 T05 冻结；D09 由 T09 冻结；D10 由 T08
 | 完成、验收和质量 | [依赖完成规则](spec.md#依赖完成规则)、[证据归属](spec.md#验收复用与唯一归属)、[质量目标](spec.md#质量目标与证据归属) |
 | 路径 | [ADR 0015](../../adr/0015-dedicated-domain-ingress.md)；内部 `/v1`，独立 API 域名下公网 `/api` 前缀 |
 
-保留 T01–T30、45 条依赖、全部 A/X/D 责任与已有交付记录；补漏验收已并入各票，不再维护第二份“本次补充”清单。本地票据与 GitHub 正文同步，实时状态以 GitHub 为准，修订不追认验收通过。本轮仅修改文档，业务实现及真实条件仍分别验证。[复杂度复核](mvp-complexity-review.md)保留决策理由，当前执行以父规格为准。
+保留 T01–T30、45 条依赖、全部 A/X/D 责任与已有交付记录；补漏验收已并入各票，不再维护第二份“本次补充”清单。本地票据与 GitHub 正文按变更记录同步，实时状态以 GitHub 为准，修订不追认验收通过。本轮仅修改文档，业务实现及真实条件仍分别验证。[复杂度复核](mvp-complexity-review.md)保留决策理由，当前执行以父规格为准。
 
 ## 已确认内容
 
