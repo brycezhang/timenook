@@ -32,5 +32,6 @@ export function livePageAllowed(page: string): boolean {
     "export",
     "deletion-status",
     "account",
+    "service",
   ].includes(page);
 }

@@ -3,3 +3,10 @@
 
 #preview-width{margin-left:8px;padding:5px 12px;border:1px solid #cfc4b3;border-radius:5px;color:#75604d;background:transparent;font:inherit;}
 :where(#page) span { white-space: pre-wrap; }
+
+#page .focus-sheet { position:absolute; }
+
+.action-sheet { align-self:flex-end; padding:8px 20px; } .action-sheet button { display:block; width:100%; min-height:52px; background:transparent; color:#593b2c; border-bottom:1px solid #e8ded0; font-size:17px; } .action-sheet button:last-child { border:0; color:#817467; }
+/* Native checkboxes keep their checked indicator in the browser adapter. */
+#page input[type="checkbox"]{appearance:auto;accent-color:#566348;padding:0;border-radius:0}
+#page input[type="range"]{appearance:auto;accent-color:#697657;padding:0;border:0;border-radius:0;min-height:32px;height:32px;background:transparent}

@@ -24,7 +24,7 @@ function state(value: ParticipationState) {
     !Number.isSafeInteger(value.accessEpoch) ||
     !Number.isSafeInteger(value.bindingVersion) ||
     !Array.isArray(value.choices) ||
-    value.choices.length !== 3 ||
+    value.choices.length !== CONSENT_PURPOSES.length ||
     !CONSENT_PURPOSES.every((p) =>
       value.choices.some(
         (c) => c.purpose === p && [true, false, null].includes(c.granted),
@@ -73,7 +73,7 @@ export const participationClient = {
       typeof result.inviter !== "string" ||
       !Array.isArray(result.process) ||
       !Array.isArray(result.purposes) ||
-      result.purposes.length !== 3
+      result.purposes.length !== CONSENT_PURPOSES.length
     )
       throw new Error("邀请无效或已到期");
     return result;
@@ -155,6 +155,25 @@ export const participationClient = {
             ),
             purpose,
             ...(!revoke ? { granted } : {}),
+            expectedBindingVersion: current.bindingVersion,
+            expectedAccessEpoch: current.accessEpoch,
+          },
+        },
+      ),
+    );
+  },
+  async start(current: ParticipationState, key: string) {
+    return state(
+      await sessionClient.request<ParticipationState>(
+        `/projects/${current.projectId}/consents/start`,
+        {
+          key,
+          data: {
+            noticeVersion: current.noticeVersion,
+            evidenceRef: evidence(
+              current.noticeVersion,
+              `click:purpose-start:${key}`,
+            ),
             expectedBindingVersion: current.bindingVersion,
             expectedAccessEpoch: current.accessEpoch,
           },

@@ -1,3 +1,5 @@
+import { showSavedRecording } from "./recording-step-helper.mjs";
+import { storyAction } from "./recording-step-helper.mjs";
 import { prepareRecordingStep } from "./recording-step-helper.mjs";
 import {
   createPrivacyFixtureApplication,
@@ -516,6 +518,16 @@ async function savedInterview() {
   return interview;
 }
 
+async function adjustStoryDecision(page, label) {
+  await storyAction(page, "回听已保存的原声");
+  await page.getByRole("button", { name: "调整本版决定", exact: true }).click();
+  const saved = page.waitForResponse((response) =>
+    response.url().endsWith("/decisions"),
+  );
+  await page.getByRole("button", { name: label, exact: true }).click();
+  expect((await saved).status()).toBe(201);
+}
+
 test("real project, full-story correction and independent narrator decisions persist through HTTP and PostgreSQL", async ({
   browser,
 }) => {
@@ -557,7 +569,9 @@ test("real project, full-story correction and independent narrator decisions per
   const page = await openPage(browser, narrator);
   try {
     await page.goto(`${base}/#/project?projectId=${projectId}`);
-    await expect(page.getByText(/1 篇待本人确认/)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /待本人确认 1/ }),
+    ).toBeVisible();
     await page
       .getByRole("button")
       .filter({ hasText: "那些年我记得的事" })
@@ -593,9 +607,7 @@ test("real project, full-story correction and independent narrator decisions per
     expect(actions.every((size) => size.width >= 48 && size.height >= 48)).toBe(
       true,
     );
-    await page
-      .getByRole("button", { name: "协助校对这版故事", exact: true })
-      .click();
+    await storyAction(page, "修改故事文字");
     await expect(page.getByText("校对故事", { exact: true })).toBeVisible();
     const paragraphs = page.locator("textarea");
     await paragraphs.nth(0).fill("本人校对后的首段，保留原有来源。");
@@ -608,26 +620,16 @@ test("real project, full-story correction and independent narrator decisions per
       .nth(1)
       .fill("本人无法确认品种，保留未知");
     await page
-      .getByRole("button", { name: "保存新版本，重新确认", exact: true })
+      .getByRole("button", { name: "保存为新版本", exact: true })
       .click();
     await expect(
       page.getByText("本人校对后的首段，保留原有来源。", { exact: true }),
     ).toBeVisible();
-    await page
-      .getByRole("button", { name: "本人确认或调整这版决定", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "确认这版内容", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "暂不入书／撤回入书许可", exact: true })
-      .click();
-    await page
-      .getByPlaceholder("请记录本人本次核对和选择的说明")
-      .fill("本地合成：本人核对这版但暂不入书");
-    await page
-      .getByRole("button", { name: "保存本人这次的两项决定", exact: true })
-      .click();
+    await page.getByRole("button", { name: "确认", exact: true }).click();
+    await expect(
+      page.locator(".live-decision textarea, .live-decision checkbox"),
+    ).toHaveCount(0);
+    await adjustStoryDecision(page, "这版暂不入书");
     await expect
       .poll(
         async () =>
@@ -652,7 +654,7 @@ test("real project, full-story correction and independent narrator decisions per
     expect(current.version).toBe(2);
     expect(current.decision.allowInBook).toBe(false);
     await page.goto(`${base}/#/project?projectId=${projectId}`);
-    await expect(page.getByText(/1 篇已确认 · 0 篇允许入书/)).toBeVisible();
+    await expect(page.getByText("1 篇已确认", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "修改书名", exact: true }).click();
     await page.locator("input").fill("本人的新书名");
     const renaming = page.waitForResponse((r) =>
@@ -671,13 +673,19 @@ test("real project, full-story correction and independent narrator decisions per
   } catch (error) {
     await writeFile(
       "/tmp/timenook-t19-browser-debug.txt",
-      (await page.locator("body").innerText()) +
+      (await page
+        .locator("body")
+        .innerText()
+        .catch(() => "closed")) +
         "\nERRORS\n" +
         JSON.stringify(errors),
     );
     throw error;
   } finally {
-    await page.context().close();
+    await page
+      .context()
+      .close()
+      .catch(() => {});
   }
 });
 async function unboundStory() {
@@ -850,21 +858,11 @@ test("the actual no-WeChat narrator grants story-purpose assistance then confirm
         exact: true,
       }),
     ).toBeVisible();
-    await page
-      .getByRole("button", { name: "本人确认或调整这版决定", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "确认这版内容", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "暂不入书／撤回入书许可", exact: true })
-      .click();
-    await page
-      .getByPlaceholder("请记录本人本次核对和选择的说明")
-      .fill("本人核对并确认当前版本，但这次暂不入书");
-    await page
-      .getByRole("button", { name: "保存本人这次的两项决定", exact: true })
-      .click();
+    await page.getByRole("button", { name: "确认", exact: true }).click();
+    await expect(
+      page.locator(".live-decision textarea, .live-decision checkbox"),
+    ).toHaveCount(0);
+    await adjustStoryDecision(page, "这版暂不入书");
     await expect
       .poll(
         async () =>
@@ -889,21 +887,7 @@ test("the actual no-WeChat narrator grants story-purpose assistance then confirm
     expect(current.decision.allowInBook).toBe(false);
     expect(current.decision.operatorUserId).toBe(p.operator.user.id);
     expect(current.decision.method).toBe("assisted");
-    await page
-      .getByRole("button", { name: "本人确认或调整这版决定", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "确认这版内容", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "允许这版入书", exact: true })
-      .click();
-    await page
-      .getByPlaceholder("请记录本人本次核对和选择的说明")
-      .fill("本人这次另行同意把刚才确认的这一版故事用于入书");
-    await page
-      .getByRole("button", { name: "保存本人这次的两项决定", exact: true })
-      .click();
+    await adjustStoryDecision(page, "重新确认并允许这版入书");
     await expect
       .poll(
         async () =>
@@ -923,11 +907,17 @@ test("the actual no-WeChat narrator grants story-purpose assistance then confirm
   } catch (error) {
     await writeFile(
       "/tmp/timenook-t19-assisted-debug.txt",
-      await page.locator("body").innerText(),
+      await page
+        .locator("body")
+        .innerText()
+        .catch(() => "closed"),
     );
     throw error;
   } finally {
-    await page.context().close();
+    await page
+      .context()
+      .close()
+      .catch(() => {});
   }
 });
 test("real project resume keeps the same interview's saved native-file timing and an HTTP failure stays recoverable", async ({
@@ -943,10 +933,7 @@ test("real project resume keeps the same interview's saved native-file timing an
     await page.evaluate((url) => {
       location.hash = url;
     }, `#/project?projectId=${projectId}`);
-    await page
-      .getByRole("button", { name: /^继续：/ })
-      .first()
-      .click();
+    await page.locator(".resume-row").first().click();
     await expect(page).toHaveURL(new RegExp(`interviewId=${interview.id}`));
     await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -956,7 +943,9 @@ test("real project resume keeps the same interview's saved native-file timing an
     await page.evaluate(() => {
       window.syntheticTime += 3000;
     });
-    await expect(page.locator(".record-timer")).toHaveText("00:03");
+    await expect(page.locator(".record-timer, .review-duration")).toHaveText(
+      "00:03",
+    );
     await page
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
@@ -965,19 +954,21 @@ test("real project resume keeps the same interview's saved native-file timing an
         .locator(".local-recording")
         .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
-    await expect(page.locator(".record-timer")).toHaveText("00:01");
+    await expect(page.locator(".record-timer, .review-duration")).toHaveText(
+      "00:01",
+    );
     await page.evaluate((url) => {
       location.hash = url;
     }, `#/project?projectId=${projectId}`);
     await page.evaluate(() => {
       window.syntheticTime += 60000;
     });
-    await page
-      .getByRole("button", { name: /^继续：/ })
-      .first()
-      .click();
+    await page.locator(".resume-row").first().click();
     await expect(page).toHaveURL(new RegExp(`interviewId=${interview.id}`));
-    await expect(page.locator(".record-timer")).toHaveText("00:01");
+    await showSavedRecording(page);
+    await expect(page.locator(".record-timer, .review-duration")).toHaveText(
+      "00:01",
+    );
     expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
     await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -987,11 +978,15 @@ test("real project resume keeps the same interview's saved native-file timing an
     await page.evaluate(() => {
       window.syntheticTime += 3000;
     });
-    await expect(page.locator(".record-timer")).toHaveText("00:04");
+    await expect(page.locator(".record-timer, .review-duration")).toHaveText(
+      "00:04",
+    );
     await page
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
-    await expect(page.locator(".record-timer")).toHaveText("00:02");
+    await expect(page.locator(".record-timer, .review-duration")).toHaveText(
+      "00:01",
+    );
     let once = true;
     await page.route(`**/projects/${projectId}/overview`, async (route) => {
       if (once) {
@@ -1022,14 +1017,11 @@ test("real project resume keeps the same interview's saved native-file timing an
     await page
       .getByRole("button", { name: "重新查询项目", exact: true })
       .click();
-    await expect(
-      page.getByRole("button", { name: /^继续：/ }).first(),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: /^继续：/ })
-      .first()
-      .click();
-    await expect(page.locator(".record-timer")).toHaveText("00:02");
+    await expect(page.locator(".resume-row").first()).toBeVisible();
+    await page.locator(".resume-row").first().click();
+    await expect(page.locator(".record-timer, .review-duration")).toHaveText(
+      "00:01",
+    );
     expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(2);
     expect(errors).toEqual([]);
     await page.screenshot({
@@ -1038,11 +1030,19 @@ test("real project resume keeps the same interview's saved native-file timing an
   } catch (error) {
     await writeFile(
       "/tmp/timenook-t19-recording-debug.txt",
-      (await page.locator("body").innerText()) + "\n" + JSON.stringify(errors),
+      (await page
+        .locator("body")
+        .innerText()
+        .catch(() => "closed")) +
+        "\n" +
+        JSON.stringify(errors),
     );
     throw error;
   } finally {
-    await page.context().close();
+    await page
+      .context()
+      .close()
+      .catch(() => {});
   }
 });
 test("a collection-only assisted project home starts real recording without exposing its saved private story or history", async ({
@@ -1099,22 +1099,23 @@ test("a collection-only assisted project home starts real recording without expo
     await expect(
       page.getByText(p.story.revision.title, { exact: true }),
     ).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /^继续：/ })).toHaveCount(0);
+    await expect(page.locator(".resume-row")).toHaveCount(0);
     await page
       .getByRole("button", { name: "本人在场，进入同机协助", exact: true })
       .click();
     await expect(
-      page.getByRole("button", { name: "本人在场，开始本次讲述", exact: true }),
+      page.getByRole("button", { name: "同意所选并开始讲述", exact: true }),
     ).toBeVisible();
     const contextResponse = page.waitForResponse((r) =>
       r.url().endsWith(`/projects/${p.projectId}/interviews/context`),
     );
     await page
-      .getByRole("button", { name: "本人在场，开始本次讲述", exact: true })
+      .getByRole("button", { name: "同意所选并开始讲述", exact: true })
       .click();
     const safe = await (await contextResponse).json();
     expect(safe.data.interviews).toEqual([]);
     expect(JSON.stringify(safe)).not.toContain(p.story.revision.title);
+    await page.getByRole("button", { name: "换个问题", exact: true }).click();
     await page.getByRole("button", { name: "自由讲述", exact: true }).click();
     await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -1134,11 +1135,19 @@ test("a collection-only assisted project home starts real recording without expo
   } catch (error) {
     await writeFile(
       "/tmp/timenook-t19-collection-debug.txt",
-      (await page.locator("body").innerText()) + "\n" + JSON.stringify(errors),
+      (await page
+        .locator("body")
+        .innerText()
+        .catch(() => "closed")) +
+        "\n" +
+        JSON.stringify(errors),
     );
     throw error;
   } finally {
-    await page.context().close();
+    await page
+      .context()
+      .close()
+      .catch(() => {});
   }
 });
 
@@ -1203,6 +1212,7 @@ test("a real revoked Story download clears the active Assisted page including it
     await page.evaluate((url) => {
       location.hash = url;
     }, `#/story?projectId=${p.projectId}&storyId=${p.story.id}`);
+    await storyAction(page, "回听已保存的原声");
     await page
       .getByRole("button", { name: "回听第 1 段原声", exact: true })
       .click();
@@ -1212,6 +1222,9 @@ test("a real revoked Story download clears the active Assisted page including it
         name: "本人在场，申请当次故事确认协助",
         exact: true,
       })
+      .click();
+    await page
+      .getByRole("button", { name: "其他操作与本人权利", exact: true })
       .click();
     await expect(
       page.getByText(`工单 record:${grant.caseId}`, { exact: true }),
@@ -1259,7 +1272,10 @@ test("a real revoked Story download clears the active Assisted page including it
     expect(errors).toEqual([]);
   } finally {
     release();
-    await page.context().close();
+    await page
+      .context()
+      .close()
+      .catch(() => {});
   }
 });
 
@@ -1277,10 +1293,7 @@ test("project progress keeps optional follow-up distinct while the same intervie
     await page.evaluate((url) => {
       location.hash = url;
     }, `#/project?projectId=${p.projectId}&assistedSessionId=${p.collection.id}`);
-    await page
-      .getByRole("button", { name: /^继续：/ })
-      .first()
-      .click();
+    await page.locator(".resume-row").first().click();
     await expect(page).toHaveURL(new RegExp(`interviewId=${p.interview.id}`));
     await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -1290,13 +1303,19 @@ test("project progress keeps optional follow-up distinct while the same intervie
     await page
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
-    await expect(page.locator(".record-timer")).toHaveText("00:01");
+    await expect(page.locator(".record-timer, .review-duration")).toHaveText(
+      "00:01",
+    );
     await page
       .getByRole("button", { name: "提交这段讲述", exact: true })
       .click();
+    await expect(page.locator(".processing-step")).toBeVisible();
     await expect(
-      page.getByText("已确认保存，这台设备也保留了一份", { exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", { name: "再聊一个问题", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "整理成故事", exact: true }),
+    ).toHaveCount(0);
     await expect
       .poll(
         async () => {
@@ -1320,11 +1339,15 @@ test("project progress keeps optional follow-up distinct while the same intervie
         { timeout: 20000 },
       )
       .toBe(true);
+    await page
+      .getByRole("button", { name: "重新查询转写状态", exact: true })
+      .click();
+    await expect(page.getByText("文字已转写", { exact: true })).toBeVisible();
     const followupResponse = page.waitForResponse((r) =>
       r.url().endsWith(`${path.slice(3)}/follow-up`),
     );
     await page
-      .getByRole("button", { name: "请求一条可选追问", exact: true })
+      .getByRole("button", { name: "再聊一个问题", exact: true })
       .click();
     expect((await followupResponse).status()).toBe(202);
     await expect
@@ -1340,9 +1363,7 @@ test("project progress keeps optional follow-up distinct while the same intervie
         { timeout: 20000 },
       )
       .toBe("succeeded");
-    await page
-      .getByRole("button", { name: "查询可选追问", exact: true })
-      .click();
+    // Follow-up status advances automatically; wait for the actual question below.
     await expect(page.locator(".interview-question")).toHaveText(
       "您还记得家门口那棵树旁的一个具体场景吗？",
       { timeout: 20000 },
@@ -1357,29 +1378,25 @@ test("project progress keeps optional follow-up distinct while the same intervie
     await page.evaluate((url) => {
       location.hash = url;
     }, `#/project?projectId=${p.projectId}&assistedSessionId=${p.collection.id}`);
+    await page.getByRole("button", { name: /保存与处理详情/ }).click();
     await expect(
-      page.getByText("可选追问：已完成", { exact: true }),
+      page.locator(".live-task").filter({ hasText: "可选追问" }),
     ).toBeVisible();
     await expect(
-      page.getByText("1 篇待本人确认 · 0 篇已确认 · 0 篇允许入书", {
-        exact: true,
-      }),
+      page.getByRole("button", { name: /待本人确认 1/ }),
     ).toBeVisible();
-    await expect(
-      page.getByText("可选追问不影响继续讲述；故事整理与本人确认分别记录。", {
-        exact: true,
-      }),
-    ).toBeVisible();
+    await expect(page.getByText("0 篇已确认", { exact: true })).toBeVisible();
     await page.evaluate(() => {
       window.syntheticTime += 60000;
     });
     await page
-      .getByRole("button", {
-        name: `继续：${displayed.currentQuestion.snapshot.text}`,
-        exact: true,
-      })
+      .locator(".resume-row")
+      .filter({ hasText: `${displayed.currentQuestion.snapshot.text}` })
       .click();
-    await expect(page.locator(".record-timer")).toHaveText("00:01");
+    await showSavedRecording(page);
+    await expect(page.locator(".record-timer, .review-duration")).toHaveText(
+      "00:01",
+    );
     expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
     const startResponse = page.waitForResponse((r) =>
       r.url().endsWith(`${path.slice(3)}/recording-start`),
@@ -1401,11 +1418,16 @@ test("project progress keeps optional follow-up distinct while the same intervie
     await page.evaluate(() => {
       window.syntheticTime += 3000;
     });
-    await expect(page.locator(".record-timer")).toHaveText("00:04");
+    await expect(page.locator(".record-timer, .review-duration")).toHaveText(
+      "00:04",
+    );
     await page
       .getByRole("button", { name: "说完了，停止录音", exact: true })
       .click();
-    await expect(page.locator(".record-timer")).toHaveText("00:02");
+    await expect(page.locator(".record-timer, .review-duration")).toHaveText(
+      "00:01",
+    );
+    await expect(page.locator(".review-player")).toBeVisible();
     const clips = await page.evaluate((interviewId) => {
       const key = Object.keys(localStorage).find(
         (k) =>
@@ -1509,7 +1531,7 @@ for (const action of ["save", "photos", "title"]) {
               ? "保存书名"
               : action === "photos"
                 ? "选用已保存的最新照片清单"
-                : "保存新版本，重新确认",
+                : "保存为新版本",
           exact: true,
         })
         .click();
@@ -1544,7 +1566,10 @@ for (const action of ["save", "photos", "title"]) {
       ).toEqual({ audio: "only-audio-original", photo: "only-photo-original" });
       expect(errors).toEqual([]);
     } finally {
-      await page.context().close();
+      await page
+        .context()
+        .close()
+        .catch(() => {});
     }
   });
 }

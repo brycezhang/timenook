@@ -15,6 +15,10 @@ import { ProjectServiceTerms } from "../src/projects/service-terms";
 import { Deletions } from "../src/care/deletions";
 import { internalSnapshot } from "../src/projects/internal-profile";
 import { PrivacyRights } from "../src/care/privacy-rights";
+import {
+  PERSISTENT_WEB_EXPIRY,
+  provisionWebAccount,
+} from "../src/web/web-provisioning";
 
 const schema = `web_${randomUUID().replaceAll("-", "")}`;
 const origin = "https://localhost:3447";
@@ -676,6 +680,114 @@ test("the project list hides active-data deletion immediately before payload era
   } finally {
     await plans.close();
     await db.$disconnect();
+  }
+});
+
+test("internal acceptance links remain reusable across browsers and logout until revoked", async (t) => {
+  const previous = await signedIn();
+  config.acceptance = {
+    mode: "internal-acceptance",
+    profileVersion: "internal-acceptance-v1",
+  };
+  try {
+    const upgraded = await app.inject({
+      method: "GET",
+      url: "/v1/web/session",
+      headers: { cookie: previous.cookie },
+    });
+    assert.equal(upgraded.statusCode, 200);
+    assert.equal(upgraded.json().data.session.expiresAt, PERSISTENT_WEB_EXPIRY);
+    assert.match(String(upgraded.headers["set-cookie"]), /Expires=.*9999/);
+
+    const issued = await provisionWebAccount(config, "issue", {
+      userId: previous.account.user.id,
+    });
+    assert.ok(issued.ticket);
+    assert.equal(issued.ticket.expiresAt, PERSISTENT_WEB_EXPIRY);
+    const ticket = new URLSearchParams(new URL(issued.url!).hash.slice(1)).get(
+      "ticket",
+    );
+    const now = Date.now();
+    t.mock.method(Date, "now", () => now + 2 * 86400000);
+    const login = await app.inject({
+      method: "POST",
+      url: "/v1/web/session",
+      headers,
+      payload: { ticket },
+    });
+    assert.equal(login.statusCode, 201);
+    assert.equal(login.json().data.session.expiresAt, PERSISTENT_WEB_EXPIRY);
+    const cookie = String(login.headers["set-cookie"]).split(";")[0];
+    t.mock.method(Date, "now", () => now + 30 * 86400000);
+    assert.equal(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/v1/web/session",
+          headers: { cookie },
+        })
+      ).statusCode,
+      200,
+    );
+    const secondBrowser = await app.inject({
+      method: "POST",
+      url: "/v1/web/session",
+      headers,
+      payload: { ticket },
+    });
+    assert.equal(
+      secondBrowser.statusCode,
+      201,
+      "same link opens another browser",
+    );
+    assert.deepEqual(secondBrowser.json().data.user, login.json().data.user);
+    const logout = await app.inject({
+      method: "DELETE",
+      url: "/v1/web/session",
+      headers: {
+        ...headers,
+        cookie,
+        "x-csrf-token": login.json().data.csrfToken,
+      },
+    });
+    assert.equal(logout.statusCode, 204);
+    assert.equal(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/v1/web/session",
+          headers: { cookie },
+        })
+      ).statusCode,
+      401,
+    );
+    const afterLogout = await app.inject({
+      method: "POST",
+      url: "/v1/web/session",
+      headers,
+      payload: { ticket },
+    });
+    assert.equal(
+      afterLogout.statusCode,
+      201,
+      "same link signs in after logout",
+    );
+    await provisionWebAccount(config, "revoke", { ticketId: issued.ticket.id });
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/v1/web/session",
+          headers,
+          payload: { ticket },
+        })
+      ).statusCode,
+      401,
+      "explicit revocation disables the reusable link",
+    );
+  } finally {
+    t.mock.restoreAll();
+    delete config.acceptance;
   }
 });
 

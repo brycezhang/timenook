@@ -42,7 +42,7 @@
   margin-bottom: 12rpx;
 }
 .chapter-num {
-  font-size: 40rpx;
+  font-size: 32rpx;
   color: #aa967d;
 }
 .chapter-title {
@@ -74,12 +74,12 @@
   margin-top: 26rpx;
 }
 .live-book {
-  font-size: 40rpx;
+  font-size: 32rpx;
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
 .live-book .btn {
-  font-size: 40rpx;
+  font-size: 32rpx;
   min-width: 96rpx;
   min-height: 96rpx;
   line-height: 1.5;
@@ -98,14 +98,176 @@
   padding: 56rpx 32rpx;
   text-align: center;
 }
-.live-cover .title { margin: 32rpx 0; line-height: 1.5; }
-.toc-row { display: flex; justify-content: space-between; gap: 24rpx; border-bottom: 1rpx solid var(--line); padding: 24rpx 0; }
-.excerpt-card, .directory-card { margin-top: 24rpx; padding: 28rpx; border: 1rpx solid var(--line); border-radius: 12rpx; background: var(--surface); }
-.excerpt-body { display: block; line-height: 1.85; margin-top: 20rpx; }
-.directory-title { min-height: 96rpx; width: 100%; font-size: 40rpx; border-bottom: 2rpx solid var(--line); margin: 18rpx 0; }
-.directory-actions { display: flex; flex-wrap: wrap; gap: 16rpx; margin-top: 16rpx; }
-.directory-actions .btn { flex: 1; }
-.live-book .note { font-size: 36rpx; }
-.book-cover-photo { display: block; width: 100%; height: 420rpx; margin: 28rpx auto; }
-.cover-editor { padding: 28rpx; border: 1rpx solid var(--line); border-radius: 12rpx; background: var(--surface); }
-.cover-salutation { width: 100%; min-height: 96rpx; font-size: 40rpx; border-bottom: 2rpx solid var(--line); margin-top: 18rpx; }
+.live-cover .title {
+  margin: 32rpx 0;
+  line-height: 1.5;
+}
+.toc-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24rpx;
+  border-bottom: 1rpx solid var(--line);
+  padding: 24rpx 0;
+}
+.excerpt-card,
+.directory-card {
+  margin-top: 24rpx;
+  padding: 28rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 12rpx;
+  background: var(--surface);
+}
+.excerpt-body {
+  display: block;
+  line-height: 1.85;
+  margin-top: 20rpx;
+}
+.directory-title {
+  min-height: 96rpx;
+  width: 100%;
+  font-size: 32rpx;
+  border-bottom: 2rpx solid var(--line);
+  margin: 18rpx 0;
+}
+.directory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+.directory-actions .btn {
+  flex: 1;
+}
+.live-book .note {
+  font-size: 28rpx;
+}
+.book-cover-photo {
+  display: block;
+  width: 100%;
+  height: 420rpx;
+  margin: 28rpx auto;
+}
+.cover-editor {
+  padding: 28rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 12rpx;
+  background: var(--surface);
+}
+.cover-salutation {
+  width: 100%;
+  min-height: 96rpx;
+  font-size: 32rpx;
+  border-bottom: 2rpx solid var(--line);
+  margin-top: 18rpx;
+}
+
+.live-book .btn {
+  font-size: 34rpx;
+  border-radius: 60rpx;
+}
+.live-tabs .tab {
+  min-height: 86rpx;
+  font-size: 23rpx;
+}
+.live-cover {
+  border-radius: 6rpx 18rpx 18rpx 6rpx;
+  box-shadow: 12rpx 18rpx 36rpx #593b2c18;
+  min-height: 480rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.live-cover .title {
+  font-size: 50rpx;
+}
+.book-status {
+  color: var(--olive);
+  font-size: 28rpx;
+}
+.excerpt-body {
+  font-size: 27rpx;
+}
+
+.book-empty-preview image {
+  width: 100%;
+  height: 440rpx;
+  border-radius: 14rpx;
+}
+.live-book .empty {
+  padding: 36rpx 0;
+}
+
+.book-hero {
+  margin-bottom: 54rpx;
+}
+.live-cover {
+  max-width: 460rpx;
+  min-height: 510rpx;
+  margin: 0 auto 48rpx;
+  padding: 52rpx 34rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-radius: 4rpx;
+  box-shadow: 6rpx 8rpx 0 #e9e1d6;
+}
+.live-cover .title {
+  font-size: 52rpx;
+}
+.book-summary > .title {
+  margin-top: 18rpx;
+}
+.book-summary .eyebrow {
+  font-size: 21rpx;
+  color: var(--muted);
+  letter-spacing: 2rpx;
+}
+.book-status {
+  margin-top: 26rpx;
+  color: var(--olive);
+  font-size: 27rpx;
+}
+.toc-row {
+  font-size: 28rpx;
+  padding: 30rpx 0;
+}
+.toc-row > text:first-child {
+  flex: 1;
+}
+.toc-row > text:last-child {
+  font-size: 23rpx;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.excerpt-card {
+  border: 0;
+  border-left: 2rpx solid var(--line);
+  border-radius: 0;
+  padding: 14rpx 28rpx;
+  background: transparent;
+}
+.excerpt-body {
+  font-family: "Songti SC", "STSong", SimSun, serif;
+  font-size: 32rpx;
+  line-height: 2;
+}
+.book-display {
+  height: 440rpx;
+  max-width: 460rpx;
+  margin: 20rpx auto 28rpx;
+  border-radius: 6rpx;
+  overflow: hidden;
+}
+.book-content {
+  margin: 0;
+  padding: 24rpx 42rpx 64rpx;
+  border-radius: 0;
+}
+.chapter-row {
+  background: transparent;
+  border: 0;
+  border-bottom: 1rpx solid var(--line);
+  border-radius: 0;
+  padding: 30rpx 0;
+  margin: 0;
+}

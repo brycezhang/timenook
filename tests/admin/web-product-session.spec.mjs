@@ -1,3 +1,4 @@
+import { chooseDefaultQuestion } from "./recording-step-helper.mjs";
 import { test, expect } from "@playwright/test";
 import { prepareRecordingStep } from "./recording-step-helper.mjs";
 import {
@@ -672,10 +673,10 @@ test.describe("production shared pages", () => {
     await page
       .getByRole("button", { name: "开始一段讲述", exact: true })
       .click();
-    await page
-      .getByRole("button", { name: "就从这个问题开始", exact: true })
-      .click();
-    await expect(page.locator(".step-title")).toHaveText("准备开讲");
+    await chooseDefaultQuestion(page);
+    await expect(
+      page.getByRole("button", { name: "开始说", exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "开始说", exact: true }),
     ).toBeVisible();
@@ -779,7 +780,9 @@ test("shared recording submits its saved original through cookie and CSRF", asyn
   );
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByText("已在测试环境保存，真实云端保存仍待验证", { exact: true }),
+    page.getByText("录音已在测试环境保存；这不代表真实云端存储。", {
+      exact: true,
+    }),
   ).toBeVisible();
   const downloaded = await page.evaluate(
     async ({ projectId, sessionModule }) => {
@@ -825,4 +828,91 @@ test("shared recording submits its saved original through cookie and CSRF", asyn
   );
   expect(downloaded.size).toBe(bytes.length);
   expect(downloaded.mime).toBe("audio/mpeg");
+});
+
+test("continuous typing keeps focus and the full value in shared forms", async ({
+  page,
+}) => {
+  const link = await cli("issue", { userId: projectAccount });
+  await openLink(page, link.url);
+  await page.getByRole("button", { name: "进入我的故事书" }).click();
+  await page.getByRole("link", { name: "打开故事书", exact: true }).click();
+  await page
+    .getByRole("button", { name: "个人大纲与问题", exact: true })
+    .click();
+  const title = page.locator(".chapter input").first();
+  await title.fill("");
+  await title.pressSequentially("我的童年", { delay: 60 });
+  await expect(title).toHaveValue("我的童年");
+  await expect(title).toBeFocused();
+  await title.press("ArrowLeft");
+  await title.pressSequentially("珍贵的", { delay: 60 });
+  await expect(title).toHaveValue("我的童珍贵的年");
+  const question = page.locator(".question textarea").first();
+  await question.fill("");
+  await question.pressSequentially("小时候住在哪里？", { delay: 60 });
+  await expect(question).toHaveValue("小时候住在哪里？");
+  await expect(question).toBeFocused();
+  await page.getByRole("button", { name: "保存个人计划", exact: true }).click();
+  await expect(
+    page.getByText("个人计划已保存；已回答内容和本人偏好继续保留。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".chapter input").first()).toHaveValue(
+    "我的童珍贵的年",
+  );
+  await expect(page.locator(".question textarea").first()).toHaveValue(
+    "小时候住在哪里？",
+  );
+});
+
+test("new narration uses the shared native microphone screen even after an earlier interview was saved", async ({
+  page,
+}) => {
+  const link = await cli("issue", { userId: projectAccount });
+  await openLink(page, link.url);
+  await page.getByRole("button", { name: "进入我的故事书" }).click();
+  await page.getByRole("link", { name: "打开故事书", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "开始一段讲述", exact: true }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "开始一段讲述", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "就从这个问题开始", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".processing-step, .review-player")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "就从这个问题开始", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "开始说", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".processing-step")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "换个问题", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "说完了，停止录音", exact: true }),
+  ).toHaveCount(0);
+  const route = page.url();
+  expect(route).toMatch(/draftId=[a-f0-9-]{36}/);
+  for (const width of [390, 320, 1280]) {
+    await page.setViewportSize({ width, height: width === 320 ? 760 : 844 });
+    const mic = await page.locator(".record-button").boundingBox();
+    expect(mic.width).toBeGreaterThanOrEqual(112);
+    expect(mic.height).toBeGreaterThanOrEqual(112);
+    expect(mic.y).toBeGreaterThanOrEqual(48);
+    expect(mic.y + mic.height).toBeLessThanOrEqual(width === 320 ? 760 : 844);
+    expect(await page.locator("#page").evaluate((n) => n.scrollTop)).toBe(0);
+    await page.screenshot({
+      path: `/tmp/timenook-native-recording-${width}.png`,
+    });
+  }
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "开始说", exact: true }),
+  ).toBeEnabled();
+  expect(page.url()).toBe(route);
 });

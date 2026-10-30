@@ -47,7 +47,8 @@ export function mountMiniProgram(
     route = "",
     template: Element | null = null,
     serial = 0,
-    scheduled = false;
+    scheduled = false,
+    composing = false;
   const definitions: Record<string, any> = {};
   let registering = "";
   let pageLoad = Promise.resolve();
@@ -62,12 +63,18 @@ export function mountMiniProgram(
       .replace(/\bimage(?=[\s:.#>+\[{,])/g, "img")
       .replace(
         /(-?[\d.]+)rpx/g,
-        (_, n) => `${(Number(n) * phone.clientWidth) / 750}px`,
+        (_, n) =>
+          `${(Number(n) * (options.product && window.innerWidth > 650 ? 390 : phone.clientWidth)) / 750}px`,
       )
       .replace(/100vh/g, "var(--phone-height)");
   }
   function updateStyles() {
     phone.style.setProperty("--phone-height", phone.clientHeight + "px");
+    if (options.product)
+      document.body.style.setProperty(
+        "--site-header-height",
+        `${document.querySelector(".site-header")!.getBoundingClientRect().height}px`,
+      );
     cssTag.textContent = css(
       String(styles["../miniprogram/styles/tokens.wxss"]) +
         String(styles["../miniprogram/app.wxss"]) +
@@ -210,7 +217,7 @@ export function mountMiniProgram(
             url.pathname,
           )) ||
         (options.method === "POST" &&
-          /\/v1\/(?:orders(?:\/[a-f0-9-]{36}\/(?:payment|close))?|projects\/[a-f0-9-]{36}\/(?:stories\/(?:context|organize)|invitations|consents(?:\/revoke)?|care-requests|assisted-sessions|tasks(?:\/status|\/[a-f0-9-]{36}\/retry)|plan(?:\/preferences)?|interviews(?:\/context|\/[a-f0-9-]{36}\/(?:resume|recording-start|collection-check|actual-question|follow-up(?:\/(?:status|finish))?)|\/[a-f0-9-]{36}\/clips(?:\/[a-f0-9-]{36}\/(?:upload|seal|status|release))?)?)|invitations\/[A-Za-z0-9_-]{43}\/requests|binding-requests\/[a-f0-9-]{36}\/approve)$/.test(
+          /\/v1\/(?:orders(?:\/[a-f0-9-]{36}\/(?:payment|close))?|projects\/[a-f0-9-]{36}\/(?:stories\/(?:context|organize)|invitations|consents(?:\/(?:revoke|start))?|care-requests|assisted-sessions|tasks(?:\/status|\/[a-f0-9-]{36}\/retry)|plan(?:\/preferences)?|interviews(?:\/context|\/[a-f0-9-]{36}\/(?:resume|recording-start|collection-check|actual-question|follow-up(?:\/(?:status|finish))?)|\/[a-f0-9-]{36}\/clips(?:\/[a-f0-9-]{36}\/(?:upload|seal|status|release))?)?)|invitations\/[A-Za-z0-9_-]{43}\/requests|binding-requests\/[a-f0-9-]{36}\/approve)$/.test(
             url.pathname,
           ));
       void (async () => {
@@ -286,6 +293,18 @@ export function mountMiniProgram(
         }
       })();
     },
+    pageScrollTo(options: any) {
+      if (options.selector)
+        root
+          .querySelector(options.selector)
+          ?.scrollIntoView({ block: "start" });
+      else root.scrollTop = options.scrollTop ?? 0;
+      options.success?.({ errMsg: "pageScrollTo:ok" });
+    },
+    redirectTo({ url }: any) {
+      history.replaceState(null, "", targetUrl(url));
+      void mount();
+    },
     navigateTo({ url }: any) {
       location.hash = targetUrl(url);
     },
@@ -315,6 +334,28 @@ export function mountMiniProgram(
       );
     },
     showModal: modal,
+    showActionSheet(options: any) {
+      overlay.replaceChildren();
+      const list = document.createElement("div");
+      list.className = "modal action-sheet";
+      options.itemList.forEach((label: string, tapIndex: number) => {
+        const button = document.createElement("button");
+        button.textContent = label;
+        button.onclick = () => {
+          overlay.replaceChildren();
+          options.success?.({ tapIndex });
+        };
+        list.append(button);
+      });
+      const cancel = document.createElement("button");
+      cancel.textContent = "取消";
+      cancel.onclick = () => {
+        overlay.replaceChildren();
+        options.fail?.({ errMsg: "showActionSheet:fail cancel" });
+      };
+      list.append(cancel);
+      overlay.append(list);
+    },
     setNavigationBarTitle({ title }: any) {
       document.querySelector("#nav-title")!.textContent = title;
     },
@@ -477,9 +518,11 @@ export function mountMiniProgram(
     const match = source.match(/^{{([\s\S]*)}}$/);
     return match ? evaluate(match[1], scope) : source;
   }
-  function renderChildren(node: Node, scope: any, parent: Node) {
+  function renderChildren(node: Node, scope: any, parent: Node, path = "root") {
+    let childIndex = 0;
     let conditional: boolean | null = null;
     for (const child of Array.from(node.childNodes)) {
+      const key = `${path}.${childIndex++}`;
       if (child.nodeType === 3) {
         parent.appendChild(
           document.createTextNode(interpolate(child.textContent || "", scope)),
@@ -507,30 +550,76 @@ export function mountMiniProgram(
             [el.getAttribute("wx:for-item") || "item"]: item,
             [el.getAttribute("wx:for-index") || "index"]: index,
           };
-          renderElement(el, local, parent);
+          renderElement(el, local, parent, `${key}.${index}`);
         });
-      } else renderElement(el, scope, parent);
+      } else renderElement(el, scope, parent, key);
     }
   }
-  function renderElement(el: Element, scope: any, parent: Node) {
+  function renderElement(el: Element, scope: any, parent: Node, key: string) {
     if (el.tagName === "block") {
-      renderChildren(el, scope, parent);
+      renderChildren(el, scope, parent, key);
       return;
     }
     const mapped: Record<string, string> = {
       view: "div",
       text: "span",
       image: "img",
+      "checkbox-group": "div",
+      checkbox: "input",
+      slider: "input",
     };
     const out = document.createElement(mapped[el.tagName] || el.tagName);
+    out.dataset.renderKey = key;
+    if (el.tagName === "checkbox") (out as HTMLInputElement).type = "checkbox";
+    if (el.tagName === "slider") (out as HTMLInputElement).type = "range";
     for (const attr of Array.from(el.attributes)) {
       if (attr.name.startsWith("wx:") || attr.name === "xmlns:wx") continue;
+      if (attr.name === "open-type" && attr.value === "share") {
+        out.addEventListener("click", () => {
+          const share = current?.onShareAppMessage?.();
+          if (!share) return;
+          const source = new URL(share.path, location.origin);
+          const token = source.searchParams.get("token");
+          const url =
+            options.product && token
+              ? new URL(`/app/invitation/${token}`, location.origin).href
+              : new URL(targetUrl(share.path), location.href).href;
+          if (navigator.share) {
+            void navigator.share({ title: share.title, url }).catch((error) => {
+              if (error.name !== "AbortError")
+                toast("分享未完成，请复制邀请链接后发送。");
+            });
+          } else {
+            wx.setClipboardData({
+              data: url,
+              success: () => toast("邀请链接已复制，可以发给讲述者。"),
+              fail: () => toast("复制未完成，请重试复制邀请链接。"),
+            });
+          }
+        });
+        continue;
+      }
       if (attr.name.startsWith("bind")) {
         const event =
-          attr.name.slice(4) === "tap" ? "click" : attr.name.slice(4);
+          attr.name.slice(4) === "tap"
+            ? "click"
+            : attr.name.slice(4) === "changing"
+              ? "input"
+              : attr.name.slice(4);
         out.addEventListener(event, (ev) => {
           ev.stopPropagation();
-          const detail = { value: (ev.target as HTMLInputElement).value };
+          const detail = {
+            value:
+              el.tagName === "checkbox-group"
+                ? Array.from(
+                    out.querySelectorAll<HTMLInputElement>(
+                      'input[type="checkbox"]:checked',
+                    ),
+                  ).map((input) => input.value)
+                : el.tagName === "slider"
+                  ? Number((ev.target as HTMLInputElement).value)
+                  : (ev.target as HTMLInputElement).value,
+          };
           try {
             current?.[attr.value]?.({
               currentTarget: { dataset: (out as HTMLElement).dataset },
@@ -545,6 +634,10 @@ export function mountMiniProgram(
       }
       if (attr.name === "disabled") {
         (out as HTMLButtonElement).disabled = !!value(attr.value, scope);
+        continue;
+      }
+      if (attr.name === "checked") {
+        (out as HTMLInputElement).checked = !!value(attr.value, scope);
         continue;
       }
       const v = interpolate(attr.value, scope);
@@ -579,33 +672,144 @@ export function mountMiniProgram(
       }
       out.setAttribute(attr.name, v);
     }
-    renderChildren(el, scope, out);
+    renderChildren(el, scope, out, key);
     parent.appendChild(out);
+  }
+  function updateChildren(parent: Node, next: Node) {
+    const children = Array.from(next.childNodes);
+    children.forEach((fresh, index) => {
+      const previous = parent.childNodes[index];
+      if (!previous) {
+        parent.appendChild(fresh);
+        return;
+      }
+      if (
+        previous.nodeType === Node.TEXT_NODE &&
+        fresh.nodeType === Node.TEXT_NODE
+      ) {
+        if (previous.textContent !== fresh.textContent)
+          previous.textContent = fresh.textContent;
+        return;
+      }
+      if (
+        previous instanceof HTMLElement &&
+        fresh instanceof HTMLElement &&
+        previous.tagName === fresh.tagName &&
+        previous.dataset.renderKey === fresh.dataset.renderKey &&
+        !(fresh instanceof HTMLImageElement && !fresh.hasAttribute("src"))
+      ) {
+        for (const attr of Array.from(previous.attributes))
+          if (!fresh.hasAttribute(attr.name))
+            previous.removeAttribute(attr.name);
+        for (const attr of Array.from(fresh.attributes))
+          if (previous.getAttribute(attr.name) !== attr.value)
+            previous.setAttribute(attr.name, attr.value);
+        if (
+          (previous instanceof HTMLInputElement &&
+            fresh instanceof HTMLInputElement) ||
+          (previous instanceof HTMLTextAreaElement &&
+            fresh instanceof HTMLTextAreaElement)
+        ) {
+          if (previous.value !== fresh.value) previous.value = fresh.value;
+          if (
+            previous instanceof HTMLInputElement &&
+            fresh instanceof HTMLInputElement
+          )
+            previous.checked = fresh.checked;
+        }
+        updateChildren(previous, fresh);
+      } else parent.replaceChild(fresh, previous);
+    });
+    while (parent.childNodes.length > children.length)
+      parent.lastChild?.remove();
   }
   function render() {
     scheduled = false;
-    if (!current || !template) return;
+    if (!current || !template || composing) return;
     const active = document.activeElement as HTMLInputElement,
-      field = active?.dataset?.field,
-      caret = field ? active.selectionStart : null;
+      field =
+        root.contains(active) && ["INPUT", "TEXTAREA"].includes(active?.tagName)
+          ? active?.dataset?.renderKey
+          : undefined,
+      caret = field ? active.selectionStart : null,
+      end = field ? active.selectionEnd : null,
+      direction = field ? active.selectionDirection : null,
+      scroll = root.scrollTop;
     const fragment = document.createDocumentFragment();
     try {
       renderChildren(template, current.data, fragment);
-      root.replaceChildren(fragment);
+      updateChildren(root, fragment);
+      root.dataset.page = route;
+      if (options.product) {
+        const projectId =
+          current.projectId ||
+          new URLSearchParams(
+            location.hash.split("?")[1] || options.initialPage?.split("?")[1],
+          ).get("projectId");
+        const activePage = [
+          "book",
+          "manuscript",
+          "print",
+          "production",
+          "quality",
+        ].includes(route)
+          ? "book"
+          : [
+                "account",
+                "settings",
+                "service",
+                "export",
+                "deletion-status",
+                "refunds",
+              ].includes(route)
+            ? "account"
+            : "project";
+        document
+          .querySelectorAll<HTMLAnchorElement>("[data-product-page]")
+          .forEach((link) => {
+            const page = link.dataset.productPage!;
+            link.href = `#/${page}${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`;
+            if (page === activePage) link.setAttribute("aria-current", "page");
+            else link.removeAttribute("aria-current");
+          });
+        const title = document.querySelector("#current-project-title");
+        if (title)
+          title.textContent =
+            current.data.overview?.bookTitle ||
+            current.data.version?.snapshot.cover.title ||
+            current.data.context?.bookTitle ||
+            current.data.context?.current?.snapshot.cover.title ||
+            "";
+      }
       if (field) {
         const next = root.querySelector<HTMLInputElement>(
-          `[data-field="${field}"]`,
+          `[data-render-key="${field}"]`,
         );
         next?.focus({ preventScroll: true });
-        if (caret !== null) next?.setSelectionRange(caret, caret);
+        if (caret !== null && end !== null)
+          next?.setSelectionRange(caret, end, direction ?? undefined);
       }
+      root.scrollTop = scroll;
     } catch (e) {
       console.error(e);
       root.innerHTML =
         '<div class="preview-error">页面渲染失败，请查看控制台。</div>';
     }
   }
+  const compositionStart = () => {
+    composing = true;
+  };
+  const compositionEnd = () => {
+    composing = false;
+    if (!scheduled) {
+      scheduled = true;
+      queueMicrotask(render);
+    }
+  };
+  root.addEventListener("compositionstart", compositionStart);
+  root.addEventListener("compositionend", compositionEnd);
   async function mount() {
+    composing = false;
     const ticket = ++serial;
     const hash =
       location.hash.replace(/^#\/?/, "") || options.initialPage || "home";
@@ -754,6 +958,8 @@ export function mountMiniProgram(
     root.replaceChildren();
     overlay.replaceChildren();
     observer.disconnect();
+    root.removeEventListener("compositionstart", compositionStart);
+    root.removeEventListener("compositionend", compositionEnd);
     cssTag.remove();
     window.removeEventListener("hashchange", onHashChange);
     document.removeEventListener("visibilitychange", onVisibility);

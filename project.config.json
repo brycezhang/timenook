@@ -1,7 +1,7 @@
 {
   "description": "时光里 · 岁月成书原生小程序前端",
   "projectname": "timenook",
-  "appid": "touristappid",
+  "appid": "wxa54f81265fba2439",
   "compileType": "miniprogram",
   "miniprogramRoot": "dist/miniprogram/",
   "setting": { "es6": true, "minified": true, "urlCheck": true },

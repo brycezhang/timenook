@@ -71,17 +71,3 @@ tabs.forEach((tab, index) => {
     }
   });
 });
-
-const orderDialog = element<HTMLDialogElement>("#order-dialog");
-let orderOpener: HTMLElement | null = null;
-for (const button of document.querySelectorAll<HTMLButtonElement>(
-  "[data-order]",
-)) {
-  button.addEventListener("click", () => {
-    orderOpener = button;
-    orderDialog.showModal();
-  });
-}
-element(".dialog-close").addEventListener("click", () => orderDialog.close());
-element("#dialog-done").addEventListener("click", () => orderDialog.close());
-orderDialog.addEventListener("close", () => orderOpener?.focus());

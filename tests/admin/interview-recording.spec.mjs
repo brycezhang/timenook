@@ -1,3 +1,4 @@
+import { chooseDefaultQuestion } from "./recording-step-helper.mjs";
 import { prepareRecordingStep } from "./recording-step-helper.mjs";
 import {
   createPrivacyFixtureApplication,
@@ -322,13 +323,16 @@ test("bound project home reaches the actual recording page, seals a file and ret
 }) => {
   const page = await openPage(browser, narrator);
   await page.goto(`${base}/#/welcome?projectId=${projectId}`);
+  await page
+    .getByRole("button", { name: "调整用途与资料服务", exact: true })
+    .click();
   const overviewLoaded = page.waitForResponse(
     (response) =>
       response.request().method() === "GET" &&
       response.url().endsWith(`/v1/projects/${projectId}/overview`),
   );
   await page
-    .getByRole("button", { name: "进入本人参与的项目", exact: true })
+    .getByRole("button", { name: "返回本人参与的项目", exact: true })
     .click();
   const overviewResponse = await overviewLoaded;
   expect(overviewResponse.status()).toBe(200);
@@ -340,18 +344,34 @@ test("bound project home reaches the actual recording page, seals a file and ret
   const title = page.locator(".live-project > .title");
   await expect(title).toHaveCount(1);
   await expect(title).toHaveText(overview.bookTitle);
-  await expect(
-    page.getByText(
-      `${overview.summary.pending} 篇待本人确认 · ${overview.summary.confirmed} 篇已确认 · ${overview.summary.included} 篇允许入书`,
-      { exact: true },
-    ),
-  ).toBeVisible();
+  await expect(page.locator(".filters")).toBeVisible();
   const began = performance.now();
   await page.getByRole("button", { name: "开始一段讲述", exact: true }).click();
-  await page
-    .getByRole("button", { name: "就从这个问题开始", exact: true })
-    .click();
-  await expect(page.locator(".step-title")).toHaveText("准备开讲");
+  for (const width of [320, 375, 390, 430]) {
+    await page.setViewportSize({ width, height: 900 });
+    const actions = page.locator(".question-card .question-actions");
+    await expect(actions).toBeVisible();
+    const start = await actions
+      .getByRole("button", { name: "就从这个问题开始", exact: true })
+      .boundingBox();
+    const change = await actions
+      .getByRole("button", { name: "换个问题", exact: true })
+      .boundingBox();
+    expect(start.height).toBeGreaterThanOrEqual(52);
+    expect(change.height).toBeGreaterThanOrEqual(48);
+    expect(change.y - start.y - start.height).toBeGreaterThanOrEqual(12);
+    expect(
+      await page
+        .locator("#page")
+        .evaluate((node) => node.scrollWidth <= node.clientWidth),
+    ).toBe(true);
+    await page.screenshot({ path: `/tmp/timenook-ui1-choose-${width}.png` });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await chooseDefaultQuestion(page);
+  await expect(
+    page.getByRole("button", { name: "开始说", exact: true }),
+  ).toBeVisible();
   await page.screenshot({ path: "/tmp/timenook-w03-prepare-390.png" });
   await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -391,7 +411,7 @@ test("bound project home reaches the actual recording page, seals a file and ret
   expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByText("已在测试环境保存，真实云端保存仍待验证", {
+    page.getByText("录音已在测试环境保存；这不代表真实云端存储。", {
       exact: true,
     }),
   ).toBeVisible();
@@ -417,23 +437,23 @@ test("bound project home reaches the actual recording page, seals a file and ret
       })),
     );
   for (const size of sizes) {
-    expect(size.font).toBeGreaterThanOrEqual(20);
+    expect(size.font).toBeGreaterThanOrEqual(16);
     expect(size.height).toBeGreaterThanOrEqual(48);
     expect(size.width).toBeGreaterThanOrEqual(48);
   }
-  await page.getByRole("button", { name: "今天先到这里", exact: true }).click();
+  await page.getByRole("button", { name: "先回到项目", exact: true }).click();
   await page
-    .getByRole("button", { name: "进入本人参与的项目", exact: true })
-    .click();
-  await page
-    .getByRole("button", {
-      name: `继续：${context.interviews[0].currentQuestion.snapshot.text}`,
-      exact: true,
+    .locator(".resume-row")
+    .filter({
+      hasText: `${context.interviews[0].currentQuestion.snapshot.text}`,
     })
     .click();
+  await expect(page.locator(".processing-status")).toContainText(
+    "原声已保存，等待转写",
+  );
   await expect(
-    page.getByText("已确认保存，这台设备也保留了一份", { exact: true }),
-  ).toBeVisible();
+    page.getByRole("button", { name: "整理成故事", exact: true }),
+  ).toHaveCount(0);
   expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
   await page.setViewportSize({ width: 768, height: 1000 });
   await page.screenshot({ path: "/tmp/timenook-t14-recording-768.png" });
@@ -492,23 +512,29 @@ test("actual Page and HTTP retain an older answer source after another question 
       },
     ),
   );
-  await page
-    .getByRole("button", { name: "重新查询与恢复", exact: true })
-    .click();
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
   await expect(page.getByText(laterText, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
+  await expect(page.locator(".processing-status")).toContainText(
+    "原声已保存，等待转写",
+  );
   await expect(
-    page.getByRole("button", { name: "重新核对保存结果", exact: true }),
-  ).toBeVisible();
+    page.getByRole("button", { name: "整理成故事", exact: true }),
+  ).toHaveCount(0);
   await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
   await page
     .getByRole("button", { name: "说完了，停止录音", exact: true })
     .click();
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
+  await expect(page.locator(".processing-status")).toContainText(
+    "原声已保存，等待转写",
+  );
   await expect(
-    page.getByRole("button", { name: "重新核对保存结果", exact: true }),
-  ).toHaveCount(2);
+    page.getByRole("button", { name: "整理成故事", exact: true }),
+  ).toHaveCount(0);
   const restored = data(
     await request(
       "GET",
@@ -562,14 +588,29 @@ test("a collection-only assisted participant starts and resumes its own pending 
   const page = await openPage(browser, buyer);
   await page.goto(`${base}/#/welcome?projectId=${id}`);
   await page
-    .getByRole("button", { name: "无个人微信？本人在场同机协助", exact: true })
+    .getByRole("button", { name: "本人在场，协助开始", exact: true })
     .click();
+  const choices = page.getByRole("checkbox");
+  await expect(choices).toHaveCount(3);
+  await choices.nth(0).check();
+  await choices.nth(1).uncheck();
+  await choices.nth(2).uncheck();
+  const submittedChoices = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().endsWith("/assisted-sessions")) {
+      const { purpose, granted } = r.postDataJSON();
+      submittedChoices.push({ purpose, granted });
+    }
+  });
   await page
-    .getByRole("button", { name: "本人在场，开始本次讲述", exact: true })
+    .getByRole("button", { name: "同意所选并开始讲述", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "就从这个问题开始", exact: true })
-    .click();
+  await chooseDefaultQuestion(page);
+  expect(submittedChoices).toEqual([
+    { purpose: "collection", granted: true },
+    { purpose: "ai", granted: false },
+    { purpose: "sharing", granted: false },
+  ]);
   await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
   await page
@@ -580,18 +621,31 @@ test("a collection-only assisted participant starts and resumes its own pending 
       .locator(".local-recording")
       .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "重新查询与恢复", exact: true })
-    .click();
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
   await expect(
     page
       .locator(".local-recording")
       .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
+  await expect(page.locator(".processing-status")).toContainText(
+    "原声已保存，等待转写",
+  );
+  await expect(page.locator(".processing-status")).toContainText(
+    "测试环境保存",
+  );
   await expect(
-    page.getByText("已确认保存，这台设备也保留了一份", { exact: true }),
-  ).toBeVisible();
+    page.getByRole("button", { name: "整理成故事", exact: true }),
+  ).toHaveCount(0);
+  const assisted = data(
+    await request("GET", `/v1/projects/${id}/participation`, buyer),
+    200,
+  );
+  expect(assisted.choices.find((row) => row.purpose === "ai").granted).not.toBe(
+    true,
+  );
   expect(
     (await request("GET", `/v1/projects/${id}/interviews`, buyer)).statusCode,
   ).toBe(403);
@@ -692,7 +746,9 @@ test("actual browser MP3 pauses, survives reload in IndexedDB and seals the iden
   await expect(page.locator(".local-recording")).toBeVisible();
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByText("已在测试环境保存，真实云端保存仍待验证", { exact: true }),
+    page.getByText("录音已在测试环境保存；这不代表真实云端存储。", {
+      exact: true,
+    }),
   ).toBeVisible();
   const restored = data(
     await request(

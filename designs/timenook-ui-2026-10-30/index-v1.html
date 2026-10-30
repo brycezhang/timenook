@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#f8f4ed" />
+    <title>时光里 · 两端 UI 设计提案</title>
+    <link rel="icon" href="assets/icons/book-open.svg" />
+    <link rel="stylesheet" href="style-v1.css" />
+  </head>
+  <body>
+    <header class="review-bar">
+      <a class="review-brand" href="#project"
+        >时光里 <span>设计提案 / 2026.10.30</span></a
+      >
+      <div class="view-switch" aria-label="预览平台">
+        <button data-view="desktop" aria-pressed="true">桌面网页</button>
+        <button data-view="web" aria-pressed="false">手机网页</button>
+        <button data-view="mini" aria-pressed="false">微信小程序</button>
+      </div>
+      <div class="review-actions">
+        <a href="review.html">现状与实施清单</a
+        ><button id="reset">重置体验</button>
+      </div>
+    </header>
+    <div class="prototype-notice">
+      可点击设计原型 · 虚构示例 ·
+      录音、回听、云端处理、确认与制作均为交互演示，不连接业务服务
+    </div>
+    <div class="workbench">
+      <aside class="review-rail">
+        <p class="rail-caption">岁月成书 / UI 梳理</p>
+        <h1>把下一步，<br />轻轻递到眼前。</h1>
+        <p>延续纸张、宋体与橄榄绿。让讲述回到中心，让保存与确认更清楚。</p>
+        <label class="review-label" for="screen-picker">查看页面 / 状态</label>
+        <select id="screen-picker"></select>
+        <label class="review-label" for="role-picker">预览当前操作身份</label>
+        <select id="role-picker">
+          <option value="narrator">讲述者本人</option>
+          <option value="initiator">发起人</option>
+        </select>
+        <label class="review-label" for="width-picker">手机预览宽度</label>
+        <select id="width-picker">
+          <option value="320">320 px</option>
+          <option value="375">375 px</option>
+          <option value="390" selected>390 px</option>
+          <option value="430">430 px</option>
+        </select>
+        <label class="review-label" for="network-picker"
+          >保存场景（仅评审控制）</label
+        >
+        <select id="network-picker">
+          <option value="normal">正常保存</option>
+          <option value="failed">上传中断</option>
+        </select>
+        <div class="rail-note" id="design-note"></div>
+        <div class="swatches">
+          <span style="background: #f8f4ed"></span
+          ><span style="background: #fffcf7"></span
+          ><span style="background: #566348"></span
+          ><span style="background: #593b2c"></span>
+        </div>
+        <p class="tiny">
+          方案待评审。两端共用步骤、文案和状态；登录、权限及文件操作按平台适配。小程序原生导航由平台提供。
+        </p>
+      </aside>
+      <div class="preview-area">
+        <div class="viewport-label" id="viewport-label">
+          桌面网页 · 自适应布局
+        </div>
+        <div class="device" data-view="desktop">
+          <div id="app"></div>
+        </div>
+      </div>
+    </div>
+    <dialog id="sheet" aria-labelledby="sheet-title">
+      <div id="sheet-content"></div>
+    </dialog>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="app-v1.js"></script>
+  </body>
+</html>

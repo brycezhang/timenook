@@ -1,3 +1,5 @@
+import { resumeVisiblePage } from "./recording-step-helper.mjs";
+import { openInterviewPhotos, storyAction } from "./recording-step-helper.mjs";
 import {
   prepareRecordingStep,
   showProcessingStep,
@@ -33,6 +35,7 @@ let api,
   latestPage;
 const errors = [];
 let invalidComposition = false;
+let noContentComposition = false;
 const base = "http://127.0.0.1:5180";
 const data = (r, status = 201) => {
   expect(r.statusCode, r.body).toBe(status);
@@ -184,14 +187,25 @@ test.beforeAll(async () => {
                   message: {
                     role: "assistant",
                     content: JSON.stringify(
-                      invalidComposition
+                      noContentComposition
                         ? {
-                            ...output,
-                            paragraphs: [
-                              { text: "无来源正文", sourceRefs: ["invented"] },
-                            ],
+                            status: "not_applicable",
+                            title: null,
+                            theme: null,
+                            paragraphs: [],
+                            reviewItems: [],
                           }
-                        : output,
+                        : invalidComposition
+                          ? {
+                              ...output,
+                              paragraphs: [
+                                {
+                                  text: "无来源正文",
+                                  sourceRefs: ["invented"],
+                                },
+                              ],
+                            }
+                          : output,
                     ),
                   },
                 },
@@ -408,10 +422,19 @@ async function openPage(
         destroyed: 0,
         removed: [],
       };
+      window.browserAudioFactory = window.wx.createInnerAudioContext;
       window.wx.createInnerAudioContext = () => ({
         src: "",
+        currentTime: 0,
+        duration: 1.08,
+        onCanplay() {},
+        onTimeUpdate() {},
+        onSeeked() {},
         onEnded() {},
         onError() {},
+        seek(position) {
+          this.currentTime = position;
+        },
         pause() {},
         stop() {},
         play() {
@@ -506,40 +529,31 @@ async function savedInterview() {
   }
   return interview;
 }
-test("real story Page submits, leaves and restores the same task then renders every paragraph and review item", async ({
+// Waiting-input tasks remain restorable even though new UI submissions wait for
+// every selected clip to finish transcription.
+async function waitingStory(interview) {
+  return data(
+    await request(
+      "POST",
+      `/v1/projects/${projectId}/stories/organize`,
+      narrator,
+      { interviewId: interview.id, baseVersion: 0 },
+    ),
+    202,
+  );
+}
+async function openProjectStory(page, storyId) {
+  await page.goto(`${base}/#/project?projectId=${projectId}`);
+  await page.locator(`.live-story-row[data-id="${storyId}"]`).click();
+}
+test("real story Page restores a waiting-input task from the project then renders every paragraph and review item", async ({
   browser,
 }) => {
   const interview = await savedInterview(),
+    waiting = await waitingStory(interview),
     page = await openPage(browser, narrator);
   try {
-    await page.goto(
-      `${base}/#/interview?projectId=${projectId}&interviewId=${interview.id}`,
-    );
-    await expect(
-      page.getByRole("button", { name: "整理或查看故事", exact: true }),
-    ).toBeVisible({ timeout: 5000 });
-    await showProcessingStep(page);
-    await page
-      .getByRole("button", { name: "整理或查看故事", exact: true })
-      .click();
-    await expect(page).toHaveURL(
-      new RegExp(
-        `/story\\?projectId=${projectId}&interviewId=${interview.id}$`,
-      ),
-    );
-    const beforeSubmission = data(
-      await request(
-        "POST",
-        `/v1/projects/${projectId}/stories/context`,
-        narrator,
-        { interviewId: interview.id },
-      ),
-    );
-    expect(beforeSubmission.story).toBeNull();
-    await expect(
-      page.getByRole("button", { name: "整理故事", exact: true }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "整理故事", exact: true }).click();
+    await openProjectStory(page, waiting.id);
     await expect(
       page.getByText("正在等待全部录音转写，可离开", { exact: true }),
     ).toBeVisible();
@@ -554,24 +568,20 @@ test("real story Page submits, leaves and restores the same task then renders ev
       id = context.story.task.id;
     await page.screenshot({ path: "/tmp/timenook-t18-waiting-390.png" });
     await page
-      .getByRole("button", { name: "回采访页继续讲", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "今天先到这里", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "进入本人参与的项目", exact: true })
-      .click();
-    await page
       .getByRole("button", {
-        name: `继续：${interview.actualQuestion.snapshot.text}`,
+        name: /^回采访页(?:继续讲|恢复保存)$/,
         exact: true,
       })
       .click();
     await showProcessingStep(page);
-    await page
-      .getByRole("button", { name: "整理或查看故事", exact: true })
-      .click();
+    await expect(
+      page.getByText("原声已保存，等待转写", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "整理成故事", exact: true }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "先回到项目", exact: true }).click();
+    await page.locator(`.live-story-row[data-id="${waiting.id}"]`).click();
     await expect(
       page.getByText("正在等待全部录音转写，可离开", { exact: true }),
     ).toBeVisible();
@@ -623,9 +633,17 @@ test("real story Page submits, leaves and restores the same task then renders ev
       }),
     ).toBeVisible();
     await expect(page.getByText(/出门的具体年份待本人核对/)).toBeVisible();
+    await expect(page.getByText("AI 整理", { exact: true })).toBeVisible();
     await expect(
-      page.getByText("AI 整理 · 待本人核对", { exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", { name: "先核对待确认事项", exact: true }),
+    ).toBeEnabled();
+    await expect(page.locator(".live-error")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "确认", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      page.locator(".live-decision textarea, .live-decision checkbox"),
+    ).toHaveCount(0);
     const body = page.locator(".live-story .paragraph");
     expect(await body.count()).toBe(3);
     expect(
@@ -639,9 +657,12 @@ test("real story Page submits, leaves and restores the same task then renders ev
         .count(),
     ).toBe(0);
     expect(await page.title()).not.toBe("");
-    expect(await page.locator("body").innerText()).not.toContain(
-      "页面渲染失败",
-    );
+    expect(
+      await page
+        .locator("body")
+        .innerText()
+        .catch(() => "closed"),
+    ).not.toContain("页面渲染失败");
     expect(await page.locator("vite-error-overlay").count()).toBe(0);
     await page.screenshot({
       path: "/tmp/timenook-t18-story-390.png",
@@ -672,6 +693,7 @@ test("real story Page submits, leaves and restores the same task then renders ev
     expect(
       currentStory.revision.audioManifest.map((source) => source.clipId),
     ).toEqual(context.story.task.sources.map((source) => source.clipId));
+    await storyAction(page, "回听已保存的原声");
     const audioOrder = page.locator(".live-story .live-reviews").filter({
       has: page.getByText("本版关联的原声顺序", { exact: true }),
     });
@@ -694,9 +716,11 @@ test("real story Page submits, leaves and restores the same task then renders ev
       path: "/tmp/timenook-t18-story-1280.png",
       fullPage: true,
     });
+    await storyAction(page, "回听已保存的原声");
     await expect(
       page.getByRole("button", { name: "回听第 1 段原声", exact: true }),
     ).toBeVisible();
+    await storyAction(page, "回听已保存的原声");
     await page
       .getByRole("button", { name: "回听第 1 段原声", exact: true })
       .click();
@@ -717,9 +741,7 @@ test("real story Page submits, leaves and restores the same task then renders ev
         .update(Buffer.from(audioBase64, "base64"))
         .digest("hex"),
     );
-    await page
-      .getByRole("button", { name: "回采访页继续讲", exact: true })
-      .click();
+    await storyAction(page, "继续补充讲述");
     await expect
       .poll(() => page.evaluate(() => window.syntheticPlayback.destroyed))
       .toBe(1);
@@ -735,7 +757,10 @@ test("real story Page submits, leaves and restores the same task then renders ev
       JSON.stringify(
         {
           url: page.url(),
-          body: await page.locator("body").innerText(),
+          body: await page
+            .locator("body")
+            .innerText()
+            .catch(() => "closed"),
           errors,
         },
         null,
@@ -744,7 +769,10 @@ test("real story Page submits, leaves and restores the same task then renders ev
     );
     throw error;
   } finally {
-    await page.context().close();
+    await page
+      .context()
+      .close()
+      .catch(() => {});
   }
 });
 
@@ -763,7 +791,136 @@ async function wakeBrowserTask(id) {
   await runtime.recoverDue();
   await completed;
 }
-test("the rendered failed story retries from its saved sources and recovers without another user intent", async ({
+test("the shared story screen displays transcribed text when no story was formed and preserves it after refresh", async ({
+  browser,
+}) => {
+  const interview = await savedInterview();
+  const { ProductionTasks } = apiRequire("./dist-test/src/tasks/tasks.js");
+  const audio = data(
+    await request("POST", `/v1/projects/${projectId}/tasks/status`, narrator, {
+      interviewId: interview.id,
+    }),
+  );
+  for (const task of audio) {
+    await api.get(ProductionTasks).run(task.id);
+    await api.get(ProductionTasks).run(task.id);
+  }
+  const story = data(
+    await request(
+      "POST",
+      `/v1/projects/${projectId}/stories/organize`,
+      narrator,
+      { interviewId: interview.id, baseVersion: 0 },
+    ),
+    202,
+  );
+  noContentComposition = true;
+  try {
+    await api.get(ProductionTasks).run(story.task.id);
+  } finally {
+    noContentComposition = false;
+  }
+  const page = await openPage(browser, narrator);
+  try {
+    await page.goto(
+      `${base}/#/story?projectId=${projectId}&interviewId=${interview.id}`,
+    );
+    await expect(
+      page.getByText("已识别到文字，暂未形成故事，可以继续补充讲述", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.locator(".live-transcripts .paragraph")).toHaveCount(2);
+    await expect(page.locator(".live-audio-button")).toHaveCount(2);
+    await expect(page.locator(".live-audio-times").first()).toHaveText(
+      /00:00\s*00:01/,
+    );
+    await expect(page.locator(".live-sources")).toHaveCount(0);
+    await page.evaluate(() => {
+      window.playbackParagraph = document.querySelector(
+        ".live-transcripts .paragraph",
+      );
+      window.realPlayback = { players: 0, player: null };
+      window.wx.createInnerAudioContext = () => {
+        const player = window.browserAudioFactory();
+        window.realPlayback.players++;
+        window.realPlayback.player = player;
+        return player;
+      };
+    });
+    await page
+      .getByRole("button", { name: "回听第 1 段原声", exact: true })
+      .click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.realPlayback.player?.currentTime ?? 0),
+      )
+      .toBeGreaterThan(0);
+    await page.locator(".live-audio-button").first().click();
+    await expect
+      .poll(() => page.evaluate(() => window.realPlayback.player.paused))
+      .toBe(true);
+    const timeline = page.getByRole("slider", {
+      name: "第 1 段原声播放进度",
+      exact: true,
+    });
+    await expect(timeline).toBeEnabled();
+    await timeline.press("Home");
+    await timeline.press("ArrowRight");
+    await expect
+      .poll(() => page.evaluate(() => window.realPlayback.player.currentTime))
+      .toBeCloseTo(0.1, 1);
+    expect(await page.evaluate(() => window.realPlayback.player.paused)).toBe(
+      true,
+    );
+    const pausedAt = await page.evaluate(
+      () => window.realPlayback.player.currentTime,
+    );
+    await page.locator(".live-audio-button").first().click();
+    await expect
+      .poll(() => page.evaluate(() => window.realPlayback.player.currentTime))
+      .toBeGreaterThan(pausedAt);
+    expect(await page.evaluate(() => window.realPlayback.players)).toBe(1);
+    expect(
+      await page.evaluate(() => window.playbackParagraph.isConnected),
+    ).toBe(true);
+    await page.locator(".live-audio-button").first().click();
+    await expect(
+      page.getByRole("button", { name: "继续回听第 1 段原声", exact: true }),
+    ).toBeEnabled();
+    await expect(
+      page.locator(".live-transcripts .paragraph").first(),
+    ).toHaveText("我那一年第一次出门，后来家门口的树长高了。");
+    await expect(
+      page.getByText("未识别到有效语音，请再录一段", { exact: true }),
+    ).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByText("已识别的内容", { exact: true })).toBeVisible();
+    await expect(page.locator(".live-error")).toHaveCount(0);
+    await page.setViewportSize({ width: 320, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({ path: "/tmp/timenook-story-no-content-320.png" });
+    await page
+      .getByRole("button", {
+        name: "回采访页继续讲",
+        exact: true,
+      })
+      .click();
+    await expect(page).toHaveURL(
+      new RegExp(
+        `/interview\\?projectId=${projectId}&interviewId=${interview.id}`,
+      ),
+    );
+    expect(errors).toEqual([]);
+  } finally {
+    await page.context().close();
+  }
+});
+test("the client submits after all transcripts are ready and the failed story retries from saved sources without another user intent", async ({
   browser,
 }) => {
   const interview = await savedInterview(),
@@ -778,14 +935,38 @@ test("the rendered failed story retries from its saved sources and recovers with
           { interviewId: interview.id },
         ),
       );
-    for (const task of audio) {
-      await api.get(ProductionTasks).run(task.id);
-      await api.get(ProductionTasks).run(task.id);
-    }
+    expect(audio).toHaveLength(2);
+    await api.get(ProductionTasks).run(audio[0].id);
+    await api.get(ProductionTasks).run(audio[0].id);
     await page.goto(
-      `${base}/#/story?projectId=${projectId}&interviewId=${interview.id}`,
+      `${base}/#/interview?projectId=${projectId}&interviewId=${interview.id}`,
     );
-    await page.getByRole("button", { name: "整理故事", exact: true }).click();
+    await showProcessingStep(page);
+    await expect(
+      page.getByText("原声已保存，等待转写", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "整理成故事", exact: true }),
+    ).toHaveCount(0);
+    await api.get(ProductionTasks).run(audio[1].id);
+    await api.get(ProductionTasks).run(audio[1].id);
+    expect(
+      data(
+        await request(
+          "POST",
+          `/v1/projects/${projectId}/tasks/status`,
+          narrator,
+          {
+            interviewId: interview.id,
+          },
+        ),
+      ).map((task) => task.state),
+    ).toEqual(["succeeded", "succeeded"]);
+    await page
+      .getByRole("button", { name: "重新查询转写状态", exact: true })
+      .click();
+    await expect(page.getByText("文字已转写", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "整理成故事", exact: true }).click();
     await expect(
       page.getByText("正在等待全部录音转写，可离开", { exact: true }),
     ).toBeVisible();
@@ -834,11 +1015,14 @@ test("the rendered failed story retries from its saved sources and recovers with
     expect(errors).toEqual([]);
   } finally {
     invalidComposition = false;
-    await page.context().close();
+    await page
+      .context()
+      .close()
+      .catch(() => {});
   }
 });
 
-test("entering story from the interview keeps an unsealed local recording recoverable and cannot submit a partial story", async ({
+test("an unsealed local recording gates interview submission and stays recoverable after direct story entry", async ({
   browser,
 }) => {
   const interview = await savedInterview(),
@@ -858,9 +1042,15 @@ test("entering story from the interview keeps an unsealed local recording recove
         .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
     await showProcessingStep(page);
-    await page
-      .getByRole("button", { name: "整理或查看故事", exact: true })
-      .click();
+    await expect(
+      page.getByText("这段讲述还在本机", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "整理成故事", exact: true }),
+    ).toHaveCount(0);
+    await page.goto(
+      `${base}/#/story?projectId=${projectId}&interviewId=${interview.id}`,
+    );
     await expect(
       page.getByText("还有录音没有云端保存，请回采访页恢复", { exact: true }),
     ).toBeVisible();
@@ -886,7 +1076,10 @@ test("entering story from the interview keeps an unsealed local recording recove
     ).toBeVisible();
     expect(errors).toEqual([]);
   } finally {
-    await page.context().close();
+    await page
+      .context()
+      .close()
+      .catch(() => {});
   }
 });
 
@@ -964,11 +1157,13 @@ test("a hidden interview current-session HTTP 401 clears the active story, playi
           )?.[1],
     );
     expect(original).toHaveLength(1);
-    await showProcessingStep(page);
-    await page
-      .getByRole("button", { name: "整理或查看故事", exact: true })
-      .click();
+    // Direct entry can read the existing story while the interview's new local
+    // recording remains unsubmitted; no organize command is sent through the gate.
+    await page.goto(
+      `${base}/#/story?projectId=${projectId}&interviewId=${interview.id}`,
+    );
     await expect(page.locator(".live-story .paragraph")).toHaveCount(3);
+    await storyAction(page, "回听已保存的原声");
     await page
       .getByRole("button", { name: "回听第 1 段原声", exact: true })
       .click();
@@ -976,7 +1171,7 @@ test("a hidden interview current-session HTTP 401 clears the active story, playi
       .poll(() => page.evaluate(() => window.syntheticPlayback.plays))
       .toBe(1);
     holdContext = true;
-    await page.getByRole("button", { name: "刷新状态", exact: true }).click();
+    await resumeVisiblePage(page);
     await contextSeen;
     const revoked = await api.inject({
       method: "DELETE",
@@ -987,7 +1182,7 @@ test("a hidden interview current-session HTTP 401 clears the active story, playi
     releaseStatus();
     await expect(page.locator(".live-story .paragraph")).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: "刷新状态", exact: true }),
+      page.getByRole("button", { name: "回采访页恢复保存", exact: true }),
     ).toBeEnabled();
     await expect
       .poll(() => page.evaluate(() => window.syntheticPlayback.destroyed))
@@ -1017,7 +1212,10 @@ test("a hidden interview current-session HTTP 401 clears the active story, playi
   } finally {
     releaseStatus();
     releaseContext();
-    await page.context().close();
+    await page
+      .context()
+      .close()
+      .catch(() => {});
   }
 });
 
@@ -1025,16 +1223,10 @@ test("cancelling PhotoPage selection leaves the waiting story intact while actua
   browser,
 }) => {
   const interview = await savedInterview(),
+    waiting = await waitingStory(interview),
     page = await openPage(browser, narrator);
   try {
-    await page.goto(
-      `${base}/#/interview?projectId=${projectId}&interviewId=${interview.id}`,
-    );
-    await showProcessingStep(page);
-    await page
-      .getByRole("button", { name: "整理或查看故事", exact: true })
-      .click();
-    await page.getByRole("button", { name: "整理故事", exact: true }).click();
+    await openProjectStory(page, waiting.id);
     await expect(
       page.getByText("正在等待全部录音转写，可离开", { exact: true }),
     ).toBeVisible();
@@ -1044,11 +1236,12 @@ test("cancelling PhotoPage selection leaves the waiting story intact while actua
       }).then((r) => data(r));
     const before = await current();
     await page
-      .getByRole("button", { name: "回采访页继续讲", exact: true })
+      .getByRole("button", {
+        name: /^回采访页(?:继续讲|恢复保存)$/,
+        exact: true,
+      })
       .click();
-    await page
-      .getByRole("button", { name: "查看照片或事后补图", exact: true })
-      .click();
+    await openInterviewPhotos(page);
     await page.evaluate(() => {
       window.wx.chooseMedia = (o) =>
         o.fail({ errMsg: "chooseMedia:fail cancel" });
@@ -1086,6 +1279,9 @@ test("cancelling PhotoPage selection leaves the waiting story intact while actua
     ).toBeVisible();
     expect(errors).toEqual([]);
   } finally {
-    await page.context().close();
+    await page
+      .context()
+      .close()
+      .catch(() => {});
   }
 });

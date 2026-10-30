@@ -1232,6 +1232,13 @@ export class Stories {
             sources: await Promise.all(
               sources.map(async (source) => ({
                 ...source,
+                durationMs:
+                  (
+                    await tx.recordingAsset.findUnique({
+                      where: { id: source.assetId },
+                      select: { durationMs: true },
+                    })
+                  )?.durationMs ?? null,
                 question: canReadQuestions ? source.question : undefined,
                 state: (
                   await tx.productionTask.findUniqueOrThrow({
@@ -1261,7 +1268,30 @@ export class Stories {
       projectId,
       authorization,
       undefined,
-      (tx) => this.view(tx, projectId, id),
+      async (tx, actor) => {
+        const view = await this.view(tx, projectId, id);
+        const previous = await tx.storyDecision.findFirst({
+          where: {
+            projectId,
+            storyId: id,
+            subjectId: actor.subjectId,
+          },
+          orderBy: { sequence: "desc" },
+          select: { allowInBook: true },
+        });
+        return {
+          ...view,
+          confirmation: {
+            canDecide: actor.subjectDecision === "self",
+            // A binding changes the operator, not this subject's explicit refusal.
+            allowInBook: previous?.allowInBook ?? true,
+            noticeVersion: this.config.acceptance
+              ? "internal-participation-v1"
+              : "synthetic-d08-v1",
+            evidencePrefix: this.config.acceptance ? "internal:" : "synthetic:",
+          },
+        };
+      },
     );
   }
 }

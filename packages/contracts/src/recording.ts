@@ -45,6 +45,7 @@ export interface RecordingContext {
   plan: {
     revision: number;
     defaultQuestion: PlanQuestion | null;
+    eligibleQuestions: PlanQuestion[];
     starters: PlanContent["starters"];
   };
 }

@@ -251,6 +251,10 @@ const context = {
       text: question.snapshot.text,
       intent: "具体场景",
     },
+    eligibleQuestions: [
+      { key: "place", text: question.snapshot.text, intent: "具体场景" },
+      { key: "memory", text: "还有哪一件小事让你记得很清楚？", intent: "回忆" },
+    ],
     starters: [],
   },
 };
@@ -323,10 +327,78 @@ test("step navigation shows the question that will actually be selected or recor
   h.page.data.interview = { ...interview, currentQuestion: changed };
   h.page.data.question = changed.snapshot.text;
   h.page.chooseAnother();
-  assert.equal(h.page.data.question, context.plan.defaultQuestion.text);
+  assert.equal(h.page.data.question, context.plan.eligibleQuestions[1].text);
   h.page.prepareCurrent();
   assert.equal(h.page.data.question, changed.snapshot.text);
   assert.equal(h.requests.length, 0);
+});
+
+test("changing the real plan question starts the displayed key rather than the default", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), context);
+  await showing;
+  h.page.chooseAnother();
+  assert.equal(h.page.data.question, context.plan.eligibleQuestions[1].text);
+  assert.equal(h.requests.length, 0, "browsing does not create interviews");
+  const selecting = h.page.selectQuestion();
+  assert.equal(h.requests[0].data.questionKey, "memory");
+  respond(
+    h.requests.shift(),
+    {
+      ...interview,
+      actualQuestion: {
+        ...question,
+        questionKey: "memory",
+        snapshot: context.plan.eligibleQuestions[1],
+      },
+    },
+    201,
+  );
+  await selecting;
+  assert.equal(h.page.data.question, context.plan.eligibleQuestions[1].text);
+  assert.equal(h.starts, 0);
+});
+
+test("welcome preparation uses a fresh draft and leaves old pending originals recoverable without starting the microphone", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const draftId = "77777777-7777-4777-8777-777777777777";
+  const partition = `timenook.recording.v1:${base}:synthetic-app:${login.user.id}:${projectId}`;
+  h.storage.set(`${partition}:active`, interviewId);
+  h.storage.set(`${partition}:index`, [interviewId]);
+  h.page.onLoad({ projectId, draftId, prepare: "1" });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        clips: [
+          { id: "88888888-8888-4888-8888-888888888888", state: "sealed" },
+        ],
+      },
+    ],
+  });
+  await showing;
+  assert.equal(h.page.data.flowStep, "prepare");
+  assert.equal(h.page.data.question, context.plan.defaultQuestion.text);
+  assert.equal(h.page.data.interview, null);
+  assert.deepEqual(Array.from(h.page.data.pendingInterviews), [interviewId]);
+  assert.equal(h.storage.get(`${partition}:active`), interviewId);
+  assert.equal(h.starts, 0);
+  assert.equal(h.requests.length, 0);
+  h.page.openQuestionPicker();
+  const restoring = h.page.resumeLocal({
+    currentTarget: { dataset: { id: interviewId } },
+  });
+  assert.match(h.requests[0].url, new RegExp(`/interviews/${interviewId}$`));
+  respond(h.requests.shift(), interview);
+  await restoring;
+  assert.equal(h.page.data.interview.id, interviewId);
+  assert.equal(h.starts, 0);
 });
 
 test("leaving while paused saves the same recording and clears its private page", async () => {
@@ -1441,7 +1513,7 @@ test("the interview page restores transcription state, stops polling in backgrou
     201,
   );
   await tick();
-  assert.match(h.page.data.taskRows[0].label, /无有效语音.*补录/);
+  assert.match(h.page.data.taskRows[0].label, /未识别到语音.*原声已保存.*补录/);
   assert.equal(h.page.taskPollHandle, undefined);
   h.page.onUnload();
 });
@@ -1755,7 +1827,7 @@ test("the story entry preserves the selected assisted interview and blocks recor
   h.page.openStory();
   assert.equal(
     h.navigation[0].url,
-    `/pages/story/index?projectId=${projectId}&interviewId=${interviewId}&assistedSessionId=${assistedSessionId}`,
+    `/pages/story/index?projectId=${projectId}&interviewId=${interviewId}&organize=1&assistedSessionId=${assistedSessionId}`,
   );
   await start(h);
   h.page.openStory();
@@ -2243,4 +2315,470 @@ test("the page passes the remaining server budget to the native recording bounda
     if (!maxDurationMs) assert.match(h.page.data.status, /额度未确认/);
     h.page.onUnload();
   }
+});
+
+test("a new draft ignores an old sealed interview and the microphone starts without a separate setup action", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const draftId = "77777777-7777-4777-8777-777777777777";
+  h.page.onLoad({ projectId, draftId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        clips: [
+          { id: "88888888-8888-4888-8888-888888888888", state: "sealed" },
+        ],
+      },
+    ],
+  });
+  await showing;
+  assert.equal(h.page.data.interview, null);
+  assert.equal(h.page.data.flowStep, "choose");
+  assert.equal(
+    h.requests.length,
+    0,
+    "new intent does not resume the old processing page",
+  );
+  const speaking = h.page.startSpeaking();
+  assert.equal(h.requests[0].data.clientInterviewId, draftId);
+  const actual = { ...question, answerRef: interviewId };
+  respond(h.requests.shift(), { ...interview, actualQuestion: actual }, 201);
+  await tick();
+  const authorization = h.requests.shift();
+  assert.match(
+    authorization.url,
+    new RegExp(`/interviews/${interviewId}/recording-start$`),
+  );
+  respond(
+    authorization,
+    {
+      allowed: true,
+      actualQuestionId: question.id,
+      questionVersion: 1,
+      maxDurationMs: 120000,
+    },
+    201,
+  );
+  await speaking;
+  assert.equal(h.starts, 1);
+  assert.equal(h.page.data.flowStep, "record");
+});
+
+test("reloading a draft that already started restores that exact interview without creating another", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const draftId = "77777777-7777-4777-8777-777777777777";
+  h.storage.set(
+    `timenook.recording.v1:${base}:synthetic-app:${login.user.id}:${projectId}:draft:${draftId}`,
+    interviewId,
+  );
+  h.page.onLoad({ projectId, draftId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [interview] });
+  await showing;
+  assert.equal(h.page.data.interview.id, interviewId);
+  assert.equal(h.page.data.flowStep, "prepare");
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.starts, 0);
+});
+
+test("saved audio waits for actual transcription success before offering story organization", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        clips: [
+          { id: "77777777-7777-4777-8777-777777777777", state: "sealed" },
+        ],
+      },
+    ],
+  });
+  await showing;
+  await tick();
+  const task = {
+    id: "99999999-9999-4999-8999-999999999999",
+    projectId,
+    clipId: "77777777-7777-4777-8777-777777777777",
+    state: "queued",
+    retryable: false,
+    nextAction: "leave_and_return",
+  };
+  respond(h.requests.shift(), [task], 201);
+  await tick();
+  assert.equal(h.page.data.processingTitle, "原声已保存，等待转写");
+  assert.equal(h.page.data.processingReady, false);
+  const refreshing = h.page.refreshTasks();
+  respond(h.requests.shift(), [{ ...task, state: "succeeded" }], 201);
+  await refreshing;
+  assert.equal(h.page.data.processingTitle, "文字已转写");
+  assert.equal(h.page.data.processingReady, true);
+});
+
+test("an unknown seal keeps the local original and recovers the same clip into truthful test-storage presentation", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const local = h.page.data.localClips[0];
+  const remote = {
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    projectId,
+    interviewId,
+    actualQuestionId: question.id,
+    clientClipId: local.clientClipId,
+    bytes: local.bytes,
+    sha256: local.sha256,
+    state: "pending",
+    storage: "local-simulator",
+    asset: null,
+  };
+  const upload = h.page.submitReview();
+  assert.equal(h.page.data.processingTitle, "正在上传录音");
+  respond(h.requests.shift(), remote, 201);
+  await tick();
+  respond(
+    h.requests.shift(),
+    {
+      url: "/v1/recordings/objects",
+      storage: "local-simulator",
+      fields: {},
+      expiresAt: "2099-01-01T00:00:00Z",
+    },
+    201,
+  );
+  await tick();
+  assert.equal(h.page.data.processingTitle, "正在确认保存");
+  assert.equal(h.page.data.processingReady, false);
+  h.requests.shift().fail({ errMsg: "request:fail timeout" });
+  await upload;
+  assert.equal(h.page.data.processingTitle, "保存结果待确认");
+  assert.equal(h.files.size, 1);
+  const recovery = h.page.retryProcessing();
+  const status = h.requests.shift();
+  assert.equal(
+    status.url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/clips/${remote.id}/status`,
+  );
+  respond(
+    status,
+    {
+      ...remote,
+      state: "sealed",
+      asset: {
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        sha256: local.sha256,
+      },
+    },
+    201,
+  );
+  await recovery;
+  assert.match(h.page.data.processingStorage, /测试环境/);
+  assert.doesNotMatch(h.page.data.processingStorage, /已在云端/);
+  assert.equal(h.page.data.processingReady, false);
+  h.page.onHide();
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), []); // task query triggered by sealing may still be pending
+  await tick();
+  const request = h.requests.shift();
+  respond(request, {
+    ...context,
+    interviews: [{ ...interview, clips: [{ id: remote.id, state: "sealed" }] }],
+  });
+  await returning;
+  assert.match(h.page.data.processingStorage, /测试环境/);
+});
+
+test("actual transcription results choose their own recovery action and never make a partial set ready", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const clipId = "77777777-7777-4777-8777-777777777777";
+  const secondClipId = "88888888-8888-4888-8888-888888888888";
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        clips: [
+          { id: clipId, state: "sealed" },
+          { id: secondClipId, state: "sealed" },
+        ],
+      },
+    ],
+  });
+  await showing;
+  await tick();
+  const task = {
+    id: "99999999-9999-4999-8999-999999999999",
+    projectId,
+    clipId,
+    state: "succeeded",
+    retryable: false,
+    nextAction: "continue",
+  };
+  respond(h.requests.shift(), [task], 201);
+  await tick();
+  assert.equal(
+    h.page.data.processingReady,
+    false,
+    "the second saved clip has no confirmed transcription result",
+  );
+  for (const [state, retryable, errorCode, title, action] of [
+    ["submitting", false, null, "正在提交文字处理", ""],
+    ["waiting_provider", false, null, "正在把声音变成文字", ""],
+    ["no_speech", false, null, "未识别到有效语音", "review"],
+    ["failed", true, null, "转写未完成", "retry"],
+    ["failed", false, null, "转写未完成", "service"],
+    ["manual_review", true, null, "文字处理需要人工协助", "service"],
+    [
+      "failed",
+      true,
+      "AI_AUTHORIZATION_REQUIRED",
+      "原声已保存，等待 AI 处理授权",
+      "consent",
+    ],
+    ["invalidated", true, null, "本次文字处理授权已失效", "consent"],
+  ]) {
+    const query = h.page.refreshTasks();
+    respond(
+      h.requests.shift(),
+      [
+        task,
+        {
+          ...task,
+          id: secondClipId,
+          clipId: secondClipId,
+          state,
+          retryable,
+          errorCode,
+        },
+      ],
+      201,
+    );
+    await query;
+    assert.equal(h.page.data.processingTitle, title);
+    assert.equal(h.page.data.processingAction, action);
+    assert.equal(h.page.data.processingReady, false);
+  }
+});
+
+test("retrying a lost seal response keeps the selected original when other local takes are unsubmitted", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  h.page.prepareCurrent();
+  await start(h);
+  await h.page.record();
+  await tick();
+  const chosen = h.page.data.localClips[1];
+  const remote = {
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    projectId,
+    interviewId,
+    actualQuestionId: question.id,
+    clientClipId: chosen.clientClipId,
+    bytes: chosen.bytes,
+    sha256: chosen.sha256,
+    state: "pending",
+    storage: "local-simulator",
+    asset: null,
+  };
+  const submitting = h.page.submitReview();
+  respond(h.requests.shift(), remote, 201);
+  await tick();
+  respond(
+    h.requests.shift(),
+    {
+      url: "/v1/recordings/objects",
+      storage: "local-simulator",
+      fields: {},
+      expiresAt: "2099-01-01T00:00:00Z",
+    },
+    201,
+  );
+  await tick();
+  h.requests.shift().fail({ errMsg: "request:fail timeout" });
+  await submitting;
+  const retrying = h.page.retryProcessing();
+  const query = h.requests.shift();
+  assert.equal(
+    query.url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/clips/${remote.id}/status`,
+  );
+  query.fail({ errMsg: "request:fail timeout" });
+  await retrying;
+  assert.equal(h.files.size, 2);
+});
+
+test("a second local take blocks organization until it is submitted and its actual transcription succeeds", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const firstClipId = "77777777-7777-4777-8777-777777777777";
+  const secondClipId = "88888888-8888-4888-8888-888888888888";
+  const firstTask = {
+    id: "99999999-9999-4999-8999-999999999999",
+    projectId,
+    clipId: firstClipId,
+    state: "succeeded",
+    retryable: false,
+    nextAction: "continue",
+  };
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      { ...interview, clips: [{ id: firstClipId, state: "sealed" }] },
+    ],
+  });
+  await showing;
+  await tick();
+  respond(h.requests.shift(), [firstTask], 201);
+  await tick();
+  assert.equal(h.page.data.processingReady, true);
+
+  h.page.prepareCurrent();
+  await start(h);
+  await h.page.record();
+  await tick();
+  h.page.showProcessing();
+  assert.equal(h.page.data.localClips.length, 1);
+  assert.equal(h.page.data.localClips[0].sealed, undefined);
+  assert.equal(h.page.data.processingReady, false);
+  assert.equal(h.page.data.processingAction, "review");
+  assert.equal(h.page.data.processingTitle, "这段讲述还在本机");
+
+  h.page.reviewCurrent();
+  const local = h.page.data.reviewClip;
+  const submitting = h.page.submitReview();
+  respond(
+    h.requests.shift(),
+    {
+      id: secondClipId,
+      projectId,
+      interviewId,
+      actualQuestionId: question.id,
+      clientClipId: local.clientClipId,
+      bytes: local.bytes,
+      sha256: local.sha256,
+      state: "sealed",
+      storage: "local-simulator",
+      asset: {
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        sha256: local.sha256,
+      },
+    },
+    201,
+  );
+  await submitting;
+  assert.equal(
+    h.page.data.taskRows.length,
+    0,
+    "a new seal needs fresh task status",
+  );
+  const secondTask = {
+    ...firstTask,
+    id: secondClipId,
+    clipId: secondClipId,
+    state: "queued",
+  };
+  respond(h.requests.shift(), [firstTask, secondTask], 201);
+  await tick();
+  assert.equal(h.page.data.processingReady, false);
+  const refreshing = h.page.refreshTasks();
+  respond(
+    h.requests.shift(),
+    [firstTask, { ...secondTask, state: "succeeded" }],
+    201,
+  );
+  await refreshing;
+  assert.equal(h.page.data.processingReady, true);
+  assert.equal(h.page.data.processingTitle, "文字已转写");
+  const remoteRefresh = h.page.refreshTasks();
+  respond(
+    h.requests.shift(),
+    [
+      firstTask,
+      { ...secondTask, state: "succeeded" },
+      {
+        ...firstTask,
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        clipId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      },
+    ],
+    201,
+  );
+  await remoteRefresh;
+  assert.equal(
+    h.page.data.processingReady,
+    true,
+    "the complete task response may include sealed clips absent from the client's metadata",
+  );
+});
+
+test("switching interviews discards prior successful tasks and ignores their late response", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const clipId = "77777777-7777-4777-8777-777777777777";
+  const nextId = "88888888-8888-4888-8888-888888888888";
+  const task = {
+    id: "99999999-9999-4999-8999-999999999999",
+    projectId,
+    clipId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    state: "succeeded",
+    retryable: false,
+    nextAction: "continue",
+  };
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [{ ...interview, clips: [{ id: clipId, state: "sealed" }] }],
+  });
+  await showing;
+  respond(h.requests.shift(), [task], 201);
+  await tick();
+  assert.equal(h.page.data.processingReady, true);
+  const oldQuery = h.page.refreshTasks();
+  const oldRequest = h.requests.shift();
+  const selecting = h.page.selectQuestion();
+  respond(
+    h.requests.shift(),
+    {
+      ...interview,
+      id: nextId,
+      actualQuestion: { ...question, answerRef: nextId },
+      clips: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", state: "sealed" }],
+    },
+    201,
+  );
+  await selecting;
+  assert.equal(h.page.data.taskRows.length, 0);
+  assert.equal(h.page.data.processingReady, false);
+  respond(oldRequest, [task], 201);
+  await oldQuery;
+  assert.equal(h.page.data.taskRows.length, 0);
+  assert.equal(h.page.data.processingReady, false);
+  const pendingQuery = h.page.refreshTasks();
+  respond(h.requests.shift(), [{ ...task, state: "queued" }], 201);
+  await pendingQuery;
+  assert.equal(h.page.data.processingReady, false);
+  const currentQuery = h.page.refreshTasks();
+  respond(h.requests.shift(), [task], 201);
+  await currentQuery;
+  assert.equal(h.page.data.processingReady, true);
 });

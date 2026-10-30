@@ -1,15 +1,33 @@
+<view wx:if="{{live}}" class="page live-service">
+  <view class="title">资料与帮助</view>
+  <view class="subtitle">故事由本人决定，服务进度以实际记录为准。</view>
+  <view wx:if="{{status}}" class="note section" role="status">{{status}}</view>
+  <view class="legal-section"><view class="section-title">保存或处理遇到问题</view><text>录音上传后还要确认保存结果，转写和故事整理分别处理。请保留本机录音，从原片段重查或按页面提供的重试入口继续。</text><button class="btn section" bindtap="project">返回项目，查看保存与处理详情</button></view>
+  <view class="legal-section"><view class="section-title">本人选择与资料服务</view><text>讲述者可调整资料用途、撤回或申请删除。发起人不能替代本人授权；导出和删除申请须按已有流程核验。</text>
+    <button class="list-row" bindtap="rights"><text class="grow">资料用途与本人权利</text><image class="icon small" src="/assets/icons/chevron-right.svg" /></button>
+    <button class="list-row" bindtap="completeExport"><text class="grow">完整资料导出</text><image class="icon small" src="/assets/icons/chevron-right.svg" /></button>
+    <button class="list-row" bindtap="deletion"><text class="grow">查看资料删除进度</text><image class="icon small" src="/assets/icons/chevron-right.svg" /></button>
+  </view>
+  <view class="legal-section"><view class="section-title">项目服务工单</view><text>当前未提供即时客服通道。这里查询项目已有的服务记录，申请、核验与实际执行分别记录。</text>
+    <view wx:if="{{!busy && !careRequests.length && !status}}" class="note section">暂无服务工单。</view>
+    <view wx:for="{{careRequests}}" wx:key="id" class="service-case"><view>{{item.kind === 'withdraw' ? '撤回申请' : item.kind === 'export' ? '完整资料导出' : item.kind === 'delete' ? '资料删除' : item.kind === 'correction' ? '故事校对' : item.kind === 'production_handoff' ? '生产交接' : item.kind === 'quality' ? '质量售后' : item.kind === 'refund' ? '退款' : '本人账号绑定'}}</view><view class="small muted">{{item.state === 'open' ? '待核验' : item.state === 'verified' ? '已核验，后续执行待完成' : '已完成'}} · {{item.id}}</view></view>
+    <button class="text-action" bindtap="refresh" disabled="{{busy}}">{{busy ? '正在查询…' : '重新查询项目工单'}}</button>
+  </view>
+  <view class="note section">制作、回听、导出申请与已完成资料包下载长期有效；当前用途授权、首本权益和退款规则仍分别适用。</view>
+</view>
+<block wx:else="">
 <view class="page"
   ><block wx:if="{{kind==='privacy'||kind==='terms'}}"
     ><view class="title">你的故事，由你决定</view
     ><view class="legal-section"
       ><view class="section-title">关于这份礼物</view
       ><text
-        >一个项目记录一位父母的人生，999元包含一本实体书。父母参与讲述，子女协助校对，故事经本人允许才入书。</text
+        >一个项目记录一位成年讲述者的人生，999元包含一本实体书。本人参与讲述，发起人协助校对，故事经本人允许才入书。</text
       ></view
     ><view class="legal-section"
       ><view class="section-title">资料与共享范围</view
       ><text
-        >正式服务中，讲述、照片与故事仅供本人及获授权的购买子女查看。付款不代替讲述者授权，你可以选择不入书、停止参与或申请删除资料。</text
+        >正式服务中，讲述、照片与故事仅供本人及获授权的发起人查看。付款不代替讲述者授权，你可以选择不入书、停止参与或申请删除资料。</text
       ></view
     ><view class="legal-section"
       ><view class="section-title">当前前端演示版</view
@@ -85,3 +103,5 @@
     ></block
   ></view
 >
+
+</block>

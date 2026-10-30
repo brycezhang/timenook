@@ -1,38 +1,48 @@
 <block wx:if="{{mode === 'live'}}">
 <view class="page live-project with-tabs">
- <view class="title">{{overview ? overview.bookTitle : '我的人生项目'}}</view><view wx:if="{{status}}" class="section">{{status}}</view>
- <view wx:if="{{busy}}" class="section">正在查询项目与保存状态…</view>
+ <view class="title">{{overview ? overview.bookTitle : participation && participation.bookTitle ? participation.bookTitle : '我的人生项目'}}</view>
+ <view class="subtitle">{{overview ? pending + ' 篇待本人确认 · ' + confirmed + ' 篇已确认' : '把生命的故事，温柔收藏'}}</view>
+ <view wx:if="{{status}}" class="soft section" role="status">{{status}}</view>
+ <view wx:if="{{busy}}" class="note section" role="status">正在打开你的故事书…</view>
+ <view wx:if="{{overview}}" class="project-progress"><view class="active">讲述往事</view><view class="line"/><view>整理成书</view><view class="line"/><view>寄到身边</view></view>
+ <view wx:if="{{participation}}" class="next-story section">
+  <view class="row"><image class="icon small" src="/assets/icons/sprout.svg"/><text class="small muted">今天，聊一件记得的小事</text></view>
+  <view class="serif prompt">一段往事，<text class="line-break">{{'\n'}}</text>就是书的开始。</view>
+  <button wx:if="{{participation.canCollect}}" class="btn" bindtap="record" disabled="{{busy}}"><image class="icon" src="/assets/icons/mic-light.svg"/>开始一段讲述</button>
+  <block wx:else="">
+   <button wx:if="{{participation.role === 'initiator' && participation.bindingVersion === 0}}" class="btn" bindtap="invite">邀请家人开始讲述</button>
+   <button wx:if="{{participation.role === 'initiator'}}" class="btn secondary section" bindtap="assisted">本人在场，进入同机协助</button>
+   <button wx:if="{{participation.role === 'narrator'}}" class="btn" bindtap="participate">选择资料用途，开始讲述</button>
+   <view class="note section">由讲述者本人决定资料用途后，就可以开始留下声音。</view>
+  </block>
+  <button wx:if="{{participation.canRead}}" class="link" bindtap="plan">个人大纲与问题<image class="icon small" src="/assets/icons/chevron-right.svg"/></button>
+ </view>
+ <view wx:if="{{recentInterview || localRecoveryIds.length}}" class="section resume-card">
+  <view class="section-head"><view class="section-title">接着上次，慢慢说</view></view>
+  <button wx:if="{{recentInterview}}" class="list-row resume-row" data-id="{{recentInterview.id}}" bindtap="resume"><image class="icon" src="/assets/icons/mic.svg"/><view class="grow"><view>{{recentInterview.resumeLabel}}</view><view class="small muted">继续讲述或查看保存进度</view></view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button>
+  <button wx:for="{{localRecoveryIds}}" wx:key="*this" class="list-row resume-row" data-id="{{item}}" bindtap="resume"><image class="icon" src="/assets/icons/headphones.svg"/><view class="grow">本机讲述待核对<view class="note">回听、提交或重查原片段保存结果</view></view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button>
+ </view>
  <view wx:if="{{overview}}" class="section">
-  <view>{{overview.summary.pending}} 篇待本人确认 · {{overview.summary.confirmed}} 篇已确认 · {{overview.summary.included}} 篇允许入书</view>
-  <view class="next-story section">下一步：{{overview.nextStep}}</view>
-  <button class="btn secondary section" bindtap="settings">修改书名</button>
+  <view class="section-head"><view class="section-title">留下来的故事</view><text class="small muted">{{confirmed}} 篇已确认</text></view>
+  <view class="filters"><button class="filter {{filter==='all'?'selected':''}}" data-filter="all" bindtap="filter">全部</button><button class="filter {{filter==='pending'?'selected':''}}" data-filter="pending" bindtap="filter">待本人确认 {{pending}}</button></view>
+  <view wx:if="{{!liveStories.length}}" class="empty"><image class="icon" src="/assets/icons/book-open.svg"/><view>{{filter==='pending'?'所有故事都已确认':'故事，正等着你慢慢说'}}</view><view class="subtitle">{{filter==='pending'?'继续留下更多珍贵回忆':'从一段小小的往事开始就好'}}</view></view>
+  <button wx:for="{{liveStories}}" wx:key="id" class="story-row live-story-row" data-id="{{item.id}}" bindtap="story"><view class="story-number serif">{{index + 1}}</view><view class="grow"><view class="story-name">{{item.revision ? item.revision.title : '整理中的故事'}}</view><view class="small muted">{{item.decision && item.decision.confirmed ? (item.decision.allowInBook ? '本人已确认 · 允许入书' : '本人已确认 · 暂不入书') : (item.revision ? '待本人确认' : '尚未形成故事版本')}}</view></view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button>
  </view>
- <view wx:if="{{participation}}" class="section">
-  <view wx:if="{{participation.policyStatus === 'internal-acceptance'}}" class="section">内部功能验收 · 无付款及实体书生产</view>
-  <button wx:if="{{participation.role === 'initiator'}}" class="btn secondary section" bindtap="invite">邀请与参与授权</button>
-  <button class="btn" bindtap="record" disabled="{{busy || !participation.canCollect}}">开始一段讲述</button>
-  <button wx:if="{{participation.canRead}}" class="btn secondary section" bindtap="plan">个人大纲与问题</button>
-  <view wx:if="{{!participation.canCollect}}" class="section">当前不能新录音；已保存资料仍按当前用途与期限恢复。</view>
-  <button wx:if="{{participation.role === 'initiator'}}" class="btn secondary section" bindtap="assisted">本人在场，进入同机协助</button>
+ <view wx:if="{{faultRows.length}}" class="section recovery-tasks">
+  <view class="section-title">需要你看一看</view>
+  <view wx:for="{{faultRows}}" wx:key="id" class="live-task"><view class="row between"><text>{{item.kindLabel}}</text><text class="small muted">{{item.errorCode === 'AI_AUTHORIZATION_REQUIRED' ? '等待本人 AI 用途选择' : item.stateLabel}}</text></view><view class="note">{{item.nextActionLabel}}</view><button class="link" data-id="{{item.id}}" bindtap="recoverTask">查看与恢复<image class="icon small" src="/assets/icons/chevron-right.svg"/></button></view>
  </view>
- <button wx:for="{{interviews}}" wx:key="id" class="btn secondary section" data-id="{{item.id}}" bindtap="resume">继续：{{item.resumeLabel}}</button>
- <view wx:if="{{taskRows.length}}" class="section live-tasks">
-  <view class="title section-title">处理进度</view>
-  <view wx:for="{{taskRows}}" wx:key="id" class="live-task section"><view>{{item.kindLabel}}：{{item.stateLabel}}</view><view>{{item.nextActionLabel}}</view><view wx:if="{{item.kind==='ask_followup'}}">可选追问不影响继续讲述；故事整理与本人确认分别记录。</view></view>
+ <view wx:if="{{historyTaskRows.length || historyInterviews.length}}" class="section live-tasks">
+  <button class="history-toggle" bindtap="toggleHistory" aria-expanded="{{historyExpanded}}">保存与处理详情<text>{{historyExpanded ? '收起' : '展开'}}</text></button>
+  <view wx:if="{{historyExpanded}}">
+   <button wx:for="{{historyInterviews}}" wx:key="id" class="list-row resume-row" data-id="{{item.id}}" bindtap="resume"><view class="grow">{{item.resumeLabel}}<view class="note">查看这段讲述与保存记录</view></view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button>
+   <view wx:for="{{historyTaskRows}}" wx:key="id" class="live-task"><view class="row between"><text>{{item.kindLabel}}</text><text class="small muted">{{item.stateLabel}}</text></view><view class="note">{{item.nextActionLabel}}</view></view>
+  </view>
  </view>
- <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">重新查询项目</button>
- <view wx:if="{{overview}}" class="section">
-  <view class="title section-title">留下来的故事</view>
-  <view class="live-filters"><button class="btn secondary" data-filter="all" bindtap="filter">全部</button><button class="btn secondary" data-filter="pending" bindtap="filter">待本人确认</button></view>
-  <view wx:if="{{!liveStories.length}}" class="section">{{filter==='pending'?'当前没有待确认故事':'保存录音后，可以整理第一篇故事'}}</view>
-  <button wx:for="{{liveStories}}" wx:key="id" class="btn secondary section live-story-row" data-id="{{item.id}}" bindtap="story">
-   <view>{{item.revision ? item.revision.title : '整理中的故事'}}</view>
-   <view>{{item.decision && item.decision.confirmed ? (item.decision.allowInBook ? '本人已确认 · 允许入书' : '本人已确认 · 暂不入书') : (item.revision ? '待本人确认' : '尚未形成故事版本')}}</view>
-   <view wx:if="{{item.task}}">整理任务：{{item.task.state==='failed'?'失败，原声保留，可进入恢复':item.task.state==='succeeded'?'已完成':item.task.state==='obsolete'?'素材已变化，需重新整理':item.task.state==='manual_review'?'需要人工协助':item.task.state==='waiting_inputs'?'等待转写':item.task.state==='queued'?'排队中':'处理中'}}</view>
-  </button>
- </view>
+ <view class="project-tools section"><button class="link" bindtap="settings">修改书名</button><button wx:if="{{participation && participation.role === 'initiator'}}" class="link" bindtap="invite">邀请与参与授权</button><button wx:if="{{participation && participation.role === 'narrator'}}" class="link" bindtap="participate">本人参与与资料用途</button><button class="link" bindtap="refresh" disabled="{{busy}}">重新查询项目</button></view>
+ <view wx:if="{{participation && participation.policyStatus === 'internal-acceptance'}}" class="demo-note">内测项目 · 无真实付款及实体书生产</view>
 </view>
-<view class="tabs live-tabs"><button class="tab active" bindtap="project"><text class="tab-label">{{overview ? overview.bookTitle : '项目'}}</text></button><button class="tab" bindtap="book">成书</button><button class="tab" bindtap="account">我的</button></view>
+<view class="tabs live-tabs"><button class="tab active" bindtap="project"><image class="icon" src="/assets/icons/book-open.svg"/><text class="tab-label">{{overview ? overview.bookTitle : '项目'}}</text></button><button class="tab" bindtap="book"><image class="icon" src="/assets/icons/file-text.svg"/><text>成书</text></button><button class="tab" bindtap="account"><image class="icon" src="/assets/icons/user.svg"/><text>我的</text></button></view>
 </block>
 <block wx:else="">
 <view class="page with-tabs"

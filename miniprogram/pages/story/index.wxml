@@ -4,65 +4,82 @@
     <view class="title story-title">{{story && story.revision ? story.revision.title : '整理这段讲述'}}</view>
     <view class="live-stage">{{stage}}</view>
     <view wx:if="{{saveWarning}}" class="live-error">{{saveWarning}}</view>
-    <view wx:if="{{context}}" class="live-save">{{context.clipCount}} 段原声云端已保存</view>
+    <view wx:if="{{story && story.task && story.task.sources.length}}" class="live-audio-list">
+      <view wx:for="{{liveAudioSources}}" wx:key="clipId" class="live-audio-card {{playingClipId === item.clipId ? 'is-playing' : ''}}">
+      <button class="live-audio-button"
+        aria-label="{{playingClipId === item.clipId ? '暂停回听' : pausedClipId === item.clipId ? '继续回听第 ' + (index+1) + ' 段原声' : '回听第 ' + (index+1) + ' 段原声'}}"
+        bindtap="playLive" data-id="{{item.clipId}}" disabled="{{busy || audioBusy || privateError}}">
+        <view class="live-audio-icon"><image src="/assets/icons/{{playingClipId === item.clipId ? 'pause-light' : 'play-light'}}.svg" /></view>
+        <view class="live-audio-copy">
+          <text class="live-audio-label">{{loadingClipId === item.clipId ? '正在加载原声…' : playingClipId === item.clipId ? '暂停试听' : pausedClipId === item.clipId ? '继续试听' : story.task.sources.length > 1 ? '试听第 ' + (index+1) + ' 段原声' : '试听原声'}}</text>
+          <text class="live-audio-status">{{playingClipId === item.clipId ? '正在播放 · 点击暂停' : pausedClipId === item.clipId ? '已暂停 · 点击继续' : '原声已保存'}}</text>
+        </view>
+        <view class="live-audio-wave" aria-hidden="true"><view /><view /><view /><view /><view /><view /><view /></view>
+      </button>
+      <view class="live-audio-timeline">
+        <slider class="live-audio-slider" aria-label="{{'第 ' + (index+1) + ' 段原声播放进度'}}"
+          min="0" max="{{playingClipId === item.clipId || pausedClipId === item.clipId ? audioDuration : item.durationSeconds}}" step="0.1"
+          value="{{playingClipId === item.clipId || pausedClipId === item.clipId ? audioPosition : 0}}"
+          disabled="{{audioBusy || privateError || (playingClipId !== item.clipId && pausedClipId !== item.clipId) || !audioDuration}}"
+          data-id="{{item.clipId}}" bindchanging="draggingLive" bindchange="seekLive" activeColor="#697657" backgroundColor="#d4dac7" block-color="#697657" block-size="16" />
+        <view class="live-audio-times"><text>{{playingClipId === item.clipId || pausedClipId === item.clipId ? audioPositionLabel : '00:00'}}</text><text>{{playingClipId === item.clipId || pausedClipId === item.clipId ? audioDurationLabel : item.durationLabel}}</text></view>
+      </view>
+      </view>
+    </view>
+    <view wx:if="{{context && context.clipCount && (!story || !story.task)}}" class="live-save">{{context.clipCount}} 段原声已保存，整理后可试听</view>
+    <view wx:if="{{audioError}}" class="live-error">{{audioError}}</view>
     <view wx:if="{{error}}" class="live-error">{{error}}</view>
     <view wx:if="{{privateError}}" class="live-error">{{privateError}}</view>
-    <view class="live-controls">
-      <button class="btn secondary" bindtap="refresh" disabled="{{busy}}">{{busy?'正在查询…':'刷新状态'}}</button>
+    <view wx:if="{{liveTranscripts.length}}" class="live-transcripts">
+      <view class="title section-title">已识别的内容</view>
+      <view class="live-source-label">以下为语音转写，尚未整理成故事。</view>
+      <view wx:for="{{liveTranscripts}}" wx:key="clipId" class="live-transcript">
+        <view class="live-source-label">{{item.label}}</view>
+        <text class="paragraph" selectable="{{true}}">{{item.text}}</text>
+      </view>
+    </view>
+    <view wx:if="{{!story || !story.revision}}" class="live-controls">
+      <button wx:if="{{error}}" class="btn secondary" bindtap="refresh" disabled="{{busy}}">重新尝试</button>
       <button wx:if="{{canOrganize}}" class="btn" bindtap="submitLive" disabled="{{busy}}">{{story && story.version?'重新整理故事':'整理故事'}}</button>
       <button wx:if="{{story && story.task && story.task.state==='failed' && retryable}}" class="btn" bindtap="retryLive" disabled="{{busy}}">从原素材重试</button>
-      <button class="btn secondary" bindtap="recoverInterview" disabled="{{busy}}">{{pendingLocal || !context || !context.cloudSaved?'回采访页恢复保存':'回采访页继续讲'}}</button>
+      <button class="link" bindtap="recoverInterview" disabled="{{busy}}">{{pendingLocal || !context || !context.cloudSaved?'回采访页恢复保存':'回采访页继续讲'}}</button>
     </view>
     <block wx:if="{{story && story.revision}}">
-      <view class="live-origin">{{story.revision.origin==='ai'?'AI 整理 · 待本人核对':'已保存的文字版本 · 待本人核对'}}</view>
+      <view class="live-origin">{{story.revision.origin==='ai'?'AI 整理':'已保存的文字版本'}}</view>
       <view class="live-version">第 {{story.version}} 版</view>
-      <button class="btn secondary section" bindtap="edit" disabled="{{busy}}">协助校对这版故事</button>
-      <button class="btn secondary section" bindtap="editLivePhotos" disabled="{{busy}}">查看与编辑采访照片</button>
-      <view class="live-source-label section">照片素材保存后，请在“协助校对”中明确应用新的照片清单，形成新的故事版本。</view>
       <view class="story-body">
         <view wx:for="{{liveParagraphs}}" wx:key="index" class="live-paragraph">
           <text class="paragraph">{{item.text}}</text>
-          <view class="live-source-label">来源：{{item.sourceLabel}}</view>
+          <view wx:if="{{showAudio}}" class="live-source-label">来源：{{item.sourceLabel}}</view>
         </view>
       </view>
-      <view class="live-reviews">
+      <view wx:if="{{story.revision.reviewItems.length}}" class="live-reviews">
         <view class="title section-title">请本人核对</view>
         <view wx:if="{{!story.revision.reviewItems.length}}">整理稿没有列出核对项，仍请阅读全文。</view>
         <view wx:for="{{story.revision.reviewItems}}" wx:key="index" class="live-review">{{index+1}}. {{item}}</view>
         <view wx:for="{{story.revision.reviewResolutions}}" wx:key="index" class="live-review">已处理：{{item.item}}；依据：{{item.reason}}</view>
       </view>
-      <view wx:if="{{story.revision.notes && story.revision.notes.length}}" class="live-reviews section"><view>校对说明</view><view wx:for="{{story.revision.notes || []}}" wx:key="id" class="live-review">{{item.text}}</view></view>
-      <view wx:if="{{story.revision.photoSnapshot}}" class="live-reviews section"><view>本版照片清单（第 {{story.revision.photoSnapshot.revision}} 版）</view><view wx:for="{{story.revision.photoSnapshot.entries}}" wx:key="photoId" class="live-review">照片 {{index+1}}：{{item.caption || '未填写说明'}}</view></view>
-      <view class="live-reviews section"><view>本版关联的原声顺序</view><view wx:for="{{story.revision.audioManifest || story.revision.sourceManifest}}" wx:key="clipId" class="live-review">第 {{index+1}} 段：{{item.question && item.question.snapshot ? item.question.snapshot.text : '已保存的本人原声'}}</view><view wx:if="{{story.revision.audioManifest && !story.revision.audioManifest.length}}">这版未关联原声；原始素材仍保留。</view></view>
-      <view class="live-controls">
-        <view wx:if="{{decisionStatus}}" class="live-stage">{{decisionStatus}}</view>
-        <button class="btn" bindtap="prepareDecision" disabled="{{busy}}">本人确认或调整这版决定</button>
-        <button class="btn secondary" bindtap="participation" disabled="{{busy}}">本人在场，申请当次故事确认协助</button>
+      <view wx:if="{{showCare && story.revision.notes && story.revision.notes.length}}" class="live-reviews section"><view>校对说明</view><view wx:for="{{story.revision.notes || []}}" wx:key="id" class="live-review">{{item.text}}</view></view>
+      <view wx:if="{{showAudio && story.revision.photoSnapshot}}" class="live-reviews section"><view>本版照片清单（第 {{story.revision.photoSnapshot.revision}} 版）</view><view wx:for="{{story.revision.photoSnapshot.entries}}" wx:key="photoId" class="live-review">照片 {{index+1}}：{{item.caption || '未填写说明'}}</view></view>
+      <view wx:if="{{showAudio}}" class="live-reviews section"><view>本版关联的原声顺序</view><view wx:for="{{story.revision.audioManifest || story.revision.sourceManifest}}" wx:key="clipId" class="live-review">第 {{index+1}} 段：{{item.question && item.question.snapshot ? item.question.snapshot.text : '已保存的本人原声'}}</view><view wx:if="{{story.revision.audioManifest && !story.revision.audioManifest.length}}">这版未关联原声；原始素材仍保留。</view></view>
+      <button wx:if="{{showAudio && canDecide}}" class="link" bindtap="adjustDecision" disabled="{{busy}}">调整本版决定</button>
+      <view class="live-decision">
+        <view wx:if="{{decisionStatus}}" class="live-stage" role="status">{{decisionStatus}}</view>
+        <view wx:if="{{needsReview}}" class="section"><view>还有待核对的事项。补充说明后，才能确认这版内容。</view><button class="btn secondary section" bindtap="edit" disabled="{{busy}}">先核对待确认事项</button></view>
+        <block wx:if="{{canDecide}}">
+          <button class="btn section" bindtap="decideLive" disabled="{{busy || needsReview || (story.decision && story.decision.confirmed && story.decision.allowInBook === allowInBook)}}">{{story.decision && story.decision.confirmed && story.decision.allowInBook === allowInBook ? '已确认' : '确认'}}</button>
+        </block>
+        <view wx:else="" class="decision-copy">这版故事由讲述者本人确认。<button class="link" bindtap="participation" disabled="{{busy}}">本人在场，申请当次故事确认协助</button></view>
+        <view class="decision-footnote">修改文字或照片后，需要重新确认。</view>
       </view>
-      <view wx:if="{{decisionReady && canDecide}}" class="live-decision">
-        <view>请讲述者本人阅读全文后分别选择。确认内容与允许入书是两项决定。</view>
-        <view class="section">一、这版故事的内容是否确认？</view>
-        <button class="btn secondary section" data-value="true" bindtap="chooseConfirmation">{{confirmedChoice===true?'已选：':''}}确认这版内容</button>
-        <button class="btn secondary section" data-value="false" bindtap="chooseConfirmation">{{confirmedChoice===false?'已选：':''}}不确认／撤回确认</button>
-        <view class="section">二、是否允许这版故事入书？</view>
-        <button class="btn secondary section" data-value="true" bindtap="chooseInclusion">{{includeChoice===true?'已选：':''}}允许这版入书</button>
-        <button class="btn secondary section" data-value="false" bindtap="chooseInclusion">{{includeChoice===false?'已选：':''}}暂不入书／撤回入书许可</button>
-        <view class="section">本次独立说明</view><textarea class="decision-evidence" value="{{evidence}}" bindinput="decisionEvidence" maxlength="160" auto-height="{{true}}" placeholder="请记录本人本次核对和选择的说明" />
-        <view class="live-source-label">{{noticeText}}</view>
-        <button class="btn section" bindtap="decideLive" disabled="{{busy}}">保存本人这次的两项决定</button>
-        <view class="section">申请限时人工校对</view><view>请本人明确选择授权有效期和本次独立说明。运营校对后的故事仍需本人确认。</view>
+      <button class="link reading-tools" bindtap="moreActions" disabled="{{busy}}">修改、照片与原声</button>
+      <view wx:if="{{showCare && decisionReady && canDecide}}" class="live-care">
+        <block wx:if="{{showCare}}"><view class="section">申请限时人工校对</view><view>请本人明确选择授权有效期和本次独立说明。运营校对后的故事仍需本人确认。</view>
         <input class="decision-evidence" value="{{careExpiry}}" data-field="careExpiry" bindinput="correctionInput" placeholder="ISO 有效期，如 YYYY-MM-DDTHH:mm:ss+08:00" maxlength="40" />
         <textarea class="decision-evidence" value="{{careEvidence}}" data-field="careEvidence" bindinput="correctionInput" auto-height="{{true}}" maxlength="160" placeholder="本人本次申请人工校对的独立说明" />
-        <button class="btn secondary section" bindtap="requestCorrection" disabled="{{busy}}">按所选期限申请人工校对</button><view wx:if="{{careStatus}}" class="live-stage">{{careStatus}}</view>
+        <button class="btn secondary section" bindtap="requestCorrection" disabled="{{busy}}">按所选期限申请人工校对</button><view wx:if="{{careStatus}}" class="live-stage">{{careStatus}}</view></block>
       </view>
     </block>
-    <view wx:if="{{story && story.task}}" class="live-sources">
-      <view class="title section-title">已保存的原声</view>
-      <view wx:if="{{audioError}}" class="live-error">{{audioError}}</view>
-      <view wx:for="{{story.task.sources}}" wx:key="clipId" class="live-source-row">第 {{index+1}} 段 · 云端已保存
-        <button wx:if="{{!privateError}}" class="btn secondary section" bindtap="playLive" data-id="{{item.clipId}}" disabled="{{busy || audioBusy}}">{{playingClipId === item.clipId ? '停止回听' : '回听第 ' + (index+1) + ' 段原声'}}</button>
-      </view>
-    </view>
   </view>
 </block>
 <block wx:else="">
@@ -115,7 +132,7 @@
     class="btn"
     disabled="{{s.confirmedVersion===s.version && s.included}}"
     bindtap="confirm"
-    >{{s.confirmedVersion===s.version&&s.included?'已确认，允许入书':'没问题，同意入书'}}</button
+    >{{s.confirmedVersion===s.version&&s.included?'已确认':'确认'}}</button
   ><view class="dock-note">修改文字或照片后，需要重新确认</view></view
 >
 

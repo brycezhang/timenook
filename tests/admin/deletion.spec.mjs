@@ -243,6 +243,9 @@ test("本人申请删除、客服核验、在线停止与逐层外部证据保�
   browser,
 }) => {
   const mini = await openMini(browser, narratorSession);
+  await mini
+    .getByRole("button", { name: "调整用途与资料服务", exact: true })
+    .click();
   await expect(
     mini.getByRole("button", {
       name: "提交本人删除申请，等待客服核验",

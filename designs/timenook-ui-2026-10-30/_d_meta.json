@@ -1,0 +1,48 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "时光里双端高保真原型": {
+      "versions": [
+        {
+          "path": "index-v1.html",
+          "createdAt": "2026-10-30T09:34:35.760Z",
+          "status": "changes-requested",
+          "subtitle": "首版存档"
+        },
+        {
+          "path": "index-v2.html",
+          "createdAt": "2026-10-30T09:42:37.353Z",
+          "status": "changes-requested",
+          "subtitle": "第二轮存档"
+        },
+        {
+          "path": "index.html",
+          "createdAt": "2026-10-30T09:42:37.403Z",
+          "status": "needs-review",
+          "subtitle": "第三轮：一键确认并开始",
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          }
+        }
+      ]
+    },
+    "现状与实施清单": {
+      "versions": [
+        {
+          "path": "review.html",
+          "createdAt": "2026-10-30T08:58:21.863Z",
+          "status": "needs-review",
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          }
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-10-30T08:58:21.837Z",
+  "updatedAt": "2026-10-30T09:42:37.404Z"
+}

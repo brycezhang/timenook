@@ -6,6 +6,7 @@ import {
   InterviewRecorder,
   interviewRecordingClient,
   recordingPartition,
+  type InterviewLocalClip,
 } from "../../services/interview-recording";
 import { recordingId } from "../../services/local-audio-recorder";
 import { paymentKey } from "../../services/payments";
@@ -44,7 +45,7 @@ Page({
     status: "",
     busy: false,
     canRecord: false,
-    localClips: [] as ProbeLocalClip[],
+    localClips: [] as InterviewLocalClip[],
     taskRows: [] as (ProductionTaskView & { label: string })[],
     taskError: "",
     followup: null as OptionalFollowupView | null,
@@ -57,12 +58,27 @@ Page({
     customIntent: "",
     question: questions[0],
     questionIndex: 0,
+    selectedQuestionKey: "",
+    hasOtherQuestions: false,
     state: "idle",
     timer: "00:00",
     error: "",
     photo: "",
     permission: false,
     playingId: "",
+    questionPicker: false,
+    customQuestion: false,
+    clipPicker: false,
+    followupEditing: false,
+    questionHint: "",
+    reviewClip: null as (InterviewLocalClip & { durationLabel: string }) | null,
+    processingTitle: "保存与文字处理",
+    processingMessage: "",
+    processingReady: false,
+    processingError: false,
+    processingRetryable: false,
+    processingAction: "",
+    processingStorage: "",
   },
   localAudio: null as WechatMiniprogram.InnerAudioContext | null,
   followupPoll: undefined as ReturnType<typeof setTimeout> | undefined,
@@ -73,6 +89,9 @@ Page({
   projectId: "",
   assistedSessionId: "",
   requestedInterviewId: "",
+  uploadingClipId: "",
+  draftId: "",
+  prepareDraft: false,
   generation: 0,
   liveRecorder: null as InterviewRecorder | null,
   context: null as RecordingContext | null,
@@ -93,7 +112,11 @@ Page({
   onLoad(q) {
     if (dataMode() === "live") {
       this.projectId = q.projectId ?? "";
-      this.requestedInterviewId = q.interviewId ?? "";
+      this.draftId = /^[a-f0-9-]{36}$/.test(q.draftId ?? "")
+        ? q.draftId || ""
+        : "";
+      this.requestedInterviewId = q.interviewId || "";
+      this.prepareDraft = !!this.draftId && q.prepare === "1";
       this.assistedSessionId = q.assistedSessionId ?? "";
       this.setData({
         mode: "live",
@@ -120,6 +143,13 @@ Page({
         timer: min + ":" + sec,
         error: s.error,
         permission: s.state === "error" && !recorder.hasPending,
+        ...flowView(
+          s.state === "saved"
+            ? "review"
+            : ["recording", "requesting", "saving"].includes(s.state)
+              ? "record"
+              : "prepare",
+        ),
       });
     });
     if (q.photo === "1") this.pickPhoto();
@@ -149,6 +179,7 @@ Page({
   },
   clearPrivateView() {
     this.closePlayback();
+    this.uploadingClipId = "";
     if (this.collectionWatch) clearTimeout(this.collectionWatch);
     this.collectionWatch = undefined;
     this.clearFollowup();
@@ -170,6 +201,8 @@ Page({
       this.setData({
         ...flowView("choose"),
         question: "",
+        selectedQuestionKey: "",
+        hasOtherQuestions: false,
         interview: null,
         localClips: [],
         interviews: [],
@@ -178,6 +211,18 @@ Page({
         customIntent: "",
         busy: false,
         canRecord: false,
+        questionPicker: false,
+        clipPicker: false,
+        customQuestion: false,
+        reviewClip: null,
+        followupEditing: false,
+        processingTitle: "保存与文字处理",
+        processingMessage: "",
+        processingStorage: "",
+        processingReady: false,
+        processingError: false,
+        processingRetryable: false,
+        processingAction: "",
       });
       return;
     }
@@ -237,6 +282,10 @@ Page({
       this.setData({
         canRecord: result.canRecord,
         interviews: result.interviews,
+        selectedQuestionKey: result.plan.defaultQuestion?.key ?? "",
+        hasOtherQuestions: result.plan.eligibleQuestions.length > 1,
+        questionHint:
+          result.plan.defaultQuestion?.optionalContext?.join("，") ?? "",
         question:
           result.plan.defaultQuestion?.text ??
           "想从哪里讲起？可以自由讲述、看照片或自拟问题。",
@@ -254,11 +303,17 @@ Page({
             )
           : [],
       });
+      const partition = recordingPartition(this.projectId);
       const active =
         this.requestedInterviewId ||
-        wx.getStorageSync(`${recordingPartition(this.projectId)}:active`);
+        (this.draftId
+          ? wx.getStorageSync(`${partition}:draft:${this.draftId}`)
+          : wx.getStorageSync(`${partition}:active`));
       let selected =
-        result.interviews.find((i) => i.id === active) ?? result.interviews[0];
+        result.interviews.find((i) => i.id === active) ??
+        (this.requestedInterviewId || this.draftId
+          ? undefined
+          : result.interviews[0]);
       if (
         !selected &&
         typeof active === "string" &&
@@ -269,6 +324,15 @@ Page({
           active,
           this.assistedSessionId || undefined,
         );
+      if (!selected && this.current(generation, context)) {
+        this.setData({
+          ...flowView(
+            this.prepareDraft && result.canRecord ? "prepare" : "choose",
+          ),
+          state: "idle",
+          status: "",
+        });
+      }
       if (selected && this.current(generation, context)) {
         await this.attach(selected, generation, context);
         if (
@@ -295,6 +359,9 @@ Page({
       !value.actualQuestion?.snapshot?.text
     )
       throw new Error("采访数据无效");
+    if (this.taskPollHandle) clearTimeout(this.taskPollHandle);
+    this.taskPollHandle = undefined;
+    ++this.taskSequence;
     this.liveRecorder?.unsubscribe();
     const device = InterviewRecorder.open(
       this.projectId,
@@ -307,8 +374,20 @@ Page({
     this.setData({
       ...flowView("prepare"),
       interview: value,
+      taskRows: [],
+      taskError: "",
       question: (value.currentQuestion ?? value.actualQuestion).snapshot.text,
+      selectedQuestionKey:
+        (value.currentQuestion ?? value.actualQuestion).questionKey ?? "",
       state: "idle",
+      questionHint:
+        "optionalContext" in
+        (value.currentQuestion ?? value.actualQuestion).snapshot
+          ? (
+              (value.currentQuestion ?? value.actualQuestion)
+                .snapshot as import("../../../packages/contracts/src").PlanQuestion
+            ).optionalContext.join("，")
+          : "",
     });
     device.subscribe((snapshot) => {
       if (snapshot.stage !== "recording" && this.timerHandle) {
@@ -316,6 +395,22 @@ Page({
         this.timerHandle = undefined;
       }
       if (this.current(generation, context)) {
+        if (
+          snapshot.clips.some(
+            (clip) =>
+              clip.sealed &&
+              !this.data.localClips.some(
+                (prior) =>
+                  prior.clientClipId === clip.clientClipId && prior.sealed,
+              ),
+          )
+        ) {
+          if (this.taskPollHandle) clearTimeout(this.taskPollHandle);
+          this.taskPollHandle = undefined;
+          ++this.taskSequence;
+          this.setData({ taskRows: [], taskError: "" });
+        }
+        const priorStep = this.data.flowStep;
         this.setData({
           ...flowView(
             savedRecordingStep(
@@ -326,8 +421,11 @@ Page({
           state: snapshot.stage,
           status: snapshot.message,
           localClips: snapshot.clips,
+          reviewClip: this.reviewSelection(snapshot.clips),
           timer: recordingTime(snapshot.clips, device.elapsedRecordingMs()),
         });
+        if (priorStep !== this.data.flowStep) this.scrollToTop();
+        this.updateProcessingView();
         if (snapshot.stage === "recording" && !this.timerHandle)
           this.timerHandle = setInterval(() => {
             if (this.current(generation, context))
@@ -417,6 +515,7 @@ Page({
       if (
         !this.taskVisible ||
         !this.current(generation, context) ||
+        this.data.interview?.id !== interviewId ||
         sequence !== this.taskSequence
       )
         return;
@@ -430,7 +529,7 @@ Page({
             : row.state === "succeeded"
               ? "转写完成；原声与正式转录已保存。"
               : row.state === "no_speech"
-                ? "无有效语音；可以回听原声、继续补录或换个问题。"
+                ? "未识别到语音；原声已保存，可以回听、继续补录或换个问题。"
                 : row.state === "failed"
                   ? row.retryable
                     ? "转写未完成；已保存原声，可以按原任务重试。"
@@ -442,6 +541,7 @@ Page({
                       : "转写中；原声已保存，可以离开，返回后继续查询。",
       }));
       this.setData({ taskRows, taskError: "" });
+      this.updateProcessingView();
       if (
         rows.some((row) =>
           ["queued", "waiting_provider", "submitting"].includes(row.state),
@@ -471,8 +571,9 @@ Page({
           (error.status === 401 || error.status === 403)
             ? []
             : this.data.taskRows,
-        taskError: "转写状态未能确认；原声仍保留，请重新查询。",
+        taskError: "暂时无法更新处理进度，已保存的声音不会丢失。",
       });
+      this.updateProcessingView();
     }
   },
   async retryTranscription(e: E) {
@@ -499,15 +600,21 @@ Page({
       await this.refreshTasks();
     } catch (error) {
       if (this.taskAuthorizationLost(error, generation, context)) return;
-      if (this.current(generation, context))
+      if (this.current(generation, context)) {
         this.setData({
           taskError: "重试结果未确认，请重新查询；相同任务保留原请求。",
         });
+        this.updateProcessingView();
+      }
     } finally {
       if (this.current(generation, context)) this.setData({ busy: false });
     }
   },
   async selectQuestion(e?: E) {
+    if (dataMode() !== "live") {
+      this.setData({ ...flowView("prepare"), questionPicker: false });
+      return;
+    }
     if (
       !this.context ||
       this.data.busy ||
@@ -520,6 +627,9 @@ Page({
       return;
     this.clearFollowup();
     const kind = e?.currentTarget?.dataset.kind ?? "plan";
+    const selectedQuestion = this.context.plan.eligibleQuestions.find(
+      (question) => question.key === this.data.selectedQuestionKey,
+    );
     const source =
       kind === "custom"
         ? {
@@ -528,8 +638,8 @@ Page({
               intent: this.data.customIntent,
             },
           }
-        : kind === "plan" && this.context.plan.defaultQuestion
-          ? { questionKey: this.context.plan.defaultQuestion.key }
+        : kind === "plan" && selectedQuestion
+          ? { questionKey: selectedQuestion.key }
           : { starterKind: kind === "photo" ? "photo" : "free-narration" };
     const command = {
       expectedPlanRevision: this.context.plan.revision,
@@ -543,11 +653,12 @@ Page({
       this.selection = {
         input,
         key: paymentKey(),
-        clientInterviewId: recordingId(),
+        clientInterviewId:
+          !this.data.interview && this.draftId ? this.draftId : recordingId(),
       };
     const generation = this.generation,
       context = sessionClient.context();
-    this.setData({ busy: true, status: "正在确定本次实际问题" });
+    this.setData({ busy: true, status: "正在确定本次实际问题", error: "" });
     try {
       const selected = await interviewRecordingClient.start(
         this.projectId,
@@ -565,10 +676,27 @@ Page({
       if (!ids.includes(selected.id)) ids.push(selected.id);
       wx.setStorageSync(`${partition}:index`, ids);
       wx.setStorageSync(`${partition}:active`, selected.id);
+      if (this.draftId)
+        wx.setStorageSync(`${partition}:draft:${this.draftId}`, selected.id);
       this.selection = null;
       this.setData({ pendingInterviews: ids });
       await this.attach(selected, generation, context);
-      if (kind === "photo") this.photos();
+      this.setData({ questionPicker: false, customQuestion: false });
+      this.scrollToTop();
+      if (kind === "photo") {
+        this.photos();
+        return;
+      }
+      if (
+        this.requestedInterviewId &&
+        !this.draftId &&
+        selected.id !== this.requestedInterviewId
+      ) {
+        wx.redirectTo({
+          url: `/pages/interview/index?projectId=${this.projectId}&interviewId=${selected.id}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+        });
+        return;
+      }
     } catch (error) {
       if (generation === this.generation && dataMode() === "live") {
         if (
@@ -594,11 +722,285 @@ Page({
         this.setData({
           status:
             error instanceof Error ? error.message : "本次问题未确认，请重试",
+          error:
+            error instanceof Error ? error.message : "本次问题未确认，请重试",
         });
       }
     } finally {
       if (this.current(generation, context)) this.setData({ busy: false });
     }
+  },
+  moreActions() {
+    wx.showActionSheet({
+      itemList: [
+        "再补充一段",
+        "查看照片或事后补图",
+        "回听已保存片段",
+        "查看保存进度",
+        "返回项目",
+      ],
+      success: ({ tapIndex }) => {
+        if (tapIndex === 0) this.prepareCurrent();
+        else if (tapIndex === 1) this.photos();
+        else if (tapIndex === 2) this.reviewCurrent();
+        else if (tapIndex === 3) this.showProcessing();
+        else void this.finish();
+      },
+    });
+  },
+  scrollToTop() {
+    wx.pageScrollTo?.({ scrollTop: 0, duration: 0 });
+  },
+  reviewSelection(clips: ProbeLocalClip[]) {
+    const chosen = clips.find(
+      (c) => c.clientClipId === this.data.reviewClip?.clientClipId,
+    );
+    const added = clips.some(
+      (c) =>
+        !this.data.localClips.some(
+          (old) => old.clientClipId === c.clientClipId,
+        ),
+    );
+    const clip =
+      chosen && !chosen.sealed && !added
+        ? chosen
+        : ([...clips].reverse().find((c) => !c.sealed) ??
+          clips[clips.length - 1]);
+    return clip ? { ...clip, durationLabel: recordingTime([clip]) } : null;
+  },
+  updateProcessingView() {
+    const { state, taskRows, taskError, localClips, interview } = this.data;
+    const unsubmitted = localClips.some((clip) => !clip.sealed);
+    const sealedIds = new Set([
+      ...(interview?.clips
+        .filter((clip) => clip.state === "sealed")
+        .map((clip) => clip.id) ?? []),
+      ...localClips
+        .filter((clip) => clip.sealed && clip.serverId)
+        .map((clip) => clip.serverId!),
+    ]);
+    const ready =
+      !unsubmitted &&
+      sealedIds.size > 0 &&
+      taskRows.length > 0 &&
+      taskRows.every((row) => row.state === "succeeded") &&
+      // Task status is scoped to this interview's sealed RecordingClips.
+      // Assisted views omit earlier sealed intent metadata. Known local/server
+      // intents are a lower bound; the response contains the full task set.
+      new Set(taskRows.map((row) => row.clipId).filter(Boolean)).size >=
+        sealedIds.size;
+    const issue =
+      taskRows.find((row) => row.state === "invalidated") ??
+      taskRows.find((row) => row.errorCode === "AI_AUTHORIZATION_REQUIRED") ??
+      taskRows.find((row) =>
+        ["failed", "manual_review", "no_speech", "obsolete"].includes(
+          row.state,
+        ),
+      );
+    const waiting =
+      taskRows.find((row) => row.state === "waiting_provider") ??
+      taskRows.find((row) => row.state === "submitting") ??
+      taskRows.find((row) => ["queued", "waiting_inputs"].includes(row.state));
+    let title = "保存状态待查询",
+      message = "请重新查询原片段的保存结果。",
+      action = "query",
+      error = false;
+    if (state === "uploading") {
+      title = "正在上传录音";
+      message = "本机文件仍在。上传后还会确认保存结果，请保留本机文件。";
+      action = "";
+    } else if (state === "sealing") {
+      title = "正在确认保存";
+      message = "录音已上传，保存结果尚未确认，请保留本机文件。";
+      action = "";
+    } else if (state === "seal-error" || state === "upload-error") {
+      title = state === "seal-error" ? "保存结果待确认" : "录音上传未完成";
+      message = "本机原文件仍保留。重新核对同一片段，无需重录。";
+      action = "upload";
+      error = true;
+    } else if (taskError) {
+      title = "文字处理状态待确认";
+      message = taskError;
+      error = true;
+    } else if (unsubmitted) {
+      title = "这段讲述还在本机";
+      message = "还有片段未提交。回听后再决定上传，换设备暂时看不到。";
+      action = "review";
+    } else if (issue) {
+      title =
+        issue.state === "invalidated"
+          ? "本次文字处理授权已失效"
+          : issue.errorCode === "AI_AUTHORIZATION_REQUIRED"
+            ? "原声已保存，等待 AI 处理授权"
+            : issue.state === "no_speech"
+              ? "未识别到有效语音"
+              : issue.state === "manual_review"
+                ? "文字处理需要人工协助"
+                : issue.state === "obsolete"
+                  ? "素材已变化，请重新核对"
+                  : "转写未完成";
+      message = issue.label;
+      action =
+        issue.state === "invalidated" ||
+        issue.errorCode === "AI_AUTHORIZATION_REQUIRED"
+          ? "consent"
+          : issue.state === "no_speech"
+            ? "review"
+            : issue.state === "failed" && issue.retryable
+              ? "retry"
+              : "service";
+      error = true;
+    } else if (waiting) {
+      title =
+        waiting.state === "queued" || waiting.state === "waiting_inputs"
+          ? "原声已保存，等待转写"
+          : waiting.state === "submitting"
+            ? "正在提交文字处理"
+            : "正在把声音变成文字";
+      message = "原声已确认保存。可以先离开，回来后继续查询实际处理结果。";
+      action = "";
+    } else if (ready) {
+      title = "文字已转写";
+      message = "已提交片段的文字已就绪，可以一起整理成故事。原始录音仍保留。";
+      action = "organize";
+    } else if (sealedIds.size) {
+      title = "原声已确认保存";
+      message = "文字处理状态尚未确认。重新查询后，再继续整理故事。";
+    }
+    const storage = localClips.some(
+      (clip) => clip.sealed && clip.storage === "local-simulator",
+    )
+      ? "录音已在测试环境保存；这不代表真实云端存储。"
+      : localClips.some((clip) => clip.sealed && clip.storage === "oss")
+        ? "原声已在云端确认保存；本机文件也保留。"
+        : sealedIds.size
+          ? "原声已确认保存；文字处理不覆盖原录音。"
+          : "确认保存前，请保留本机原文件。";
+    this.setData({
+      processingTitle: title,
+      processingMessage: message,
+      processingReady: action === "organize",
+      processingError: error,
+      processingRetryable: ["upload", "query", "retry"].includes(action),
+      processingAction: action,
+      processingStorage: [
+        "uploading",
+        "sealing",
+        "upload-error",
+        "seal-error",
+      ].includes(state)
+        ? "当前片段仍在本机，保存结果以重新核对为准。"
+        : storage,
+    });
+  },
+  processingHelp() {
+    if (this.data.processingAction === "consent")
+      go(
+        this.assistedSessionId ? "assisted" : "welcome",
+        `projectId=${this.projectId}`,
+      );
+    else go("service", `kind=support&projectId=${this.projectId}`);
+  },
+  async startSpeaking() {
+    if (dataMode() !== "live") {
+      await this.record();
+      return;
+    }
+    if (this.data.busy || !this.data.canRecord) return;
+    const owner = sessionClient.context();
+    if (!this.data.interview) await this.selectQuestion();
+    if (
+      owner === sessionClient.context() &&
+      this.data.interview &&
+      !this.data.busy &&
+      ["choose", "prepare"].includes(this.data.flowStep)
+    )
+      await this.record();
+  },
+  closeQuestionPicker() {
+    const question =
+      this.data.interview?.currentQuestion ??
+      this.data.interview?.actualQuestion;
+    this.setData({
+      questionPicker: false,
+      customQuestion: false,
+      question: question?.snapshot.text ?? this.data.question,
+      ...(question ? { selectedQuestionKey: question.questionKey ?? "" } : {}),
+    });
+  },
+  writeQuestion() {
+    this.setData({ customQuestion: true });
+  },
+  showClips() {
+    this.setData({ clipPicker: true });
+  },
+  closeClips() {
+    this.setData({ clipPicker: false });
+  },
+  selectReviewClip(e: E) {
+    const clip = this.data.localClips.find(
+      (c) => c.clientClipId === e.currentTarget.dataset.id,
+    );
+    if (clip)
+      this.setData({
+        reviewClip: { ...clip, durationLabel: recordingTime([clip]) },
+        clipPicker: false,
+      });
+  },
+  async submitReview() {
+    if (dataMode() !== "live") {
+      this.example();
+      return;
+    }
+    if (this.data.reviewClip?.sealed) {
+      this.showProcessing();
+      return;
+    }
+    if (this.data.reviewClip) {
+      this.closePlayback();
+      this.scrollToTop();
+      await this.upload({
+        currentTarget: { dataset: { id: this.data.reviewClip.clientClipId } },
+        detail: { value: "" },
+      });
+    }
+  },
+  async retryProcessing() {
+    if (this.data.processingAction === "upload") {
+      const selectedId =
+        this.uploadingClipId || this.data.reviewClip?.clientClipId;
+      const clip = this.data.localClips.find(
+        (c) => !c.sealed && c.clientClipId === selectedId,
+      );
+      if (clip)
+        await this.upload({
+          currentTarget: { dataset: { id: clip.clientClipId } },
+          detail: { value: "" },
+        });
+    } else {
+      const task =
+        this.data.processingAction === "retry"
+          ? this.data.taskRows.find(
+              (row) => row.state === "failed" && row.retryable,
+            )
+          : undefined;
+      if (task)
+        await this.retryTranscription({
+          currentTarget: { dataset: { id: task.id } },
+          detail: { value: "" },
+        });
+      else await this.refreshTasks();
+    }
+  },
+  async moreQuestion() {
+    this.scrollToTop();
+    await this.requestFollowup();
+  },
+  async organizeAfterFollowup() {
+    if (await this.skipFollowup()) this.openStory();
+  },
+  editFollowup() {
+    this.setData({ followupEditing: !this.data.followupEditing });
   },
   async resumeLocal(e: E) {
     if (
@@ -621,6 +1023,7 @@ Page({
         this.assistedSessionId || undefined,
       );
       if (this.current(generation, context)) {
+        this.setData({ questionPicker: false });
         wx.setStorageSync(`${recordingPartition(this.projectId)}:active`, id);
         await this.attach(selected, generation, context);
       }
@@ -645,6 +1048,7 @@ Page({
   },
   async upload(e: E) {
     if (this.data.busy || !this.liveRecorder) return;
+    this.uploadingClipId = e.currentTarget.dataset.id;
     const generation = this.generation,
       context = sessionClient.context();
     this.setData({ busy: true });
@@ -806,23 +1210,52 @@ Page({
     this.setData({
       ...flowView("prepare"),
       question: currentQuestion.snapshot.text,
+      selectedQuestionKey: currentQuestion.questionKey ?? "",
+      questionPicker: false,
     });
+    this.scrollToTop();
   },
-  chooseAnother() {
+  openQuestionPicker() {
     if (
       this.data.busy ||
       ["recording", "paused", "requesting", "saving", "device-error"].includes(
         this.data.state,
       )
     )
-      return;
+      return false;
     this.closePlayback();
+    const question =
+      this.context?.plan.eligibleQuestions.find(
+        (q) => q.key === this.data.selectedQuestionKey,
+      ) ?? this.context?.plan.defaultQuestion;
     this.setData({
-      ...flowView("choose"),
-      question:
-        this.context?.plan.defaultQuestion?.text ??
-        "想从哪里讲起？可以自由讲述、看照片或自拟问题。",
+      questionPicker: true,
+      customQuestion: false,
+      ...(dataMode() === "live"
+        ? {
+            selectedQuestionKey: question?.key ?? "",
+            question:
+              question?.text ??
+              "想从哪里讲起？可以自由讲述、看照片或自拟问题。",
+          }
+        : {}),
     });
+    return true;
+  },
+  chooseAnother() {
+    if (!this.openQuestionPicker() || dataMode() !== "live" || !this.context)
+      return;
+    const questions = this.context.plan.eligibleQuestions;
+    const index = questions.findIndex(
+      (q) => q.key === this.data.selectedQuestionKey,
+    );
+    const question = questions[(index + 1) % questions.length];
+    if (question)
+      this.setData({
+        selectedQuestionKey: question.key,
+        question: question.text,
+        questionHint: question.optionalContext?.join("，") ?? "",
+      });
   },
   showProcessing() {
     if (
@@ -834,7 +1267,9 @@ Page({
     )
       return;
     this.closePlayback();
-    this.setData(flowView("processing"));
+    this.setData({ ...flowView("processing"), questionPicker: false });
+    this.updateProcessingView();
+    this.scrollToTop();
   },
   reviewCurrent() {
     if (
@@ -843,7 +1278,11 @@ Page({
       ["recording", "paused", "requesting", "saving"].includes(this.data.state)
     )
       return;
-    this.setData(flowView("review"));
+    this.setData({
+      ...flowView("review"),
+      reviewClip: this.reviewSelection(this.data.localClips),
+    });
+    this.scrollToTop();
   },
   async togglePause() {
     if (this.data.busy || !this.liveRecorder || dataMode() !== "live") return;
@@ -905,6 +1344,7 @@ Page({
         }
         this.setData({
           status: error instanceof Error ? error.message : "不能开始录音",
+          error: error instanceof Error ? error.message : "不能开始录音",
         });
       }
     } finally {
@@ -934,6 +1374,7 @@ Page({
   },
   async retry() {
     if (dataMode() === "live") {
+      this.setData({ error: "" });
       if (this.liveRecorder?.snapshot().hasPendingSave)
         await this.liveRecorder.retrySave();
       else await this.liveRecorder?.restore();
@@ -1138,8 +1579,10 @@ Page({
       context = sessionClient.context(),
       sequence = ++this.followupSequence;
     this.setData({
+      ...flowView("followup"),
       busy: true,
-      followupStatus: "正在请求可选追问；已有原声仍可整理",
+      followupEditing: false,
+      followupStatus: "正在准备一个小问题…",
     });
     try {
       const view = await optionalFollowupClient.request(
@@ -1194,7 +1637,7 @@ Page({
               ? "可以先讲到这里，已有原声可以直接整理。"
               : view.task?.state === "obsolete"
                 ? "旧建议已失效；当前问题和已保存原声仍保留。"
-                : "可选追问状态已确认；可以继续讲、换题或整理。",
+                : "想到了就再说一点，也可以先讲到这里。",
     });
     if (waiting)
       this.followupPoll = setTimeout(() => void this.refreshFollowup(), 2000);
@@ -1297,7 +1740,7 @@ Page({
     this.clearFollowup();
     go(
       "story",
-      `projectId=${this.projectId}&interviewId=${interview.id}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+      `projectId=${this.projectId}&interviewId=${interview.id}&organize=1${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
     );
   },
   async finish() {
@@ -1314,7 +1757,7 @@ Page({
       )
         return;
       if (this.data.interview && !(await this.skipFollowup())) return;
-      go("welcome", `projectId=${this.projectId}`);
+      wx.reLaunch({ url: `/pages/project/index?projectId=${this.projectId}` });
       return;
     }
     home();

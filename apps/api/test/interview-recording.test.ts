@@ -979,6 +979,75 @@ test("withdrawal during object copying fences the final transaction and retains 
   );
 });
 
+test("recording question choices use the edited personal plan and exclude every unavailable or forbidden question", async () => {
+  const p = await bound();
+  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const planUrl = `/v1/projects/${p.projectId}/plan`;
+  const initial = data(await request("GET", planUrl, p.narrator.token), 200);
+  const original = initial.chapters[0].questions[0];
+  const questions = [
+    "skipped",
+    "later",
+    "not-applicable",
+    "blocked-key",
+    "blocked-tag",
+    "mine",
+    "another",
+  ].map((key) => ({
+    ...original,
+    key,
+    text: `本人问题：${key}`,
+    sensitivityTags: key === "blocked-tag" ? ["private-topic"] : [],
+  }));
+  data(
+    await request("POST", planUrl, p.narrator.token, {
+      expectedVersion: initial.revision,
+      content: {
+        chapters: [{ ...initial.chapters[0], questions }],
+        starters: initial.starters,
+      },
+    }),
+  );
+  const selected = data(
+    await request("POST", `${planUrl}/preferences`, p.narrator.token, {
+      expectedVersion: initial.preferences.version,
+      blockedTopics: ["blocked-key", "private-topic"],
+      questionStates: ["skipped", "later", "not-applicable"].map((state) => ({
+        questionKey: state,
+        state,
+      })),
+    }),
+  );
+  const current = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/interviews`,
+      p.narrator.token,
+    ),
+    200,
+  );
+  assert.deepEqual(
+    current.plan.eligibleQuestions.map((q: { key: string }) => q.key),
+    ["mine", "another"],
+  );
+  assert.equal(current.plan.defaultQuestion.key, "mine");
+  assert.equal(current.plan.eligibleQuestions[1].text, "本人问题：another");
+  const started = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/interviews`,
+      p.narrator.token,
+      {
+        clientInterviewId: randomUUID(),
+        expectedPlanRevision: selected.revision,
+        questionKey: current.plan.eligibleQuestions[1].key,
+      },
+    ),
+  );
+  assert.equal(started.actualQuestion.questionKey, "another");
+  assert.equal(started.actualQuestion.snapshot.text, "本人问题：another");
+});
+
 test("collection-only actual-question commands return the current recording context without private question history", async () => {
   const p = await project(),
     current = await state(p, p.buyer.token);

@@ -6,7 +6,7 @@
   --brown-dark: #593b2c;
   --brown: #986349;
   --olive: #566348;
-  --muted: #817467;
+  --muted: #6e6256;
   --line: #e8ded0;
   color: var(--ink);
   background: var(--paper);
@@ -1178,4 +1178,10 @@ dialog .button {
 }
 body:has(dialog[open]) {
   overflow: hidden;
+}
+
+.internal-entry-note {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 16px 24px;
 }

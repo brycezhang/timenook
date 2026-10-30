@@ -2,7 +2,11 @@ import { watchProjectAccess } from "../../services/project-access";
 import { dataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
 import { storyClient } from "../../services/stories";
-import { clearStoryAudio, privateStoryAudio } from "../../services/story-audio";
+import {
+  clearStoryAudio,
+  privateStoryAudio,
+  requireStoryAudioAccess,
+} from "../../services/story-audio";
 import { recordingPartition } from "../../services/interview-recording";
 import { paymentKey } from "../../services/payments";
 import { projectOverviewClient } from "../../services/project-overview";
@@ -28,14 +32,23 @@ function stage(story: StoryView | null) {
         : task.state === "succeeded"
           ? "故事已整理，待本人核对"
           : task.state === "no_speech"
-            ? "未识别到有效语音，请再录一段"
-            : task.state === "failed"
-              ? "整理失败，原声仍保留"
-              : task.state === "manual_review"
-                ? "需要人工协助，原声仍保留"
-                : task.state === "obsolete"
-                  ? "这次整理已失效，请保存补录后重新整理"
-                  : "处理中，可离开";
+            ? "未识别到语音，原声已保存，请回听后再录一段"
+            : task.state === "no_content"
+              ? "已识别到文字，暂未形成故事，可以继续补充讲述"
+              : task.state === "failed"
+                ? "整理失败，原声仍保留"
+                : task.state === "manual_review"
+                  ? "需要人工协助，原声仍保留"
+                  : task.state === "obsolete"
+                    ? "这次整理已失效，请保存补录后重新整理"
+                    : "处理中，可离开";
+}
+function audioTime(seconds: number) {
+  const total = Math.max(0, Math.floor(seconds)),
+    hours = Math.floor(total / 3600);
+  const minutes = Math.floor(total / 60) % 60,
+    rest = total % 60;
+  return `${hours ? hours + ":" : ""}${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 import type { Story } from "../../domain/model";
 import { confirmStory, touch } from "../../domain/model";
@@ -61,8 +74,10 @@ Page({
   confirmationSessionId: "",
   generation: 0,
   visible: false,
+  autoOrganize: false,
   ownerContext: "",
   audioSequence: 0,
+  audioSeeking: false,
   liveAudio: null as WechatMiniprogram.InnerAudioContext | null,
   stopProjectWatch: undefined as (() => void) | undefined,
   stopSessionWatch: undefined as (() => void) | undefined,
@@ -70,6 +85,9 @@ Page({
   decisionCommand: null as { input: string; key: string } | null,
   careCommand: null as { input: string; key: string } | null,
   data: {
+    needsReview: false,
+    showAudio: false,
+    showCare: false,
     careExpiry: "",
     careEvidence: "",
     careStatus: "",
@@ -78,14 +96,24 @@ Page({
     noticeText: "当前为本地合成政策验证；此说明仅提交到本次选择。",
     decisionReady: false,
     canDecide: false,
-    confirmedChoice: null as boolean | null,
-    includeChoice: null as boolean | null,
-    evidence: "",
+    allowInBook: false,
     decisionStatus: "",
     audioBusy: false,
     audioError: "",
     playingClipId: "",
+    pausedClipId: "",
+    loadingClipId: "",
+    audioPosition: 0,
+    audioDuration: 0,
+    audioPositionLabel: "00:00",
+    audioDurationLabel: "--:--",
+    liveAudioSources: [] as {
+      clipId: string;
+      durationSeconds: number;
+      durationLabel: string;
+    }[],
     liveParagraphs: [] as { text: string; sourceLabel: string }[],
+    liveTranscripts: [] as { clipId: string; label: string; text: string }[],
     saveWarning: "",
     canOrganize: false,
     live: false,
@@ -104,6 +132,7 @@ Page({
   },
   onLoad(q) {
     if (dataMode() === "live") {
+      this.autoOrganize = q.organize === "1";
       this.projectId = q.projectId || "";
       this.interviewId = q.interviewId || "";
       this.storyId = q.storyId || "";
@@ -137,6 +166,8 @@ Page({
       this.setData({
         story: null,
         liveParagraphs: [],
+        liveTranscripts: [],
+        liveAudioSources: [],
         canOrganize: false,
         context: null,
         error: "",
@@ -145,9 +176,7 @@ Page({
         busy: false,
         decisionReady: false,
         canDecide: false,
-        confirmedChoice: null,
-        includeChoice: null,
-        evidence: "",
+        allowInBook: false,
         decisionStatus: "",
         careExpiry: "",
         careEvidence: "",
@@ -169,6 +198,17 @@ Page({
         return;
       }
       await this.refreshLive(generation, context);
+      if (
+        this.currentLive(generation, context) &&
+        this.autoOrganize &&
+        this.data.canOrganize &&
+        (!this.data.story?.task ||
+          this.data.story.task.state === "obsolete" ||
+          this.data.context?.clipCount !== this.data.story.task.sources.length)
+      ) {
+        this.autoOrganize = false;
+        await this.submitLive();
+      }
       if (this.currentLive(generation, context) && this.data.story) {
         this.stopProjectWatch?.();
         this.stopProjectWatch = watchProjectAccess(
@@ -210,12 +250,12 @@ Page({
         careStatus: "",
         decisionReady: false,
         canDecide: false,
-        confirmedChoice: null,
-        includeChoice: null,
-        evidence: "",
+        allowInBook: false,
         decisionStatus: "",
         story: null,
         liveParagraphs: [],
+        liveTranscripts: [],
+        liveAudioSources: [],
         canOrganize: false,
         context: null,
         busy: false,
@@ -267,23 +307,22 @@ Page({
       error: error instanceof Error ? error.message : fallback,
     });
   },
-  async refreshLive(generation?: number, context?: string) {
+  async refreshLive(generation?: number, context?: string, background = false) {
     generation ??= this.generation;
     context ??= this.ownerContext;
     if (this.poll) clearTimeout(this.poll);
-    this.setData({
-      busy: true,
-      error: "",
-      decisionReady: false,
-      canDecide: false,
-      confirmedChoice: null,
-      includeChoice: null,
-      evidence: "",
-      careEvidence: "",
-      careExpiry: "",
-      decisionStatus: "",
-      careStatus: "",
-    });
+    if (!background)
+      this.setData({
+        busy: true,
+        error: "",
+        decisionReady: false,
+        canDecide: false,
+        allowInBook: false,
+        careEvidence: "",
+        careExpiry: "",
+        decisionStatus: "",
+        careStatus: "",
+      });
     try {
       let loaded: StoryView | undefined;
       if (this.storyId) {
@@ -304,10 +343,22 @@ Page({
             this.assistedSessionId || undefined,
           );
       if (!this.currentLive(generation, context)) return;
-      this.setData({
+      const view = {
         context: result,
         story: loaded ?? result?.story ?? null,
-        liveParagraphs: [],
+        liveParagraphs: [] as { text: string; sourceLabel: string }[],
+        liveTranscripts: [] as {
+          clipId: string;
+          label: string;
+          text: string;
+        }[],
+        privateError: "",
+        needsReview: false,
+        liveAudioSources: [] as {
+          clipId: string;
+          durationSeconds: number;
+          durationLabel: string;
+        }[],
         pendingLocal,
         stage: stage(loaded ?? result?.story ?? null),
         saveWarning:
@@ -321,17 +372,53 @@ Page({
           (!result.story?.task ||
             ["obsolete", "succeeded"].includes(result.story.task.state) ||
             result.clipCount !== result.story.task.sources.length),
-      });
+      };
       if (loaded || result?.story) {
         try {
           const full =
             loaded ??
             (await storyClient.read(this.projectId, result!.story!.id));
           if (!this.currentLive(generation, context)) return;
-          this.setData({
+          Object.assign(view, {
             story: full,
+            decisionReady: !!full.confirmation,
+            canDecide:
+              !!full.confirmation &&
+              (full.confirmation.canDecide || !!this.confirmationSessionId),
+            allowInBook: full.confirmation?.allowInBook === true,
+            noticeVersion:
+              full.confirmation?.noticeVersion || "synthetic-d08-v1",
+            evidencePrefix: full.confirmation?.evidencePrefix || "synthetic:",
+            noticeText: full.confirmation?.noticeText || "",
+            liveAudioSources: (full.task?.sources ?? []).map((source) => ({
+              clipId: source.clipId,
+              durationSeconds: (source.durationMs ?? 0) / 1000,
+              durationLabel: source.durationMs
+                ? audioTime(source.durationMs / 1000)
+                : "--:--",
+            })),
+            needsReview: !!full.revision?.reviewItems.some(
+              (item) =>
+                !full.revision?.reviewResolutions?.some(
+                  (resolved) => resolved.item === item,
+                ),
+            ),
             stage: stage(full),
             privateError: "",
+            liveTranscripts:
+              !full.revision || full.task?.state === "no_content"
+                ? (full.task?.sources ?? []).flatMap((source, index) =>
+                    source.transcript?.text.trim()
+                      ? [
+                          {
+                            clipId: source.clipId,
+                            label: `第 ${index + 1} 段原声`,
+                            text: source.transcript.text,
+                          },
+                        ]
+                      : [],
+                  )
+                : [],
             liveParagraphs: (full.revision?.paragraphs ?? []).map((p) => ({
               text: p.text,
               sourceLabel: p.sourceRefs
@@ -353,7 +440,7 @@ Page({
           if (full.task?.state === "failed") {
             const task = await storyClient.task(this.projectId, full.task.id);
             if (this.currentLive(generation, context))
-              this.setData({ retryable: task.retryable });
+              view.retryable = task.retryable;
           }
         } catch (error) {
           if (
@@ -361,13 +448,15 @@ Page({
             error.status === 403 &&
             this.currentLive(generation, context)
           ) {
-            this.setData({
+            Object.assign(view, {
               story: result?.story ?? null,
               privateError: "正文暂时不可查看，请核对讲述者的共享授权",
             });
           } else throw error;
         }
       }
+      if (!this.currentLive(generation, context)) return;
+      this.setData(view);
       if (
         this.currentLive(generation, context) &&
         this.data.story?.task &&
@@ -376,15 +465,39 @@ Page({
         )
       )
         this.poll = setTimeout(
-          () => void this.refreshLive(generation, context),
+          () => void this.refreshLive(generation, context, true),
           2000,
         );
     } catch (error) {
       this.liveFailure(generation, context, error, "查询失败，请重试");
     } finally {
-      if (this.currentLive(generation, context, true))
+      if (!background && this.currentLive(generation, context, true))
         this.setData({ busy: false });
     }
+  },
+  moreActions() {
+    wx.showActionSheet({
+      itemList: [
+        "修改故事文字",
+        "补充照片",
+        "回听已保存的原声",
+        "重新整理故事",
+        "申请人工校对",
+        "继续补充讲述",
+      ],
+      success: ({ tapIndex }) => {
+        if (tapIndex === 0) this.edit();
+        else if (tapIndex === 1) this.editLivePhotos();
+        else if (tapIndex === 2) {
+          this.setData({ showAudio: true });
+          wx.pageScrollTo?.({ selector: ".live-audio-list", duration: 200 });
+        } else if (tapIndex === 3) void this.submitLive();
+        else if (tapIndex === 4) {
+          this.setData({ showCare: true });
+          void this.prepareDecision();
+        } else this.recoverInterview();
+      },
+    });
   },
   async submitLive() {
     if (
@@ -480,12 +593,13 @@ Page({
           overview.noticeText ||
           "当前为本地合成政策验证；此说明仅提交到本次选择。",
         canDecide: overview.canDecide || !!this.confirmationSessionId,
-        confirmedChoice: null,
-        includeChoice: null,
-        evidence: "",
+        allowInBook:
+          this.data.story?.confirmation?.allowInBook ??
+          this.data.story?.decision?.allowInBook ??
+          true,
         decisionStatus:
           overview.canDecide || this.confirmationSessionId
-            ? "请本人分别选择，并记录本次独立说明"
+            ? "请本人阅读全文后确认这版内容"
             : "当前账号只能协助校对；本人确认请使用讲述者账号或当次故事确认协助",
       });
     } catch (error) {
@@ -500,42 +614,37 @@ Page({
         this.setData({ busy: false });
     }
   },
-  chooseConfirmation(e: E) {
-    this.setData({ confirmedChoice: e.currentTarget.dataset.value === "true" });
+  decideLive() {
+    return this.saveDecision(true, this.data.allowInBook);
   },
-  chooseInclusion(e: E) {
-    this.setData({ includeChoice: e.currentTarget.dataset.value === "true" });
+  adjustDecision() {
+    if (!this.data.canDecide || this.data.busy) return;
+    wx.showActionSheet({
+      itemList: ["撤回这版内容确认", "这版暂不入书", "重新确认并允许这版入书"],
+      success: ({ tapIndex }) => {
+        if (tapIndex >= 0 && tapIndex <= 2)
+          void this.saveDecision(tapIndex !== 0, tapIndex === 2);
+      },
+    });
   },
-  decisionEvidence(e: E) {
-    this.setData({ evidence: e.detail.value });
-  },
-  async decideLive() {
+  async saveDecision(confirmed: boolean, allowInBook: boolean) {
     const current = this.data.story,
       revision = current?.revision;
-    if (this.data.busy || !current || !revision || !this.data.canDecide) return;
     if (
-      this.data.confirmedChoice === null ||
-      this.data.includeChoice === null ||
-      !/^[^\r\n]{3,160}$/.test(this.data.evidence.trim())
-    ) {
-      this.setData({
-        decisionStatus:
-          "请本人分别选择内容确认与入书许可，并填写 3 至 160 字的本次独立说明（单行）",
-      });
+      this.data.busy ||
+      !current ||
+      !revision ||
+      !this.data.canDecide ||
+      (confirmed && this.data.needsReview)
+    )
       return;
-    }
-    if (this.data.includeChoice && !this.data.confirmedChoice) {
-      this.setData({ decisionStatus: "未确认的故事不能允许入书" });
-      return;
-    }
     const input = {
       revisionId: revision.id,
       contentHash: revision.contentHash,
       expectedVersion: current.version,
-      confirmed: this.data.confirmedChoice,
-      allowInBook: this.data.includeChoice,
+      confirmed,
+      allowInBook,
       noticeVersion: this.data.noticeVersion,
-      evidenceRef: `${this.data.evidencePrefix}${this.data.evidence.trim()}`,
       ...(this.confirmationSessionId
         ? { assistedSessionId: this.confirmationSessionId }
         : {}),
@@ -550,7 +659,10 @@ Page({
       const result = await storyClient.decide(
         this.projectId,
         current.id,
-        input,
+        {
+          ...input,
+          evidenceRef: `${this.data.evidencePrefix}click:story-confirm:${this.decisionCommand!.key}`,
+        },
         this.decisionCommand!.key,
       );
       if (!this.currentLive(generation, context)) return;
@@ -558,7 +670,7 @@ Page({
       this.setData({
         story: result,
         stage: stage(result),
-        evidence: "",
+        allowInBook: result.decision?.allowInBook ?? this.data.allowInBook,
         decisionReady: false,
         decisionStatus: result.decision?.confirmed
           ? result.decision.allowInBook
@@ -660,10 +772,22 @@ Page({
   },
   async stopLiveAudio() {
     ++this.audioSequence;
-    this.liveAudio?.stop();
-    this.liveAudio?.destroy();
+    this.audioSeeking = false;
+    const player = this.liveAudio;
     this.liveAudio = null;
-    this.setData({ playingClipId: "", audioBusy: false, audioError: "" });
+    player?.stop();
+    player?.destroy();
+    this.setData({
+      playingClipId: "",
+      pausedClipId: "",
+      loadingClipId: "",
+      audioBusy: false,
+      audioError: "",
+      audioPosition: 0,
+      audioDuration: 0,
+      audioPositionLabel: "00:00",
+      audioDurationLabel: "--:--",
+    });
     await clearStoryAudio();
   },
   async playLive(e: E) {
@@ -679,12 +803,40 @@ Page({
       !this.currentLive(generation, context)
     )
       return;
-    const stopping = this.data.playingClipId === id;
     try {
+      if (this.liveAudio && this.data.playingClipId === id) {
+        this.liveAudio.pause();
+        this.setData({ playingClipId: "", pausedClipId: id });
+        return;
+      }
+      if (this.liveAudio && this.data.pausedClipId === id) {
+        const player = this.liveAudio,
+          sequence = this.audioSequence;
+        this.setData({ audioBusy: true, loadingClipId: id });
+        await requireStoryAudioAccess(
+          this.projectId,
+          source,
+          () =>
+            this.currentLive(generation, context) &&
+            sequence === this.audioSequence,
+        );
+        if (!this.currentLive(generation, context) || this.liveAudio !== player)
+          return;
+        this.setData({ playingClipId: id, pausedClipId: "" });
+        player.play();
+        return;
+      }
       await this.stopLiveAudio();
-      if (stopping || !this.currentLive(generation, context)) return;
+      if (!this.currentLive(generation, context)) return;
       const sequence = ++this.audioSequence;
-      this.setData({ audioBusy: true });
+      this.setData({
+        audioBusy: true,
+        loadingClipId: id,
+        audioDuration: (source.durationMs ?? 0) / 1000,
+        audioDurationLabel: source.durationMs
+          ? audioTime(source.durationMs / 1000)
+          : "--:--",
+      });
       const path = await privateStoryAudio(
         this.projectId,
         source,
@@ -702,6 +854,31 @@ Page({
       const player = wx.createInnerAudioContext();
       this.liveAudio = player;
       player.src = path;
+      const updateTime = () => {
+        if (
+          this.liveAudio !== player ||
+          this.audioSeeking ||
+          !this.currentLive(generation, context)
+        )
+          return;
+        const duration =
+          player.duration > 0 ? player.duration : this.data.audioDuration;
+        const position = Math.min(
+          Math.max(0, player.currentTime || 0),
+          duration || Infinity,
+        );
+        const label = audioTime(position),
+          durationLabel = duration > 0 ? audioTime(duration) : "--:--";
+        this.setData({
+          audioPosition: position,
+          audioDuration: duration,
+          audioPositionLabel: label,
+          audioDurationLabel: durationLabel,
+        });
+      };
+      player.onCanplay(updateTime);
+      player.onTimeUpdate(updateTime);
+      player.onSeeked(updateTime);
       const finish = () => {
         if (this.liveAudio === player)
           void this.stopLiveAudio().catch(() =>
@@ -728,8 +905,54 @@ Page({
       }
     } finally {
       if (this.currentLive(generation, context))
-        this.setData({ audioBusy: false });
+        this.setData({ audioBusy: false, loadingClipId: "" });
     }
+  },
+  seekLive(e: {
+    currentTarget: { dataset: { id: string } };
+    detail: { value: number };
+    type?: string;
+  }) {
+    const id = e.currentTarget.dataset.id;
+    if (
+      !this.liveAudio ||
+      ![this.data.playingClipId, this.data.pausedClipId].includes(id) ||
+      this.data.audioBusy
+    )
+      return;
+    const position = Math.min(
+      this.data.audioDuration,
+      Math.max(0, Number(e.detail.value)),
+    );
+    if (!Number.isFinite(position)) return;
+    this.audioSeeking = false;
+    this.liveAudio.seek(position);
+    this.setData({
+      audioPosition: position,
+      audioPositionLabel: audioTime(position),
+    });
+  },
+  draggingLive(e: {
+    currentTarget: { dataset: { id: string } };
+    detail: { value: number };
+  }) {
+    if (
+      !this.liveAudio ||
+      ![this.data.playingClipId, this.data.pausedClipId].includes(
+        e.currentTarget.dataset.id,
+      )
+    )
+      return;
+    const position = Math.min(
+      this.data.audioDuration,
+      Math.max(0, Number(e.detail.value)),
+    );
+    if (!Number.isFinite(position)) return;
+    this.audioSeeking = true;
+    this.setData({
+      audioPosition: position,
+      audioPositionLabel: audioTime(position),
+    });
   },
   recoverInterview() {
     const partition = recordingPartition(this.projectId),

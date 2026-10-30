@@ -1,3 +1,4 @@
+import { chooseDefaultQuestion } from "./recording-step-helper.mjs";
 import {
   prepareRecordingStep,
   showProcessingStep,
@@ -394,10 +395,13 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
   browser,
 }) => {
   const page = await openPage(browser, narrator);
+  page.setDefaultTimeout(5000);
   await page.goto(`${base}/#/interview?projectId=${projectId}`);
-  await page
-    .getByRole("button", { name: "就从这个问题开始", exact: true })
-    .click();
+  await chooseDefaultQuestion(page);
+  const current = () =>
+    request("GET", `/v1/projects/${projectId}/interviews`, narrator).then(
+      (r) => data(r, 200).interviews[0],
+    );
   const record = async () => {
     await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -413,16 +417,39 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
       .getByRole("button", { name: "提交这段讲述", exact: true })
       .click();
     await expect(
-      page.getByText("已在测试环境保存，真实云端保存仍待验证", {
+      page.getByText("录音已在测试环境保存；这不代表真实云端存储。", {
         exact: true,
       }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "整理成故事", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "再聊一个问题", exact: true }),
+    ).toHaveCount(0);
+    const saved = await current();
+    await expect
+      .poll(async () => {
+        await runtime.recoverDue();
+        const tasks = data(
+          await request(
+            "POST",
+            `/v1/projects/${projectId}/tasks/status`,
+            narrator,
+            {
+              interviewId: saved.id,
+            },
+          ),
+        );
+        return tasks.map((task) => task.state);
+      })
+      .toEqual(saved.clips.map(() => "succeeded"));
+    await page
+      .getByRole("button", { name: "重新查询转写状态", exact: true })
+      .click();
+    await expect(page.getByText("文字已转写", { exact: true })).toBeVisible();
   };
   await record();
-  const current = () =>
-    request("GET", `/v1/projects/${projectId}/interviews`, narrator).then(
-      (r) => data(r, 200).interviews[0],
-    );
   const first = await current();
   const db = new PrismaClient({ datasourceUrl: databaseUrl });
   try {
@@ -433,7 +460,7 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
       })
       .toBe(1);
     await page
-      .getByRole("button", { name: "请求一条可选追问", exact: true })
+      .getByRole("button", { name: "再聊一个问题", exact: true })
       .click();
     await expect
       .poll(async () => {
@@ -451,6 +478,9 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     expect(shown.currentQuestion.source.kind).toBe("follow-up");
     expect(shown.questionHistory).toHaveLength(2);
     await page
+      .getByRole("button", { name: "换成自己的问法", exact: true })
+      .click();
+    await page
       .locator(".optional-followup textarea")
       .fill("那一年您最记得哪件事？");
     await page
@@ -466,20 +496,6 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     expect(edited.questionHistory[2].parentActualQuestionId).toBe(
       shown.currentQuestion.id,
     );
-    await record();
-    const answered = await current();
-    expect(answered.clips.map((c) => c.actualQuestionId).sort()).toEqual(
-      [first.actualQuestion.id, edited.currentQuestion.id].sort(),
-    );
-    await showProcessingStep(page);
-    await page
-      .getByRole("button", { name: "跳过追问，继续原问题或整理", exact: true })
-      .click();
-    await expect(
-      page.getByText("已跳过追问；可以继续原问题、换题或直接整理。", {
-        exact: true,
-      }),
-    ).toBeVisible();
     await page.locator("#page").evaluate((n) => (n.scrollTop = 0));
     await page.screenshot({
       path: test.info().outputPath("optional-followup-390.png"),
@@ -493,8 +509,10 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
           height: n.getBoundingClientRect().height,
         })),
       );
+    expect(sizes.length).toBeGreaterThan(0);
     for (const size of sizes) {
-      expect(size.font).toBeGreaterThanOrEqual(20);
+      // The approved UI uses 15–17px operation text.
+      expect(size.font).toBeGreaterThanOrEqual(15);
       expect(size.width).toBeGreaterThanOrEqual(48);
       expect(size.height).toBeGreaterThanOrEqual(48);
     }
@@ -507,13 +525,16 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     await page.screenshot({
       path: test.info().outputPath("optional-followup-outer768-content390.png"),
     });
+    await record();
+    const answered = await current();
+    expect(answered.clips.map((c) => c.actualQuestionId).sort()).toEqual(
+      [first.actualQuestion.id, edited.currentQuestion.id].sort(),
+    );
     await showProcessingStep(page);
-    await page
-      .getByRole("button", { name: "整理或查看故事", exact: true })
-      .click();
+    await page.getByRole("button", { name: "整理成故事", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`story.*interviewId=${first.id}`));
     await page.goto(
-      `${base}/#/interview?projectId=${projectId}&interviewId=${first.id}`,
+      `${base}/#/interview?projectId=${projectId}&draftId=${randomUUID()}&prepare=1`,
     );
     await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -525,10 +546,31 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
         .locator(".local-recording")
         .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
+    await showProcessingStep(page);
+    await expect(
+      page.getByText("这段讲述还在本机", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "整理成故事", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "再聊一个问题", exact: true }),
+    ).toHaveCount(0);
+    // Keep this unsubmitted recording in its own interview; only the fully
+    // transcribed interview may open another question or finish the follow-up.
+    await page.goto(
+      `${base}/#/interview?projectId=${projectId}&interviewId=${first.id}`,
+    );
+    await expect(page.getByText("文字已转写", { exact: true })).toBeVisible();
     const pending = await page.evaluate(() =>
       Object.entries(localStorage).filter(([key]) => key.includes("recording")),
     );
-    expect(pending.length).toBeGreaterThan(0);
+    expect(
+      pending.some(([, value]) => {
+        const clips = JSON.parse(value);
+        return Array.isArray(clips) && clips.some((clip) => !clip.sealed);
+      }),
+    ).toBe(true);
     // Drop a genuine successful HTTP response at exact device expiry to model a transport timeout.
     await page.route(
       `**/interviews/${first.id}/follow-up/finish`,
@@ -543,7 +585,10 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     );
     await showProcessingStep(page);
     await page
-      .getByRole("button", { name: "跳过追问，继续原问题或整理", exact: true })
+      .getByRole("button", { name: "再聊一个问题", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "就讲到这里，整理故事", exact: true })
       .click();
     await expect(page.getByText(/当前权限已失效/)).toBeVisible();
     await expect(
@@ -568,11 +613,16 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
       JSON.stringify(
         {
           errors,
-          body: await page.locator("body").innerText(),
-          tasks: await db.productionTask.findMany({
-            where: { projectId },
-            select: { kind: true, state: true, errorCode: true },
-          }),
+          body: await page
+            .locator("body")
+            .innerText()
+            .catch(() => "closed"),
+          tasks: await db.productionTask
+            .findMany({
+              where: { projectId },
+              select: { kind: true, state: true, errorCode: true },
+            })
+            .catch(() => []),
         },
         null,
         2,
@@ -581,6 +631,9 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     throw error;
   } finally {
     await db.$disconnect();
-    await page.context().close();
+    await page
+      .context()
+      .close()
+      .catch(() => {});
   }
 });

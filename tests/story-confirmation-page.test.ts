@@ -171,6 +171,12 @@ const participation = {
 };
 function story() {
   return {
+    confirmation: {
+      canDecide: true,
+      allowInBook: false,
+      noticeVersion: "synthetic-d08-v1",
+      evidencePrefix: "synthetic:",
+    },
     id: storyId,
     projectId,
     interviewId,
@@ -201,6 +207,36 @@ function story() {
     },
   };
 }
+test("reading never confirms; one actual click confirms the pinned revision with actual click evidence", async () => {
+  const h = harness("story");
+  h.page.onLoad({ projectId, storyId });
+  const showing = h.page.onShow();
+  await tick();
+  const value = story();
+  value.confirmation.allowInBook = true;
+  h.respond(0, value);
+  await showing;
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.page.data.canDecide, true);
+  const deciding = h.page.decideLive();
+  const sent = h.requests[1]?.data;
+  assert.ok(sent, "one confirm click sends its actual action");
+  assert.equal(sent.confirmed, true);
+  assert.equal(sent.allowInBook, true);
+  assert.equal(sent.revisionId, revisionId);
+  assert.equal(sent.contentHash, "f".repeat(64));
+  assert.equal(sent.noticeVersion, "synthetic-d08-v1");
+  assert.match(sent.evidenceRef, /^synthetic:click:story-confirm:/);
+  await h.page.decideLive();
+  assert.equal(h.requests.length, 2);
+  h.respond(1, {
+    ...value,
+    decision: { revisionId, confirmed: true, allowInBook: true },
+  });
+  await deciding;
+  assert.match(h.page.data.decisionStatus, /允许这版入书/);
+  h.page.onUnload();
+});
 function overview() {
   const initialQuestion = {
     id: "99999999-9999-4999-8999-999999999991",
@@ -580,9 +616,11 @@ test("project page distinguishes real optional-followup, transcription, story an
     `/pages/interview/index?projectId=${projectId}&interviewId=${interviewId}`,
   );
   h.page.record();
-  assert.equal(
+  assert.match(
     h.routes[h.routes.length - 1],
-    `/pages/interview/index?projectId=${projectId}`,
+    new RegExp(
+      `/pages/interview/index\\?projectId=${projectId}&draftId=[a-f0-9-]{36}$`,
+    ),
   );
   h.page.onUnload();
 });
@@ -629,7 +667,7 @@ for (const policy of [
     noticeText: "内部验收，由本人选择",
   },
 ]) {
-  test(`story saves the exact version and separate inclusion choice under ${policy.noticeVersion}`, async () => {
+  test(`story confirms the exact version with the existing inclusion decision under ${policy.noticeVersion}`, async () => {
     const h = harness("story");
     h.page.onLoad({ projectId, storyId });
     const showing = h.page.onShow();
@@ -647,15 +685,6 @@ for (const policy of [
     const preparing = h.page.prepareDecision();
     h.respond(1, { ...overview(), ...policy });
     await preparing;
-    assert.equal(h.page.data.confirmedChoice, null);
-    assert.equal(h.page.data.includeChoice, null);
-    h.page.chooseConfirmation({
-      currentTarget: { dataset: { value: "true" } },
-    });
-    h.page.chooseInclusion({ currentTarget: { dataset: { value: "false" } } });
-    h.page.decisionEvidence({
-      detail: { value: "本人逐段核对，确认内容，暂不入书。" },
-    });
     const deciding = h.page.decideLive();
     assert.equal(
       h.requests[2].url,
@@ -811,9 +840,11 @@ test("denied story sharing keeps the authorized collection path available withou
   assert.equal(h.page.data.participation.canCollect, true);
   assert.match(h.page.data.status, /共享|授权/);
   h.page.record();
-  assert.equal(
+  assert.match(
     h.routes[h.routes.length - 1],
-    `/pages/interview/index?projectId=${projectId}`,
+    new RegExp(
+      `/pages/interview/index\\?projectId=${projectId}&draftId=[a-f0-9-]{36}$`,
+    ),
   );
   h.page.assisted();
   assert.equal(
@@ -1049,9 +1080,6 @@ test("a decision response after account replacement purges the previous private 
   const preparing = h.page.prepareDecision();
   h.respond(1, overview());
   await preparing;
-  h.page.chooseConfirmation({ currentTarget: { dataset: { value: "true" } } });
-  h.page.chooseInclusion({ currentTarget: { dataset: { value: "false" } } });
-  h.page.decisionEvidence({ detail: { value: "本人确认后暂不入书" } });
   const saving = h.page.decideLive();
   h.storage.set(`timenook.session.v1:${base}`, {
     ...login,
@@ -1069,7 +1097,6 @@ test("a decision response after account replacement purges the previous private 
   await saving;
   assert.equal(h.page.data.story, null);
   assert.equal(h.page.data.liveParagraphs.length, 0);
-  assert.equal(h.page.data.evidence, "");
   assert.equal(h.page.data.busy, false);
   assert.match(h.page.data.stage, /账号|访问/);
   h.page.onUnload();
@@ -1225,7 +1252,7 @@ test("correction explicitly applies the latest photo snapshot and selected audio
   h.page.onUnload();
 });
 
-test("refreshing to a new story revision requires fresh independent choices and evidence", async () => {
+test("refreshing to a new revision requires an actual new click pinned to its current content", async () => {
   const h = harness("story");
   h.page.onLoad({ projectId, storyId });
   const showing = h.page.onShow();
@@ -1235,9 +1262,6 @@ test("refreshing to a new story revision requires fresh independent choices and 
   const preparing = h.page.prepareDecision();
   h.respond(1, overview());
   await preparing;
-  h.page.chooseConfirmation({ currentTarget: { dataset: { value: "true" } } });
-  h.page.chooseInclusion({ currentTarget: { dataset: { value: "true" } } });
-  h.page.decisionEvidence({ detail: { value: "只核对过第一版" } });
   const refreshing = h.page.refreshLive(),
     revised = story();
   revised.version = 2;
@@ -1246,10 +1270,14 @@ test("refreshing to a new story revision requires fresh independent choices and 
   revised.revision.contentHash = "a".repeat(64);
   h.respond(2, revised);
   await refreshing;
-  assert.equal(h.page.data.confirmedChoice, null);
-  assert.equal(h.page.data.includeChoice, null);
-  assert.equal(h.page.data.evidence, "");
-  assert.equal(h.page.data.decisionReady, false);
+  assert.equal(h.page.data.decisionReady, true);
+  assert.equal(h.requests.length, 3, "refresh cannot confirm the new version");
+  const saving = h.page.decideLive();
+  assert.equal(h.requests[3].data.revisionId, revised.revision.id);
+  assert.equal(h.requests[3].data.contentHash, "a".repeat(64));
+  assert.equal(h.requests[3].data.expectedVersion, 2);
+  h.respond(3, revised);
+  await saving;
   h.page.onUnload();
 });
 
@@ -1274,11 +1302,6 @@ test("opening an existing story with story-confirmation assistance never submits
   const preparing = h.page.prepareDecision();
   h.respond(1, { ...overview(), canDecide: false, role: "initiator" });
   await preparing;
-  h.page.chooseConfirmation({ currentTarget: { dataset: { value: "true" } } });
-  h.page.chooseInclusion({ currentTarget: { dataset: { value: "false" } } });
-  h.page.decisionEvidence({
-    detail: { value: "本人逐段核对本版内容，单独选择不入书" },
-  });
   const saving = h.page.decideLive();
   assert.equal(h.requests[2].data.assistedSessionId, confirmationSessionId);
   h.respond(2, story());
@@ -1305,11 +1328,6 @@ for (const outcome of ["success", "network"] as const) {
     const preparing = h.page.prepareDecision();
     h.respond(1, overview());
     await preparing;
-    h.page.chooseConfirmation({
-      currentTarget: { dataset: { value: "true" } },
-    });
-    h.page.chooseInclusion({ currentTarget: { dataset: { value: "false" } } });
-    h.page.decisionEvidence({ detail: { value: "本人这次核对后暂不入书" } });
     const deciding = h.page.decideLive();
     h.expireSession();
     if (outcome === "success")
@@ -1321,7 +1339,6 @@ for (const outcome of ["success", "network"] as const) {
     await deciding;
     assert.equal(h.page.data.story, null);
     assert.equal(h.page.data.liveParagraphs.length, 0);
-    assert.equal(h.page.data.evidence, "");
     assert.equal(h.page.data.canDecide, false);
     assert.equal(h.page.data.busy, false);
     assert.equal(h.page.data.decisionStatus, "");

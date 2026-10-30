@@ -33,25 +33,15 @@ test("访客能切换讲述与整理稿，键盘也能操作", async ({ page }) 
   await expect(page.getByRole("tabpanel")).toContainText("我把书包一放");
 });
 
-test("下单入口说明尚未开放，关闭与 Escape 都恢复焦点", async ({
-  page,
-}, testInfo) => {
+test("制作入口直接进入网页产品，不再停留在说明弹窗", async ({ page }) => {
   await page.goto("/");
-  const order = page.getByRole("button", { name: "去微信小程序下单" }).first();
-  await order.click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("暂未开放下单");
-  await page.screenshot({
-    path: `/tmp/timenook-website-${testInfo.project.name}-dialog.png`,
-  });
-  await dialog.getByRole("button", { name: "知道了" }).click();
-  await expect(dialog).not.toBeVisible();
-  await expect(order).toBeFocused();
-  await order.click();
-  await page.keyboard.press("Escape");
-  await expect(dialog).not.toBeVisible();
-  await expect(order).toBeFocused();
+  const entries = page.getByRole("link", { name: "进入内测体验" });
+  await expect(page.locator("[data-order]")).toHaveCount(4);
+  for (const entry of await entries.all())
+    await expect(entry).toHaveAttribute("href", "/app/");
+  await entries.first().click();
+  await expect(page).toHaveURL(/\/app\/$/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
 test("常见问题可以展开并再次收起", async ({ page }) => {

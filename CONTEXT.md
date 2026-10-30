@@ -4,11 +4,20 @@
 
 品牌「时光里」，产品「岁月成书」。微信小程序为一位成年讲述者及一位发起人提供分轮语音记录、故事确认及个人故事书制作；999元包含一个项目与一本实体书。
 
+2026-10-30 用户确认区分“未识别到语音”与“已转写但暂未形成故事”：前者为 `no_speech`，后者为 `no_content`；网页与小程序共用故事页显示已识别文字和继续补充入口，转写不作为故事确认稿。方案与验证见[转写与成稿状态修复](docs/delivery/2026-10-30/transcription-story-states.md)。
+
+同日用户要求将故事页的原声保存提示改为可直接试听的播放卡片；网页与小程序共用，支持逐段播放、暂停／继续、进度条拖动、已播放／总时长及加载提示，沿用原声授权和临时文件清理规则。
+
 项目处于开发阶段，方案调整与文档、记忆更新按[工程约定](AGENTS.md)执行。
 
 赠礼关系可配置或自定义。产品内置大纲模板，双方可编辑个人章节和问题，讲述者决定回答与入书。核心链路为“录音 → 可靠保存 → 文件转写 → 可选追问 → 故事确认”。
 
 - 产品范围与验收：[MVP PRD](docs/时光里_岁月成书_MVP_PRD.md)。
+- 双端 UI：2026-10-30 用户批准[最新原型](docs/frontend/ui-review-2026-10-30.md)并授权网页版、小程序版实施和线上部署。[工程交付](docs/delivery/2026-10-30/ui-refresh-delivery.md)已统一移动/桌面布局、项目与分步录音、真实保存转写状态、成书及辅助页面。用途开始一次确认既有三项；故事仅「确认」，不新增第四类用途记录或独立入书说明。本人、版本、原拒绝、撤回和协助校验保留。网页已发布，小程序停在 `0.2.3` 体验版；用户最新要求「先不提审」，本轮不更改主营类目或进入正式提审。实际发布和平台限制以 [#124](https://github.com/brycezhang/timenook/issues/124) 为唯一运行证据，微信真机结果分别记录。
+- 内部验收登录：2026-10-30 用户要求验证阶段账号不要过期；显式内部验收模式下，验收登录链接可反复使用，不因打开、登录或退出而失效，直到手动撤销；会话持续有效，已有有效会话恢复时升级；主动退出终止当前会话，再次登录可使用原链接，见[网页账号](docs/development-web-accounts.md)。
+- 2026-10-30 同机协助简化：用户确认三项用途改为复选项，首次默认勾选，可单独取消，一键保存后进入讲述；已有拒绝、撤销或过期状态按实际回显。仍逐项保存独立证据，故事/书稿确认单独进行；小程序与网页继续共用原生页面，见[体验交付](docs/delivery/2026-10-30/web-experience.md#同机协助复选项与一键继续)。
+- 2026-10-30 界面收敛：用户要求网页直接复刻小程序，业务页只维护同一份 WXML / WXSS / Page，不另写网页界面；录音首屏直接显示问题与大麦克风，按录制、回听提交、自动保存处理、可选追问分阶段呈现。新讲述使用独立草稿标识，不误恢复上一段；照片、改写和原声放次级入口。见[最新体验交付](docs/delivery/2026-10-30/web-experience.md#同日界面收敛)。
+- 网页完整体验：2026-10-30 用户确认网页 UI/UX 沿用小程序与效果图，保留正常登录、套餐、支付及创建项目流程；内测点击直接登录独立账号、模拟支付后创建真实内测项目，无真实扣款或生产权益。共用页面同步调整并修复网页输入失焦、邀请返回与分享；方案、验证与部署见[体验交付](docs/delivery/2026-10-30/web-experience.md)。
 - 两端分步讲述：2026-10-29 用户确认手机网页端与小程序统一选题、录制（暂停继续）、回听提交、保存处理／可选追问及故事确认流程，保留既有授权和版本规则；网页与落地页同域 `sgl.wootoon.cn`，首版用于内部验收、账号简化、无网页真实收款。规格与工程进度见[统一流程规格](docs/delivery/2026-10-29/mobile-web-spec.md)和[实施票据](docs/delivery/2026-10-29/mobile-web-tickets.md)，网页已部署同域内测入口，并用双账号同一项目完成真实OSS/ASR/DeepSeek、故事确认、5页PDF同版确认和书中原声回听，见[运行验收](docs/delivery/2026-10-29/mobile-web-online.md)；语音是明确虚构的模拟设备输入，微信真机与人工目标用户仍待验。
 - 后台整体重构：用户确认参考 wutong 完整采用 Vben 登录/主布局、路由菜单、搜索筛选分页、详情/弹窗/抽屉及多标签页；保留飞书白名单登录和现有业务权限。菜单按商品配置、客户服务、生产履约、系统运维组织，客户服务只保留实际工单事项，见[重构规格草案](docs/delivery/2026-10-29/admin-vben-refactor-spec.md)。
 - 营销官网：[首版需求](docs/frontend/marketing-requirements.md)已确认；以 Monorepo 内独立应用 `apps/website` 开发、构建与打包，见[官网说明](apps/website/README.md)，规格/实现票为 #69/#70。单页以成年子女为父母制作人生书为主线，微信分享后的手机访问优先并适配电脑；展示样书节选、讲述与故事示例及 999 元套餐，引导直达微信小程序套餐页。沿用小程序视觉和用户提供的「时光里」Logo，公司版权沿用 deed-fe 的「千言一语文化传媒有限公司」；首版使用明确标注的现有效果图与示例，不设咨询入口。官网展示预览已部署至 `https://sgl.wootoon.cn`，公网15项浏览器检查通过，见[发布记录](docs/delivery/2026-10-28/website-online.md)；小程序下单仍未开放，正式跳转及购买验证通过后再对外推广；微信具体接入方式仍待核实。
@@ -18,7 +27,7 @@
 - 工程基线：[wutong技术栈对齐](docs/architecture/wutong技术栈对齐.md)，参考wutong-admin的工程组织及ECS/Nginx/systemd发布方式。
 - 上线参数：[决策与待定项](docs/architecture/决策与待定项.md)。
 - 部署入口：与 legal-agent 共用阿里云 ECS，TimeNook API 为 `https://timenookapi.threeminreading.com/api/v1`；管理页面为同域 `/admin/`，官网为 `https://sgl.wootoon.cn`。配置与验收边界见 [ADR 0015](docs/adr/0015-dedicated-domain-ingress.md) 和 [域名配置记录](docs/delivery/2026-10-28/domain-ingress.md)。应用、数据及身份独立。
-- 支付方案：普通商户直连，复用 wutong/payment-service 的商户配置，TimeNook 使用独立 AppID/OpenID 和本项目通知接口；参数来源与未完成项见[配置清单](docs/delivery/2026-10-26/manual-inputs.md#2026-10-28-普通商户配置决定)。普通商户正式配置读取与验签装配由 T29 接入；独立小程序尚未申请下来，AppID/Secret 按用户要求留空，收退款未启用。工程与实际发布边界见 [T29 记录](docs/delivery/2026-10-28/t29-release.md)。
+- 支付方案：普通商户直连，复用 wutong/payment-service 的商户配置，TimeNook 使用独立 AppID/OpenID 和本项目通知接口；参数来源与未完成项见[配置清单](docs/delivery/2026-10-26/manual-inputs.md#2026-10-28-普通商户配置决定)。普通商户正式配置读取与验签装配由 T29 接入。2026-10-30 小程序项目已绑定用户提供的独立 AppID `wxa54f81265fba2439`；核实线上服务端 AppID/Secret 仍成对留空，微信登录和真实收退款未启用。工程与实际发布边界见 [T29 记录](docs/delivery/2026-10-28/t29-release.md)。
 - 2026-10-25 配置调整：OSS 使用独立私有 Bucket `timenook`（上海），停止与 deed（legal-agent）混用 Bucket，见 [ADR 0013](docs/adr/0013-dedicated-oss-bucket.md)。OSS AccessKey 与 DeepSeek API key 继续按 [ADR 0011](docs/adr/0011-shared-oss-and-deepseek.md) 沿用 deed 配置；应用、业务数据、队列及微信身份独立。豆包 ASR 配置入口及本地测试边界见[共用服务配置](docs/development-shared-services.md)。
 - 当前联调拓扑：API、OSS、数据库在 deed 阿里云环境；数据库复用 deed 连接配置并分库为 `timenook`，网页/小程序在本地运行，见 [ADR 0012](docs/adr/0012-cloud-integration-database.md)。这是受控联调部署，微信登录/支付和正式上线验收仍未执行；实际结果单独见[云端验证记录](docs/delivery/2026-10-25/cloud-integration.md)。
 - 业务语言：[GLOSSARY.md](GLOSSARY.md)。

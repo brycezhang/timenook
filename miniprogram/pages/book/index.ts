@@ -1,3 +1,4 @@
+import { recordingId } from "../../services/local-audio-recorder";
 import { participationClient } from "../../services/participation";
 import { type Project } from "../../domain/model";
 import { asset, go, home, read } from "../../services/store";
@@ -70,7 +71,7 @@ Page({
       this.onHide();
       ++this.generation;
       this.projectId = q.projectId || projectOverviewClient.selected();
-      this.setData({ live: true });
+      this.setData({ live: true, bookImage: "/assets/book.jpg" });
     }
   },
   onHide() {
@@ -344,6 +345,12 @@ Page({
         }),
       ),
     });
+  },
+  openCover() {
+    if (!this.canDraft() || this.data.busy) return;
+    this.setData({ coverEditing: true }, () =>
+      wx.pageScrollTo({ selector: ".cover-editor", duration: 200 }),
+    );
   },
   editCover() {
     if (this.canDraft() && !this.data.busy)
@@ -802,7 +809,12 @@ Page({
     go("settings", this.data.live ? `projectId=${this.projectId}` : "");
   },
   record() {
-    go("interview", this.data.live ? `projectId=${this.projectId}` : "");
+    go(
+      "interview",
+      this.data.live
+        ? `projectId=${this.projectId}&draftId=${recordingId()}`
+        : "",
+    );
   },
   project() {
     if (this.data.live) {

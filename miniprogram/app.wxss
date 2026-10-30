@@ -5,7 +5,7 @@ page {
   font-family:
     -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
     sans-serif;
-  font-size: 32rpx;
+  font-size: 30rpx;
   line-height: 1.6;
 }
 view,
@@ -52,7 +52,7 @@ image {
   font-family: "Songti SC", "STSong", "Noto Serif SC", SimSun, serif;
 }
 .title {
-  font-size: 52rpx;
+  font-size: 56rpx;
   line-height: 1.5;
   font-weight: 600;
   color: var(--brown-dark);
@@ -78,7 +78,7 @@ image {
   color: var(--brown);
 }
 .page {
-  padding: 36rpx 36rpx 70rpx;
+  padding: 54rpx 42rpx 64rpx;
 }
 .with-dock {
   padding-bottom: 210rpx;
@@ -122,7 +122,7 @@ image {
 .paper {
   background: var(--surface);
   border: 1rpx solid var(--line);
-  border-radius: 24rpx;
+  border-radius: 16rpx;
   padding: 30rpx;
 }
 .soft {
@@ -146,7 +146,7 @@ image {
   border-radius: 60rpx;
   background: var(--olive);
   color: #fffaf2;
-  font-size: 34rpx;
+  font-size: 30rpx;
   font-weight: 500;
   line-height: 1.5;
 }
@@ -154,9 +154,9 @@ image {
   background: var(--terracotta);
 }
 .btn.secondary {
-  background: var(--surface);
+  background: transparent;
   color: var(--brown-dark);
-  border: 1rpx solid var(--line);
+  border: 1rpx solid #c6b8a7;
 }
 .btn.quiet {
   background: transparent;
@@ -404,4 +404,56 @@ textarea {
 }
 .privacy-link {
   width: 100%;
+}
+
+/* Reading and service surfaces share the approved paper / Songti hierarchy. */
+.section-title {
+  color: var(--brown-dark);
+  font-family: "Songti SC", "STSong", SimSun, serif;
+  font-weight: 600;
+  font-size: 40rpx;
+}
+.title,
+.section-title,
+.list-row,
+.note,
+.subtitle {
+  overflow-wrap: anywhere;
+}
+.btn {
+  white-space: normal;
+}
+.with-tabs {
+  padding-bottom: 180rpx;
+}
+.tabs {
+  padding: 12rpx 0 calc(14rpx + env(safe-area-inset-bottom));
+}
+.tab {
+  min-height: 96rpx;
+  justify-content: center;
+  font-size: 23rpx;
+}
+.tab .icon {
+  width: 40rpx;
+  height: 40rpx;
+}
+.text-action {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  min-height: 96rpx;
+  color: var(--brown-dark);
+  font-size: 27rpx;
+}
+.decision-panel {
+  margin-top: 52rpx;
+  padding: 36rpx 0;
+  border-top: 1rpx solid var(--line);
+}
+.quiet-panel {
+  padding: 30rpx;
+  background: var(--soft);
+  border-radius: 16rpx;
 }

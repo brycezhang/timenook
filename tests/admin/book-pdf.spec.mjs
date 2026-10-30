@@ -196,16 +196,14 @@ test("real book generation freezes one snapshot and delivers the same complete P
   const page = await openBook(browser);
   try {
     await expect(
-      page.getByRole("button", { name: "生成完整书稿", exact: true }),
+      page.getByRole("button", { name: /^生成(?:新版)?完整书稿$/ }),
     ).toBeVisible();
     const generated = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
         response.url().endsWith(`/projects/${project.projectId}/book/versions`),
     );
-    await page
-      .getByRole("button", { name: "生成完整书稿", exact: true })
-      .click();
+    await page.getByRole("button", { name: /^生成(?:新版)?完整书稿$/ }).click();
     const accepted = await generated;
     expect(accepted.status()).toBe(202);
     const queued = (await accepted.json()).data;
@@ -358,7 +356,9 @@ test("actual directory edits invalidate the previous PDF and empty chapters do n
     await expect(
       page.getByRole("button", { name: "调整入书目录", exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "调整书封", exact: true }).click();
+    await page
+      .getByRole("button", { name: "调整书封与称呼", exact: true })
+      .click();
     await page.locator(".cover-salutation").click();
     await page.locator(".cover-salutation").pressSequentially("给一路陪伴的人");
     await expect(page.locator(".cover-salutation")).toHaveValue(
@@ -414,9 +414,7 @@ test("actual directory edits invalidate the previous PDF and empty chapters do n
     await expect(
       page.getByRole("button", { name: "查看完整书稿并确认", exact: true }),
     ).toHaveCount(0);
-    await page
-      .getByRole("button", { name: "生成完整书稿", exact: true })
-      .click();
+    await page.getByRole("button", { name: /^生成(?:新版)?完整书稿$/ }).click();
     await expect(
       page.getByRole("button", { name: "查看完整书稿并确认", exact: true }),
     ).toBeVisible({ timeout: 30000 });

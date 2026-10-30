@@ -143,12 +143,14 @@ class ApprovalDto {
   @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
   evidenceRef!: string;
 }
-class RevokeDto extends ParticipationNoticeDto {
+class StartConsentDto extends ParticipationNoticeDto {
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedBindingVersion!: number;
+  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedAccessEpoch!: number;
+}
+class RevokeDto extends StartConsentDto {
   @ApiProperty({ enum: CONSENT_PURPOSES })
   @IsIn(CONSENT_PURPOSES)
   purpose!: (typeof CONSENT_PURPOSES)[number];
-  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedBindingVersion!: number;
-  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedAccessEpoch!: number;
 }
 class ConsentDto extends RevokeDto {
   @ApiProperty() @IsBoolean() granted!: boolean;
@@ -245,10 +247,19 @@ export class Participation
       snapshot: admission.snapshot,
     };
   }
-  private validateNotice(body: { noticeVersion: string }) {
+  private validateNotice(body: {
+    noticeVersion: string;
+    evidenceRef?: string;
+  }) {
     if (
       body.noticeVersion !==
-      (this.config.acceptance ? INTERNAL_NOTICE_VERSION : "synthetic-d08-v1")
+        (this.config.acceptance
+          ? INTERNAL_NOTICE_VERSION
+          : "synthetic-d08-v1") ||
+      (body.evidenceRef !== undefined &&
+        !body.evidenceRef.startsWith(
+          this.config.acceptance ? "internal:" : "synthetic:",
+        ))
     )
       throw new BadRequestException();
   }
@@ -259,7 +270,7 @@ export class Participation
   ) {
     if (!this.config.acceptance) return supplied;
     const context = await readSessionContextIn(tx, authorization);
-    return `${context.method}:${context.sessionId}:${randomUUID()}`;
+    return `${context.method}:${context.sessionId}:${supplied}`;
   }
   private async subject(tx: Prisma.TransactionClient, id: string) {
     await tx.$queryRaw`SELECT id FROM project_subjects WHERE project_id=${id}::uuid FOR UPDATE`;
@@ -710,6 +721,11 @@ export class Participation
     const terms = await this.terms.read(p.id, tx);
     return {
       projectId: p.id,
+      bookTitle:
+        !deleted &&
+        (narrator || !subject.boundUserId || effective.sharing === true)
+          ? (p.bookTitle ?? undefined)
+          : undefined,
       subjectId: subject.id,
       bindingVersion: subject.bindingVersion,
       accessEpoch: p.accessEpoch,
@@ -757,13 +773,16 @@ export class Participation
   }
   async consent(
     id: string,
-    body: ConsentDto,
+    body: ConsentDto | StartConsentDto,
     key: string,
     authorization?: string,
     action = "consent",
   ) {
     const user = await this.identity.current(authorization);
     this.policy();
+    const granted = action === "start" || (body as ConsentDto).granted;
+    const purposes =
+      action === "start" ? CONSENT_PURPOSES : [(body as ConsentDto).purpose];
     const result = await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       await this.rights.requireAvailableIn(tx, id);
@@ -791,7 +810,7 @@ export class Participation
       if (p.accessEpoch !== body.expectedAccessEpoch)
         throw new ConflictException();
       const payloadDeleted = await this.activeDataDeletedIn(tx, id);
-      if (payloadDeleted && body.granted)
+      if (payloadDeleted && granted)
         throw new ForbiddenException(
           "Deleted activity cannot acquire new authorization payload",
         );
@@ -799,32 +818,35 @@ export class Participation
         where: { id },
         // New positive purpose choices do not revoke existing capabilities.
         // Withdrawals advance the revocation fence and cannot revive old work.
-        data: { accessEpoch: body.granted ? p.accessEpoch : { increment: 1 } },
+        data: { accessEpoch: granted ? p.accessEpoch : { increment: 1 } },
       });
-      await tx.consentRecord.create({
-        data: {
-          id: randomUUID(),
-          projectId: id,
-          subjectId: subject.id,
-          bindingVersion: subject.bindingVersion,
-          accessEpoch: updated.accessEpoch,
-          operatorUserId: user.id,
-          granteeUserId: body.purpose === "sharing" ? p.initiatorUserId : null,
-          purpose: body.purpose,
-          granted: body.granted,
-          noticeVersion: body.noticeVersion,
-          evidenceRef: payloadDeleted
-            ? null
-            : await this.evidenceIn(tx, authorization, body.evidenceRef),
-          method: await readSelfMethodIn(tx, authorization),
-        },
-      });
-      if (!body.granted)
+      const evidenceRef = payloadDeleted
+        ? null
+        : await this.evidenceIn(tx, authorization, body.evidenceRef);
+      const method = await readSelfMethodIn(tx, authorization);
+      for (const purpose of purposes)
+        await tx.consentRecord.create({
+          data: {
+            id: randomUUID(),
+            projectId: id,
+            subjectId: subject.id,
+            bindingVersion: subject.bindingVersion,
+            accessEpoch: updated.accessEpoch,
+            operatorUserId: user.id,
+            granteeUserId: purpose === "sharing" ? p.initiatorUserId : null,
+            purpose,
+            granted,
+            noticeVersion: body.noticeVersion,
+            evidenceRef,
+            method,
+          },
+        });
+      if (!granted)
         await this.recordRevocationIn(
           tx,
           id,
           updated.accessEpoch,
-          body.purpose,
+          (body as ConsentDto).purpose,
           await readSelfMethodIn(tx, authorization),
         );
       await tx.participationCommand.create({
@@ -845,7 +867,7 @@ export class Participation
         user.id,
       );
     });
-    if (!body.granted) await this.reconcileRevocations(id);
+    if (!granted) await this.reconcileRevocations(id);
     return result;
   }
   async care(
@@ -2087,6 +2109,9 @@ export class Participation
           latest?.id,
         );
       }
+      const evidenceRef = payloadDeleted
+        ? null
+        : await this.evidenceIn(tx, authorization, body.evidenceRef);
       const row = await tx.assistedSession.create({
         data: {
           id: randomUUID(),
@@ -2096,9 +2121,7 @@ export class Participation
           purpose: body.purpose,
           granted: body.granted,
           noticeVersion: body.noticeVersion,
-          evidenceRef: payloadDeleted
-            ? null
-            : await this.evidenceIn(tx, authorization, body.evidenceRef),
+          evidenceRef,
           bindingVersion: subject.bindingVersion,
           accessEpoch: p.accessEpoch,
           idempotencyKey: key!,
@@ -2119,7 +2142,7 @@ export class Participation
             purpose: body.purpose,
             granted: body.granted,
             noticeVersion: body.noticeVersion,
-            evidenceRef: payloadDeleted ? null : body.evidenceRef,
+            evidenceRef,
             method: "assisted",
           },
         });
@@ -2163,7 +2186,15 @@ export class Participation
         accessEpoch:
           reason === "assisted" ? { lte: accessEpoch } : { lt: accessEpoch },
         kind: { in: kinds },
-        state: { notIn: ["succeeded", "no_speech", "invalidated", "obsolete"] },
+        state: {
+          notIn: [
+            "succeeded",
+            "no_speech",
+            "no_content",
+            "invalidated",
+            "obsolete",
+          ],
+        },
       },
       select: { id: true, fence: true },
     });
@@ -2264,7 +2295,13 @@ export class Participation
               id: target.id,
               fence: task.fence,
               state: {
-                notIn: ["succeeded", "no_speech", "invalidated", "obsolete"],
+                notIn: [
+                  "succeeded",
+                  "no_speech",
+                  "no_content",
+                  "invalidated",
+                  "obsolete",
+                ],
               },
             },
             data: {
@@ -2528,6 +2565,25 @@ export class ParticipationController {
         body,
         idempotencyKey(req),
         req.headers.authorization,
+      ),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post("projects/:id/consents/start")
+  @Header("Cache-Control", "no-store")
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  async startConsent(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: StartConsentDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.participation.consent(
+        id,
+        body,
+        idempotencyKey(req),
+        req.headers.authorization,
+        "start",
       ),
       meta: { requestId: req.id },
     };

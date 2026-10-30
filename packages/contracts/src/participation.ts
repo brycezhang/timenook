@@ -13,6 +13,7 @@ export interface InvitationView {
 }
 export interface ParticipationState {
   projectId: string;
+  bookTitle?: string;
   subjectId: string;
   role: "narrator" | "initiator";
   bindingVersion: number;

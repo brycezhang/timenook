@@ -390,9 +390,7 @@ test("mini-program invitation and separate choices feed the shared care form, wh
     `invite?projectId=${projectId}`,
   );
   watch(buyer);
-  await expect(
-    buyer.getByText("邀请与参与管理", { exact: true }),
-  ).toBeVisible();
+  await expect(buyer.locator(".live-invite > .title")).toBeVisible();
   await expect(
     buyer.getByRole("button", { name: "准备本人邀请", exact: true }),
     await buyer.locator("body").innerText(),
@@ -438,19 +436,46 @@ test("mini-program invitation and separate choices feed the shared care form, wh
   ).toBeVisible();
   await buyer.getByRole("button", { name: "重新查询参与状态" }).click();
   await buyer.getByRole("button", { name: "已核对本人，确认绑定" }).click();
-  await expect(buyer.getByText("绑定版本：1", { exact: true })).toBeVisible();
+  await expect(buyer.getByText(/已绑定。本人须分别授权/)).toBeVisible();
   await narrator.getByRole("button", { name: "重新查询参与状态" }).click();
-  const collection = narrator.locator(".paper").filter({
-    has: narrator.getByText("采集并保存讲述和照片", { exact: true }),
+  await expect(narrator.locator(".consent-details")).toHaveCount(0);
+  const beforeStart = await api.inject({
+    method: "GET",
+    url: `/v1/projects/${projectId}/participation`,
+    headers: { authorization: `Bearer ${narratorSession.session.token}` },
   });
-  await collection
-    .getByRole("button", { name: "同意此用途", exact: true })
+  expect(responseData(beforeStart, 200).consent).toHaveLength(0);
+  const starting = narrator.waitForResponse((response) =>
+    response.url().endsWith(`/projects/${projectId}/consents/start`),
+  );
+  await narrator
+    .getByRole("button", { name: "确认并开始", exact: true })
     .click();
-  await expect(collection.getByText("已同意", { exact: true })).toBeVisible();
+  const startHttp = await starting;
+  expect(startHttp.status()).toBe(201);
+  const started = (await startHttp.json()).data;
+  expect(started.consent).toHaveLength(3);
+  expect(started.choices.every((choice) => choice.granted === true)).toBe(true);
+  expect(
+    started.consent.every(
+      (record) => record.operatorUserId === narratorSession.user.id,
+    ),
+  ).toBe(true);
+  expect(
+    started.consent.every((record) =>
+      record.evidenceRef.startsWith("synthetic:click:purpose-start:"),
+    ),
+  ).toBe(true);
+  await expect(narrator).toHaveURL(
+    new RegExp(`/interview[?]projectId=${projectId}`),
+  );
+  await narrator.goto(
+    `http://127.0.0.1:5174/#/welcome?projectId=${projectId}&manage=1`,
+  );
   const ai = narrator
     .locator(".paper")
     .filter({ has: narrator.getByText("交由AI处理素材", { exact: true }) });
-  await ai.getByRole("button", { name: "拒绝此用途", exact: true }).click();
+  await ai.getByRole("button", { name: "撤回此用途", exact: true }).click();
   await expect(ai.getByText("已拒绝或撤回", { exact: true })).toBeVisible();
   await narrator.screenshot({ path: "/tmp/timenook-t11-consents-mobile.png" });
   await narrator
@@ -476,6 +501,9 @@ test("mini-program invitation and separate choices feed the shared care form, wh
       name: `查看本人的用途选择 · ${projectId}`,
       exact: true,
     })
+    .click();
+  await narrator
+    .getByRole("button", { name: "调整用途与资料服务", exact: true })
     .click();
   await expect(
     narrator.getByText(`换绑工单：record:${care.id}`, { exact: true }),
@@ -515,7 +543,9 @@ test("mini-program invitation and separate choices feed the shared care form, wh
     page.getByText("来源绑定版本：1", { exact: true }),
   ).toBeVisible();
   await page.screenshot({ path: "/tmp/timenook-t11-care-mobile.png" });
-  await buyer.goto(`http://127.0.0.1:5174/#/welcome?projectId=${projectId}`);
+  await buyer.goto(
+    `http://127.0.0.1:5174/#/welcome?projectId=${projectId}&manage=1`,
+  );
   await expect(
     buyer.getByText(`换绑工单：record:${care.id}`, { exact: true }),
   ).toBeVisible();
@@ -538,7 +568,7 @@ test("mini-program invitation and separate choices feed the shared care form, wh
   const replacement = await sessionPage(
     await browser.newContext(),
     replacementSession,
-    `welcome?projectId=${projectId}`,
+    `welcome?projectId=${projectId}&manage=1`,
   );
   watch(replacement);
   await expect(replacement.getByText("尚未选择", { exact: true })).toHaveCount(
@@ -578,12 +608,41 @@ test("assisted subject choices and Care manual intake preserve real actors, with
     productSession,
     `assisted?projectId=${assistedProjectId}`,
   );
+  await expect(buyer.locator(".assisted-page .title")).toHaveText(
+    "本人在场，一起开始",
+  );
+  const choices = buyer.getByRole("checkbox");
+  await expect(choices).toHaveCount(3);
+  for (const checkbox of await choices.all())
+    await expect(checkbox).toBeChecked();
   await expect(
-    buyer.getByText("本人在场，同机协助", { exact: true }),
-  ).toBeVisible();
-  const collection = buyer
-    .locator(".paper")
-    .filter({ has: buyer.getByText("采集并保存讲述和照片", { exact: true }) });
+    buyer.getByRole("button", {
+      name: "记录本人完整资料导出申请",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  const posts = [];
+  buyer.on("request", (r) => {
+    if (r.method() === "POST" && r.url().endsWith("/assisted-sessions"))
+      posts.push(r.postDataJSON());
+  });
+  for (const width of [320, 390, 1280]) {
+    await buyer.setViewportSize({ width, height: 900 });
+    const button = buyer.getByRole("button", {
+      name: "同意所选并开始讲述",
+      exact: true,
+    });
+    const rect = await button.boundingBox();
+    expect(rect.y + rect.height).toBeLessThan(900);
+    expect(
+      await buyer
+        .locator(".assisted-page")
+        .evaluate((el) => el.scrollWidth <= el.clientWidth),
+    ).toBe(true);
+    await buyer.screenshot({ path: `/tmp/timenook-assisted-${width}.png` });
+  }
+  await buyer.setViewportSize({ width: 390, height: 844 });
+  expect(posts).toHaveLength(0);
   let releaseConsent;
   const consentGate = new Promise((resolve) => {
     releaseConsent = resolve;
@@ -592,35 +651,51 @@ test("assisted subject choices and Care manual intake preserve real actors, with
     if (route.request().method() === "POST") await consentGate;
     await route.continue();
   });
-  await collection
-    .getByRole("button", { name: "本人同意此用途，记录当次证据", exact: true })
+  await buyer
+    .getByRole("button", { name: "同意所选并开始讲述", exact: true })
     .click();
   await expect(
-    buyer.getByText("正在查询或保存，请稍候…", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    collection.getByRole("button", {
-      name: "本人同意此用途，记录当次证据",
-      exact: true,
-    }),
+    buyer.getByRole("button", { name: "正在保存选择…", exact: true }),
   ).toBeDisabled();
-  const consentResponse = buyer.waitForResponse(
-    (r) =>
-      r.url().endsWith("/assisted-sessions") && r.request().method() === "POST",
-  );
+  await expect(choices.first()).toBeDisabled();
   releaseConsent();
-  const consentHttp = await consentResponse;
-  expect(consentHttp.status(), await consentHttp.text()).toBe(201);
-  await expect(buyer.getByText("当次许可有效", { exact: true })).toBeVisible();
+  await expect(buyer).toHaveURL(
+    /interview.*draftId=[a-f0-9-]{36}.*assistedSessionId=/,
+  );
+  await buyer
+    .getByRole("button", { name: "就从这个问题开始", exact: true })
+    .click();
+  await expect(
+    buyer.getByRole("button", { name: "开始说", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    buyer.getByRole("button", { name: "说完了，停止录音", exact: true }),
+  ).toHaveCount(0);
+  expect(posts.map((row) => row.purpose)).toEqual([
+    "collection",
+    "ai",
+    "sharing",
+  ]);
+  expect(posts.every((row) => row.granted)).toBe(true);
+  expect(new Set(posts.map((row) => row.evidenceRef)).size).toBe(3);
   await buyer.unroute("**/assisted-sessions");
-  const ai = buyer
-    .locator(".paper")
-    .filter({ has: buyer.getByText("交由 AI 处理素材", { exact: true }) });
-  await ai.getByRole("button", { name: "本人拒绝此用途", exact: true }).click();
-  await expect(buyer.getByText("本人已拒绝", { exact: true })).toBeVisible();
-  const sharing = buyer.locator(".paper").filter({
-    has: buyer.getByText("向本项目发起人共享资料", { exact: true }),
-  });
+  await buyer.goto(
+    `http://127.0.0.1:5174/#/assisted?projectId=${assistedProjectId}`,
+  );
+  await expect(choices).toHaveCount(3);
+  await choices.nth(0).uncheck();
+  await choices.nth(1).uncheck();
+  await buyer
+    .getByRole("button", { name: "保存用途选择", exact: true })
+    .click();
+  await expect(
+    buyer.getByText("用途选择已保存", { exact: true }),
+  ).toBeVisible();
+  expect(buyer.url()).toContain("#/assisted?");
+  await buyer
+    .getByRole("button", { name: "其他操作与本人权利", exact: true })
+    .click();
+  await expect(buyer.getByText("本人已拒绝", { exact: true })).toHaveCount(2);
   await buyer.route(
     "**/assisted-sessions",
     (route) =>
@@ -634,8 +709,8 @@ test("assisted subject choices and Care manual intake preserve real actors, with
       }),
     { times: 1 },
   );
-  await sharing
-    .getByRole("button", { name: "本人同意此用途，记录当次证据", exact: true })
+  await buyer
+    .getByRole("button", { name: "保存用途选择", exact: true })
     .click();
   await expect(buyer.getByText(/操作未确认，请重新查询/)).toBeVisible();
   await buyer
@@ -682,14 +757,24 @@ test("assisted subject choices and Care manual intake preserve real actors, with
     (r) =>
       r.url().endsWith("/assisted-sessions") && r.request().method() === "POST",
   );
-  await collection
-    .getByRole("button", { name: "本人同意此用途，记录当次证据", exact: true })
+  await choices.nth(0).check();
+  await buyer
+    .getByRole("button", { name: "同意所选并开始讲述", exact: true })
     .click();
   const renewalHttp = await renewalResponse;
   expect(renewalHttp.status(), await renewalHttp.text()).toBe(201);
   const renewalBody = renewalHttp.request().postDataJSON();
   expect(renewalBody.expectedSessionId).toBeTruthy();
-  await expect(buyer.getByText("当次许可有效", { exact: true })).toBeVisible();
+  await expect(buyer).toHaveURL(/interview.*assistedSessionId=/);
+  await buyer.goto(
+    `http://127.0.0.1:5174/#/assisted?projectId=${assistedProjectId}`,
+  );
+  await buyer
+    .getByRole("button", { name: "其他操作与本人权利", exact: true })
+    .click();
+  await expect(
+    buyer.getByText("当次许可有效", { exact: true }).first(),
+  ).toBeVisible();
   await buyer
     .getByRole("button", { name: "记录本人完整资料导出申请", exact: true })
     .click();
@@ -700,19 +785,22 @@ test("assisted subject choices and Care manual intake preserve real actors, with
     ),
   ).toBeVisible();
   await buyer.reload();
+  await buyer
+    .getByRole("button", { name: "其他操作与本人权利", exact: true })
+    .click();
   await expect(buyer.getByText(/资料导出：待客服核验/)).toBeVisible();
   for (const width of [390, 768]) {
     await buyer.setViewportSize({ width, height: 900 });
     const metrics = await buyer.locator(".assisted-page").evaluate((el) => ({
       overflow: el.scrollWidth > el.clientWidth,
       body: parseFloat(getComputedStyle(el).fontSize),
-      buttons: [...el.querySelectorAll("button")].map((b) => ({
+      buttons: [...el.querySelectorAll("button:enabled")].map((b) => ({
         w: b.getBoundingClientRect().width,
         h: b.getBoundingClientRect().height,
       })),
     }));
     expect(metrics.overflow).toBe(false);
-    expect(metrics.body).toBeGreaterThanOrEqual(20);
+    expect(metrics.body).toBeGreaterThanOrEqual(18);
     expect(metrics.buttons.every((b) => b.w >= 48 && b.h >= 48)).toBe(true);
   }
   await buyer.screenshot({ path: "/tmp/timenook-t12-assisted-mobile.png" });
@@ -751,7 +839,7 @@ test("assisted subject choices and Care manual intake preserve real actors, with
   ).toBeVisible();
   await page.screenshot({ path: "/tmp/timenook-t12-care-rights-desktop.png" });
   await buyer.goto(
-    `http://127.0.0.1:5174/#/welcome?projectId=${assistedProjectId}`,
+    `http://127.0.0.1:5174/#/welcome?projectId=${assistedProjectId}&manage=1`,
   );
   await expect(buyer.getByText(/撤回工单：record:/)).toBeVisible();
   await expect(
