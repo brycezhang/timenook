@@ -21,4 +21,12 @@
 
 ## 运行记录
 
-待本地最终构建后记录发布与原问题页面核对结果。原始用户录音和转写不写入 Git；已有错误状态单独按确定任务事实纠正，不重复 ASR 或故事模型调用。
+源候选 `78a29926bc8315656bf2d26dfb6fce6c7756dbd6` 已发布至既有 ECS `106.14.11.96`，API／Worker 为 `/data/server/timenook/releases/20261030-story-state-78a2992`，产品网页为 `/data/server/timenook-web/releases/20261030-story-state-78a2992/app`，均通过既有 current 符号链接切换。本地构建后上传；既有锁文件与 Prisma schema 摘要一致，复用服务器 Linux 依赖，未改环境配置或数据库结构。
+
+- API 包 SHA-256：`868298ac830f8374ed2b5498a94295cc5adc2dbbc981a4c196b842569b5b2093`；318 文件完整性校验通过。
+- 网页包 SHA-256：`ca351b07d1371661350a9f3165aeca7479f0b2d85246c6fd1c74683a34f1513c`；公网入口脚本 `index-CJVpJHme.js` 与本地产物一致（SHA-256 `c559f29cb2f20ccf63493b4032e66cfb1b6afc1ad5b3a9c8112c177ee85af29d`）。
+- `timenook-api`／`timenook-worker` 均 active；公网 `https://sgl.wootoon.cn/api/health/ready` 返回 200，重启后错误级别日志为空。
+- 对原问题任务，仅在确认实际整理尝试为不适用、原转写存在后，将错误存储的 `no_speech` 改为 `no_content`（1 条）；没有修改录音、文字、稿件或费用，没有重复供应商调用。
+- 在用户已有 Chrome 登录会话刷新原问题页，实际看到正确提示、已识别文字、继续讲述和原声回听入口。原始用户录音和转写不写入 Git。
+
+修复 PR：[#119](https://github.com/brycezhang/timenook/pull/119)，以待合并的 #118 共用页面分支为基线；仓库 CI／合并状态独立记录。小程序源码与本地编译产物已同步，未执行微信上传发布或真机验收。
