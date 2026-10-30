@@ -359,6 +359,9 @@ Page({
       !value.actualQuestion?.snapshot?.text
     )
       throw new Error("采访数据无效");
+    if (this.taskPollHandle) clearTimeout(this.taskPollHandle);
+    this.taskPollHandle = undefined;
+    ++this.taskSequence;
     this.liveRecorder?.unsubscribe();
     const device = InterviewRecorder.open(
       this.projectId,
@@ -371,6 +374,8 @@ Page({
     this.setData({
       ...flowView("prepare"),
       interview: value,
+      taskRows: [],
+      taskError: "",
       question: (value.currentQuestion ?? value.actualQuestion).snapshot.text,
       selectedQuestionKey:
         (value.currentQuestion ?? value.actualQuestion).questionKey ?? "",
@@ -495,6 +500,7 @@ Page({
       if (
         !this.taskVisible ||
         !this.current(generation, context) ||
+        this.data.interview?.id !== interviewId ||
         sequence !== this.taskSequence
       )
         return;

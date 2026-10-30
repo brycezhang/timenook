@@ -2704,3 +2704,56 @@ test("a second local take blocks organization until it is submitted and its actu
   assert.equal(h.page.data.processingReady, true);
   assert.equal(h.page.data.processingTitle, "文字已转写");
 });
+
+test("switching interviews discards prior successful tasks and ignores their late response", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const clipId = "77777777-7777-4777-8777-777777777777";
+  const nextId = "88888888-8888-4888-8888-888888888888";
+  const task = {
+    id: "99999999-9999-4999-8999-999999999999",
+    projectId,
+    clipId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    state: "succeeded",
+    retryable: false,
+    nextAction: "continue",
+  };
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [{ ...interview, clips: [{ id: clipId, state: "sealed" }] }],
+  });
+  await showing;
+  respond(h.requests.shift(), [task], 201);
+  await tick();
+  assert.equal(h.page.data.processingReady, true);
+  const oldQuery = h.page.refreshTasks();
+  const oldRequest = h.requests.shift();
+  const selecting = h.page.selectQuestion();
+  respond(
+    h.requests.shift(),
+    {
+      ...interview,
+      id: nextId,
+      actualQuestion: { ...question, answerRef: nextId },
+      clips: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", state: "sealed" }],
+    },
+    201,
+  );
+  await selecting;
+  assert.equal(h.page.data.taskRows.length, 0);
+  assert.equal(h.page.data.processingReady, false);
+  respond(oldRequest, [task], 201);
+  await oldQuery;
+  assert.equal(h.page.data.taskRows.length, 0);
+  assert.equal(h.page.data.processingReady, false);
+  const pendingQuery = h.page.refreshTasks();
+  respond(h.requests.shift(), [{ ...task, state: "queued" }], 201);
+  await pendingQuery;
+  assert.equal(h.page.data.processingReady, false);
+  const currentQuery = h.page.refreshTasks();
+  respond(h.requests.shift(), [task], 201);
+  await currentQuery;
+  assert.equal(h.page.data.processingReady, true);
+});
