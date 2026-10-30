@@ -349,7 +349,7 @@ async function openPage(
   return page;
 }
 
-test("the real interview page shows processing, retry and restored completion actions with an actual Worker", async ({
+test("the real interview page shows processing, retry and restored failure actions with an actual Worker", async ({
   browser,
 }) => {
   const page = await openPage(browser, narrator);
@@ -362,7 +362,7 @@ test("the real interview page shows processing, retry and restored completion ac
     .click();
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByText("已在测试环境保存，真实云端保存仍待验证", {
+    page.getByText("录音已在测试环境保存；这不代表真实云端存储。", {
       exact: true,
     }),
   ).toBeVisible();
@@ -376,10 +376,16 @@ test("the real interview page shows processing, retry and restored completion ac
     }),
   );
   await expect(
-    page.getByText("声音已保存。你可以先休息，回来再继续。", {
+    page.getByText("原声已确认保存。可以先离开，回来后继续查询实际处理结果。", {
       exact: true,
     }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "整理成故事", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "再聊一个问题", exact: true }),
+  ).toHaveCount(0);
   taskId = data(
     await request("GET", `/v1/projects/${projectId}/tasks`, narrator),
     200,
@@ -405,6 +411,9 @@ test("the real interview page shows processing, retry and restored completion ac
       exact: true,
     }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "重新尝试", exact: true }),
+  ).toBeEnabled();
   await page.screenshot({ path: "/tmp/timenook-t15-interview-retry-390.png" });
   const metrics = await page.locator(".live-interview").evaluate((el) => ({
     width: el.getBoundingClientRect().width,
@@ -424,7 +433,7 @@ test("the real interview page shows processing, retry and restored completion ac
   }
   await page.getByRole("button", { name: "重新尝试", exact: true }).click();
   await expect(
-    page.getByText("声音已保存。你可以先休息，回来再继续。", {
+    page.getByText("原声已确认保存。可以先离开，回来后继续查询实际处理结果。", {
       exact: true,
     }),
   ).toBeVisible();
@@ -442,6 +451,12 @@ test("the real interview page shows processing, retry and restored completion ac
       exact: true,
     }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "整理成故事", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "再聊一个问题", exact: true }),
+  ).toHaveCount(0);
   // Returning again also exercises the page module that finished loading after
   // the first rapid departure from the project page.
   await page.goto(`${base}/#/welcome?projectId=${projectId}`);

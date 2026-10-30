@@ -398,6 +398,10 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
   page.setDefaultTimeout(5000);
   await page.goto(`${base}/#/interview?projectId=${projectId}`);
   await chooseDefaultQuestion(page);
+  const current = () =>
+    request("GET", `/v1/projects/${projectId}/interviews`, narrator).then(
+      (r) => data(r, 200).interviews[0],
+    );
   const record = async () => {
     await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -413,16 +417,39 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
       .getByRole("button", { name: "提交这段讲述", exact: true })
       .click();
     await expect(
-      page.getByText("已在测试环境保存，真实云端保存仍待验证", {
+      page.getByText("录音已在测试环境保存；这不代表真实云端存储。", {
         exact: true,
       }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "整理成故事", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "再聊一个问题", exact: true }),
+    ).toHaveCount(0);
+    const saved = await current();
+    await expect
+      .poll(async () => {
+        await runtime.recoverDue();
+        const tasks = data(
+          await request(
+            "POST",
+            `/v1/projects/${projectId}/tasks/status`,
+            narrator,
+            {
+              interviewId: saved.id,
+            },
+          ),
+        );
+        return tasks.map((task) => task.state);
+      })
+      .toEqual(saved.clips.map(() => "succeeded"));
+    await page
+      .getByRole("button", { name: "重新查询转写状态", exact: true })
+      .click();
+    await expect(page.getByText("文字已转写", { exact: true })).toBeVisible();
   };
   await record();
-  const current = () =>
-    request("GET", `/v1/projects/${projectId}/interviews`, narrator).then(
-      (r) => data(r, 200).interviews[0],
-    );
   const first = await current();
   const db = new PrismaClient({ datasourceUrl: databaseUrl });
   try {
@@ -469,11 +496,6 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     expect(edited.questionHistory[2].parentActualQuestionId).toBe(
       shown.currentQuestion.id,
     );
-    await record();
-    const answered = await current();
-    expect(answered.clips.map((c) => c.actualQuestionId).sort()).toEqual(
-      [first.actualQuestion.id, edited.currentQuestion.id].sort(),
-    );
     await page.locator("#page").evaluate((n) => (n.scrollTop = 0));
     await page.screenshot({
       path: test.info().outputPath("optional-followup-390.png"),
@@ -487,8 +509,10 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
           height: n.getBoundingClientRect().height,
         })),
       );
+    expect(sizes.length).toBeGreaterThan(0);
     for (const size of sizes) {
-      expect(size.font).toBeGreaterThanOrEqual(16);
+      // The approved UI uses 15–17px operation text.
+      expect(size.font).toBeGreaterThanOrEqual(15);
       expect(size.width).toBeGreaterThanOrEqual(48);
       expect(size.height).toBeGreaterThanOrEqual(48);
     }
@@ -501,11 +525,16 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
     await page.screenshot({
       path: test.info().outputPath("optional-followup-outer768-content390.png"),
     });
+    await record();
+    const answered = await current();
+    expect(answered.clips.map((c) => c.actualQuestionId).sort()).toEqual(
+      [first.actualQuestion.id, edited.currentQuestion.id].sort(),
+    );
     await showProcessingStep(page);
     await page.getByRole("button", { name: "整理成故事", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`story.*interviewId=${first.id}`));
     await page.goto(
-      `${base}/#/interview?projectId=${projectId}&interviewId=${first.id}`,
+      `${base}/#/interview?projectId=${projectId}&draftId=${randomUUID()}&prepare=1`,
     );
     await prepareRecordingStep(page);
     await page.getByRole("button", { name: "开始说", exact: true }).click();
@@ -517,10 +546,31 @@ test("actual interview Page, HTTP and Worker display and rewrite one optional qu
         .locator(".local-recording")
         .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
+    await showProcessingStep(page);
+    await expect(
+      page.getByText("这段讲述还在本机", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "整理成故事", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "再聊一个问题", exact: true }),
+    ).toHaveCount(0);
+    // Keep this unsubmitted recording in its own interview; only the fully
+    // transcribed interview may open another question or finish the follow-up.
+    await page.goto(
+      `${base}/#/interview?projectId=${projectId}&interviewId=${first.id}`,
+    );
+    await expect(page.getByText("文字已转写", { exact: true })).toBeVisible();
     const pending = await page.evaluate(() =>
       Object.entries(localStorage).filter(([key]) => key.includes("recording")),
     );
-    expect(pending.length).toBeGreaterThan(0);
+    expect(
+      pending.some(([, value]) => {
+        const clips = JSON.parse(value);
+        return Array.isArray(clips) && clips.some((clip) => !clip.sealed);
+      }),
+    ).toBe(true);
     // Drop a genuine successful HTTP response at exact device expiry to model a transport timeout.
     await page.route(
       `**/interviews/${first.id}/follow-up/finish`,

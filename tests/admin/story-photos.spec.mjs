@@ -370,10 +370,7 @@ test("photo starter saves two originals independently, retries one failure and e
   browser,
 }) => {
   const page = await openPage(browser, narrator);
-  await page.goto(`${base}/#/welcome?projectId=${projectId}`);
-  await page
-    .getByRole("button", { name: "进入本人参与的项目", exact: true })
-    .click();
+  await page.goto(`${base}/#/project?projectId=${projectId}`);
   await page.getByRole("button", { name: "开始一段讲述", exact: true }).click();
   await page.getByRole("button", { name: "换个问题", exact: true }).click();
   await page
@@ -524,7 +521,11 @@ test("photo starter saves two originals independently, retries one failure and e
       .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
-  await expect(page.getByText(/已在测试环境保存/)).toBeVisible();
+  await expect(
+    page.getByText("录音已在测试环境保存；这不代表真实云端存储。", {
+      exact: true,
+    }),
+  ).toBeVisible();
   const recorded = data(
     await request(
       "GET",
@@ -535,10 +536,16 @@ test("photo starter saves two originals independently, retries one failure and e
   );
   expect(recorded.clips).toHaveLength(1);
   await expect(
-    page.getByText("声音已保存。你可以先休息，回来再继续。", {
+    page.getByText("原声已确认保存。可以先离开，回来后继续查询实际处理结果。", {
       exact: true,
     }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "整理成故事", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "再聊一个问题", exact: true }),
+  ).toHaveCount(0);
   const tasks = data(
     await request("GET", `/v1/projects/${projectId}/tasks`, narrator),
     200,
@@ -612,9 +619,7 @@ test("photo starter saves two originals independently, retries one failure and e
   await page
     .getByRole("button", { name: "返回采访，开始说", exact: true })
     .click();
-  await expect(
-    page.getByText("这段声音，留下来了", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("文字已转写", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
@@ -635,9 +640,7 @@ test("the combined interview clears private task state after an actual refresh 4
   const current = await login("synthetic-plan-narrator"),
     page = await openPage(browser, current);
   await page.goto(`${base}/#/interview?projectId=${projectId}`);
-  await expect(
-    page.getByText("这段声音，留下来了", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("文字已转写", { exact: true })).toBeVisible();
   await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
   await page
@@ -666,11 +669,11 @@ test("the combined interview clears private task state after an actual refresh 4
   await resumeVisiblePage(page);
   await denied;
   await expect(
-    page.getByText("当前权限已失效，请重新查询或登录；本机原文件仍保留", { exact: true }),
+    page.getByText("当前权限已失效，请重新查询或登录；本机原文件仍保留", {
+      exact: true,
+    }),
   ).toBeVisible();
-  await expect(
-    page.getByText("这段声音，留下来了", { exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByText("文字已转写", { exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "开始说", exact: true }),
   ).toHaveCount(0);
@@ -861,7 +864,7 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
       } else {
         await page.goto(`${base}/#/interview?projectId=${projectId}`);
         await expect(
-          page.getByText("这段声音，留下来了", { exact: true }),
+          page.getByText("文字已转写", { exact: true }),
         ).toBeVisible();
         await openInterviewPhotos(page);
       }
@@ -910,7 +913,7 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
           .getByRole("button", { name: "返回采访，开始说", exact: true })
           .click();
         await expect(
-          page.getByText("这段声音，留下来了", { exact: true }),
+          page.getByText("文字已转写", { exact: true }),
         ).toBeVisible();
         await prepareRecordingStep(page);
         await page.getByRole("button", { name: "开始说", exact: true }).click();
