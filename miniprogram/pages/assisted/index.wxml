@@ -8,7 +8,7 @@
   <block wx:if="{{participation}}">
     <view wx:if="{{storyPurpose || bookPurpose}}" class="paper section">
       <view class="section-title">{{qualityPurpose ? '仅本次质量售后资料授权协助' : bookPurpose ? '仅本次书稿确认协助' : '仅本次故事确认协助'}}</view>
-      <view wx:if="{{qualityPurpose}}" class="note section">请本人选择是否在场由发起人操作设备。返回售后后仍须本人明确选择向本工单负责人提供哪些资料及有效期；此选择不代替书稿内容确认，也不向发起人开放私人资料。</view><view wx:else="" class="note section">请本人选择是否由发起人操作设备核对{{bookPurpose ? '这一版完整书稿' : '这篇故事'}}。返回后仍须核对{{bookPurpose ? '完整 PDF，决定是否确认本版内容' : '全文，分别决定确认内容和允许入书'}}，并记录当次独立说明。采集许可不能代替这一选择。</view>
+      <view wx:if="{{qualityPurpose}}" class="note section">请本人选择是否在场由发起人操作设备。返回售后后仍须本人明确选择向本工单负责人提供哪些资料及有效期；此选择不代替书稿内容确认，也不向发起人开放私人资料。</view><view wx:else="" class="note section">请本人选择是否由发起人操作设备核对{{bookPurpose ? '这一版完整书稿' : '这篇故事'}}。返回后仍须核对{{bookPurpose ? '完整 PDF，决定是否确认本版内容' : '全文，确认这版故事'}}。采集许可不能代替这一选择。</view>
       <textarea class="story-evidence section" value="{{storyEvidence}}" bindinput="storyEvidence" auto-height="{{true}}" maxlength="160" placeholder="记录本人本次选择同机协助核对的说明" />
       <button class="btn section" data-granted="true" bindtap="startStoryConfirmation" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">{{qualityPurpose ? '本人同意当次售后授权协助，返回售后' : bookPurpose ? '本人同意当次书稿确认协助，返回书稿确认' : '本人同意当次故事确认协助，返回故事'}}</button>
       <button class="btn secondary section" data-granted="false" bindtap="startStoryConfirmation" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">本人拒绝这次{{bookPurpose ? '书稿' : '故事'}}确认协助</button>
@@ -20,7 +20,7 @@
           <view><view class="purpose-label">{{item.label}}</view><view class="purpose-description">{{item.description}}</view></view>
         </label>
       </checkbox-group>
-      <view class="selection-note">可取消任一项，点击后才保存。故事内容和入书许可仍由本人另行确认。</view>
+      <view class="selection-note">可取消任一项，点击后才保存。故事仍由本人阅读全文后确认。</view>
       <button class="btn consent-submit" bindtap="submitChoices" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">{{busy ? '正在保存选择…' : purposes[0].checked ? '同意所选并开始讲述' : '保存用途选择'}}</button>
     </block>
     <button class="assisted-link section" bindtap="toggleDetails" disabled="{{busy}}">{{showDetails ? '收起其他操作' : '其他操作与本人权利'}}</button>

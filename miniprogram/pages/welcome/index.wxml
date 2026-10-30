@@ -1,25 +1,37 @@
-<view wx:if="{{mode === 'live'}}" class="page">
-  <view class="title">本人参与与资料用途</view>
-  <view wx:if="{{(participation && participation.policyStatus === 'internal-acceptance') || (invitation && invitation.policyStatus === 'internal-acceptance')}}" class="soft section">内部功能验收 · 无付款，不发起实体书生产。{{participation ? participation.noticeText : invitation && invitation.noticeText}}</view>
-  <view wx:else="" class="soft section">请阅读本次参与说明，分别决定资料用途。</view>
-  <view wx:if="{{accountId}}" class="small muted section">当前账号：{{accountId}}</view>
+<view wx:if="{{mode === 'live'}}" class="page participation-page">
+  <view class="eyebrow">时光里 · 岁月成书</view>
+  <view class="title">{{participation && participation.role === 'narrator' ? '准备好了，就慢慢说。' : '本人参与与资料用途'}}</view>
   <view wx:if="{{status}}" class="soft section">{{status}}</view>
   <view wx:if="{{invitation}}" class="paper section">
     <view class="section-title">{{invitation.inviter}} 邀请你</view>
     <view wx:for="{{invitation.process}}" wx:key="*this" class="section">{{index + 1}}. {{item}}</view>
     <view class="note section">{{invitation.choice}}</view>
-    <view class="note section">申请只表示愿意参与，须发起人核对后绑定。采集保存、AI 处理和向发起人共享各自选择；哪些故事入书需之后另行确认。</view>
+    <view class="note section">申请只表示愿意参与，须发起人核对后绑定。进入准备前，再由本人确认资料用途；申请和访问均不产生授权。</view>
     <button wx:if="{{loggedIn}}" class="btn section" bindtap="accept" disabled="{{busy || (invitation.policyStatus !== 'synthetic-only' && invitation.policyStatus !== 'internal-acceptance')}}">已读说明，申请本人参与</button>
   </view>
   <button wx:if="{{!loggedIn}}" class="btn section" bindtap="loginLive" disabled="{{busy}}">微信登录后参与</button>
-  <button class="link" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button>
+  <button wx:if="{{status && (!showManagement || !participation)}}" class="link" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button>
   <button wx:for="{{memberships}}" wx:key="projectId" class="btn secondary section" data-id="{{item.projectId}}" bindtap="openParticipation">{{item.state === 'pending' ? '等待发起人核对' : '查看本人的用途选择'}} · {{item.projectId}}</button>
   <view wx:if="{{participation}}" class="section">
-    <button wx:if="{{participation.canRead}}" class="btn section" bindtap="project" disabled="{{busy}}">进入本人参与的项目</button>
-    <button wx:if="{{participation.canRead}}" class="btn secondary section" bindtap="plan" disabled="{{busy}}">编辑个人大纲与问题</button>
-    <button wx:if="{{participation.role === 'initiator'}}" class="btn section" bindtap="assisted">无个人微信？本人在场同机协助</button>
+    <view wx:if="{{participation.role === 'narrator'}}" class="consent-start">
+      <view class="subtitle">录音会保存并由 AI 整理成故事，与本项目发起人一起核对。</view>
+      <button class="btn consent-start-action" bindtap="confirmAndStart" disabled="{{busy || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">{{busy ? '正在保存用途…' : '确认并开始'}}</button>
+      <button class="link consent-details-toggle" bindtap="toggleDetails" aria-expanded="{{showDetails}}">{{showDetails ? '收起资料使用说明' : '了解资料如何使用'}}</button>
+      <view wx:if="{{showDetails}}" class="consent-details">
+        <view>讲述录音和照片会保存，用于 AI 转写、故事整理，并向本项目发起人共享。</view>
+        <view>以后也可以调整用途、申请撤回或删除。拒绝或撤回不取消已付款订单，已下载到设备的副本无法远程回收。</view>
+        <view wx:if="{{participation.noticeText}}">{{participation.noticeText}}</view>
+      </view>
+    </view>
+    <view wx:else="" class="consent-start"><view class="subtitle">由讲述者本人确认资料用途。你可以陪在身边，协助操作设备。</view><button class="btn consent-start-action" bindtap="assisted">本人在场，协助开始</button></view>
+    <button class="link management-toggle" bindtap="toggleManagement" aria-expanded="{{showManagement}}">{{showManagement ? '收起用途与资料服务' : '调整用途与资料服务'}}</button>
+    <block wx:if="{{showManagement}}">
+    <button class="link section" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button>
+    <button wx:if="{{participation.canRead}}" class="btn secondary section" bindtap="project" disabled="{{busy}}">返回本人参与的项目</button>
+    <button wx:if="{{participation.canRead}}" class="link section" bindtap="plan" disabled="{{busy}}">编辑个人大纲与问题</button>
+    <view wx:if="{{accountId}}" class="small muted section">当前账号：{{accountId}}</view>
     <view class="small muted">项目：{{participation.projectId}}</view>
-    <view class="note section">拒绝或撤回不取消已付款订单，仍可联系服务。已下载到设备的副本无法远程回收。本人入书确认是之后的独立决定。</view>
+    <view class="note section">拒绝或撤回不取消已付款订单，仍可联系服务。已下载到设备的副本无法远程回收。故事经本人确认后才入书。</view>
     <view wx:if="{{participation.role === 'narrator'}}">
       <view wx:for="{{participation.choices}}" wx:key="purpose" class="paper section">
         <view>{{item.purpose === 'collection' ? '采集并保存讲述和照片' : item.purpose === 'ai' ? '交由AI处理素材' : '向本项目发起人共享资料'}}</view>
@@ -36,6 +48,7 @@
       <view wx:if="{{supportCaseRef}}" class="note section">工单：{{supportCaseRef}}</view>
       <view wx:for="{{careRequests}}" wx:key="id" class="section"><view class="small muted">{{item.kind === 'rebind' ? '换绑工单' : item.kind === 'withdraw' ? '撤回工单' : item.kind === 'export' ? '资料导出工单' : item.kind === 'correction' ? '故事限时校对工单' : item.kind === 'production_handoff' ? '生产交接工单' : item.kind === 'quality' ? '质量售后工单' : item.kind === 'refund' ? '退款工单' : '删除工单'}}：record:{{item.id}}</view><view class="note">处理状态：{{item.state === 'open' ? '待客服核验' : item.kind === 'withdraw' ? '当前访问已撤销，后续联动待处理' : item.state === 'verified' ? '已核验，后续交付或执行待完成' : '已完成'}}</view></view>
     </view>
+    </block>
   </view>
   <button wx:if="{{loggedIn && statusProjectId}}" class="btn secondary section" bindtap="deletion">查看资料删除进度</button>
   <button class="link" bindtap="back">返回首页</button>
@@ -91,7 +104,7 @@
 >
 </block>
 
-<view wx:if="{{participation}}" class="page withdrawal-status">
+<view wx:if="{{participation && showManagement}}" class="page withdrawal-status">
   <button class="btn secondary section" bindtap="showWithdrawal" disabled="{{busy}}">查看撤回处置进度</button>
   <view wx:if="{{withdrawal}}" class="paper section">
     <view class="section-title">撤回与账号变更处置</view>

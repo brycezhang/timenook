@@ -96,9 +96,7 @@ Page({
     noticeText: "当前为本地合成政策验证；此说明仅提交到本次选择。",
     decisionReady: false,
     canDecide: false,
-    confirmedChoice: null as boolean | null,
-    includeChoice: null as boolean | null,
-    evidence: "",
+    allowInBook: false,
     decisionStatus: "",
     audioBusy: false,
     audioError: "",
@@ -178,9 +176,7 @@ Page({
         busy: false,
         decisionReady: false,
         canDecide: false,
-        confirmedChoice: null,
-        includeChoice: null,
-        evidence: "",
+        allowInBook: false,
         decisionStatus: "",
         careExpiry: "",
         careEvidence: "",
@@ -254,9 +250,7 @@ Page({
         careStatus: "",
         decisionReady: false,
         canDecide: false,
-        confirmedChoice: null,
-        includeChoice: null,
-        evidence: "",
+        allowInBook: false,
         decisionStatus: "",
         story: null,
         liveParagraphs: [],
@@ -323,9 +317,7 @@ Page({
         error: "",
         decisionReady: false,
         canDecide: false,
-        confirmedChoice: null,
-        includeChoice: null,
-        evidence: "",
+        allowInBook: false,
         careEvidence: "",
         careExpiry: "",
         decisionStatus: "",
@@ -389,6 +381,15 @@ Page({
           if (!this.currentLive(generation, context)) return;
           Object.assign(view, {
             story: full,
+            decisionReady: !!full.confirmation,
+            canDecide:
+              !!full.confirmation &&
+              (full.confirmation.canDecide || !!this.confirmationSessionId),
+            allowInBook: full.confirmation?.allowInBook === true,
+            noticeVersion:
+              full.confirmation?.noticeVersion || "synthetic-d08-v1",
+            evidencePrefix: full.confirmation?.evidencePrefix || "synthetic:",
+            noticeText: full.confirmation?.noticeText || "",
             liveAudioSources: (full.task?.sources ?? []).map((source) => ({
               clipId: source.clipId,
               durationSeconds: (source.durationMs ?? 0) / 1000,
@@ -592,12 +593,13 @@ Page({
           overview.noticeText ||
           "当前为本地合成政策验证；此说明仅提交到本次选择。",
         canDecide: overview.canDecide || !!this.confirmationSessionId,
-        confirmedChoice: null,
-        includeChoice: null,
-        evidence: "",
+        allowInBook:
+          this.data.story?.confirmation?.allowInBook ??
+          this.data.story?.decision?.allowInBook ??
+          true,
         decisionStatus:
           overview.canDecide || this.confirmationSessionId
-            ? "请本人分别选择，并记录本次独立说明"
+            ? "请本人阅读全文后确认这版内容"
             : "当前账号只能协助校对；本人确认请使用讲述者账号或当次故事确认协助",
       });
     } catch (error) {
@@ -612,42 +614,37 @@ Page({
         this.setData({ busy: false });
     }
   },
-  chooseConfirmation(e: E) {
-    this.setData({ confirmedChoice: e.currentTarget.dataset.value === "true" });
+  decideLive() {
+    return this.saveDecision(true, this.data.allowInBook);
   },
-  chooseInclusion(e: E) {
-    this.setData({ includeChoice: e.currentTarget.dataset.value === "true" });
+  adjustDecision() {
+    if (!this.data.canDecide || this.data.busy) return;
+    wx.showActionSheet({
+      itemList: ["撤回这版内容确认", "这版暂不入书", "重新确认并允许这版入书"],
+      success: ({ tapIndex }) => {
+        if (tapIndex >= 0 && tapIndex <= 2)
+          void this.saveDecision(tapIndex !== 0, tapIndex === 2);
+      },
+    });
   },
-  decisionEvidence(e: E) {
-    this.setData({ evidence: e.detail.value });
-  },
-  async decideLive() {
+  async saveDecision(confirmed: boolean, allowInBook: boolean) {
     const current = this.data.story,
       revision = current?.revision;
-    if (this.data.busy || !current || !revision || !this.data.canDecide) return;
     if (
-      this.data.confirmedChoice === null ||
-      this.data.includeChoice === null ||
-      !/^[^\r\n]{3,160}$/.test(this.data.evidence.trim())
-    ) {
-      this.setData({
-        decisionStatus:
-          "请本人分别选择内容确认与入书许可，并填写 3 至 160 字的本次独立说明（单行）",
-      });
+      this.data.busy ||
+      !current ||
+      !revision ||
+      !this.data.canDecide ||
+      (confirmed && this.data.needsReview)
+    )
       return;
-    }
-    if (this.data.includeChoice && !this.data.confirmedChoice) {
-      this.setData({ decisionStatus: "未确认的故事不能允许入书" });
-      return;
-    }
     const input = {
       revisionId: revision.id,
       contentHash: revision.contentHash,
       expectedVersion: current.version,
-      confirmed: this.data.confirmedChoice,
-      allowInBook: this.data.includeChoice,
+      confirmed,
+      allowInBook,
       noticeVersion: this.data.noticeVersion,
-      evidenceRef: `${this.data.evidencePrefix}${this.data.evidence.trim()}`,
       ...(this.confirmationSessionId
         ? { assistedSessionId: this.confirmationSessionId }
         : {}),
@@ -662,7 +659,10 @@ Page({
       const result = await storyClient.decide(
         this.projectId,
         current.id,
-        input,
+        {
+          ...input,
+          evidenceRef: `${this.data.evidencePrefix}click:story-confirm:${this.decisionCommand!.key}`,
+        },
         this.decisionCommand!.key,
       );
       if (!this.currentLive(generation, context)) return;
@@ -670,7 +670,7 @@ Page({
       this.setData({
         story: result,
         stage: stage(result),
-        evidence: "",
+        allowInBook: result.decision?.allowInBook ?? this.data.allowInBook,
         decisionReady: false,
         decisionStatus: result.decision?.confirmed
           ? result.decision.allowInBook

@@ -228,3 +228,38 @@
 .live-story .story-title { margin-top: 8rpx; }
 .live-story .story-body { margin-top: 36rpx; }
 .live-story .link { min-height: 96rpx; font-size: 32rpx; }
+
+.live-story .story-title {
+  font-family: var(--serif);
+  font-size: 54rpx;
+}
+.live-story .story-body {
+  margin-top: 50rpx;
+}
+.live-story .paragraph {
+  font-family: var(--serif);
+  font-size: 40rpx;
+  line-height: 2.05;
+  letter-spacing: 1rpx;
+}
+.live-story .live-source-label {
+  font-size: 25rpx;
+}
+.live-decision {
+  border-top: 1rpx solid #c9bfaf;
+  margin-top: 52rpx;
+  padding-top: 40rpx;
+}
+.decision-copy {
+  font-size: 32rpx;
+  line-height: 1.9;
+}
+.decision-footnote {
+  margin-top: 22rpx;
+  font-size: 25rpx;
+  color: var(--muted);
+}
+.reading-tools {
+  margin-top: 30rpx;
+  width: 100%;
+}

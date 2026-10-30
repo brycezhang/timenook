@@ -645,22 +645,17 @@ test("real story Page submits, leaves and restores the same task then renders ev
       }),
     ).toBeVisible();
     await expect(page.getByText(/出门的具体年份待本人核对/)).toBeVisible();
-    await expect(
-      page.getByText("AI 整理 · 待本人核对", { exact: true }),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: "本人确认或调整这版决定", exact: true })
-      .click();
+    await expect(page.getByText("AI 整理", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("button", { name: "先核对待确认事项", exact: true }),
     ).toBeEnabled();
     await expect(page.locator(".live-error")).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: "确认这版内容", exact: true }),
+      page.getByRole("button", { name: "确认", exact: true }),
     ).toBeDisabled();
     await expect(
-      page.getByRole("button", { name: "不确认／撤回确认", exact: true }),
-    ).toBeEnabled();
+      page.locator(".live-decision textarea, .live-decision checkbox"),
+    ).toHaveCount(0);
     const body = page.locator(".live-story .paragraph");
     expect(await body.count()).toBe(3);
     expect(

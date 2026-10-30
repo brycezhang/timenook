@@ -518,6 +518,16 @@ async function savedInterview() {
   return interview;
 }
 
+async function adjustStoryDecision(page, label) {
+  await storyAction(page, "回听已保存的原声");
+  await page.getByRole("button", { name: "调整本版决定", exact: true }).click();
+  const saved = page.waitForResponse((response) =>
+    response.url().endsWith("/decisions"),
+  );
+  await page.getByRole("button", { name: label, exact: true }).click();
+  expect((await saved).status()).toBe(201);
+}
+
 test("real project, full-story correction and independent narrator decisions persist through HTTP and PostgreSQL", async ({
   browser,
 }) => {
@@ -610,26 +620,16 @@ test("real project, full-story correction and independent narrator decisions per
       .nth(1)
       .fill("本人无法确认品种，保留未知");
     await page
-      .getByRole("button", { name: "保存新版本，重新确认", exact: true })
+      .getByRole("button", { name: "保存为新版本", exact: true })
       .click();
     await expect(
       page.getByText("本人校对后的首段，保留原有来源。", { exact: true }),
     ).toBeVisible();
-    await page
-      .getByRole("button", { name: "本人确认或调整这版决定", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "确认这版内容", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "暂不入书／撤回入书许可", exact: true })
-      .click();
-    await page
-      .getByPlaceholder("请记录本人本次核对和选择的说明")
-      .fill("本地合成：本人核对这版但暂不入书");
-    await page
-      .getByRole("button", { name: "保存本人这次的两项决定", exact: true })
-      .click();
+    await page.getByRole("button", { name: "确认", exact: true }).click();
+    await expect(
+      page.locator(".live-decision textarea, .live-decision checkbox"),
+    ).toHaveCount(0);
+    await adjustStoryDecision(page, "这版暂不入书");
     await expect
       .poll(
         async () =>
@@ -858,21 +858,11 @@ test("the actual no-WeChat narrator grants story-purpose assistance then confirm
         exact: true,
       }),
     ).toBeVisible();
-    await page
-      .getByRole("button", { name: "本人确认或调整这版决定", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "确认这版内容", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "暂不入书／撤回入书许可", exact: true })
-      .click();
-    await page
-      .getByPlaceholder("请记录本人本次核对和选择的说明")
-      .fill("本人核对并确认当前版本，但这次暂不入书");
-    await page
-      .getByRole("button", { name: "保存本人这次的两项决定", exact: true })
-      .click();
+    await page.getByRole("button", { name: "确认", exact: true }).click();
+    await expect(
+      page.locator(".live-decision textarea, .live-decision checkbox"),
+    ).toHaveCount(0);
+    await adjustStoryDecision(page, "这版暂不入书");
     await expect
       .poll(
         async () =>
@@ -897,21 +887,7 @@ test("the actual no-WeChat narrator grants story-purpose assistance then confirm
     expect(current.decision.allowInBook).toBe(false);
     expect(current.decision.operatorUserId).toBe(p.operator.user.id);
     expect(current.decision.method).toBe("assisted");
-    await page
-      .getByRole("button", { name: "本人确认或调整这版决定", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "确认这版内容", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "允许这版入书", exact: true })
-      .click();
-    await page
-      .getByPlaceholder("请记录本人本次核对和选择的说明")
-      .fill("本人这次另行同意把刚才确认的这一版故事用于入书");
-    await page
-      .getByRole("button", { name: "保存本人这次的两项决定", exact: true })
-      .click();
+    await adjustStoryDecision(page, "重新确认并允许这版入书");
     await expect
       .poll(
         async () =>
@@ -1128,13 +1104,13 @@ test("a collection-only assisted project home starts real recording without expo
       .getByRole("button", { name: "本人在场，进入同机协助", exact: true })
       .click();
     await expect(
-      page.getByRole("button", { name: "本人在场，开始本次讲述", exact: true }),
+      page.getByRole("button", { name: "同意所选并开始讲述", exact: true }),
     ).toBeVisible();
     const contextResponse = page.waitForResponse((r) =>
       r.url().endsWith(`/projects/${p.projectId}/interviews/context`),
     );
     await page
-      .getByRole("button", { name: "本人在场，开始本次讲述", exact: true })
+      .getByRole("button", { name: "同意所选并开始讲述", exact: true })
       .click();
     const safe = await (await contextResponse).json();
     expect(safe.data.interviews).toEqual([]);
@@ -1241,9 +1217,6 @@ test("a real revoked Story download clears the active Assisted page including it
       .getByRole("button", { name: "回听第 1 段原声", exact: true })
       .click();
     await downloading;
-    await page
-      .getByRole("button", { name: "本人确认或调整这版决定", exact: true })
-      .click();
     await page
       .getByRole("button", {
         name: "本人在场，申请当次故事确认协助",
@@ -1547,7 +1520,7 @@ for (const action of ["save", "photos", "title"]) {
               ? "保存书名"
               : action === "photos"
                 ? "选用已保存的最新照片清单"
-                : "保存新版本，重新确认",
+                : "保存为新版本",
           exact: true,
         })
         .click();

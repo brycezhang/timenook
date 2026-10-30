@@ -45,12 +45,12 @@
       <button class="link" bindtap="recoverInterview" disabled="{{busy}}">{{pendingLocal || !context || !context.cloudSaved?'回采访页恢复保存':'回采访页继续讲'}}</button>
     </view>
     <block wx:if="{{story && story.revision}}">
-      <view class="live-origin">{{story.revision.origin==='ai'?'AI 整理 · 待本人核对':'已保存的文字版本 · 待本人核对'}}</view>
+      <view class="live-origin">{{story.revision.origin==='ai'?'AI 整理':'已保存的文字版本'}}</view>
       <view class="live-version">第 {{story.version}} 版</view>
       <view class="story-body">
         <view wx:for="{{liveParagraphs}}" wx:key="index" class="live-paragraph">
           <text class="paragraph">{{item.text}}</text>
-          <view class="live-source-label">来源：{{item.sourceLabel}}</view>
+          <view wx:if="{{showAudio}}" class="live-source-label">来源：{{item.sourceLabel}}</view>
         </view>
       </view>
       <view wx:if="{{story.revision.reviewItems.length}}" class="live-reviews">
@@ -62,24 +62,18 @@
       <view wx:if="{{showCare && story.revision.notes && story.revision.notes.length}}" class="live-reviews section"><view>校对说明</view><view wx:for="{{story.revision.notes || []}}" wx:key="id" class="live-review">{{item.text}}</view></view>
       <view wx:if="{{showAudio && story.revision.photoSnapshot}}" class="live-reviews section"><view>本版照片清单（第 {{story.revision.photoSnapshot.revision}} 版）</view><view wx:for="{{story.revision.photoSnapshot.entries}}" wx:key="photoId" class="live-review">照片 {{index+1}}：{{item.caption || '未填写说明'}}</view></view>
       <view wx:if="{{showAudio}}" class="live-reviews section"><view>本版关联的原声顺序</view><view wx:for="{{story.revision.audioManifest || story.revision.sourceManifest}}" wx:key="clipId" class="live-review">第 {{index+1}} 段：{{item.question && item.question.snapshot ? item.question.snapshot.text : '已保存的本人原声'}}</view><view wx:if="{{story.revision.audioManifest && !story.revision.audioManifest.length}}">这版未关联原声；原始素材仍保留。</view></view>
-      <view class="live-controls">
-        <view wx:if="{{decisionStatus}}" class="live-stage">{{decisionStatus}}</view>
-        <button class="btn" bindtap="prepareDecision" disabled="{{busy}}">本人确认或调整这版决定</button>
-        <button class="link" bindtap="moreActions" disabled="{{busy}}">修改、照片与原声</button>
-        <button wx:if="{{decisionReady && !canDecide}}" class="btn secondary" bindtap="participation" disabled="{{busy}}">本人在场，申请当次故事确认协助</button>
+      <button wx:if="{{showAudio && canDecide}}" class="link" bindtap="adjustDecision" disabled="{{busy}}">调整本版决定</button>
+      <view class="live-decision">
+        <view wx:if="{{decisionStatus}}" class="live-stage" role="status">{{decisionStatus}}</view>
+        <view wx:if="{{needsReview}}" class="section"><view>还有待核对的事项。补充说明后，才能确认这版内容。</view><button class="btn secondary section" bindtap="edit" disabled="{{busy}}">先核对待确认事项</button></view>
+        <block wx:if="{{canDecide}}">
+          <button class="btn section" bindtap="decideLive" disabled="{{busy || needsReview || (story.decision && story.decision.confirmed && story.decision.allowInBook === allowInBook)}}">{{story.decision && story.decision.confirmed && story.decision.allowInBook === allowInBook ? '已确认' : '确认'}}</button>
+        </block>
+        <view wx:else="" class="decision-copy">这版故事由讲述者本人确认。<button class="link" bindtap="participation" disabled="{{busy}}">本人在场，申请当次故事确认协助</button></view>
+        <view class="decision-footnote">修改文字或照片后，需要重新确认。</view>
       </view>
-      <view wx:if="{{decisionReady && canDecide}}" class="live-decision">
-        <view wx:if="{{needsReview}}" class="section"><view>还有待核对的事项。补充说明后，才能确认这版内容和入书许可。</view><button class="btn section" bindtap="edit" disabled="{{busy}}">先核对待确认事项</button></view>
-        <view>请讲述者本人阅读全文后分别选择。确认内容与允许入书是两项决定。</view>
-        <view class="section">一、这版故事的内容是否确认？</view>
-        <button class="btn secondary section" data-value="true" bindtap="chooseConfirmation" disabled="{{needsReview}}">{{confirmedChoice===true?'已选：':''}}确认这版内容</button>
-        <button class="btn secondary section" data-value="false" bindtap="chooseConfirmation">{{confirmedChoice===false?'已选：':''}}不确认／撤回确认</button>
-        <view class="section">二、是否允许这版故事入书？</view>
-        <button class="btn secondary section" data-value="true" bindtap="chooseInclusion" disabled="{{needsReview}}">{{includeChoice===true?'已选：':''}}允许这版入书</button>
-        <button class="btn secondary section" data-value="false" bindtap="chooseInclusion">{{includeChoice===false?'已选：':''}}暂不入书／撤回入书许可</button>
-        <view class="section">本次独立说明</view><textarea class="decision-evidence" value="{{evidence}}" bindinput="decisionEvidence" maxlength="160" auto-height="{{true}}" placeholder="请记录本人本次核对和选择的说明" />
-        <view class="live-source-label">{{noticeText}}</view>
-        <button class="btn section" bindtap="decideLive" disabled="{{busy}}">保存本人这次的两项决定</button>
+      <button class="link reading-tools" bindtap="moreActions" disabled="{{busy}}">修改、照片与原声</button>
+      <view wx:if="{{showCare && decisionReady && canDecide}}" class="live-care">
         <block wx:if="{{showCare}}"><view class="section">申请限时人工校对</view><view>请本人明确选择授权有效期和本次独立说明。运营校对后的故事仍需本人确认。</view>
         <input class="decision-evidence" value="{{careExpiry}}" data-field="careExpiry" bindinput="correctionInput" placeholder="ISO 有效期，如 YYYY-MM-DDTHH:mm:ss+08:00" maxlength="40" />
         <textarea class="decision-evidence" value="{{careEvidence}}" data-field="careEvidence" bindinput="correctionInput" auto-height="{{true}}" maxlength="160" placeholder="本人本次申请人工校对的独立说明" />

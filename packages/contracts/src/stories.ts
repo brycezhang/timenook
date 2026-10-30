@@ -69,6 +69,13 @@ export interface StoryRevisionView {
   origin: "ai" | "participant";
 }
 export interface StoryView {
+  confirmation?: {
+    canDecide: boolean;
+    allowInBook: boolean;
+    noticeVersion: string;
+    evidencePrefix: string;
+    noticeText?: string;
+  };
   appliedRevision?: { id: string; version: number; contentHash: string };
   decision?: StoryDecisionView | null;
   id: string;

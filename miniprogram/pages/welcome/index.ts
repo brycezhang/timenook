@@ -26,6 +26,8 @@ Page({
     productionDisposition: "",
     p: null as Project | null,
     agreed: false,
+    showDetails: false,
+    showManagement: false,
     missing: false,
     mode: dataMode(),
     invitation: null as InvitationView | null,
@@ -49,6 +51,7 @@ Page({
   generation: 0,
   intent: null as { input: string; key: string } | null,
   onLoad(q) {
+    this.setData({ showManagement: q.manage === "1" });
     if (q.token || q.projectId) setDataMode("live");
     if (dataMode() === "live") {
       this.inviteToken = q.token ?? "";
@@ -254,6 +257,65 @@ Page({
           participation: null,
           status:
             error instanceof Error ? error.message : "保存未确认，请重新查询",
+        });
+    } finally {
+      if (context === sessionClient.context() && generation === this.generation)
+        this.setData({ busy: false });
+    }
+  },
+  toggleDetails() {
+    this.setData({ showDetails: !this.data.showDetails });
+  },
+  toggleManagement() {
+    this.setData({ showManagement: !this.data.showManagement });
+  },
+  async confirmAndStart() {
+    const state = this.data.participation;
+    if (
+      !state ||
+      this.data.busy ||
+      state.role !== "narrator" ||
+      !["synthetic-only", "internal-acceptance"].includes(state.policyStatus)
+    )
+      return;
+    const input = JSON.stringify({
+      action: "start",
+      projectId: state.projectId,
+      notice: state.noticeVersion,
+      binding: state.bindingVersion,
+      epoch: state.accessEpoch,
+    });
+    if (this.intent?.input !== input)
+      this.intent = { input, key: paymentKey() };
+    const context = sessionClient.context(),
+      generation = this.generation;
+    this.setData({ busy: true, status: "" });
+    try {
+      const participation = await participationClient.start(
+        state,
+        this.intent.key,
+      );
+      if (context !== sessionClient.context() || generation !== this.generation)
+        return;
+      this.intent = null;
+      this.setData({ participation });
+      if (
+        participation.canCollect &&
+        participation.canProcessAi &&
+        CONSENT_PURPOSES.every((purpose) =>
+          participation.choices.some(
+            (choice) => choice.purpose === purpose && choice.granted,
+          ),
+        )
+      )
+        go("interview", `projectId=${state.projectId}`);
+      else this.setData({ status: "用途保存后仍未取得开始权限，请重新查询" });
+    } catch (error) {
+      if (this.recoverExpiredSession(error, generation, context)) return;
+      if (context === sessionClient.context() && generation === this.generation)
+        this.setData({
+          status:
+            error instanceof Error ? error.message : "开始结果未确认，请重试",
         });
     } finally {
       if (context === sessionClient.context() && generation === this.generation)

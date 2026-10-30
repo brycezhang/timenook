@@ -1,6 +1,6 @@
 <block wx:if="{{live}}">
 <view class="page live-edit">
- <view class="title">校对故事</view><view class="section">保留本人原意。保存将追加新版本，需要本人重新确认，原声与正式转录保留。</view>
+ <view class="eyebrow">校对故事</view><view class="title">把记忆里的细节，写准确。</view><view class="section">保留本人原意。保存将追加新版本，需要本人重新确认，原声与正式转录保留。</view>
  <view wx:if="{{busy}}" class="section">正在查询或保存，请稍候…</view>
  <view wx:if="{{error}}" class="error section">{{error}}</view>
  <button wx:if="{{!story}}" class="btn secondary section" bindtap="onShow" disabled="{{busy}}">重新读取故事</button>
@@ -23,7 +23,7 @@
   <view class="section">本版照片：{{photoSnapshot ? '已选第 '+photoSnapshot.revision+' 版' : '不附照片'}}</view>
   <view wx:for="{{photoSnapshot ? photoSnapshot.entries : []}}" wx:key="photoId" class="section">照片 {{index+1}}：{{item.caption || '无说明'}}</view>
   <button class="btn secondary section" bindtap="applyPhotos" disabled="{{busy}}">选用已保存的最新照片清单</button><button class="btn secondary section" bindtap="removePhotos" disabled="{{busy}}">本版不附照片</button>
-  <button class="btn section" bindtap="save" disabled="{{busy}}">{{busy?'正在保存…':'保存新版本，重新确认'}}</button>
+  <button class="btn section" bindtap="save" disabled="{{busy}}">{{busy?'正在保存…':'保存为新版本'}}</button>
  </block>
 </view>
 </block>

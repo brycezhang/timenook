@@ -426,6 +426,62 @@ async function choose(
     ),
   };
 }
+test("one narrator start atomically records three purposes, binds actual actor and notice, and replays without duplicate records", async () => {
+  const p = await bound();
+  const before = await state(p, p.narrator.token);
+  assert.equal(before.consent.length, 0, "visiting cannot authorize");
+  const body = {
+      ...notice(),
+      evidenceRef: `synthetic:click:purpose-start:${randomUUID()}`,
+      expectedBindingVersion: before.bindingVersion,
+      expectedAccessEpoch: before.accessEpoch,
+    },
+    key = randomUUID(),
+    url = `/v1/projects/${p.projectId}/consents/start`;
+  assert.equal(
+    (await request("POST", url, p.buyer.token, body)).statusCode,
+    403,
+  );
+  const saved = data(await request("POST", url, p.narrator.token, body, key));
+  assert.deepEqual(
+    saved.choices.map((choice: any) => [choice.purpose, choice.granted]),
+    [
+      ["collection", true],
+      ["ai", true],
+      ["sharing", true],
+    ],
+  );
+  assert.equal(saved.consent.length, 3);
+  for (const record of saved.consent) {
+    assert.equal(record.operatorUserId, p.narrator.id);
+    assert.equal(record.subjectId, p.subjectId);
+    assert.equal(record.noticeVersion, body.noticeVersion);
+    assert.equal(record.evidenceRef, body.evidenceRef);
+  }
+  assert.equal(
+    data(await request("POST", url, p.narrator.token, body, key)).consent
+      .length,
+    3,
+  );
+  assert.equal(
+    (
+      await request("POST", url, p.narrator.token, {
+        ...body,
+        noticeVersion: "internal-participation-v1",
+      })
+    ).statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await request("POST", url, p.narrator.token, {
+        ...body,
+        expectedAccessEpoch: 0,
+      })
+    ).statusCode,
+    409,
+  );
+});
 test("three purpose decisions stay separate; rejection keeps care and orders, sharing and AI require explicit consent and revocation fences old commands", async () => {
   const p = await bound();
   assert.equal(

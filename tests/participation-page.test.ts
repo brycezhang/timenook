@@ -137,6 +137,49 @@ const current = {
   canRead: false,
   careAvailable: true,
 };
+test("welcome visits do not authorize; an actual narrator start records three purposes once before recording preparation", async () => {
+  const { page, requests, routes } = harness("welcome");
+  page.onLoad({ projectId });
+  const showing = page.onShow();
+  await completeProjectState(requests, current);
+  await showing;
+  assert.equal(requests.length, 0);
+  assert.equal(page.data.showDetails, false);
+  const starting = page.confirmAndStart();
+  assert.equal(
+    requests[0]?.url,
+    `${base}/projects/${projectId}/consents/start`,
+  );
+  const sent = requests[0].data as any;
+  assert.equal(sent.noticeVersion, "synthetic-d08-v1");
+  assert.equal(sent.expectedBindingVersion, 1);
+  assert.equal(sent.expectedAccessEpoch, 1);
+  assert.match(sent.evidenceRef, /^synthetic:click:purpose-start:/);
+  await page.confirmAndStart();
+  assert.equal(requests.length, 1, "double taps share one pending action");
+  assert.equal(routes.length, 0);
+  respond(requests.shift()!, {
+    ...current,
+    choices: ["collection", "ai", "sharing"].map((purpose) => ({
+      purpose,
+      granted: true,
+    })),
+    canCollect: true,
+    canRead: true,
+    canProcessAi: true,
+  });
+  await starting;
+  assert.equal(routes[0], `/pages/interview/index?projectId=${projectId}`);
+});
+test("initiator cannot authorize the narrator by invoking the welcome start action", async () => {
+  const { page, requests } = harness("welcome");
+  page.onLoad({ projectId });
+  const showing = page.onShow();
+  await completeProjectState(requests, { ...current, role: "initiator" });
+  await showing;
+  await page.confirmAndStart();
+  assert.equal(requests.length, 0);
+});
 test("assisted book confirmation records a distinct current purpose and returns to the pinned book", async () => {
   const { page, requests, routes } = harness("assisted"),
     bookVersionId = "66666666-6666-4666-8666-666666666666";
@@ -348,7 +391,12 @@ test("welcome restores open and completed care requests on reentry and does not 
   assert.equal(page.data.careRequests.length, 0);
   assert.equal(requests.length, 0);
 });
-for (const action of ["accept", "chooseConsent", "requestRebind"])
+for (const action of [
+  "accept",
+  "chooseConsent",
+  "requestRebind",
+  "confirmAndStart",
+])
   test(`welcome ${action} releases an expired session and exposes login again`, async () => {
     const { page, requests } = harness("welcome");
     page.onLoad(
@@ -447,7 +495,16 @@ for (const action of ["refreshLive", "share", "approve"])
   });
 
 for (const [name, actions] of [
-  ["welcome", ["refreshLive", "accept", "chooseConsent", "requestRebind"]],
+  [
+    "welcome",
+    [
+      "refreshLive",
+      "accept",
+      "chooseConsent",
+      "requestRebind",
+      "confirmAndStart",
+    ],
+  ],
   ["invite", ["refreshLive", "share", "approve"]],
 ] as const)
   for (const action of actions)

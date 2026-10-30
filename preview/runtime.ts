@@ -217,7 +217,7 @@ export function mountMiniProgram(
             url.pathname,
           )) ||
         (options.method === "POST" &&
-          /\/v1\/(?:orders(?:\/[a-f0-9-]{36}\/(?:payment|close))?|projects\/[a-f0-9-]{36}\/(?:stories\/(?:context|organize)|invitations|consents(?:\/revoke)?|care-requests|assisted-sessions|tasks(?:\/status|\/[a-f0-9-]{36}\/retry)|plan(?:\/preferences)?|interviews(?:\/context|\/[a-f0-9-]{36}\/(?:resume|recording-start|collection-check|actual-question|follow-up(?:\/(?:status|finish))?)|\/[a-f0-9-]{36}\/clips(?:\/[a-f0-9-]{36}\/(?:upload|seal|status|release))?)?)|invitations\/[A-Za-z0-9_-]{43}\/requests|binding-requests\/[a-f0-9-]{36}\/approve)$/.test(
+          /\/v1\/(?:orders(?:\/[a-f0-9-]{36}\/(?:payment|close))?|projects\/[a-f0-9-]{36}\/(?:stories\/(?:context|organize)|invitations|consents(?:\/(?:revoke|start))?|care-requests|assisted-sessions|tasks(?:\/status|\/[a-f0-9-]{36}\/retry)|plan(?:\/preferences)?|interviews(?:\/context|\/[a-f0-9-]{36}\/(?:resume|recording-start|collection-check|actual-question|follow-up(?:\/(?:status|finish))?)|\/[a-f0-9-]{36}\/clips(?:\/[a-f0-9-]{36}\/(?:upload|seal|status|release))?)?)|invitations\/[A-Za-z0-9_-]{43}\/requests|binding-requests\/[a-f0-9-]{36}\/approve)$/.test(
             url.pathname,
           ));
       void (async () => {

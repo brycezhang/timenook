@@ -728,6 +728,73 @@ test("review resolutions append a revision and narrator fact confirmation can re
   assert.equal(reread.decision.confirmed, true);
   assert.equal(reread.decision.allowInBook, false);
 });
+test("a single actual confirmation click retains an earlier explicit inclusion refusal across edits until the narrator changes it", async () => {
+  const p = await readyStory(),
+    url = `/v1/projects/${p.projectId}/stories/${p.story.id}`;
+  const corrected = data(
+    await request("POST", `${url}/revisions`, p.buyer.token, {
+      ...correction(p.story),
+      reviewResolutions: [
+        { item: "确切年代待本人核对", reason: "本人要求保留大约年代" },
+      ],
+    }),
+  );
+  const refused = data(
+    await request(
+      "POST",
+      `${url}/decisions`,
+      p.narrator.token,
+      decision(corrected, false),
+    ),
+  );
+  assert.equal(refused.decision.allowInBook, false);
+  const edited = data(
+    await request("POST", `${url}/revisions`, p.buyer.token, {
+      ...correction(corrected),
+      reviewResolutions: corrected.revision.reviewResolutions,
+    }),
+  );
+  const reading = data(await request("GET", url, p.narrator.token), 200);
+  assert.equal(
+    reading.decision,
+    null,
+    "editing cannot inherit content confirmation",
+  );
+  assert.equal(
+    reading.confirmation.allowInBook,
+    false,
+    "simplified UI cannot silently widen a refusal",
+  );
+  const click = {
+    ...decision(edited, false),
+    evidenceRef: `synthetic:click:story-confirm:${randomUUID()}`,
+  };
+  const key = randomUUID();
+  const confirmed = data(
+    await request("POST", `${url}/decisions`, p.narrator.token, click, key),
+  );
+  assert.equal(confirmed.decision.confirmed, true);
+  assert.equal(confirmed.decision.allowInBook, false);
+  assert.equal(confirmed.decision.contentHash, edited.revision.contentHash);
+  assert.equal(confirmed.decision.operatorUserId, p.narrator.id);
+  assert.equal(confirmed.decision.evidenceRef, click.evidenceRef);
+  assert.equal(
+    data(
+      await request("POST", `${url}/decisions`, p.narrator.token, click, key),
+    ).decision.id,
+    confirmed.decision.id,
+  );
+  const allowed = data(
+    await request(
+      "POST",
+      `${url}/decisions`,
+      p.narrator.token,
+      decision(edited, true),
+    ),
+  );
+  assert.equal(allowed.decision.allowInBook, true);
+});
+
 test("correction and decision retries keep one result but recheck current sharing before replay", async () => {
   const p = await readyStory(),
     url = `/v1/projects/${p.projectId}/stories/${p.story.id}`,

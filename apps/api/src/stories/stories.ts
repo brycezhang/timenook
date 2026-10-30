@@ -1268,7 +1268,30 @@ export class Stories {
       projectId,
       authorization,
       undefined,
-      (tx) => this.view(tx, projectId, id),
+      async (tx, actor) => {
+        const view = await this.view(tx, projectId, id);
+        const previous = await tx.storyDecision.findFirst({
+          where: {
+            projectId,
+            storyId: id,
+            subjectId: actor.subjectId,
+            bindingVersion: actor.bindingVersion,
+          },
+          orderBy: { sequence: "desc" },
+          select: { allowInBook: true },
+        });
+        return {
+          ...view,
+          confirmation: {
+            canDecide: actor.subjectDecision === "self",
+            allowInBook: previous?.allowInBook ?? true,
+            noticeVersion: this.config.acceptance
+              ? "internal-participation-v1"
+              : "synthetic-d08-v1",
+            evidencePrefix: this.config.acceptance ? "internal:" : "synthetic:",
+          },
+        };
+      },
     );
   }
 }
