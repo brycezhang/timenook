@@ -1,5 +1,7 @@
 # T29 · 在共用 ECS 发布独立服务并完成恢复演练
 
+2026-10-29 当前目标按 [ADR 0017](../../../adr/0017-lifetime-service-and-retention.md) 更新；长期规则及工程调整见 [#105](https://github.com/brycezhang/timenook/issues/105)；正式环境、设备及供应商验收仍按原责任票留证。
+
 GitHub：[#30](https://github.com/brycezhang/timenook/issues/30) · 状态以 GitHub 为准。
 阶段：S4
 
@@ -15,9 +17,11 @@ GitHub：[#30](https://github.com/brycezhang/timenook/issues/30) · 状态以 Gi
 - [ ] 演练发布回滚、数据库备份恢复且先重放删除台账、Redis 丢失重建、供应商失败及队列积压；记录 RTO/RPO 实测。
 - [ ] 按 request/project/task/revision/book/fulfillment 标识串联脱敏日志，告警覆盖支付无权益、Outbox、任务费用、错版、访问与工单超时。
 - [ ] 集中承接 T06/T07 的正式域名及管理部署验证：实际管理员受控绑定/飞书登录、密钥保管与恢复、生产 PostgreSQL/Redis 重启；独立域名下用户 `/api/v1`、运营与 Cookie Path `/api/v1/admin`、管理页面 `/admin/`、支付/退款 `/api/v1/webhooks/wechat-pay/...` 与健康路径 `/api/health/...` 正确，API 前缀只剥离一次。检查静态资源、客户端/通知/OpenAPI 基址及同机 legal-agent 服务。
-- [ ] 验证 T10/T26 服务期限调度在暂停、重启、积压与恢复后补扫，重复事件不延长权益或重复执行清理；正式参数和时钟有依据，资料副本清理结果逐层留证。
+- [ ] 验证长期服务在时间推进、Worker 重启、积压与恢复后仍可使用，服务日期占位及旧期限配置不会触发失权或资料清理；核对实际存储生命周期不会删除有效资产。主动撤回/删除、迟到文件补扫与备份恢复防复活继续验证，清理结果逐层留证。
 
 ## 实现边界
+
+本次后台与长期服务开发重构直接硬更新，不以备份、旧开发数据/台账迁移、历史期限兼容或回滚演练作为实施前提；新模型下的主动删除、权限及重启行为仍验证。下述原责任票的完整环境/实物范围与本次重构执行边界分别记录。
 
 沿用现有 ECS/Nginx/systemd 和单体进程角色；集中验正式环境、共用路由与恢复。引用 T15/T26 机制证据，仅补目标环境增量，不建设部署平台或重复业务故障矩阵。
 
