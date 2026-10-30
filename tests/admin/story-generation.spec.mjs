@@ -529,46 +529,31 @@ async function savedInterview() {
   }
   return interview;
 }
-test("real story Page submits, leaves and restores the same task then renders every paragraph and review item", async ({
+// Waiting-input tasks remain restorable even though new UI submissions wait for
+// every selected clip to finish transcription.
+async function waitingStory(interview) {
+  return data(
+    await request(
+      "POST",
+      `/v1/projects/${projectId}/stories/organize`,
+      narrator,
+      { interviewId: interview.id, baseVersion: 0 },
+    ),
+    202,
+  );
+}
+async function openProjectStory(page, storyId) {
+  await page.goto(`${base}/#/project?projectId=${projectId}`);
+  await page.locator(`.live-story-row[data-id="${storyId}"]`).click();
+}
+test("real story Page restores a waiting-input task from the project then renders every paragraph and review item", async ({
   browser,
 }) => {
   const interview = await savedInterview(),
+    waiting = await waitingStory(interview),
     page = await openPage(browser, narrator);
   try {
-    await page.goto(
-      `${base}/#/interview?projectId=${projectId}&interviewId=${interview.id}`,
-    );
-    await expect(
-      page.getByRole("button", { name: "整理成故事", exact: true }),
-    ).toBeVisible({ timeout: 5000 });
-    await showProcessingStep(page);
-    await page.getByRole("button", { name: "整理成故事", exact: true }).click();
-    await expect(page).toHaveURL(
-      new RegExp(
-        `/story\\?projectId=${projectId}&interviewId=${interview.id}&organize=1$`,
-      ),
-    );
-    const beforeSubmission = data(
-      await request(
-        "POST",
-        `/v1/projects/${projectId}/stories/context`,
-        narrator,
-        { interviewId: interview.id },
-      ),
-    );
-    await expect
-      .poll(
-        async () =>
-          data(
-            await request(
-              "POST",
-              `/v1/projects/${projectId}/stories/context`,
-              narrator,
-              { interviewId: interview.id },
-            ),
-          ).story?.task?.state,
-      )
-      .toBe("waiting_inputs");
+    await openProjectStory(page, waiting.id);
     await expect(
       page.getByText("正在等待全部录音转写，可离开", { exact: true }),
     ).toBeVisible();
@@ -583,17 +568,20 @@ test("real story Page submits, leaves and restores the same task then renders ev
       id = context.story.task.id;
     await page.screenshot({ path: "/tmp/timenook-t18-waiting-390.png" });
     await page
-      .getByRole("button", { name: "回采访页继续讲", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "今天先到这里", exact: true })
-      .click();
-    await page
-      .locator(".resume-row")
-      .filter({ hasText: `${interview.actualQuestion.snapshot.text}` })
+      .getByRole("button", {
+        name: /^回采访页(?:继续讲|恢复保存)$/,
+        exact: true,
+      })
       .click();
     await showProcessingStep(page);
-    await page.getByRole("button", { name: "整理成故事", exact: true }).click();
+    await expect(
+      page.getByText("原声已保存，等待转写", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "整理成故事", exact: true }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "先回到项目", exact: true }).click();
+    await page.locator(`.live-story-row[data-id="${waiting.id}"]`).click();
     await expect(
       page.getByText("正在等待全部录音转写，可离开", { exact: true }),
     ).toBeVisible();
@@ -917,7 +905,10 @@ test("the shared story screen displays transcribed text when no story was formed
     ).toBe(true);
     await page.screenshot({ path: "/tmp/timenook-story-no-content-320.png" });
     await page
-      .getByRole("button", { name: "回采访页继续讲", exact: true })
+      .getByRole("button", {
+        name: "回采访页继续讲",
+        exact: true,
+      })
       .click();
     await expect(page).toHaveURL(
       new RegExp(
@@ -929,7 +920,7 @@ test("the shared story screen displays transcribed text when no story was formed
     await page.context().close();
   }
 });
-test("the rendered failed story retries from its saved sources and recovers without another user intent", async ({
+test("the client submits after all transcripts are ready and the failed story retries from saved sources without another user intent", async ({
   browser,
 }) => {
   const interview = await savedInterview(),
@@ -944,14 +935,38 @@ test("the rendered failed story retries from its saved sources and recovers with
           { interviewId: interview.id },
         ),
       );
-    for (const task of audio) {
-      await api.get(ProductionTasks).run(task.id);
-      await api.get(ProductionTasks).run(task.id);
-    }
+    expect(audio).toHaveLength(2);
+    await api.get(ProductionTasks).run(audio[0].id);
+    await api.get(ProductionTasks).run(audio[0].id);
     await page.goto(
-      `${base}/#/story?projectId=${projectId}&interviewId=${interview.id}`,
+      `${base}/#/interview?projectId=${projectId}&interviewId=${interview.id}`,
     );
-    await page.getByRole("button", { name: "整理故事", exact: true }).click();
+    await showProcessingStep(page);
+    await expect(
+      page.getByText("原声已保存，等待转写", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "整理成故事", exact: true }),
+    ).toHaveCount(0);
+    await api.get(ProductionTasks).run(audio[1].id);
+    await api.get(ProductionTasks).run(audio[1].id);
+    expect(
+      data(
+        await request(
+          "POST",
+          `/v1/projects/${projectId}/tasks/status`,
+          narrator,
+          {
+            interviewId: interview.id,
+          },
+        ),
+      ).map((task) => task.state),
+    ).toEqual(["succeeded", "succeeded"]);
+    await page
+      .getByRole("button", { name: "重新查询转写状态", exact: true })
+      .click();
+    await expect(page.getByText("文字已转写", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "整理成故事", exact: true }).click();
     await expect(
       page.getByText("正在等待全部录音转写，可离开", { exact: true }),
     ).toBeVisible();
@@ -1007,7 +1022,7 @@ test("the rendered failed story retries from its saved sources and recovers with
   }
 });
 
-test("entering story from the interview keeps an unsealed local recording recoverable and cannot submit a partial story", async ({
+test("an unsealed local recording gates interview submission and stays recoverable after direct story entry", async ({
   browser,
 }) => {
   const interview = await savedInterview(),
@@ -1027,7 +1042,15 @@ test("entering story from the interview keeps an unsealed local recording recove
         .getByText("已保存在这台设备，还未上传", { exact: true }),
     ).toBeVisible();
     await showProcessingStep(page);
-    await page.getByRole("button", { name: "整理成故事", exact: true }).click();
+    await expect(
+      page.getByText("这段讲述还在本机", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "整理成故事", exact: true }),
+    ).toHaveCount(0);
+    await page.goto(
+      `${base}/#/story?projectId=${projectId}&interviewId=${interview.id}`,
+    );
     await expect(
       page.getByText("还有录音没有云端保存，请回采访页恢复", { exact: true }),
     ).toBeVisible();
@@ -1134,8 +1157,11 @@ test("a hidden interview current-session HTTP 401 clears the active story, playi
           )?.[1],
     );
     expect(original).toHaveLength(1);
-    await showProcessingStep(page);
-    await page.getByRole("button", { name: "整理成故事", exact: true }).click();
+    // Direct entry can read the existing story while the interview's new local
+    // recording remains unsubmitted; no organize command is sent through the gate.
+    await page.goto(
+      `${base}/#/story?projectId=${projectId}&interviewId=${interview.id}`,
+    );
     await expect(page.locator(".live-story .paragraph")).toHaveCount(3);
     await storyAction(page, "回听已保存的原声");
     await page
@@ -1197,13 +1223,10 @@ test("cancelling PhotoPage selection leaves the waiting story intact while actua
   browser,
 }) => {
   const interview = await savedInterview(),
+    waiting = await waitingStory(interview),
     page = await openPage(browser, narrator);
   try {
-    await page.goto(
-      `${base}/#/interview?projectId=${projectId}&interviewId=${interview.id}`,
-    );
-    await showProcessingStep(page);
-    await page.getByRole("button", { name: "整理成故事", exact: true }).click();
+    await openProjectStory(page, waiting.id);
     await expect(
       page.getByText("正在等待全部录音转写，可离开", { exact: true }),
     ).toBeVisible();
@@ -1213,7 +1236,10 @@ test("cancelling PhotoPage selection leaves the waiting story intact while actua
       }).then((r) => data(r));
     const before = await current();
     await page
-      .getByRole("button", { name: "回采访页继续讲", exact: true })
+      .getByRole("button", {
+        name: /^回采访页(?:继续讲|恢复保存)$/,
+        exact: true,
+      })
       .click();
     await openInterviewPhotos(page);
     await page.evaluate(() => {
