@@ -2551,3 +2551,84 @@ test("retrying a lost seal response keeps the selected original when other local
   await retrying;
   assert.equal(h.files.size, 2);
 });
+
+test("a second local take blocks organization until it is submitted and its actual transcription succeeds", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const firstClipId = "77777777-7777-4777-8777-777777777777";
+  const secondClipId = "88888888-8888-4888-8888-888888888888";
+  const firstTask = {
+    id: "99999999-9999-4999-8999-999999999999",
+    projectId,
+    clipId: firstClipId,
+    state: "succeeded",
+    retryable: false,
+    nextAction: "continue",
+  };
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      { ...interview, clips: [{ id: firstClipId, state: "sealed" }] },
+    ],
+  });
+  await showing;
+  await tick();
+  respond(h.requests.shift(), [firstTask], 201);
+  await tick();
+  assert.equal(h.page.data.processingReady, true);
+
+  h.page.prepareCurrent();
+  await start(h);
+  await h.page.record();
+  await tick();
+  h.page.showProcessing();
+  assert.equal(h.page.data.localClips.length, 1);
+  assert.equal(h.page.data.localClips[0].sealed, undefined);
+  assert.equal(h.page.data.processingReady, false);
+  assert.equal(h.page.data.processingAction, "review");
+  assert.equal(h.page.data.processingTitle, "这段讲述还在本机");
+
+  h.page.reviewCurrent();
+  const local = h.page.data.reviewClip;
+  const submitting = h.page.submitReview();
+  respond(
+    h.requests.shift(),
+    {
+      id: secondClipId,
+      projectId,
+      interviewId,
+      actualQuestionId: question.id,
+      clientClipId: local.clientClipId,
+      bytes: local.bytes,
+      sha256: local.sha256,
+      state: "sealed",
+      storage: "local-simulator",
+      asset: {
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        sha256: local.sha256,
+      },
+    },
+    201,
+  );
+  await submitting;
+  const secondTask = {
+    ...firstTask,
+    id: secondClipId,
+    clipId: secondClipId,
+    state: "queued",
+  };
+  respond(h.requests.shift(), [firstTask, secondTask], 201);
+  await tick();
+  assert.equal(h.page.data.processingReady, false);
+  const refreshing = h.page.refreshTasks();
+  respond(
+    h.requests.shift(),
+    [firstTask, { ...secondTask, state: "succeeded" }],
+    201,
+  );
+  await refreshing;
+  assert.equal(h.page.data.processingReady, true);
+  assert.equal(h.page.data.processingTitle, "文字已转写");
+});
