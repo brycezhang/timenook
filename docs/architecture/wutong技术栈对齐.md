@@ -13,12 +13,14 @@ TimeNook以`wutong-admin`的TypeScript / NestJS、Fastify和Vben为工程基线�
 | ORM与数据库  | API声明Prisma 6；[schema](/Users/bryce/workspace/wutong-admin/apps/api/prisma/schema.prisma)为postgresql；本地compose用PostgreSQL 16                                                                                            | Prisma + 阿里云RDS PostgreSQL，优先评估16系支持规格；迁移/锁/事务语义保持PostgreSQL                      |
 | 后台任务     | API声明BullMQ 5、ioredis 5；[书籍导入队列](/Users/bryce/workspace/wutong-admin/apps/api/src/modules/books/books-import-queue.service.ts)实际使用Queue和IORedis；字幕任务另有DB轮询实现                                          | 使用BullMQ/ioredis与阿里云Tair（兼容Redis）；数据库业务任务/Outbox仍是TimeNook事实来源                   |
 | 进程         | [worker入口](/Users/bryce/workspace/wutong-admin/apps/api/src/worker.ts)创建Nest应用上下文，并注册停止处理                                                                                                                      | API与Worker同代码库、不同进程；PDF渲染隔离资源                                                           |
-| 管理端       | [web-antd依赖](/Users/bryce/workspace/wutong-admin/apps/web-antd/package.json)使用Vben workspace包及antdv-next                                                                                                                  | 采用Vben的web-antd工程路线，沿用布局、表单、表格、权限与请求层组织方式                                   |
+| 管理端       | [web-antd依赖](/Users/bryce/workspace/wutong-admin/apps/web-antd/package.json)使用Vben workspace包及antdv-next                                                                                                                  | 采用完整Vben web-antd应用布局、认证页、路由菜单、面包屑、表单、表格、权限与请求层；本项目按用户决定启用多标签页                                   |
 | 契约         | [contracts](/Users/bryce/workspace/wutong-admin/packages/contracts/package.json)独立包                                                                                                                                          | 公开DTO/枚举/权限码与OpenAPI客户端契约集中；不共享Prisma实体、云密钥或服务器实现                         |
 | 对象存储     | [books.service](/Users/bryce/workspace/wutong-admin/apps/api/src/modules/books/books.service.ts)读取ALIYUN_OSS配置并生成上传授权                                                                                                | 使用阿里云OSS；新小程序按PostObject V4/受限STS设计，不照搬现有后台PUT签名和CDN读取假设                   |
 | 交付         | [部署说明](/Users/bryce/workspace/wutong-admin/docs/deployment.md)与templates提供CI构建、SSH release包、releases/current/shared、Nginx、systemd；Dockerfile/compose用于本地开发                                                 | 阿里云ECS + Nginx + systemd管理API/Worker，release包切换/回滚；PDF可用固定容器镜像；不默认建设Kubernetes |
 
 以上版本是参考项目的声明/本地开发配置，不代表本项目已安装、压测或生产部署。Prisma二进制目标、OpenSSL和Chromium/字体必须按TimeNook目标Linux验证，不能直接复制参考项目的运行产物。
+
+2026-10-29 只读复核：wutong 使用应用层 `AuthPageLayout` / `BasicLayout`、路由权限与通用页面，当前关闭多标签页；TimeNook 原实现只保留底层布局等依赖闭包，以按钮变量切页。整体补齐方案与长期服务调整见[重构规格草案](../delivery/2026-10-29/admin-vben-refactor-spec.md)，尚不代表新后台已实现。
 
 ## 2. 基础设施与外部服务
 
