@@ -740,6 +740,7 @@ Page({
         .map((clip) => clip.serverId!),
     ]);
     const ready =
+      !unsubmitted &&
       sealedIds.size > 0 &&
       taskRows.length > 0 &&
       taskRows.every((row) => row.state === "succeeded") &&
@@ -779,7 +780,7 @@ Page({
       title = "文字处理状态待确认";
       message = taskError;
       error = true;
-    } else if (unsubmitted && !sealedIds.size) {
+    } else if (unsubmitted) {
       title = "这段讲述还在本机";
       message = "还有片段未提交。回听后再决定上传，换设备暂时看不到。";
       action = "review";
