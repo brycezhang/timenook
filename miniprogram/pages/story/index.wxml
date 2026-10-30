@@ -5,8 +5,8 @@
     <view class="live-stage">{{stage}}</view>
     <view wx:if="{{saveWarning}}" class="live-error">{{saveWarning}}</view>
     <view wx:if="{{story && story.task && story.task.sources.length}}" class="live-audio-list">
-      <button wx:for="{{story.task.sources}}" wx:key="clipId"
-        class="live-audio-button {{playingClipId === item.clipId ? 'is-playing' : ''}}"
+      <view wx:for="{{liveAudioSources}}" wx:key="clipId" class="live-audio-card {{playingClipId === item.clipId ? 'is-playing' : ''}}">
+      <button class="live-audio-button"
         aria-label="{{playingClipId === item.clipId ? '暂停回听' : pausedClipId === item.clipId ? '继续回听第 ' + (index+1) + ' 段原声' : '回听第 ' + (index+1) + ' 段原声'}}"
         bindtap="playLive" data-id="{{item.clipId}}" disabled="{{busy || audioBusy || privateError}}">
         <view class="live-audio-icon"><image src="/assets/icons/{{playingClipId === item.clipId ? 'pause-light' : 'play-light'}}.svg" /></view>
@@ -16,6 +16,15 @@
         </view>
         <view class="live-audio-wave" aria-hidden="true"><view /><view /><view /><view /><view /><view /><view /></view>
       </button>
+      <view class="live-audio-timeline">
+        <slider class="live-audio-slider" aria-label="{{'第 ' + (index+1) + ' 段原声播放进度'}}"
+          min="0" max="{{playingClipId === item.clipId || pausedClipId === item.clipId ? audioDuration : item.durationSeconds}}" step="0.1"
+          value="{{playingClipId === item.clipId || pausedClipId === item.clipId ? audioPosition : 0}}"
+          disabled="{{audioBusy || privateError || (playingClipId !== item.clipId && pausedClipId !== item.clipId) || !audioDuration}}"
+          data-id="{{item.clipId}}" bindchanging="draggingLive" bindchange="seekLive" activeColor="#697657" backgroundColor="#d4dac7" block-color="#697657" block-size="16" />
+        <view class="live-audio-times"><text>{{playingClipId === item.clipId || pausedClipId === item.clipId ? audioPositionLabel : '00:00'}}</text><text>{{playingClipId === item.clipId || pausedClipId === item.clipId ? audioDurationLabel : item.durationLabel}}</text></view>
+      </view>
+      </view>
     </view>
     <view wx:if="{{context && context.clipCount && (!story || !story.task)}}" class="live-save">{{context.clipCount}} 段原声已保存，整理后可试听</view>
     <view wx:if="{{audioError}}" class="live-error">{{audioError}}</view>

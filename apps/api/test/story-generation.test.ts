@@ -1210,6 +1210,7 @@ for (const status of ["not_applicable", "declined"]) {
       assert.equal(result.task.errorCode, "NO_CONTENT");
       assert.equal(result.revision, null);
       assert.equal(result.task.sources[0].state, "succeeded");
+      assert.ok(result.task.sources[0].durationMs > 0);
       assert.equal(
         result.task.sources[0].transcript.text,
         "那一年大概是八十年代。\n也可能更早。",

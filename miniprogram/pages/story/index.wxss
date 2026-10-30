@@ -124,22 +124,28 @@
   gap: 16rpx;
   margin: 28rpx 0;
 }
+.live-audio-card {
+  padding: 22rpx 24rpx 14rpx;
+  border: 2rpx solid #dce1ce;
+  border-radius: 20rpx;
+  background: #eeefe5;
+}
 .live-audio-button {
   display: flex;
   align-items: center;
   gap: 20rpx;
   width: 100%;
   min-height: 112rpx;
-  padding: 22rpx 24rpx;
-  border: 2rpx solid #dce1ce;
-  border-radius: 20rpx;
-  background: #eeefe5;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   text-align: left;
   line-height: 1.5;
   color: #3e4931;
 }
 .live-audio-button::after { border: 0; }
-.live-audio-button.is-playing { background: #e4e8d8; }
+.live-audio-card.is-playing { background: #e4e8d8; }
 .live-audio-button[disabled] { opacity: 0.65; color: #3e4931; }
 .live-audio-icon {
   display: flex;
@@ -159,6 +165,9 @@
 .live-audio-wave view { width: 5rpx; height: 14rpx; border-radius: 4rpx; background: #899775; }
 .live-audio-wave view:nth-child(2n) { height: 28rpx; }
 .live-audio-wave view:nth-child(3n) { height: 40rpx; }
+.live-audio-timeline { margin-top: 8rpx; }
+.live-audio-slider { display: block; width: 100%; margin: 0; min-height: 44rpx; accent-color: #697657; }
+.live-audio-times { display: flex; justify-content: space-between; font-size: 24rpx; color: #747c68; font-variant-numeric: tabular-nums; }
 .live-transcripts {
   margin-top: 32rpx;
   padding: 26rpx;

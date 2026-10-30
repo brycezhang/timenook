@@ -560,10 +560,12 @@ export function mountMiniProgram(
       image: "img",
       "checkbox-group": "div",
       checkbox: "input",
+      slider: "input",
     };
     const out = document.createElement(mapped[el.tagName] || el.tagName);
     out.dataset.renderKey = key;
     if (el.tagName === "checkbox") (out as HTMLInputElement).type = "checkbox";
+    if (el.tagName === "slider") (out as HTMLInputElement).type = "range";
     for (const attr of Array.from(el.attributes)) {
       if (attr.name.startsWith("wx:") || attr.name === "xmlns:wx") continue;
       if (attr.name === "open-type" && attr.value === "share") {
@@ -593,7 +595,11 @@ export function mountMiniProgram(
       }
       if (attr.name.startsWith("bind")) {
         const event =
-          attr.name.slice(4) === "tap" ? "click" : attr.name.slice(4);
+          attr.name.slice(4) === "tap"
+            ? "click"
+            : attr.name.slice(4) === "changing"
+              ? "input"
+              : attr.name.slice(4);
         out.addEventListener(event, (ev) => {
           ev.stopPropagation();
           const detail = {
@@ -604,7 +610,9 @@ export function mountMiniProgram(
                       'input[type="checkbox"]:checked',
                     ),
                   ).map((input) => input.value)
-                : (ev.target as HTMLInputElement).value,
+                : el.tagName === "slider"
+                  ? Number((ev.target as HTMLInputElement).value)
+                  : (ev.target as HTMLInputElement).value,
           };
           try {
             current?.[attr.value]?.({

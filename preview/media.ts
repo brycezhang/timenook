@@ -117,6 +117,9 @@ export function createAudio() {
       token++;
       audio.pause();
     },
+    seek(position: number) {
+      audio.currentTime = position;
+    },
     stop() {
       token++;
       audio.pause();
@@ -131,8 +134,9 @@ export function createAudio() {
   };
   for (const [method, event] of [
     ["onPlay", "play"],
-    ["onEnded", "ended"],
+    ["onCanplay", "loadedmetadata"],
     ["onTimeUpdate", "timeupdate"],
+    ["onSeeked", "seeked"],
     ["onEnded", "ended"],
     ["onError", "error"],
   ])

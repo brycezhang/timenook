@@ -43,6 +43,13 @@ function stage(story: StoryView | null) {
                     ? "这次整理已失效，请保存补录后重新整理"
                     : "处理中，可离开";
 }
+function audioTime(seconds: number) {
+  const total = Math.max(0, Math.floor(seconds)),
+    hours = Math.floor(total / 3600);
+  const minutes = Math.floor(total / 60) % 60,
+    rest = total % 60;
+  return `${hours ? hours + ":" : ""}${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+}
 import type { Story } from "../../domain/model";
 import { confirmStory, touch } from "../../domain/model";
 import {
@@ -70,6 +77,7 @@ Page({
   autoOrganize: false,
   ownerContext: "",
   audioSequence: 0,
+  audioSeeking: false,
   liveAudio: null as WechatMiniprogram.InnerAudioContext | null,
   stopProjectWatch: undefined as (() => void) | undefined,
   stopSessionWatch: undefined as (() => void) | undefined,
@@ -97,6 +105,15 @@ Page({
     playingClipId: "",
     pausedClipId: "",
     loadingClipId: "",
+    audioPosition: 0,
+    audioDuration: 0,
+    audioPositionLabel: "00:00",
+    audioDurationLabel: "--:--",
+    liveAudioSources: [] as {
+      clipId: string;
+      durationSeconds: number;
+      durationLabel: string;
+    }[],
     liveParagraphs: [] as { text: string; sourceLabel: string }[],
     liveTranscripts: [] as { clipId: string; label: string; text: string }[],
     saveWarning: "",
@@ -152,6 +169,7 @@ Page({
         story: null,
         liveParagraphs: [],
         liveTranscripts: [],
+        liveAudioSources: [],
         canOrganize: false,
         context: null,
         error: "",
@@ -243,6 +261,7 @@ Page({
         story: null,
         liveParagraphs: [],
         liveTranscripts: [],
+        liveAudioSources: [],
         canOrganize: false,
         context: null,
         busy: false,
@@ -343,6 +362,11 @@ Page({
         }[],
         privateError: "",
         needsReview: false,
+        liveAudioSources: [] as {
+          clipId: string;
+          durationSeconds: number;
+          durationLabel: string;
+        }[],
         pendingLocal,
         stage: stage(loaded ?? result?.story ?? null),
         saveWarning:
@@ -365,6 +389,13 @@ Page({
           if (!this.currentLive(generation, context)) return;
           Object.assign(view, {
             story: full,
+            liveAudioSources: (full.task?.sources ?? []).map((source) => ({
+              clipId: source.clipId,
+              durationSeconds: (source.durationMs ?? 0) / 1000,
+              durationLabel: source.durationMs
+                ? audioTime(source.durationMs / 1000)
+                : "--:--",
+            })),
             needsReview: !!full.revision?.reviewItems.some(
               (item) =>
                 !full.revision?.reviewResolutions?.some(
@@ -741,6 +772,7 @@ Page({
   },
   async stopLiveAudio() {
     ++this.audioSequence;
+    this.audioSeeking = false;
     const player = this.liveAudio;
     this.liveAudio = null;
     player?.stop();
@@ -751,6 +783,10 @@ Page({
       loadingClipId: "",
       audioBusy: false,
       audioError: "",
+      audioPosition: 0,
+      audioDuration: 0,
+      audioPositionLabel: "00:00",
+      audioDurationLabel: "--:--",
     });
     await clearStoryAudio();
   },
@@ -793,7 +829,14 @@ Page({
       await this.stopLiveAudio();
       if (!this.currentLive(generation, context)) return;
       const sequence = ++this.audioSequence;
-      this.setData({ audioBusy: true, loadingClipId: id });
+      this.setData({
+        audioBusy: true,
+        loadingClipId: id,
+        audioDuration: (source.durationMs ?? 0) / 1000,
+        audioDurationLabel: source.durationMs
+          ? audioTime(source.durationMs / 1000)
+          : "--:--",
+      });
       const path = await privateStoryAudio(
         this.projectId,
         source,
@@ -811,6 +854,31 @@ Page({
       const player = wx.createInnerAudioContext();
       this.liveAudio = player;
       player.src = path;
+      const updateTime = () => {
+        if (
+          this.liveAudio !== player ||
+          this.audioSeeking ||
+          !this.currentLive(generation, context)
+        )
+          return;
+        const duration =
+          player.duration > 0 ? player.duration : this.data.audioDuration;
+        const position = Math.min(
+          Math.max(0, player.currentTime || 0),
+          duration || Infinity,
+        );
+        const label = audioTime(position),
+          durationLabel = duration > 0 ? audioTime(duration) : "--:--";
+        this.setData({
+          audioPosition: position,
+          audioDuration: duration,
+          audioPositionLabel: label,
+          audioDurationLabel: durationLabel,
+        });
+      };
+      player.onCanplay(updateTime);
+      player.onTimeUpdate(updateTime);
+      player.onSeeked(updateTime);
       const finish = () => {
         if (this.liveAudio === player)
           void this.stopLiveAudio().catch(() =>
@@ -839,6 +907,52 @@ Page({
       if (this.currentLive(generation, context))
         this.setData({ audioBusy: false, loadingClipId: "" });
     }
+  },
+  seekLive(e: {
+    currentTarget: { dataset: { id: string } };
+    detail: { value: number };
+    type?: string;
+  }) {
+    const id = e.currentTarget.dataset.id;
+    if (
+      !this.liveAudio ||
+      ![this.data.playingClipId, this.data.pausedClipId].includes(id) ||
+      this.data.audioBusy
+    )
+      return;
+    const position = Math.min(
+      this.data.audioDuration,
+      Math.max(0, Number(e.detail.value)),
+    );
+    if (!Number.isFinite(position)) return;
+    this.audioSeeking = false;
+    this.liveAudio.seek(position);
+    this.setData({
+      audioPosition: position,
+      audioPositionLabel: audioTime(position),
+    });
+  },
+  draggingLive(e: {
+    currentTarget: { dataset: { id: string } };
+    detail: { value: number };
+  }) {
+    if (
+      !this.liveAudio ||
+      ![this.data.playingClipId, this.data.pausedClipId].includes(
+        e.currentTarget.dataset.id,
+      )
+    )
+      return;
+    const position = Math.min(
+      this.data.audioDuration,
+      Math.max(0, Number(e.detail.value)),
+    );
+    if (!Number.isFinite(position)) return;
+    this.audioSeeking = true;
+    this.setData({
+      audioPosition: position,
+      audioPositionLabel: audioTime(position),
+    });
   },
   recoverInterview() {
     const partition = recordingPartition(this.projectId),

@@ -111,6 +111,7 @@ function harness(
           plays: 0,
           pauses: 0,
           currentTime: 0,
+          duration: 90,
           destroyed: false,
           stops: 0,
           destroys: 0,
@@ -119,6 +120,9 @@ function harness(
           },
           pause() {
             this.pauses++;
+          },
+          seek(position: number) {
+            this.currentTime = position;
           },
           stop() {
             this.stops++;
@@ -129,6 +133,9 @@ function harness(
           },
           onEnded() {},
           onError() {},
+          onCanplay() {},
+          onTimeUpdate() {},
+          onSeeked() {},
         };
         players.push(player);
         return player;
@@ -444,6 +451,7 @@ test("an uncertain submit response keeps its original command key and returning 
 });
 
 const source = {
+  durationMs: 90000,
   clipId: "77777777-7777-4777-8777-777777777777",
   intentId: "88888888-8888-4888-8888-888888888888",
   interviewId,
@@ -537,6 +545,7 @@ test("background story polling keeps the current text visible while requests are
 test("saved source playback uses its recording intent, validates downloaded hash and only removes temporary audio", async () => {
   const h = harness();
   await showAudioStory(h);
+  assert.equal(h.page.data.liveAudioSources[0].durationLabel, "01:30");
   h.storage.set("synthetic-pending-original", [
     { path: "only-original", sealed: false },
   ]);
@@ -569,6 +578,20 @@ test("saved source playback uses its recording intent, validates downloaded hash
   await resumed;
   assert.equal(h.players[0].plays, 2);
   assert.equal(h.players[0].currentTime, 4.2);
+  const seekEvent = {
+    currentTarget: { dataset: { id: source.clipId } },
+    detail: { value: 45 },
+  };
+  h.page.draggingLive(seekEvent);
+  assert.equal(h.page.data.audioPositionLabel, "00:45");
+  assert.equal(
+    h.players[0].currentTime,
+    4.2,
+    "dragging previews the position without interrupting playback",
+  );
+  h.page.seekLive(seekEvent);
+  assert.equal(h.players[0].currentTime, 45);
+  assert.equal(h.page.data.playingClipId, source.clipId);
   assert.equal(
     h.downloads.length,
     1,

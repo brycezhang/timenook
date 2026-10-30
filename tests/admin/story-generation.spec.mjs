@@ -841,6 +841,9 @@ test("the shared story screen displays transcribed text when no story was formed
     ).toBeVisible();
     await expect(page.locator(".live-transcripts .paragraph")).toHaveCount(2);
     await expect(page.locator(".live-audio-button")).toHaveCount(2);
+    await expect(page.locator(".live-audio-times").first()).toHaveText(
+      /00:00\s*00:01/,
+    );
     await expect(page.locator(".live-sources")).toHaveCount(0);
     await page.evaluate(() => {
       window.playbackParagraph = document.querySelector(
@@ -866,6 +869,19 @@ test("the shared story screen displays transcribed text when no story was formed
     await expect
       .poll(() => page.evaluate(() => window.realPlayback.player.paused))
       .toBe(true);
+    const timeline = page.getByRole("slider", {
+      name: "第 1 段原声播放进度",
+      exact: true,
+    });
+    await expect(timeline).toBeEnabled();
+    await timeline.press("Home");
+    await timeline.press("ArrowRight");
+    await expect
+      .poll(() => page.evaluate(() => window.realPlayback.player.currentTime))
+      .toBeCloseTo(0.1, 1);
+    expect(await page.evaluate(() => window.realPlayback.player.paused)).toBe(
+      true,
+    );
     const pausedAt = await page.evaluate(
       () => window.realPlayback.player.currentTime,
     );

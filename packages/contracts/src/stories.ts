@@ -1,4 +1,5 @@
 export interface StorySourceView {
+  durationMs?: number | null;
   intentId: string;
   clipId: string;
   interviewId: string;
