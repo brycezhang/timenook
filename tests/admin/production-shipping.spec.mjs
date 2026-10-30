@@ -605,6 +605,9 @@ test("withdrawing sharing clears the initiator production and tracking details",
   await buyer.screenshot({ path: "/tmp/timenook-t24-denied-390.png" });
   const narrator = await openMini(browser, narratorSession, project, "welcome");
   await narrator
+    .getByRole("button", { name: "调整用途与资料服务", exact: true })
+    .click();
+  await narrator
     .getByRole("button", { name: "查看撤回处置进度", exact: true })
     .click();
   await expect(
