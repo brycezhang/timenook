@@ -395,6 +395,21 @@ Page({
         this.timerHandle = undefined;
       }
       if (this.current(generation, context)) {
+        if (
+          snapshot.clips.some(
+            (clip) =>
+              clip.sealed &&
+              !this.data.localClips.some(
+                (prior) =>
+                  prior.clientClipId === clip.clientClipId && prior.sealed,
+              ),
+          )
+        ) {
+          if (this.taskPollHandle) clearTimeout(this.taskPollHandle);
+          this.taskPollHandle = undefined;
+          ++this.taskSequence;
+          this.setData({ taskRows: [], taskError: "" });
+        }
         const priorStep = this.data.flowStep;
         this.setData({
           ...flowView(
@@ -770,8 +785,9 @@ Page({
       taskRows.length > 0 &&
       taskRows.every((row) => row.state === "succeeded") &&
       // Task status is scoped to this interview's sealed RecordingClips.
-      // Interview/local IDs identify upload intents, not those sealed clips.
-      new Set(taskRows.map((row) => row.clipId).filter(Boolean)).size ===
+      // Assisted views omit earlier sealed intent metadata. Known local/server
+      // intents are a lower bound; the response contains the full task set.
+      new Set(taskRows.map((row) => row.clipId).filter(Boolean)).size >=
         sealedIds.size;
     const issue =
       taskRows.find((row) => row.state === "invalidated") ??

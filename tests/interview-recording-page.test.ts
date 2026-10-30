@@ -2685,6 +2685,11 @@ test("a second local take blocks organization until it is submitted and its actu
     201,
   );
   await submitting;
+  assert.equal(
+    h.page.data.taskRows.length,
+    0,
+    "a new seal needs fresh task status",
+  );
   const secondTask = {
     ...firstTask,
     id: secondClipId,
@@ -2703,6 +2708,26 @@ test("a second local take blocks organization until it is submitted and its actu
   await refreshing;
   assert.equal(h.page.data.processingReady, true);
   assert.equal(h.page.data.processingTitle, "文字已转写");
+  const remoteRefresh = h.page.refreshTasks();
+  respond(
+    h.requests.shift(),
+    [
+      firstTask,
+      { ...secondTask, state: "succeeded" },
+      {
+        ...firstTask,
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        clipId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      },
+    ],
+    201,
+  );
+  await remoteRefresh;
+  assert.equal(
+    h.page.data.processingReady,
+    true,
+    "the complete task response may include sealed clips absent from the client's metadata",
+  );
 });
 
 test("switching interviews discards prior successful tasks and ignores their late response", async (t) => {
