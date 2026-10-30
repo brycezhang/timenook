@@ -7,7 +7,7 @@ const steps: Record<InterviewStep, { number: number; title: string }> = {
   prepare: { number: 2, title: "准备开讲" },
   record: { number: 3, title: "慢慢说，我们听着" },
   review: { number: 4, title: "听一听，再留下这段讲述" },
-  processing: { number: 5, title: "这段声音，留下来了" },
+  processing: { number: 5, title: "保存与文字处理" },
   followup: { number: 6, title: "还想听你说说" },
 };
 export function flowView(flowStep: InterviewStep) {

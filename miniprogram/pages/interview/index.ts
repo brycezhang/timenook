@@ -6,6 +6,7 @@ import {
   InterviewRecorder,
   interviewRecordingClient,
   recordingPartition,
+  type InterviewLocalClip,
 } from "../../services/interview-recording";
 import { recordingId } from "../../services/local-audio-recorder";
 import { paymentKey } from "../../services/payments";
@@ -44,7 +45,7 @@ Page({
     status: "",
     busy: false,
     canRecord: false,
-    localClips: [] as ProbeLocalClip[],
+    localClips: [] as InterviewLocalClip[],
     taskRows: [] as (ProductionTaskView & { label: string })[],
     taskError: "",
     followup: null as OptionalFollowupView | null,
@@ -68,12 +69,14 @@ Page({
     clipPicker: false,
     followupEditing: false,
     questionHint: "",
-    reviewClip: null as (ProbeLocalClip & { durationLabel: string }) | null,
-    processingTitle: "这段声音，留下来了",
+    reviewClip: null as (InterviewLocalClip & { durationLabel: string }) | null,
+    processingTitle: "保存与文字处理",
     processingMessage: "",
     processingReady: false,
     processingError: false,
     processingRetryable: false,
+    processingAction: "",
+    processingStorage: "",
   },
   localAudio: null as WechatMiniprogram.InnerAudioContext | null,
   followupPoll: undefined as ReturnType<typeof setTimeout> | undefined,
@@ -84,6 +87,7 @@ Page({
   projectId: "",
   assistedSessionId: "",
   requestedInterviewId: "",
+  uploadingClipId: "",
   draftId: "",
   generation: 0,
   liveRecorder: null as InterviewRecorder | null,
@@ -171,6 +175,7 @@ Page({
   },
   clearPrivateView() {
     this.closePlayback();
+    this.uploadingClipId = "";
     if (this.collectionWatch) clearTimeout(this.collectionWatch);
     this.collectionWatch = undefined;
     this.clearFollowup();
@@ -205,6 +210,13 @@ Page({
         customQuestion: false,
         reviewClip: null,
         followupEditing: false,
+        processingTitle: "保存与文字处理",
+        processingMessage: "",
+        processingStorage: "",
+        processingReady: false,
+        processingError: false,
+        processingRetryable: false,
+        processingAction: "",
       });
       return;
     }
@@ -551,15 +563,21 @@ Page({
       await this.refreshTasks();
     } catch (error) {
       if (this.taskAuthorizationLost(error, generation, context)) return;
-      if (this.current(generation, context))
+      if (this.current(generation, context)) {
         this.setData({
           taskError: "重试结果未确认，请重新查询；相同任务保留原请求。",
         });
+        this.updateProcessingView();
+      }
     } finally {
       if (this.current(generation, context)) this.setData({ busy: false });
     }
   },
   async selectQuestion(e?: E) {
+    if (dataMode() !== "live") {
+      this.setData({ ...flowView("prepare"), questionPicker: false });
+      return;
+    }
     if (
       !this.context ||
       this.data.busy ||
@@ -712,49 +730,133 @@ Page({
   },
   updateProcessingView() {
     const { state, taskRows, taskError, localClips, interview } = this.data;
-    const uploadFailed = state === "upload-error" || state === "seal-error";
-    const working = state === "uploading" || state === "sealing";
-    const failed = taskRows.find(
-      (row) =>
-        ["failed", "manual_review", "invalidated", "no_speech"].includes(
+    const unsubmitted = localClips.some((clip) => !clip.sealed);
+    const sealedIds = new Set([
+      ...(interview?.clips
+        .filter((clip) => clip.state === "sealed")
+        .map((clip) => clip.id) ?? []),
+      ...localClips
+        .filter((clip) => clip.sealed && clip.serverId)
+        .map((clip) => clip.serverId!),
+    ]);
+    const ready =
+      sealedIds.size > 0 &&
+      taskRows.length > 0 &&
+      taskRows.every((row) => row.state === "succeeded") &&
+      [...sealedIds].every((id) =>
+        taskRows.some((row) => row.clipId === id && row.state === "succeeded"),
+      );
+    const issue =
+      taskRows.find((row) => row.state === "invalidated") ??
+      taskRows.find((row) => row.errorCode === "AI_AUTHORIZATION_REQUIRED") ??
+      taskRows.find((row) =>
+        ["failed", "manual_review", "no_speech", "obsolete"].includes(
           row.state,
-        ) || row.errorCode === "AI_AUTHORIZATION_REQUIRED",
-    );
-    const transcribing = taskRows.some((row) =>
-      ["queued", "submitting", "waiting_provider", "waiting_inputs"].includes(
-        row.state,
-      ),
-    );
-    const saved =
-      localClips.some((c) => c.sealed) ||
-      !!interview?.clips.some((c) => c.state === "sealed");
+        ),
+      );
+    const waiting =
+      taskRows.find((row) => row.state === "waiting_provider") ??
+      taskRows.find((row) => row.state === "submitting") ??
+      taskRows.find((row) => ["queued", "waiting_inputs"].includes(row.state));
+    let title = "保存状态待查询",
+      message = "请重新查询原片段的保存结果。",
+      action = "query",
+      error = false;
+    if (state === "uploading") {
+      title = "正在上传录音";
+      message = "本机文件仍在。上传后还会确认保存结果，请保留本机文件。";
+      action = "";
+    } else if (state === "sealing") {
+      title = "正在确认保存";
+      message = "录音已上传，保存结果尚未确认，请保留本机文件。";
+      action = "";
+    } else if (state === "seal-error" || state === "upload-error") {
+      title = state === "seal-error" ? "保存结果待确认" : "录音上传未完成";
+      message = "本机原文件仍保留。重新核对同一片段，无需重录。";
+      action = "upload";
+      error = true;
+    } else if (taskError) {
+      title = "文字处理状态待确认";
+      message = taskError;
+      error = true;
+    } else if (unsubmitted && !sealedIds.size) {
+      title = "这段讲述还在本机";
+      message = "还有片段未提交。回听后再决定上传，换设备暂时看不到。";
+      action = "review";
+    } else if (issue) {
+      title =
+        issue.state === "invalidated"
+          ? "本次文字处理授权已失效"
+          : issue.errorCode === "AI_AUTHORIZATION_REQUIRED"
+            ? "原声已保存，等待 AI 处理授权"
+            : issue.state === "no_speech"
+              ? "未识别到有效语音"
+              : issue.state === "manual_review"
+                ? "文字处理需要人工协助"
+                : issue.state === "obsolete"
+                  ? "素材已变化，请重新核对"
+                  : "转写未完成";
+      message = issue.label;
+      action =
+        issue.state === "invalidated" ||
+        issue.errorCode === "AI_AUTHORIZATION_REQUIRED"
+          ? "consent"
+          : issue.state === "no_speech"
+            ? "review"
+            : issue.state === "failed" && issue.retryable
+              ? "retry"
+              : "service";
+      error = true;
+    } else if (waiting) {
+      title =
+        waiting.state === "queued" || waiting.state === "waiting_inputs"
+          ? "原声已保存，等待转写"
+          : waiting.state === "submitting"
+            ? "正在提交文字处理"
+            : "正在把声音变成文字";
+      message = "原声已确认保存。可以先离开，回来后继续查询实际处理结果。";
+      action = "";
+    } else if (ready) {
+      title = "文字已转写";
+      message = "已提交片段的文字已就绪，可以一起整理成故事。原始录音仍保留。";
+      action = "organize";
+    } else if (sealedIds.size) {
+      title = "原声已确认保存";
+      message = "文字处理状态尚未确认。重新查询后，再继续整理故事。";
+    }
+    const storage = localClips.some(
+      (clip) => clip.sealed && clip.storage === "local-simulator",
+    )
+      ? "录音已在测试环境保存；这不代表真实云端存储。"
+      : localClips.some((clip) => clip.sealed && clip.storage === "oss")
+        ? "原声已在云端确认保存；本机文件也保留。"
+        : sealedIds.size
+          ? "原声已确认保存；文字处理不覆盖原录音。"
+          : "确认保存前，请保留本机原文件。";
     this.setData({
-      processingTitle: uploadFailed
-        ? "这段声音还没传好"
-        : working
-          ? "正在保存这段声音"
-          : taskError
-            ? "稍后再更新进度"
-            : failed
-              ? "这段声音需要再看一看"
-              : transcribing
-                ? "正在把声音变成文字"
-                : "这段声音，留下来了",
-      processingMessage: uploadFailed
-        ? "录音仍在这台设备上，可以接着上传，无需重录。"
-        : working
-          ? "本机已经保存好，请稍等片刻。"
-          : taskError ||
-            failed?.label ||
-            (transcribing
-              ? "声音已保存。你可以先休息，回来再继续。"
-              : "慢慢说的这些往事，现在可以整理成故事了。"),
-      processingReady:
-        saved && !working && !uploadFailed && !failed && !taskError,
-      processingError: uploadFailed || !!failed || !!taskError,
-      processingRetryable:
-        uploadFailed || !!taskError || taskRows.some((row) => row.retryable),
+      processingTitle: title,
+      processingMessage: message,
+      processingReady: action === "organize",
+      processingError: error,
+      processingRetryable: ["upload", "query", "retry"].includes(action),
+      processingAction: action,
+      processingStorage: [
+        "uploading",
+        "sealing",
+        "upload-error",
+        "seal-error",
+      ].includes(state)
+        ? "当前片段仍在本机，保存结果以重新核对为准。"
+        : storage,
     });
+  },
+  processingHelp() {
+    if (this.data.processingAction === "consent")
+      go(
+        this.assistedSessionId ? "assisted" : "welcome",
+        `projectId=${this.projectId}`,
+      );
+    else go("service", `kind=support&projectId=${this.projectId}`);
   },
   async startSpeaking() {
     if (dataMode() !== "live") {
@@ -823,15 +925,24 @@ Page({
     }
   },
   async retryProcessing() {
-    if (["upload-error", "seal-error"].includes(this.data.state)) {
-      const clip = this.data.localClips.find((c) => !c.sealed);
+    if (this.data.processingAction === "upload") {
+      const selectedId =
+        this.uploadingClipId || this.data.reviewClip?.clientClipId;
+      const clip = this.data.localClips.find(
+        (c) => !c.sealed && c.clientClipId === selectedId,
+      );
       if (clip)
         await this.upload({
           currentTarget: { dataset: { id: clip.clientClipId } },
           detail: { value: "" },
         });
     } else {
-      const task = this.data.taskRows.find((row) => row.retryable);
+      const task =
+        this.data.processingAction === "retry"
+          ? this.data.taskRows.find(
+              (row) => row.state === "failed" && row.retryable,
+            )
+          : undefined;
       if (task)
         await this.retryTranscription({
           currentTarget: { dataset: { id: task.id } },
@@ -896,6 +1007,7 @@ Page({
   },
   async upload(e: E) {
     if (this.data.busy || !this.liveRecorder) return;
+    this.uploadingClipId = e.currentTarget.dataset.id;
     const generation = this.generation,
       context = sessionClient.context();
     this.setData({ busy: true });

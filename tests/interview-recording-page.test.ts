@@ -2312,3 +2312,242 @@ test("reloading a draft that already started restores that exact interview witho
   assert.equal(h.requests.length, 0);
   assert.equal(h.starts, 0);
 });
+
+test("saved audio waits for actual transcription success before offering story organization", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        clips: [
+          { id: "77777777-7777-4777-8777-777777777777", state: "sealed" },
+        ],
+      },
+    ],
+  });
+  await showing;
+  await tick();
+  const task = {
+    id: "99999999-9999-4999-8999-999999999999",
+    projectId,
+    clipId: "77777777-7777-4777-8777-777777777777",
+    state: "queued",
+    retryable: false,
+    nextAction: "leave_and_return",
+  };
+  respond(h.requests.shift(), [task], 201);
+  await tick();
+  assert.equal(h.page.data.processingTitle, "原声已保存，等待转写");
+  assert.equal(h.page.data.processingReady, false);
+  const refreshing = h.page.refreshTasks();
+  respond(h.requests.shift(), [{ ...task, state: "succeeded" }], 201);
+  await refreshing;
+  assert.equal(h.page.data.processingTitle, "文字已转写");
+  assert.equal(h.page.data.processingReady, true);
+});
+
+test("an unknown seal keeps the local original and recovers the same clip into truthful test-storage presentation", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  const local = h.page.data.localClips[0];
+  const remote = {
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    projectId,
+    interviewId,
+    actualQuestionId: question.id,
+    clientClipId: local.clientClipId,
+    bytes: local.bytes,
+    sha256: local.sha256,
+    state: "pending",
+    storage: "local-simulator",
+    asset: null,
+  };
+  const upload = h.page.submitReview();
+  assert.equal(h.page.data.processingTitle, "正在上传录音");
+  respond(h.requests.shift(), remote, 201);
+  await tick();
+  respond(
+    h.requests.shift(),
+    {
+      url: "/v1/recordings/objects",
+      storage: "local-simulator",
+      fields: {},
+      expiresAt: "2099-01-01T00:00:00Z",
+    },
+    201,
+  );
+  await tick();
+  assert.equal(h.page.data.processingTitle, "正在确认保存");
+  assert.equal(h.page.data.processingReady, false);
+  h.requests.shift().fail({ errMsg: "request:fail timeout" });
+  await upload;
+  assert.equal(h.page.data.processingTitle, "保存结果待确认");
+  assert.equal(h.files.size, 1);
+  const recovery = h.page.retryProcessing();
+  const status = h.requests.shift();
+  assert.equal(
+    status.url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/clips/${remote.id}/status`,
+  );
+  respond(
+    status,
+    {
+      ...remote,
+      state: "sealed",
+      asset: {
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        sha256: local.sha256,
+      },
+    },
+    201,
+  );
+  await recovery;
+  assert.match(h.page.data.processingStorage, /测试环境/);
+  assert.doesNotMatch(h.page.data.processingStorage, /已在云端/);
+  assert.equal(h.page.data.processingReady, false);
+  h.page.onHide();
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), []); // task query triggered by sealing may still be pending
+  await tick();
+  const request = h.requests.shift();
+  respond(request, {
+    ...context,
+    interviews: [{ ...interview, clips: [{ id: remote.id, state: "sealed" }] }],
+  });
+  await returning;
+  assert.match(h.page.data.processingStorage, /测试环境/);
+});
+
+test("actual transcription results choose their own recovery action and never make a partial set ready", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const clipId = "77777777-7777-4777-8777-777777777777";
+  const secondClipId = "88888888-8888-4888-8888-888888888888";
+  h.page.onLoad({ projectId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      {
+        ...interview,
+        clips: [
+          { id: clipId, state: "sealed" },
+          { id: secondClipId, state: "sealed" },
+        ],
+      },
+    ],
+  });
+  await showing;
+  await tick();
+  const task = {
+    id: "99999999-9999-4999-8999-999999999999",
+    projectId,
+    clipId,
+    state: "succeeded",
+    retryable: false,
+    nextAction: "continue",
+  };
+  respond(h.requests.shift(), [task], 201);
+  await tick();
+  assert.equal(
+    h.page.data.processingReady,
+    false,
+    "the second saved clip has no confirmed transcription result",
+  );
+  for (const [state, retryable, errorCode, title, action] of [
+    ["submitting", false, null, "正在提交文字处理", ""],
+    ["waiting_provider", false, null, "正在把声音变成文字", ""],
+    ["no_speech", false, null, "未识别到有效语音", "review"],
+    ["failed", true, null, "转写未完成", "retry"],
+    ["failed", false, null, "转写未完成", "service"],
+    ["manual_review", true, null, "文字处理需要人工协助", "service"],
+    [
+      "failed",
+      true,
+      "AI_AUTHORIZATION_REQUIRED",
+      "原声已保存，等待 AI 处理授权",
+      "consent",
+    ],
+    ["invalidated", true, null, "本次文字处理授权已失效", "consent"],
+  ]) {
+    const query = h.page.refreshTasks();
+    respond(
+      h.requests.shift(),
+      [
+        task,
+        {
+          ...task,
+          id: secondClipId,
+          clipId: secondClipId,
+          state,
+          retryable,
+          errorCode,
+        },
+      ],
+      201,
+    );
+    await query;
+    assert.equal(h.page.data.processingTitle, title);
+    assert.equal(h.page.data.processingAction, action);
+    assert.equal(h.page.data.processingReady, false);
+  }
+});
+
+test("retrying a lost seal response keeps the selected original when other local takes are unsubmitted", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await ready(h);
+  await start(h);
+  await h.page.record();
+  await tick();
+  h.page.prepareCurrent();
+  await start(h);
+  await h.page.record();
+  await tick();
+  const chosen = h.page.data.localClips[1];
+  const remote = {
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    projectId,
+    interviewId,
+    actualQuestionId: question.id,
+    clientClipId: chosen.clientClipId,
+    bytes: chosen.bytes,
+    sha256: chosen.sha256,
+    state: "pending",
+    storage: "local-simulator",
+    asset: null,
+  };
+  const submitting = h.page.submitReview();
+  respond(h.requests.shift(), remote, 201);
+  await tick();
+  respond(
+    h.requests.shift(),
+    {
+      url: "/v1/recordings/objects",
+      storage: "local-simulator",
+      fields: {},
+      expiresAt: "2099-01-01T00:00:00Z",
+    },
+    201,
+  );
+  await tick();
+  h.requests.shift().fail({ errMsg: "request:fail timeout" });
+  await submitting;
+  const retrying = h.page.retryProcessing();
+  const query = h.requests.shift();
+  assert.equal(
+    query.url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/clips/${remote.id}/status`,
+  );
+  query.fail({ errMsg: "request:fail timeout" });
+  await retrying;
+  assert.equal(h.files.size, 2);
+});
