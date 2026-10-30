@@ -763,9 +763,10 @@ Page({
       sealedIds.size > 0 &&
       taskRows.length > 0 &&
       taskRows.every((row) => row.state === "succeeded") &&
-      [...sealedIds].every((id) =>
-        taskRows.some((row) => row.clipId === id && row.state === "succeeded"),
-      );
+      // Task status is scoped to this interview's sealed RecordingClips.
+      // Interview/local IDs identify upload intents, not those sealed clips.
+      new Set(taskRows.map((row) => row.clipId).filter(Boolean)).size ===
+        sealedIds.size;
     const issue =
       taskRows.find((row) => row.state === "invalidated") ??
       taskRows.find((row) => row.errorCode === "AI_AUTHORIZATION_REQUIRED") ??
