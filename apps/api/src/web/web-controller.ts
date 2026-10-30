@@ -22,6 +22,18 @@ class WebLoginDto {
 @Controller("v1/web")
 export class WebController {
   constructor(private readonly access: WebAccess) {}
+  private setCookie(
+    reply: FastifyReply,
+    result: Awaited<ReturnType<WebAccess["current"]>>,
+  ) {
+    reply.setCookie(WEB_COOKIE, result.token, {
+      path: WEB_COOKIE_PATH,
+      httpOnly: true,
+      secure: true,
+      sameSite: "strict",
+      expires: new Date(result.data.session.expiresAt),
+    });
+  }
   @Post("session")
   @Header("Cache-Control", "no-store")
   async exchange(
@@ -35,20 +47,20 @@ export class WebController {
       command.ticket,
       request.cookies[WEB_COOKIE],
     );
-    reply.setCookie(WEB_COOKIE, result.token, {
-      path: WEB_COOKIE_PATH,
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      expires: new Date(result.data.session.expiresAt),
-    });
+    this.setCookie(reply, result);
     return { data: result.data, meta: { requestId: request.id } };
   }
   @Get("session")
   @Header("Cache-Control", "no-store")
-  async current(@Req() request: FastifyRequest) {
+  async current(
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const result = await this.access.current(request);
+    // Refresh the browser's bounded persistent-cookie retention on real use.
+    this.setCookie(reply, result);
     return {
-      data: (await this.access.current(request)).data,
+      data: result.data,
       meta: { requestId: request.id },
     };
   }

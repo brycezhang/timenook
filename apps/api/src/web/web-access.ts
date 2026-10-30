@@ -19,7 +19,11 @@ import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
 import { PrivacyRights } from "../care/privacy-rights";
 import { IdentityAccess } from "../identity/identity-access";
-import { webDigest } from "./web-provisioning";
+import {
+  PERSISTENT_WEB_EXPIRY,
+  webCredentialExpiry,
+  webDigest,
+} from "./web-provisioning";
 
 export const WEB_COOKIE = "__Secure-timenook_web";
 export const WEB_COOKIE_PATH = "/api/v1";
@@ -122,8 +126,9 @@ export class WebAccess implements OnModuleDestroy {
           id: randomUUID(),
           userId: issued.userId,
           tokenHash: webDigest(token),
-          expiresAt: new Date(
-            now.getTime() + this.config.web!.sessionTtlSeconds * 1000,
+          expiresAt: webCredentialExpiry(
+            this.config,
+            this.config.web!.sessionTtlSeconds,
           ),
           webSession: {
             create: { keyHash: webDigest(this.config.web!.sessionKey) },
@@ -158,6 +163,16 @@ export class WebAccess implements OnModuleDestroy {
       session.webSession?.keyHash !== webDigest(this.config.web!.sessionKey)
     )
       throw new UnauthorizedException();
+    if (
+      this.config.acceptance?.mode === "internal-acceptance" &&
+      session.expiresAt.toISOString() !== PERSISTENT_WEB_EXPIRY
+    ) {
+      session.expiresAt = new Date(PERSISTENT_WEB_EXPIRY);
+      await this.db.session.update({
+        where: { id: session.id },
+        data: { expiresAt: session.expiresAt },
+      });
+    }
     return { token, data: this.view(token, session) };
   }
   async requireMutation(request: FastifyRequest) {
