@@ -406,18 +406,50 @@ test("reviewed revised remedy enters existing book and fresh confirmation views,
     );
   const buyerAccount = await session(p.buyer.who);
   const buyer = await openMini(browser, buyerAccount, p);
+  const bookLoaded = buyer.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      /\/projects\/[^/]+\/book$/.test(new URL(response.url()).pathname),
+  );
   await buyer
     .getByRole("button", { name: "修订书稿并重新核对", exact: true })
     .click();
-  await expect(buyer).toHaveURL(
-    new RegExp(`#/book\\?projectId=${p.projectId}`),
+  await expect(buyer).toHaveURL(`${origin}/#/book`);
+  const bookResponse = await bookLoaded;
+  expect(bookResponse.status()).toBe(200);
+  const book = (await bookResponse.json()).data;
+  expect(book.projectId).toBe(p.projectId);
+  expect(book.current).toMatchObject({
+    id: p.book.id,
+    projectId: p.projectId,
+    snapshotHash: p.book.snapshotHash,
+  });
+  await expect(buyer.locator(".live-book .book-summary .title")).toHaveText(
+    p.book.snapshot.cover.title,
   );
   await expect(
     buyer.getByRole("button", { name: "双方确认与首本制作", exact: true }),
   ).toBeVisible();
+  const confirmationLoaded = buyer.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      /\/projects\/[^/]+\/first-copy$/.test(new URL(response.url()).pathname),
+  );
   await buyer
     .getByRole("button", { name: "双方确认与首本制作", exact: true })
     .click();
+  await expect(buyer).toHaveURL(
+    `${origin}/#/print?projectId=${p.projectId}&versionId=${p.book.id}`,
+  );
+  const confirmationResponse = await confirmationLoaded;
+  expect(confirmationResponse.status()).toBe(200);
+  const confirmation = (await confirmationResponse.json()).data;
+  expect(confirmation.projectId).toBe(p.projectId);
+  expect(confirmation.book).toMatchObject({
+    id: p.book.id,
+    projectId: p.projectId,
+    snapshotHash: p.book.snapshotHash,
+  });
   await expect(buyer.getByText(/本次为原订单质量售后的书稿修订/)).toBeVisible();
   await expect(
     buyer.getByRole("button", { name: "使用首本权益提交制作", exact: true }),
