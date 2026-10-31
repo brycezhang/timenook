@@ -10,13 +10,14 @@ if (!fs.existsSync(compiler + "/wcc")) {
   process.exit(1);
 }
 const pages = JSON.parse(fs.readFileSync("miniprogram/app.json", "utf8")).pages;
+const sources = [...pages, "custom-tab-bar/index"];
 for (const [tool, ext, extra] of [
   ["wcc", ".wxml", []],
   ["wcsc", ".wxss", ["app.wxss", "styles/tokens.wxss"]],
 ]) {
   const result = spawnSync(
     compiler + "/" + tool,
-    ["-o", "/dev/null", ...pages.map((p) => p + ext), ...extra],
+    ["-o", "/dev/null", ...sources.map((p) => p + ext), ...extra],
     { cwd: "miniprogram", encoding: "utf8" },
   );
   if (result.status !== 0) {

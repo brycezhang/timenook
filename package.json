@@ -37,7 +37,8 @@
     "dev:web": "pnpm --filter @timenook/web dev",
     "build:web": "pnpm --filter @timenook/web build",
     "typecheck:web": "pnpm --filter @timenook/web typecheck",
-    "test:web": "pnpm exec playwright test tests/admin/web-entry.spec.mjs tests/admin/web-session.spec.mjs tests/admin/web-product-session.spec.mjs tests/admin/web-checkout.spec.mjs -c playwright.admin.config.mjs"
+    "test:web": "pnpm exec playwright test tests/admin/web-entry.spec.mjs tests/admin/web-session.spec.mjs tests/admin/web-product-session.spec.mjs tests/admin/web-checkout.spec.mjs -c playwright.admin.config.mjs",
+    "test:native-e2e": "node scripts/test-native-e2e.cjs"
   },
   "devDependencies": {
     "@napi-rs/canvas": "0.1.100",
@@ -49,6 +50,7 @@
     "libheif-js": "1.23.5",
     "lucide-static": "^0.468.0",
     "miniprogram-api-typings": "^4.0.0",
+    "miniprogram-automator": "0.13.0",
     "pdfjs-dist": "5.4.624",
     "prettier": "^3.9.10",
     "qrcode": "1.5.4",

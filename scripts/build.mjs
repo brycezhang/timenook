@@ -30,8 +30,27 @@ await build({
   format: "cjs",
   target: "es2020",
   platform: "neutral",
-  bundle: false,
+  bundle: true,
+  plugins: [
+    {
+      name: "native-shared-modules",
+      setup(build) {
+        const nativeRoot = path.resolve("miniprogram") + path.sep;
+        build.onResolve({ filter: /^\./ }, (args) => {
+          // Keep native services as shared CommonJS modules (session, recorder,
+          // etc.). Bundle dependencies outside miniprogramRoot into their
+          // consumers, since WeChat only uploads files inside that directory.
+          if (
+            args.kind !== "entry-point" &&
+            path.resolve(args.resolveDir, args.path).startsWith(nativeRoot)
+          )
+            return { path: args.path, external: true };
+        });
+      },
+    },
+  ],
   define: {
+    __TIMENOOK_NATIVE_TABS__: "true",
     __TIMENOOK_PAYMENT_VERIFICATION__: JSON.stringify(
       process.env.TIMENOOK_PAYMENT_VERIFICATION === "local-verification",
     ),

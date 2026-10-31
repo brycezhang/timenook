@@ -78,7 +78,7 @@
     </block>
     <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">{{dirty || coverDirty ? '重新查询，放弃未保存修改' : '重新查询'}}</button>
   </view>
-  <view class="tabs live-tabs"><button class="tab" bindtap="project"><image class="icon" src="/assets/icons/book-open.svg"/><text class="tab-label">项目</text></button><button class="tab active" bindtap="book"><image class="icon" src="/assets/icons/file-text.svg"/><text>成书</text></button><button class="tab" bindtap="account"><image class="icon" src="/assets/icons/user.svg"/><text>我的</text></button></view>
+  <view wx:if="{{!nativeTabs}}" class="tabs live-tabs"><button class="tab" bindtap="project"><image class="icon" src="/assets/icons/book-open.svg"/><text class="tab-label">项目</text></button><button class="tab active" bindtap="book"><image class="icon" src="/assets/icons/file-text.svg"/><text>成书</text></button><button class="tab" bindtap="account"><image class="icon" src="/assets/icons/user.svg"/><text>我的</text></button></view>
 </block>
 <block wx:else="">
 <view class="book-page with-tabs"
@@ -145,7 +145,7 @@
       ><view class="demo-note">当前为前端书稿预览，尚未生成印刷PDF</view></view
     ></view
   ></view
-><view class="tabs"
+><view wx:if="{{!nativeTabs}}" class="tabs"
   ><button class="tab" bindtap="project"
     ><image class="icon" src="/assets/icons/book-open.svg" /><text class="tab-label"
       >{{p.title}}</text

@@ -1,3 +1,9 @@
+import { NATIVE_TABS } from "../../config";
+import {
+  showProjectTab,
+  switchProjectTab,
+  tabProjectId,
+} from "../../services/navigation";
 import { recordingId } from "../../services/local-audio-recorder";
 import { participationClient } from "../../services/participation";
 import { type Project } from "../../domain/model";
@@ -25,6 +31,7 @@ type E = {
 };
 Page({
   data: {
+    nativeTabs: NATIVE_TABS,
     live: false,
     context: null as BookContext | null,
     version: null as BookVersionView | null,
@@ -70,7 +77,7 @@ Page({
     if (dataMode() === "live") {
       this.onHide();
       ++this.generation;
-      this.projectId = q.projectId || projectOverviewClient.selected();
+      this.projectId = tabProjectId(q.projectId);
       this.setData({ live: true, bookImage: "/assets/book.jpg" });
     }
   },
@@ -698,7 +705,9 @@ Page({
     }, true);
   },
   async onShow() {
+    showProjectTab(this, "book", this.data.p?.title);
     if (dataMode() === "live") {
+      this.projectId = tabProjectId() || this.projectId;
       this.stopSessionWatch?.();
       this.stopSessionWatch = sessionClient.onInvalidated(() => {
         this.onHide();
@@ -734,6 +743,7 @@ Page({
       return;
     }
     this.setData({
+      live: false,
       p,
       bookImage: asset(p),
       stories: p.stories.filter((s) => s.included),
@@ -741,6 +751,7 @@ Page({
         (s) => s.included && s.confirmedVersion !== s.version,
       ).length,
     });
+    showProjectTab(this, "book", p.title);
   },
   manuscript() {
     if (this.data.live) {
@@ -817,24 +828,12 @@ Page({
     );
   },
   project() {
-    if (this.data.live) {
-      wx.reLaunch({ url: `/pages/project/index?projectId=${this.projectId}` });
-      return;
-    }
-    home("project");
+    switchProjectTab("project", this.projectId);
   },
   book() {
-    if (this.data.live) {
-      wx.reLaunch({ url: `/pages/book/index?projectId=${this.projectId}` });
-      return;
-    }
-    home("book");
+    switchProjectTab("book", this.projectId);
   },
   account() {
-    if (this.data.live) {
-      wx.reLaunch({ url: `/pages/account/index?projectId=${this.projectId}` });
-      return;
-    }
-    home("account");
+    switchProjectTab("account", this.projectId);
   },
 });

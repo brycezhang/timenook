@@ -1,3 +1,4 @@
+import { switchProjectTab } from "../../services/navigation";
 import { flowView, savedRecordingStep } from "../../domain/interview-flow";
 import { optionalFollowupClient } from "../../services/optional-followup";
 import { dataMode } from "../../services/mode";
@@ -1757,7 +1758,7 @@ Page({
       )
         return;
       if (this.data.interview && !(await this.skipFollowup())) return;
-      wx.reLaunch({ url: `/pages/project/index?projectId=${this.projectId}` });
+      switchProjectTab("project", this.projectId);
       return;
     }
     home();

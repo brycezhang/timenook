@@ -58,6 +58,7 @@ function harness() {
       request(request: unknown) {
         requests.push(request);
       },
+      switchTab: ({ url }: { url: string }) => routes.push(url),
       navigateTo({ url }: { url: string }) {
         routes.push(url);
       },
@@ -101,7 +102,7 @@ test("live help queries actual project cases and keeps every service link in tha
     `/pages/welcome/index?projectId=${projectId}&manage=1`,
     `/pages/export/index?projectId=${projectId}`,
     `/pages/deletion-status/index?projectId=${projectId}`,
-    `/pages/project/index?projectId=${projectId}`,
+    `/pages/project/index`,
   ]);
 });
 

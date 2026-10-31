@@ -43,7 +43,11 @@ Page({
       this.setData({ mode: "live" });
       return;
     }
-    const recipient = q.recipient === "爸爸" ? "爸爸" : "妈妈";
+    // Native onLoad keeps the encoded query; the browser preview decodes it.
+    const recipient =
+      q.recipient === "爸爸" || q.recipient === encodeURIComponent("爸爸")
+        ? "爸爸"
+        : "妈妈";
     this.setData({
       recipient,
       bookImage:

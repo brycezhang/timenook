@@ -1,0 +1,5 @@
+<view class="tabs">
+  <button class="tab {{selected === 'project' ? 'active' : ''}}" data-page="project" bindtap="switchTab"><image class="icon" src="/assets/icons/book-open.svg"/><text class="tab-label">{{projectTitle}}</text></button>
+  <button class="tab {{selected === 'book' ? 'active' : ''}}" data-page="book" bindtap="switchTab"><image class="icon" src="/assets/icons/file-text.svg"/><text>成书</text></button>
+  <button class="tab {{selected === 'account' ? 'active' : ''}}" data-page="account" bindtap="switchTab"><image class="icon" src="/assets/icons/user.svg"/><text>我的</text></button>
+</view>
