@@ -1,3 +1,9 @@
+import { NATIVE_TABS } from "../../config";
+import {
+  showProjectTab,
+  switchProjectTab,
+  tabProjectId,
+} from "../../services/navigation";
 import { recordingPartition } from "../../services/interview-recording";
 import { recordingId } from "../../services/local-audio-recorder";
 import { watchProjectAccess } from "../../services/project-access";
@@ -63,6 +69,7 @@ function needsRecovery(task: ProductionTaskView) {
 }
 Page({
   data: {
+    nativeTabs: NATIVE_TABS,
     mode: dataMode(),
     status: "",
     busy: false,
@@ -94,9 +101,7 @@ Page({
   stopSessionWatch: undefined as (() => void) | undefined,
   expiry: undefined as ReturnType<typeof setTimeout> | undefined,
   onLoad(q) {
-    this.projectId =
-      q.projectId ||
-      (dataMode() === "live" ? projectOverviewClient.selected() : "");
+    this.projectId = dataMode() === "live" ? tabProjectId(q.projectId) : "";
     this.assistedSessionId = q.assistedSessionId || "";
   },
   onHide() {
@@ -164,6 +169,7 @@ Page({
           context === sessionClient.context()
         ) {
           projectOverviewClient.select(this.projectId);
+          showProjectTab(this, "project", overview.bookTitle);
           this.setData({
             overview,
             interviews: overview.interviews.map((interview) => ({
@@ -312,7 +318,17 @@ Page({
     go("assisted", `projectId=${this.projectId}`);
   },
   async onShow() {
+    showProjectTab(
+      this,
+      "project",
+      this.data.overview?.bookTitle || this.data.p?.title,
+    );
     if (dataMode() === "live") {
+      const selectedProjectId = tabProjectId();
+      if (selectedProjectId && selectedProjectId !== this.projectId) {
+        this.projectId = selectedProjectId;
+        this.assistedSessionId = "";
+      }
       this.setData({ mode: "live", p: null });
       await this.refresh();
       const generation = this.generation,
@@ -341,12 +357,14 @@ Page({
       return;
     }
     this.setData({
+      mode: "demo",
       p,
       bookImage: asset(p),
       confirmed: p.stories.filter((s) => s.confirmedVersion === s.version)
         .length,
       pending: p.stories.filter((s) => s.confirmedVersion !== s.version).length,
     });
+    showProjectTab(this, "project", p.title);
     this.filterStories();
   },
   filterStories() {
@@ -413,24 +431,12 @@ Page({
     go("invite", dataMode() === "live" ? `projectId=${this.projectId}` : "");
   },
   project() {
-    if (dataMode() === "live") {
-      wx.reLaunch({ url: `/pages/project/index?projectId=${this.projectId}` });
-      return;
-    }
-    home("project");
+    switchProjectTab("project", this.projectId);
   },
   book() {
-    if (dataMode() === "live") {
-      wx.reLaunch({ url: `/pages/book/index?projectId=${this.projectId}` });
-      return;
-    }
-    home("book");
+    switchProjectTab("book", this.projectId);
   },
   account() {
-    if (dataMode() === "live") {
-      wx.reLaunch({ url: `/pages/account/index?projectId=${this.projectId}` });
-      return;
-    }
-    home("account");
+    switchProjectTab("account", this.projectId);
   },
 });

@@ -1,3 +1,4 @@
+import { switchProjectTab } from "../../services/navigation";
 import { type Project } from "../../domain/model";
 import { asset, go, home, notify, required } from "../../services/store";
 import { dataMode } from "../../services/mode";
@@ -173,7 +174,7 @@ Page({
   },
   project() {
     if (dataMode() === "live") {
-      wx.reLaunch({ url: `/pages/project/index?projectId=${this.projectId}` });
+      switchProjectTab("project", this.projectId);
       return;
     }
     home();

@@ -2,6 +2,9 @@
 // runtime availability and WeChat configuration are recorded separately.
 declare const __TIMENOOK_API_BASE_URL__: string | undefined;
 declare const __TIMENOOK_COOKIE_WEB__: boolean | undefined;
+declare const __TIMENOOK_NATIVE_TABS__: boolean | undefined;
+export const NATIVE_TABS =
+  typeof __TIMENOOK_NATIVE_TABS__ === "boolean" && __TIMENOOK_NATIVE_TABS__;
 export const API_BASE_URL =
   typeof __TIMENOOK_COOKIE_WEB__ === "boolean" && __TIMENOOK_COOKIE_WEB__
     ? `${globalThis.location.origin}/api/v1`

@@ -27,6 +27,17 @@
     "pages/export/index",
     "pages/deletion-status/index"
   ],
+  "tabBar": {
+    "custom": true,
+    "color": "#827B6D",
+    "selectedColor": "#566143",
+    "backgroundColor": "#F8F4ED",
+    "list": [
+      { "pagePath": "pages/project/index", "text": "项目" },
+      { "pagePath": "pages/book/index", "text": "成书" },
+      { "pagePath": "pages/account/index", "text": "我的" }
+    ]
+  },
   "window": {
     "navigationBarTitleText": "时光里 · 岁月成书",
     "navigationBarBackgroundColor": "#F8F4ED",

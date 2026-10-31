@@ -50,6 +50,7 @@ async function harness() {
         return { abort() {} };
       },
       navigateTo: ({ url }: { url: string }) => routes.push(url),
+      switchTab: ({ url }: { url: string }) => routes.push(url),
       reLaunch() {},
       showToast() {},
     },
@@ -495,7 +496,7 @@ test("a reviewed revision returns to the actual book and both-party confirmation
   h.page.confirmRevision();
   h.page.production();
   assert.deepEqual(h.routes, [
-    `/pages/book/index?projectId=${projectId}`,
+    `/pages/book/index`,
     `/pages/print/index?projectId=${projectId}`,
     `/pages/production/index?projectId=${projectId}`,
   ]);

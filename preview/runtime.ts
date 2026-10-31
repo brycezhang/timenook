@@ -1,6 +1,7 @@
 import "./base.css";
 import { read as readProject } from "../miniprogram/services/store";
 import { dataMode, livePageAllowed } from "../miniprogram/services/mode";
+import { isProjectTab } from "../miniprogram/services/navigation";
 import { closePdfDocument, openPdfDocument } from "./pdf-viewer";
 import {
   createRecorder,
@@ -43,6 +44,12 @@ export function mountMiniProgram(
     eager: true,
   });
   const names = Object.keys(imports).map((k) => k.split("/")[3]);
+  const tabPages = new Map<
+    string,
+    { page: any; scrollTop: number; query: string }
+  >();
+  let resetPages = false;
+  let currentQuery = "";
   let current: any = null,
     route = "",
     template: Element | null = null,
@@ -309,7 +316,14 @@ export function mountMiniProgram(
       location.hash = targetUrl(url);
     },
     reLaunch({ url }: any) {
+      resetPages = true;
       history.replaceState(null, "", targetUrl(url));
+      void mount();
+    },
+    switchTab({ url }: any) {
+      const hash = targetUrl(url);
+      if (location.hash === hash) return;
+      history.replaceState(null, "", hash);
       void mount();
     },
     navigateBack() {
@@ -824,8 +838,22 @@ export function mountMiniProgram(
     }
     if (!names.includes(name)) return;
     current?.onHide?.();
-    current?.onUnload?.();
+    if (resetPages) {
+      for (const { page } of tabPages.values())
+        if (page !== current) page.onUnload?.();
+      tabPages.clear();
+      current?.onUnload?.();
+      resetPages = false;
+    } else if (isProjectTab(route) && current)
+      tabPages.set(route, {
+        page: current,
+        scrollTop: root.scrollTop,
+        query: currentQuery,
+      });
+    else current?.onUnload?.();
     route = name;
+    currentQuery = query ?? "";
+    const cached = tabPages.get(name);
     // Page() has no route argument; keep its owner stable until the module loads.
     const loaded = pageLoad.then(async () => {
       registering = name;
@@ -835,9 +863,10 @@ export function mountMiniProgram(
     await loaded;
     if (ticket !== serial) return;
     const def = definitions[name];
-    current = { ...def, data: structuredClone(def.data || {}) };
-    for (const [key, fn] of Object.entries(def))
-      if (typeof fn === "function") current[key] = fn.bind(current);
+    current = cached?.page ?? { ...def, data: structuredClone(def.data || {}) };
+    if (!cached)
+      for (const [key, fn] of Object.entries(def))
+        if (typeof fn === "function") current[key] = fn.bind(current);
     const instance = current;
     current.setData = (patch: any, callback?: Function) => {
       Object.assign(instance.data, patch);
@@ -876,13 +905,14 @@ export function mountMiniProgram(
     ].includes(name)
       ? "hidden"
       : "visible";
-    root.scrollTop = 0;
-    current.onLoad?.(Object.fromEntries(new URLSearchParams(query)));
+    if (!cached || (query && query !== cached.query))
+      current.onLoad?.(Object.fromEntries(new URLSearchParams(query)));
     if (ticket !== serial) return;
     if (document.hidden) current.onHide?.();
     else current.onShow?.();
     if (ticket !== serial) return;
     render();
+    root.scrollTop = cached?.scrollTop ?? 0;
   }
   document
     .querySelector("#back")!
@@ -953,6 +983,9 @@ export function mountMiniProgram(
     serial++;
     current?.onHide?.();
     current?.onUnload?.();
+    for (const { page } of tabPages.values())
+      if (page !== current) page.onUnload?.();
+    tabPages.clear();
     current = null;
     closePdfDocument();
     root.replaceChildren();

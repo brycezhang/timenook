@@ -109,6 +109,7 @@ function harness(name: string, options: { clock?: { now: number } } = {}) {
       login: (o: any) => o.success({ code: "synthetic-new-account" }),
       downloadFile: (download: any) => downloads.push(download),
       navigateTo: ({ url }: any) => routes.push(url),
+      switchTab: ({ url }: { url: string }) => routes.push(url),
       reLaunch: ({ url }: any) => routes.push(url),
       navigateBack: () => routes.push("back"),
       showToast() {},
@@ -648,10 +649,33 @@ test("project page displays real overview and preserves project/interview when o
     `/pages/interview/index?projectId=${projectId}&interviewId=${interviewId}`,
   );
   h.page.book();
-  assert.equal(
-    h.routes[h.routes.length - 1],
-    `/pages/book/index?projectId=${projectId}`,
+  assert.equal(h.routes[h.routes.length - 1], `/pages/book/index`);
+  h.page.onUnload();
+});
+
+test("a cached live project tab follows the session's changed project selection", async () => {
+  const h = harness("project");
+  h.page.onLoad({ projectId, assistedSessionId: "previous-assistance" });
+  const first = h.page.onShow();
+  h.respond(0, participation);
+  await tick();
+  h.respond(1, overview());
+  await first;
+  h.page.onHide();
+  const otherId = "abababab-abab-4bab-8bab-abababababab";
+  const selection = [...h.storage.keys()].find((key) =>
+    key.startsWith("timenook.live-project.v1:"),
   );
+  assert.ok(selection);
+  h.storage.set(selection, otherId);
+  const second = h.page.onShow();
+  assert.equal(h.requests[2].url, `${base}/projects/${otherId}/participation`);
+  assert.equal(h.page.assistedSessionId, "");
+  h.respond(2, { ...participation, projectId: otherId });
+  await tick();
+  h.respond(3, { ...overview(), projectId: otherId });
+  await second;
+  assert.equal(h.page.data.overview.projectId, otherId);
   h.page.onUnload();
 });
 
@@ -806,10 +830,7 @@ test("renamed live project title is fresh in account while book waits for a gene
   assert.equal(book.page.data.version, null);
   assert.match(book.page.data.stateLabel, /生成书稿/);
   book.page.account();
-  assert.equal(
-    book.routes[book.routes.length - 1],
-    `/pages/account/index?projectId=${projectId}`,
-  );
+  assert.equal(book.routes[book.routes.length - 1], `/pages/account/index`);
   book.page.onUnload();
   const account = harness("account");
   account.page.onLoad({ projectId });
@@ -822,7 +843,7 @@ test("renamed live project title is fresh in account while book waits for a gene
   account.page.project();
   assert.equal(
     account.routes[account.routes.length - 1],
-    `/pages/project/index?projectId=${projectId}`,
+    `/pages/project/index`,
   );
   account.page.onUnload();
 });

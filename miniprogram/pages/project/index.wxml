@@ -42,7 +42,7 @@
  <view class="project-tools section"><button class="link" bindtap="settings">修改书名</button><button wx:if="{{participation && participation.role === 'initiator'}}" class="link" bindtap="invite">邀请与参与授权</button><button wx:if="{{participation && participation.role === 'narrator'}}" class="link" bindtap="participate">本人参与与资料用途</button><button class="link" bindtap="refresh" disabled="{{busy}}">重新查询项目</button></view>
  <view wx:if="{{participation && participation.policyStatus === 'internal-acceptance'}}" class="demo-note">内测项目 · 无真实付款及实体书生产</view>
 </view>
-<view class="tabs live-tabs"><button class="tab active" bindtap="project"><image class="icon" src="/assets/icons/book-open.svg"/><text class="tab-label">{{overview ? overview.bookTitle : '项目'}}</text></button><button class="tab" bindtap="book"><image class="icon" src="/assets/icons/file-text.svg"/><text>成书</text></button><button class="tab" bindtap="account"><image class="icon" src="/assets/icons/user.svg"/><text>我的</text></button></view>
+<view wx:if="{{!nativeTabs}}" class="tabs live-tabs"><button class="tab active" bindtap="project"><image class="icon" src="/assets/icons/book-open.svg"/><text class="tab-label">{{overview ? overview.bookTitle : '项目'}}</text></button><button class="tab" bindtap="book"><image class="icon" src="/assets/icons/file-text.svg"/><text>成书</text></button><button class="tab" bindtap="account"><image class="icon" src="/assets/icons/user.svg"/><text>我的</text></button></view>
 </block>
 <block wx:else="">
 <view class="page with-tabs"
@@ -117,7 +117,7 @@
   ><view wx:if="{{p.sample}}" class="demo-note"
     >正在浏览示例项目，人物与故事仅供体验</view
   ></view
-><view class="tabs"
+><view wx:if="{{!nativeTabs}}" class="tabs"
   ><button class="tab active" bindtap="project"
     ><image class="icon" src="/assets/icons/book-open.svg" /><text class="tab-label"
       >{{p.title}}</text
