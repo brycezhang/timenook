@@ -134,6 +134,13 @@ async function sdkReady(port) {
       let response;
       try {
         response = JSON.parse(String(raw));
+        if (
+          !response ||
+          typeof response !== "object" ||
+          Array.isArray(response)
+        ) {
+          throw new Error("Invalid native SDK protocol message");
+        }
       } catch {
         const error = new Error("Invalid native SDK protocol message");
         error.name = "NativeProtocolError";

@@ -21,7 +21,7 @@ pnpm test:native-login
 
 `Tool.getInfo` 只报告配置的基础库版本；SDK 端口可连接不等于小程序已经渲染。启动通过官方 `auto`，先等待 SDK，再检查实际版本。页面等待使用 SDK 公开 CDP 通道的 `MPPage.getStack` 和 `MPPage.waitForReady`，在真实页面 `onReady` 后读取业务数据及原生布局。
 
-SDK 探测连接失败时继续有界轮询；收到无法解析的 JSON 则立即以 `startup:sdk` / `NativeProtocolError` 失败，沿用脱敏结果保存和临时项目清理，不输出原始消息或解析错误。
+SDK 探测连接失败时继续有界轮询；收到无法解析的 JSON，或顶层为 `null`、基本值或数组的响应，则立即以 `startup:sdk` / `NativeProtocolError` 失败，沿用脱敏结果保存和临时项目清理，不输出原始消息或解析错误。
 
 `onReady` 早于路由动画结束。测试副本的 `app.js` 追加被动 `wx.onAppRoute` / `wx.onAppRouteDone` 监听，只保存当前已完成路由，不改业务处理、登录或网络。下一步还须满足实际路由完成、页面非 busy/loading、原生类选择器存在可见内容及该步骤的业务完成条件。这样不在上一页仍切换时发出新的 reLaunch。原生选择器使用类名；通用 `view` 标签选择器在此工具中返回空集合。
 

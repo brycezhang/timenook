@@ -11,38 +11,43 @@ const {
   sdkReady,
 } = require("../scripts/native-automation.cjs");
 
-test(
-  "malformed SDK messages reject startup safely and close the probe",
-  { timeout: 5000 },
-  async (t) => {
-    const server = new WebSocketServer({ port: 0, host: "127.0.0.1" });
-    t.after(async () => {
-      for (const socket of server.clients) socket.terminate();
-      await new Promise((resolve) => server.close(resolve));
-    });
-    await once(server, "listening");
-    const closed = new Promise((resolve) => {
-      server.once("connection", (socket) => {
-        socket.once("close", resolve);
-        socket.once("message", () => {
-          socket.send("private-sdk-probe-payload{");
-          socket.send(
-            JSON.stringify({ id: "ready", result: { SDKVersion: "3.17.5" } }),
-          );
+for (const [description, payload] of [
+  ["malformed JSON", "private-sdk-probe-payload{"],
+  ["null response", "null"],
+]) {
+  test(
+    `SDK ${description} rejects startup safely and closes the probe`,
+    { timeout: 5000 },
+    async (t) => {
+      const server = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+      t.after(async () => {
+        for (const socket of server.clients) socket.terminate();
+        await new Promise((resolve) => server.close(resolve));
+      });
+      await once(server, "listening");
+      const closed = new Promise((resolve) => {
+        server.once("connection", (socket) => {
+          socket.once("close", resolve);
+          socket.once("message", () => {
+            socket.send(payload);
+            socket.send(
+              JSON.stringify({ id: "ready", result: { SDKVersion: "3.17.5" } }),
+            );
+          });
         });
       });
-    });
-    await assert.rejects(
-      within("startup:sdk", () => sdkReady(server.address().port)),
-      {
-        name: "NativeProtocolError",
-        message: "Invalid native SDK protocol message",
-        stage: "startup:sdk",
-      },
-    );
-    await closed;
-  },
-);
+      await assert.rejects(
+        within("startup:sdk", () => sdkReady(server.address().port)),
+        {
+          name: "NativeProtocolError",
+          message: "Invalid native SDK protocol message",
+          stage: "startup:sdk",
+        },
+      );
+      await closed;
+    },
+  );
+}
 
 function nativeApp(phases) {
   let reads = 0,
