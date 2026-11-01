@@ -36,6 +36,18 @@
 
 只记录 SDK 方法名与完成时间的启动探针保存在 `/tmp/timenook-native-startup-probe.json`，未记录协议参数或响应内容。诊断期间 CUA 报告 Mac 已锁定且无法自动解锁，系统只读锁定标志也为真；其中一次启动仍成功，因此锁定与本次间歇性渲染失败的因果关系尚未确定。需要可观察的开发者工具桌面继续核实，当前不新增猜测性等待、重试或预检。此前完整演示及真实登录证据保留原范围，部署后严格订单检查继续待验。
 
+## 组件声明、工具链升级与当前条件
+
+补齐原生 `app.json` 的全局 `usingComponents: {}`，按实际构建产物验证全局或各 Tab 页的组件声明；构建回归 4 项及原生 helper 10 项通过。旧工具上另有严格运行 `VSplEt` 完整通过：真实微信登录、本人订单 200/`required=true` 与所有清理，支撑 #129 的服务端工程验收关闭。后续演示仍出现冷启动失败，因此不据单次通过声称自动化稳定性修复完成。
+
+用户解锁后，实际界面还观察到 SummerCompiler 遗漏自定义 Tab JSON、读取到空的 `project.config.json`，以及编译器 `path.join` 收到 undefined。一次手工编译仅作诊断，不能算自动化通过。AppService 等待、证据移到项目外、额外编译标志及先 open 后 auto 的对照未充分解决问题，未保留为启动补丁。此前项目外写入对照仅移动合成探针写入，仍保留 helper 的结果写入；后续全部移出项目的对照也失败，不能将早先对照描述为排除全部写入影响。
+
+已根据[官方版本配置](https://devtools.wxqcloud.qq.com.cn/WechatWebDev/nightly/versions/config.json)与[稳定版历史](https://devtools.wxqcloud.qq.com.cn/WechatWebDev/nightly/versions/history_stable.json)，从 `2.01.2510290` 更新到官方最新 Stable `2.02.2609240`（2026-10-26）。[该版更新记录](https://devtools.wxqcloud.qq.com.cn/WechatWebDev/nightly/versions/logs/stable_v2.02.2609240.json)含 CLI 冷启动、首屏超时白屏及连续写入触发模拟器重编译的修复，与本次观察相关；这仍不证明 TimeNook 已通过新版实测。
+
+当前安装路径为 `/Applications/wechatwebdevtools.app`，CLI 仍为其 `Contents/MacOS/cli`。使用官方 ARM64 安装包，腾讯签名、完整代码签名及 macOS 公证核验通过。版本读取应用自身 package 元数据；Electron 的 CFBundle 版本不是开发工具版本。原工具二进制私下保留，未清除原项目或登录配置。
+
+新版使用独立初始资料目录，没有自动继承旧版登录或已启用的 CLI 服务。最新版本只读 `cli islogin` 实测返回 246、服务端口未启用；中间版本的一次演示因此在 `startup:official-cli` 失败，未执行登录或业务操作。当前 Mac 再次锁定，CUA 自动解锁失败，已请求用户解锁并在新版中正常扫码登录。待桌面就绪后恢复原有同范围的本机 CLI 能力，再分别执行完整演示和严格真实登录，记录实际请求/解析基础库及全部清理。**新版尚无完整原生通过结果，#130 保持 OPEN。**
+
 ## 失败证据
 
 所有路径均为操作者本机系统临时目录下，结果不进入 Git。
