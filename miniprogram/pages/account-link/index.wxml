@@ -10,10 +10,12 @@
     <view class="small muted">目标网页账号</view><view class="account-id">{{challenge.targetUser.id}}</view>
     <view wx:if="{{challenge.verificationCode}}" class="link-code">{{challenge.verificationCode}}</view>
     <view class="small muted">请当面核对两端相同的6位码，仅关联你自己的账号。</view>
+    <view wx:if="{{challenge.state === 'paired' || (challenge.state === 'linked' && !userId)}}" class="action-stack action-section">
     <button wx:if="{{challenge.state === 'paired' && !challenge.nativeConfirmed}}" class="btn" disabled="{{busy}}" bindtap="confirm">两端核对码一致，确认关联此账号</button>
     <button wx:if="{{challenge.state === 'paired'}}" class="btn secondary" disabled="{{busy}}" bindtap="refresh">刷新另一端确认状态</button>
     <button wx:if="{{challenge.state === 'paired'}}" class="link" disabled="{{busy}}" bindtap="cancel">取消关联</button>
     <button wx:if="{{challenge.state === 'linked' && !userId}}" class="btn" disabled="{{busy}}" bindtap="finish">重新微信登录同一账号</button>
+    </view>
     <view wx:if="{{userId}}" class="small account-id">已登录账号：{{userId}}</view>
   </view>
 </view>

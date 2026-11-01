@@ -116,6 +116,22 @@ image {
   flex-direction: column;
   gap: 20rpx;
 }
+.action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--action-gap);
+}
+.action-section {
+  margin-top: var(--action-section-gap);
+}
+.action-stack--quiet {
+  gap: var(--action-quiet-gap);
+}
+.action-stack > button.btn,
+.action-stack > button.link,
+.action-stack > button.text-action {
+  margin: 0;
+}
 .center {
   text-align: center;
 }
@@ -164,14 +180,14 @@ image {
 }
 .btn.compact {
   width: auto;
-  min-height: 80rpx;
+  min-height: var(--touch-target);
   padding: 16rpx 28rpx;
   font-size: 28rpx;
 }
 .link {
   color: var(--brown);
   font-size: 28rpx;
-  min-height: 70rpx;
+  min-height: var(--touch-target);
   display: flex;
   align-items: center;
   justify-content: center;

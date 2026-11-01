@@ -11,4 +11,8 @@ page {
   --olive: #566348;
   --soft: #edf0e7;
   --danger: #984b39;
+  --action-gap: 24rpx;
+  --action-section-gap: 32rpx;
+  --action-quiet-gap: 12rpx;
+  --touch-target: 44px;
 }

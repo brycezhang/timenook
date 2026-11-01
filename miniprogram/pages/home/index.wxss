@@ -140,7 +140,17 @@
 .home .link {
   font-size: 25rpx;
 }
+.home-entry-actions {
+  margin-bottom: var(--action-section-gap);
+}
+.home-entry-actions > .home-return {
+  margin: 0;
+}
 .privacy-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-target);
   font-size: 20rpx;
   color: var(--muted);
   text-align: center;
@@ -152,7 +162,7 @@
   justify-content: center;
   gap: 12rpx;
   width: 100%;
-  min-height: 72rpx;
+  min-height: var(--touch-target);
   margin-bottom: 24rpx;
   color: var(--brown);
   background: #eee6d8;

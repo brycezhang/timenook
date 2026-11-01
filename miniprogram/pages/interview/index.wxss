@@ -18,9 +18,9 @@
 .record-label { margin-top: 28rpx; font-size: 34rpx; font-weight: 500; }
 .microphone-note { text-align: center; color: var(--muted); font-size: 27rpx; line-height: 1.7; }
 .focus-link { min-height: 96rpx; padding: 18rpx 10rpx; font-size: 32rpx; line-height: 1.6; background: transparent; color: var(--brown-dark); display: flex; align-items: center; justify-content: center; width: 100%; }
-.focus-bottom { margin-top: auto; padding-top: 30rpx; }
+.focus-bottom { display: flex; flex-direction: column; gap: var(--action-gap); margin-top: auto; padding-top: 30rpx; }
 .focus-bottom > .btn { font-size: 36rpx; min-height: 112rpx; }
-.focus-bottom > .focus-link { margin-top: 8rpx; }
+.focus-bottom > .focus-link { margin-top: 0; }
 .focus-error { font-size: 30rpx; color: #9a3f2e; line-height: 1.7; margin: 24rpx 0; }
 .record-timer { font-size: 56rpx; text-align: center; font-variant-numeric: tabular-nums; color: #a34e41; margin-top: 52rpx; }
 .recording { background: #b95b4c; box-shadow: 0 0 0 18rpx #f1e1da; animation: breath 2s infinite; }
