@@ -209,10 +209,10 @@ export async function createApplication(
       config.acceptance.profileVersion !== "internal-acceptance-v1" ||
       !config.web ||
       !config.privacyJournal ||
-      config.payments)
+      (config.payments && config.payments.mode !== "ordinary-merchant"))
   )
     throw new ConfigurationError(
-      "Internal acceptance requires its profile, web sessions, independent privacy journal and no payments",
+      "Internal acceptance requires its profile, web sessions, independent privacy journal and ordinary merchant payments when configured",
     );
   if (config.web) {
     validateWebConfig(config.web);
@@ -389,19 +389,21 @@ export async function createApplication(
     throw new ConfigurationError(
       "D08 synthetic participation requires isolated local payment verification tests",
     );
+  // Both payment modes use an explicit external protocol substitute in tests.
+  // Development/production always use the native merchant transport.
   if (
-    config.payments &&
-    ((config.payments.mode === "local-verification"
-      ? config.environment !== "test" ||
-        !options.paymentFetch ||
-        options.paymentFetch === fetch
-      : config.payments.mode !== "ordinary-merchant" ||
-        config.environment === "test" ||
-        !!options.paymentFetch) ||
-      config.payments.appId !== config.wechat?.appId)
+    (options.paymentFetch && config.environment !== "test") ||
+    (config.payments &&
+      (!["local-verification", "ordinary-merchant"].includes(
+        config.payments.mode,
+      ) ||
+        (config.environment === "test"
+          ? !options.paymentFetch || options.paymentFetch === fetch
+          : config.payments.mode !== "ordinary-merchant") ||
+        config.payments.appId !== config.wechat?.appId))
   )
     throw new ConfigurationError(
-      "Payments require isolated local verification transport or ordinary merchant native transport for this AppID",
+      "Payments require explicit isolated test transport or ordinary merchant native transport for this AppID",
     );
   if (config.payments) {
     try {
