@@ -373,7 +373,7 @@ model ProbeAiGeneration {
   @@map("probe_ai_generations")
 }
 
-// T10 local verification only. Financial fields/snapshots are immutable.
+// Local verification and ordinary merchant orders. Financial fields/snapshots are immutable.
 model PaymentOrder {
   firstCopyCancellationRequired Boolean @default(false) @map("first_copy_cancellation_required")
   productionFrozen Boolean @default(false) @map("production_frozen")
