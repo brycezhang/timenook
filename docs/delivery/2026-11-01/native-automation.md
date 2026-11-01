@@ -22,7 +22,19 @@
 | `pnpm test:native-e2e`   | 全部通过：妈妈模拟购买/邀请、参与及换题、合成 MP3 输入与非空原生持久文件、同一购买项目故事确认/书稿确认/地址阻断/演示订单、Tab Page/筛选保留、修改失效与重确认、爸爸重复购买及原项目保留；音频服务、SDK、临时窗口清理通过                               | `/var/folders/7t/xgv_t04j7k74jfdhdh1p41tr0000gn/T/timenook-native-demo-Hbm1yX/evidence/result.json`；同目录 8 张合成演示截图 |
 | `pnpm test:native-login` | 核心真实登录检查全部通过：`urlCheck=true` 且未配置域名实际被拒绝；真实 `wx.login`、`/users/me` 当前账号、无会话 401、首页持久会话恢复、退出后旧会话 401、重登同一账号/不同会话、参与 HTTP/页面；本次缓存及旧测试会话撤销、本机清除、SDK及窗口关闭均通过 | `/var/folders/7t/xgv_t04j7k74jfdhdh1p41tr0000gn/T/timenook-native-live-N9Xj3x/evidence/result.json`                          |
 
-真实运行时当前内部验收装配的 `/orders` 为 404，订单页面已结束 loading 并显示服务不可用。机器结果明确记录 `orders.available=false`、`required=false`；该项只是装配可用性观察，**不计作订单模块 200 或真实收付款通过**。#129 部署后的本人订单 200 由其运行记录补验，也可用 `--orders-required` 强制要求。真实模式没有替换 `wx.login` / `wx.request`，未调用支付或麦克风，未保存账号界面截图。
+上述部署前运行的内部验收装配 `/orders` 为 404，订单页面已结束 loading 并显示服务不可用。机器结果明确记录 `orders.available=false`、`required=false`；该项只是装配可用性观察，**不计作订单模块 200 或真实收付款通过**。#129 部署后的本人订单 200 由其运行记录补验，也可用 `--orders-required` 强制要求。真实模式没有替换 `wx.login` / `wx.request`，未调用支付或麦克风，未保存账号界面截图。
+
+## 支付部署后复测与启动诊断
+
+17:18 起以 `3719910`（含协议错误处理修复）执行 `node scripts/test-native-login.cjs --orders-required`，结果为失败，保存在 `timenook-native-live-QGfHql/evidence/result.json`。请求与解析基础库均为 3.17.5，但 `page:home:render` 在 `route:null`、`rendered:false` 阶段超时，尚未调用真实登录；缓存会话清理因运行时不可访问而超时，SDK 断开与临时项目关闭成功。不能将此前真实登录成功记录复用为本次部署后订单 200。
+
+随后仅诊断启动，不重跑完整登录或演示：
+
+- `timenook-native-live-bsGRfs` 与 `timenook-native-live-2rAaVj` 启动通过；后者还验证第二个公开 SDK 连接在第一个连接断开后仍能读取真实页面。两次均完成断开及项目关闭。
+- `timenook-native-live-vPjnCA` 在项目内持续写入合成证据 JSON 时复现相同渲染超时；仅将这些写入移到项目外的对照 `timenook-native-live-Qq9OcC` 也失败，故不能将失败归因于证据写入，未据此修改目录结构。
+- 移除 SDK 就绪探测的单连接试验分别在 CLI 返回后遇到连接拒绝、仅等待 TCP 监听后遇到未初始化的 SDK 响应。两者只证明 CLI/TCP 就绪不足，未据此替换现有协议就绪检查。
+
+只记录 SDK 方法名与完成时间的启动探针保存在 `/tmp/timenook-native-startup-probe.json`，未记录协议参数或响应内容。诊断期间 CUA 报告 Mac 已锁定且无法自动解锁，系统只读锁定标志也为真；其中一次启动仍成功，因此锁定与本次间歇性渲染失败的因果关系尚未确定。需要可观察的开发者工具桌面继续核实，当前不新增猜测性等待、重试或预检。此前完整演示及真实登录证据保留原范围，部署后严格订单检查继续待验。
 
 ## 失败证据
 
