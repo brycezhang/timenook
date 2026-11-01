@@ -53,7 +53,10 @@ import { Type } from "class-transformer";
 import { PrismaClient, Prisma, PaymentOrder } from "@prisma/client";
 import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
-import { IdentityAccess } from "../identity/identity-access";
+import {
+  IdentityAccess,
+  readSessionContextIn,
+} from "../identity/identity-access";
 import { BUILTIN_TEMPLATE } from "../projects/builtin-template";
 class RecipientDto {
   @ApiPropertyOptional()
@@ -260,6 +263,11 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
     key: string,
     body: EmptyPaymentCommand,
   ) {
+    const session = await this.database.$transaction((tx) =>
+      readSessionContextIn(tx, authorization),
+    );
+    // Linking accounts permits shared reads, while real checkout stays native.
+    if (session.method === "self_web") throw new ForbiddenException();
     const order = await this.owned(authorization, id);
     const cfg = this.enabled();
     if (order.state !== "pending") throw new ConflictException();
