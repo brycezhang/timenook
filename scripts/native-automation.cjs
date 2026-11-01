@@ -112,16 +112,17 @@ async function waitForPage(
 }
 
 async function sdkReady(port) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`);
     const timer = setTimeout(() => finish(false), 2000);
     let done = false;
-    function finish(ready) {
+    function finish(ready, error) {
       if (done) return;
       done = true;
       clearTimeout(timer);
       ws.terminate();
-      resolve(ready);
+      if (error) reject(error);
+      else resolve(ready);
     }
     ws.on("error", () => finish(false));
     ws.on("open", () =>
@@ -130,7 +131,15 @@ async function sdkReady(port) {
       ),
     );
     ws.on("message", (raw) => {
-      const response = JSON.parse(String(raw));
+      let response;
+      try {
+        response = JSON.parse(String(raw));
+      } catch {
+        const error = new Error("Invalid native SDK protocol message");
+        error.name = "NativeProtocolError";
+        finish(false, error);
+        return;
+      }
       if (response.id === "ready") finish(Boolean(response.result?.SDKVersion));
     });
   });
@@ -367,4 +376,4 @@ wx.onAppRouteDone(function (event) { getApp().nativeE2ERouteDone = event.path; }
   };
 }
 
-module.exports = { within, waitForPage, createRun };
+module.exports = { within, waitForPage, sdkReady, createRun };

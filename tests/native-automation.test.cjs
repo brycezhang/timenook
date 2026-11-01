@@ -1,7 +1,48 @@
 const assert = require("node:assert/strict");
+const { once } = require("node:events");
 const test = require("node:test");
 const { runInNewContext } = require("node:vm");
-const { waitForPage, within } = require("../scripts/native-automation.cjs");
+const { Server: WebSocketServer } = require("node:module").createRequire(
+  require.resolve("miniprogram-automator"),
+)("ws");
+const {
+  waitForPage,
+  within,
+  sdkReady,
+} = require("../scripts/native-automation.cjs");
+
+test(
+  "malformed SDK messages reject startup safely and close the probe",
+  { timeout: 5000 },
+  async (t) => {
+    const server = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+    t.after(async () => {
+      for (const socket of server.clients) socket.terminate();
+      await new Promise((resolve) => server.close(resolve));
+    });
+    await once(server, "listening");
+    const closed = new Promise((resolve) => {
+      server.once("connection", (socket) => {
+        socket.once("close", resolve);
+        socket.once("message", () => {
+          socket.send("private-sdk-probe-payload{");
+          socket.send(
+            JSON.stringify({ id: "ready", result: { SDKVersion: "3.17.5" } }),
+          );
+        });
+      });
+    });
+    await assert.rejects(
+      within("startup:sdk", () => sdkReady(server.address().port)),
+      {
+        name: "NativeProtocolError",
+        message: "Invalid native SDK protocol message",
+        stage: "startup:sdk",
+      },
+    );
+    await closed;
+  },
+);
 
 function nativeApp(phases) {
   let reads = 0,
