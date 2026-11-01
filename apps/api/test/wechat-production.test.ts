@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import {
-  createCipheriv,
   createPublicKey,
   generateKeyPairSync,
   randomBytes,
-  sign,
   verify,
   X509Certificate,
   type KeyObject,
@@ -23,6 +21,10 @@ import Redis from "ioredis";
 import { BUILTIN_TEMPLATE } from "../src/projects/builtin-template";
 import { createAdminApplication } from "./admin-feishu-fixture";
 import { paymentAdmin } from "./payment-admin-fixture";
+import {
+  encryptedPaymentNotification,
+  signedPaymentHeaders,
+} from "./wechat-payment-envelope-fixture";
 
 const base: NodeJS.ProcessEnv = {
   NODE_ENV: "development",
@@ -334,20 +336,8 @@ test("ordinary merchant signed notifications and active queries share durable pa
   await bootPrivacyFixture(cfg);
   const db = new PrismaClient({ datasourceUrl: cfg.databaseUrl });
   const cfgPay = cfg.payments!;
-  const signed = (body: string) => {
-    const timestamp = String(Math.floor(Date.now() / 1000)),
-      nonce = randomUUID();
-    return {
-      "Wechatpay-Timestamp": timestamp,
-      "Wechatpay-Nonce": nonce,
-      "Wechatpay-Serial": cfgPay.platformKeyId,
-      "Wechatpay-Signature": sign(
-        "RSA-SHA256",
-        Buffer.from(`${timestamp}\n${nonce}\n${body}\n`),
-        platformPrivateKey,
-      ).toString("base64"),
-    };
-  };
+  const signed = (body: string) =>
+    signedPaymentHeaders(body, cfgPay.platformKeyId, platformPrivateKey);
   const providerOrders = new Map<string, Record<string, unknown>>();
   const providerRefunds = new Map<string, Record<string, unknown>>();
   let queryStarted: (() => void) | undefined;
@@ -422,13 +412,19 @@ test("ordinary merchant signed notifications and active queries share durable pa
     const raw = JSON.stringify(result);
     return new Response(raw, { status: 200, headers: signed(raw) });
   };
+  const wechatCodes = new Map<string, string>();
+  const code = (openId: string) => {
+    const value = randomUUID();
+    wechatCodes.set(value, openId);
+    return value;
+  };
   const wechatFetch: typeof fetch = async (input) => {
     const url = new URL(String(input));
     assert.equal(url.origin, "https://api.weixin.qq.com");
     assert.equal(url.searchParams.get("appid"), cfgPay.appId);
     return new Response(
       JSON.stringify({
-        openid: url.searchParams.get("js_code"),
+        openid: wechatCodes.get(url.searchParams.get("js_code") ?? ""),
         session_key: "isolated",
       }),
     );
@@ -436,17 +432,68 @@ test("ordinary merchant signed notifications and active queries share durable pa
   let app: Awaited<ReturnType<typeof createApplication>> | undefined;
   try {
     app = await createAdminApplication(cfg, { paymentFetch, wechatFetch });
+    const origin = { origin: cfg.web!.origin, "x-timenook-web": "1" };
+    const webLogin = await app.inject({
+      method: "POST",
+      url: "/v1/web/mock-session",
+      headers: origin,
+      payload: {},
+    });
+    assert.equal(webLogin.statusCode, 201, webLogin.body);
+    const webActor = webLogin.json().data;
+    const cookie = String(webLogin.headers["set-cookie"]).split(";")[0];
+    const webHeaders = {
+      ...origin,
+      cookie,
+      "x-csrf-token": webActor.csrfToken,
+    };
+    const challenge = await app.inject({
+      method: "POST",
+      url: "/v1/web/wechat-link",
+      headers: webHeaders,
+      payload: {},
+    });
+    assert.equal(challenge.statusCode, 201, challenge.body);
+    const claimed = await app.inject({
+      method: "POST",
+      url: "/v1/wechat-links/claim",
+      payload: {
+        linkCode: challenge.json().data.challenge.code,
+        code: code("isolated-buyer"),
+      },
+    });
+    assert.equal(claimed.statusCode, 201, claimed.body);
+    const pair = claimed.json().data;
+    const nativeConfirmed = await app.inject({
+      method: "POST",
+      url: "/v1/wechat-links/confirm",
+      payload: {
+        proof: pair.proof,
+        verificationCode: pair.challenge.verificationCode,
+        code: code("isolated-buyer"),
+      },
+    });
+    assert.equal(nativeConfirmed.statusCode, 201, nativeConfirmed.body);
+    const linked = await app.inject({
+      method: "POST",
+      url: `/v1/web/wechat-link/${pair.challenge.id}/confirm`,
+      headers: webHeaders,
+      payload: { verificationCode: pair.challenge.verificationCode },
+    });
+    assert.equal(linked.statusCode, 201, linked.body);
+    assert.equal(linked.json().data.challenge.state, "linked");
     const login = async (openId: string) => {
       const response = await app!.inject({
         method: "POST",
         url: "/v1/sessions/wechat",
-        payload: { code: openId },
+        payload: { code: code(openId) },
       });
       assert.equal(response.statusCode, 201, response.body);
       return response.json().data;
     };
     const buyer = await login("isolated-buyer"),
       stranger = await login("isolated-stranger");
+    assert.deepEqual(buyer.user, webActor.user);
     const auth = { authorization: `Bearer ${buyer.session.token}` };
     const snapshot = JSON.parse(
       readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
@@ -523,6 +570,17 @@ test("ordinary merchant signed notifications and active queries share durable pa
       ).statusCode,
       404,
     );
+    const webPrepare = await app.inject({
+      method: "POST",
+      url: `/v1/orders/${order.id}/payment`,
+      headers: { ...webHeaders, "idempotency-key": randomUUID() },
+      payload: {},
+    });
+    assert.equal(
+      webPrepare.statusCode,
+      403,
+      "a linked web account cannot request real JSAPI checkout parameters",
+    );
     const prepare = await app.inject({
       method: "POST",
       url: `/v1/orders/${order.id}/payment`,
@@ -530,6 +588,34 @@ test("ordinary merchant signed notifications and active queries share durable pa
       payload: {},
     });
     assert.equal(prepare.statusCode, 201, prepare.body);
+    assert.equal(prepare.json().data.mode, "wechat");
+    assert.equal(prepare.json().data.status, "prepared");
+    assert.match(
+      prepare.json().data.parameters.package,
+      /^prepay_id=isolated-/,
+    );
+    const webOrders = await app.inject({
+      method: "GET",
+      url: "/v1/orders",
+      headers: { cookie },
+    });
+    assert.equal(webOrders.statusCode, 200, webOrders.body);
+    assert.deepEqual(
+      webOrders.json().data.orders.map((row: { id: string }) => row.id),
+      [order.id],
+    );
+    for (const headers of [auth, { cookie }]) {
+      const ownOrder: Awaited<ReturnType<typeof app.inject>> = await app.inject(
+        {
+          method: "GET",
+          url: `/v1/orders/${order.id}`,
+          headers,
+        },
+      );
+      assert.equal(ownOrder.statusCode, 200, ownOrder.body);
+      assert.equal(ownOrder.json().data.id, order.id);
+      assert.equal(ownOrder.json().data.state, "pending");
+    }
     const transaction = {
       ...providerOrders.get(order.outTradeNo)!,
       trade_state: "SUCCESS",
@@ -543,32 +629,13 @@ test("ordinary merchant signed notifications and active queries share durable pa
       id: string,
       badSignature = false,
     ) => {
-      const type = kind === "payments" ? "transaction" : "refund",
-        nonce = "abcdefghijkl";
-      const cipher = createCipheriv(
-        "aes-256-gcm",
-        Buffer.from(cfgPay.apiV3Key),
-        nonce,
-      );
-      cipher.setAAD(Buffer.from(type));
-      const ciphertext = Buffer.concat([
-        cipher.update(JSON.stringify(value)),
-        cipher.final(),
-        cipher.getAuthTag(),
-      ]).toString("base64");
-      const raw = JSON.stringify({
+      const raw = encryptedPaymentNotification(
+        value,
+        cfgPay.apiV3Key,
         id,
-        event_type:
-          kind === "payments" ? "TRANSACTION.SUCCESS" : "REFUND.SUCCESS",
-        resource_type: "encrypt-resource",
-        resource: {
-          algorithm: "AEAD_AES_256_GCM",
-          original_type: type,
-          nonce,
-          associated_data: type,
-          ciphertext,
-        },
-      });
+        kind === "payments" ? "transaction" : "refund",
+        kind === "payments" ? "TRANSACTION.SUCCESS" : "REFUND.SUCCESS",
+      );
       return app!.inject({
         method: "POST",
         url: `/v1/webhooks/wechat-pay/${kind}`,

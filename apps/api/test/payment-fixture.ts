@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync, randomBytes, verify } from "node:crypto";
 import {
-  generateKeyPairSync,
-  randomBytes,
-  sign,
-  verify,
-  createCipheriv,
-} from "node:crypto";
+  encryptedPaymentNotification,
+  signedPaymentHeaders,
+} from "./wechat-payment-envelope-fixture";
 const merchant = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const platform = generateKeyPairSync("rsa", { modulusLength: 2048 });
 export const paymentConfig = {
@@ -44,20 +42,13 @@ export function fault(value: typeof nextFault) {
   nextFault = value;
 }
 export function signed(body: string, status = 200) {
-  const timestamp = String(Math.floor(Date.now() / 1000));
-  const nonce = "synthetic-response-nonce";
   return new Response(status === 204 ? null : body, {
     status,
-    headers: {
-      "Wechatpay-Timestamp": timestamp,
-      "Wechatpay-Nonce": nonce,
-      "Wechatpay-Serial": paymentConfig.platformKeyId,
-      "Wechatpay-Signature": sign(
-        "RSA-SHA256",
-        Buffer.from(`${timestamp}\n${nonce}\n${body}\n`),
-        platform.privateKey,
-      ).toString("base64"),
-    },
+    headers: signedPaymentHeaders(
+      body,
+      paymentConfig.platformKeyId,
+      platform.privateKey,
+    ),
   });
 }
 export const paymentFetch: typeof fetch = async (input, init) => {
@@ -209,29 +200,12 @@ export async function callback(
   originalType = "transaction",
   eventType = "TRANSACTION.SUCCESS",
 ) {
-  const nonce = "abcdefghijkl";
-  const cipher = createCipheriv(
-    "aes-256-gcm",
-    Buffer.from(paymentConfig.apiV3Key),
-    nonce,
-  );
-  cipher.setAAD(Buffer.from(originalType));
-  const ciphertext = Buffer.concat([
-    cipher.update(JSON.stringify(transaction)),
-    cipher.final(),
-    cipher.getAuthTag(),
-  ]).toString("base64");
-  const body = JSON.stringify({
+  const body = encryptedPaymentNotification(
+    transaction,
+    paymentConfig.apiV3Key,
     id,
-    event_type: eventType,
-    resource_type: "encrypt-resource",
-    resource: {
-      algorithm: "AEAD_AES_256_GCM",
-      original_type: originalType,
-      nonce,
-      associated_data: originalType,
-      ciphertext,
-    },
-  });
+    originalType,
+    eventType,
+  );
   return { body, headers: Object.fromEntries(signed(body).headers) };
 }
