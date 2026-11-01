@@ -150,6 +150,16 @@ test("native tab handlers use cached tab navigation and the package supplies its
     config.tabBar.list.map((item: { pagePath: string }) => item.pagePath),
     ["pages/project/index", "pages/book/index", "pages/account/index"],
   );
+  for (const { pagePath } of config.tabBar.list) {
+    const pageConfig = JSON.parse(
+      await readFile(path.join(root, `${pagePath}.json`), "utf8"),
+    );
+    const registry = pageConfig.usingComponents ?? config.usingComponents;
+    assert.ok(
+      registry && typeof registry === "object" && !Array.isArray(registry),
+      `${pagePath} must enable custom components locally or globally for the native custom tab bar`,
+    );
+  }
   for (const ext of ["js", "json", "wxml", "wxss"])
     assert.ok(
       (await readFile(path.join(root, `custom-tab-bar/index.${ext}`))).length,

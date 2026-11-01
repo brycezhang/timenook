@@ -38,6 +38,7 @@
       { "pagePath": "pages/account/index", "text": "我的" }
     ]
   },
+  "usingComponents": {},
   "window": {
     "navigationBarTitleText": "时光里 · 岁月成书",
     "navigationBarBackgroundColor": "#F8F4ED",
