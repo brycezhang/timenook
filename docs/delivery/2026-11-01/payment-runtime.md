@@ -34,7 +34,9 @@
 
 17:31 另经同源 `/api/v1/web` 验证网页内测登录 201、当前会话与本人项目查询 200、退出 204、旧 Cookie 再请求 401。沿用实际网页标记头、Origin 和 CSRF，不输出 Cookie 或账号，不创建项目。结果为 `/tmp/timenook-web-payment-coexistence-20261101.json`。
 
-无资金公网结果保存在操作者本机受限文件 `/tmp/timenook-payment-public-smoke-20261101.json`。通知正确验签、入账与幂等由本轮隔离公开 HTTP 测试验证；公网无效通知拒绝不等同于微信实际到账/退款通知。真实登录下本人订单检查由[原生部署后复测](native-automation.md)单独记录。
+无资金公网结果保存在操作者本机受限文件 `/tmp/timenook-payment-public-smoke-20261101.json`。通知正确验签、入账与幂等由本轮隔离公开 HTTP 测试验证；公网无效通知拒绝不等同于微信实际到账/退款通知。真实登录下本人订单检查已由严格 `--orders-required` 运行 VSplEt 通过：真实微信登录、当前账号、会话恢复、退出旧会话拒绝、同账号重登、参与及本人订单 200（`available=true`、`required=true`），全部会话撤销、本机清除、SDK 断开与项目关闭通过。证据为 `/var/folders/7t/xgv_t04j7k74jfdhdh1p41tr0000gn/T/timenook-native-live-VSplEt/evidence/result.json`，已复制到主工作区受限的 `.probe-local/wechat-engineering-20261101/`。后续原生冷启动失败仍由 [#130](https://github.com/brycezhang/timenook/issues/130) 处理，不将单次成功泛化为工具稳定性通过。
+
+[#129](https://github.com/brycezhang/timenook/issues/129) 的工程验收已齐并关闭；实际资金条件仍归原责任票。
 
 ## 待验收
 
