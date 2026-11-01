@@ -18,6 +18,8 @@
 
 ## 完整原生模拟体验 E2E
 
+2026-11-01：以下为本轮历史结果。当前脚本已改为真实路由、渲染及动画完成后继续，并另有独立真实微信登录模式；最新命令和无人干预运行结果见[自动化说明](../../development-native-automation.md)及[#130 记录](../2026-11-01/native-automation.md)。
+
 命令：先 `TIMENOOK_API_BASE_URL=https://timenookapi.threeminreading.com/api/v1 pnpm build:frontend`，再 `pnpm test:native-e2e`。要求 Mac 官方微信开发者工具已登录并允许 CLI。
 
 脚本复制已构建的小程序到全新临时项目，通过官方 `miniprogram-automator` 操作公开 Page/组件事件和原生路由，截图核对实际渲染；弹窗确认使用测试替身。录音管理器在测试副本加载前替换为合成静音输入，通过本机 HTTP 下载获得原生临时文件，后续使用真实 FileSystem 保存及项目持久化；测试副本单独允许本机下载，没有改动或上传生产包的录音实现/域名校验配置。没有复用或清除用户项目，反复运行不受上次地址、订单或确认影响。每次使用独立自动化端口，等待端口和基础库就绪后连接 SDK，结束时关闭本次测试窗口。
