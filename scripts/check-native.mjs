@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 const compiler =
   process.env.WECHAT_COMPILER_DIR ||
-  "/Applications/wechatwebdevtools.app/Contents/Resources/package.nw/node_modules/wcc-exec";
+  "/Applications/wechatwebdevtools.app/Contents/Resources/app.asar.unpacked/node_modules/wcc-exec";
 if (!fs.existsSync(compiler + "/wcc")) {
   console.error(
     "WeChat compiler not found. Set WECHAT_COMPILER_DIR to the official DevTools wcc-exec directory.",

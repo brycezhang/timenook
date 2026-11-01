@@ -89,7 +89,7 @@
 .live-controls {
   display: flex;
   flex-direction: column;
-  gap: 20rpx;
+  gap: var(--action-gap);
   margin: 32rpx 0;
 }
 .live-controls .btn {

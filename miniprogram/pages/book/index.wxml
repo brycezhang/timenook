@@ -135,7 +135,7 @@
         ></view
       ><view wx:if="{{pending}}" class="note pending-note"
         >还有{{pending}}篇故事待本人确认。确认后，才能制作实体书。</view
-      ><view class="stack section"
+      ><view class="stack action-stack section"
         ><button class="btn" bindtap="manuscript"
           >查看完整书稿
           <image class="icon" src="/assets/icons/book-open-light.svg" /></button
