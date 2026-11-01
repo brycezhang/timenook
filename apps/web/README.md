@@ -6,7 +6,7 @@
 
 从 `/app/` 点击“微信登录”进入当前浏览器独立的内测账号，选择赠礼称呼、勾选说明、确认模拟支付，再填写主人公和书名创建真实内测项目。原有私发登录链接继续可用。重复登录可恢复相同 mock 账号；清除浏览器 Cookie 后会建立新的独立账号。
 
-模拟功能只在 `INTERNAL_ACCEPTANCE_ENABLED=1` 且未配置支付时提供。接口为 `GET /api/v1/web/experience`、`POST /api/v1/web/mock-session` 和 `POST /api/v1/web/mock-purchases`；不创建真实付款或实体书权益。模拟账号凭据仅放在 HttpOnly Cookie；sessionStorage 只暂存无凭据的未完成创建请求，以便刷新和幂等重试。本人用途与版本确认继续独立执行。界面与运行结果见[体验交付](../../docs/delivery/2026-10-30/web-experience.md)。
+模拟功能只在 `INTERNAL_ACCEPTANCE_ENABLED=1` 时提供，可与普通商户订单及通知模块共存；网页会话不能准备真实微信支付，真实销售创建仍受商品准入限制。接口为 `GET /api/v1/web/experience`、`POST /api/v1/web/mock-session` 和 `POST /api/v1/web/mock-purchases`；不创建真实付款或实体书权益。模拟账号凭据仅放在 HttpOnly Cookie；sessionStorage 只暂存无凭据的未完成创建请求，以便刷新和幂等重试。本人用途与版本确认继续独立执行。界面与运行结果见[体验交付](../../docs/delivery/2026-10-30/web-experience.md)。
 
 ## 开发与验证
 

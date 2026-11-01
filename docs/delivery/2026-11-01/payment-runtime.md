@@ -32,6 +32,8 @@
 | `/admin/`、官网 `/`、网页产品 `/app/`                   | 均 200                                  |
 | `/api/v1/web/experience`                                | 200，`mockEnabled=true`                 |
 
+17:31 另经同源 `/api/v1/web` 验证网页内测登录 201、当前会话与本人项目查询 200、退出 204、旧 Cookie 再请求 401。沿用实际网页标记头、Origin 和 CSRF，不输出 Cookie 或账号，不创建项目。结果为 `/tmp/timenook-web-payment-coexistence-20261101.json`。
+
 无资金公网结果保存在操作者本机受限文件 `/tmp/timenook-payment-public-smoke-20261101.json`。通知正确验签、入账与幂等由本轮隔离公开 HTTP 测试验证；公网无效通知拒绝不等同于微信实际到账/退款通知。真实登录下本人订单检查由[原生部署后复测](native-automation.md)单独记录。
 
 ## 待验收
