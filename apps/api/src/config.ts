@@ -142,7 +142,6 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     payments = readOrdinaryMerchantConfig(
       env,
       appId && secret ? { appId, secret } : undefined,
-      environment,
     );
   } catch {
     throw new ConfigurationError(

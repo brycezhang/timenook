@@ -285,11 +285,10 @@ export function validateWechatPayConfig(config: WechatPayConfig) {
     throw new PaymentProtocolError();
 }
 
-/** Real merchant material is read once at startup, never from client input. */
+/** Server material is read once at startup; isolated tests use generated keys and an explicit external transport. */
 export function readOrdinaryMerchantConfig(
   env: NodeJS.ProcessEnv,
   identity: { appId: string; secret: string } | undefined,
-  environment: string,
 ): WechatPayConfig | undefined {
   if (
     !Object.keys(env).some(
@@ -300,7 +299,6 @@ export function readOrdinaryMerchantConfig(
   const field = (name: string) => env[`TIMENOOK_WECHAT_PAY_${name}`] ?? "";
   if (
     field("MODE") !== "ordinary-merchant" ||
-    environment === "test" ||
     !identity ||
     /synthetic|placeholder|your_/i.test(identity.secret)
   )
