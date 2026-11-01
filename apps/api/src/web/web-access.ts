@@ -74,10 +74,7 @@ export class WebAccess implements OnModuleDestroy {
       throw new ForbiddenException();
   }
   mockEnabled() {
-    return (
-      this.config.acceptance?.mode === "internal-acceptance" &&
-      !this.config.payments
-    );
+    return this.config.acceptance?.mode === "internal-acceptance";
   }
   async mockLogin(request: FastifyRequest) {
     if (!this.mockEnabled()) throw new ServiceUnavailableException();

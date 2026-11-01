@@ -144,8 +144,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       !this.config.payments ||
       (this.config.payments.mode === "local-verification"
         ? this.config.environment !== "test"
-        : this.config.payments.mode !== "ordinary-merchant" ||
-          this.config.environment === "test")
+        : this.config.payments.mode !== "ordinary-merchant")
     )
       throw new ForbiddenException();
     return this.config.payments;

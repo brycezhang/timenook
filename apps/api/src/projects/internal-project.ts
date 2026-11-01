@@ -20,7 +20,7 @@ export async function createInternalProject(
     !config.acceptance ||
     !config.web ||
     !config.privacyJournal ||
-    config.payments
+    (config.payments && config.payments.mode !== "ordinary-merchant")
   )
     throw new ServiceUnavailableException();
   if (
