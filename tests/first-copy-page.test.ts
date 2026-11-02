@@ -604,6 +604,7 @@ test("an internal project without payment shows its actual zero payment and deni
   h.respond(0, value);
   await loading;
   assert.equal(h.page.data.paidAmount, "0.00");
+  assert.equal(h.page.data.canPrepareProduction, false);
   assert.equal(h.page.data.canSubmit, false);
   assert.match(h.page.data.blockerLabels.join(" "), /不含实物制作权益/);
   h.page.onUnload();

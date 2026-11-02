@@ -25,6 +25,7 @@ Page({
     regionOptions: [] as { label: string; selected: boolean }[],
     blockerLabels: [] as string[],
     paidAmount: "",
+    canPrepareProduction: false,
     narratorChecked: false,
     initiatorChecked: false,
     narratorEvidence: "",
@@ -123,8 +124,14 @@ Page({
       PROJECT_FROZEN: "项目当前已冻结，请联系服务人员",
       ALREADY_SUBMITTED: "首本已提交，无需再次提交",
     };
+    const canPrepareProduction = !value.blockers.some((code) =>
+      ["PHYSICAL_PRODUCTION_UNAVAILABLE", "PRODUCTION_PDF_UNAPPROVED"].includes(
+        code,
+      ),
+    );
     this.setData({
       context: value,
+      canPrepareProduction,
       paidAmount: (value.payment.paidAmountFen / 100).toFixed(2),
       versionMismatch,
       canSubmit: value.canSubmit && !versionMismatch,
@@ -148,6 +155,7 @@ Page({
       addressDirty: false,
       canConfirmNarrator:
         (value.canConfirmNarrator || !!this.assistedSessionId) &&
+        canPrepareProduction &&
         !versionMismatch,
       narratorChecked: false,
       initiatorChecked: false,
