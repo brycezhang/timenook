@@ -14,6 +14,8 @@ export default defineConfig(({ command }) => {
   }
   return {
     base: "/admin/",
+    // Linked Vben packages must share the app's injection keys and stores.
+    resolve: { dedupe: ["vue", "vue-router", "pinia"] },
     plugins: [vue(), tailwindcss()],
     // The shared workspace contract also serves the CommonJS Nest API.
     optimizeDeps: { include: ["@timenook/contracts"] },
