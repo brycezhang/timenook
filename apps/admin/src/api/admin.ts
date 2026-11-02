@@ -244,6 +244,24 @@ export const catalogApi = {
       )
     ).data;
   },
+  async publish(draft: { id: string; revision: number }, csrf: string) {
+    return (
+      await client.post<ApiResponse<PackageVersion>>(
+        `/catalog/package-drafts/${draft.id}/publish`,
+        { expectedRevision: draft.revision, confirmRealParameters: true },
+        { headers: { "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
+  async publishE2e(csrf: string) {
+    return (
+      await client.post<ApiResponse<PackageVersion>>(
+        "/catalog/e2e-versions",
+        {},
+        { headers: { "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
   async freeze(draft: { id: string; revision: number }, csrf: string) {
     return (
       await client.post<ApiResponse<PackageVersion>>(

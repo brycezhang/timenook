@@ -389,7 +389,8 @@ export class Books implements OnModuleDestroy {
         bleedMm: 0,
         productionReady: false,
         status:
-          admission.source === "internal-acceptance"
+          admission.source === "internal-acceptance" ||
+          admission.snapshot.scope === "paid-e2e"
             ? "internal-acceptance-candidate"
             : "synthetic-unfrozen",
       },
@@ -739,7 +740,9 @@ export class Books implements OnModuleDestroy {
         ? await this.viewIn(tx, row, readable.inputHash, accessExpiresAt)
         : null,
       accessExpiresAt,
-      physicalProduction: admission.source === "paid",
+      physicalProduction:
+        admission.source === "paid" &&
+        admission.snapshot.physicalProduction !== false,
     };
   }
   context(projectId: string, authorization?: string) {
@@ -792,10 +795,14 @@ export class Books implements OnModuleDestroy {
         (role === "initiator" || subject.boundUserId === actor.userId),
       confirmations,
       noticeVersion:
-        admission.source === "internal-acceptance"
-          ? "internal-book-confirmation-v1"
-          : "synthetic-d08-v1",
-      physicalProduction: admission.source === "paid",
+        admission.snapshot.scope === "paid-e2e"
+          ? "paid-e2e-book-confirmation-v1"
+          : admission.source === "internal-acceptance"
+            ? "internal-book-confirmation-v1"
+            : "synthetic-d08-v1",
+      physicalProduction:
+        admission.source === "paid" &&
+        admission.snapshot.physicalProduction !== false,
       accessExpiresAt: actor.accessExpiresAt,
     };
   }

@@ -1,3 +1,5 @@
+import { E2E_NOTICE_VERSION } from "../catalog/e2e-package";
+import { readProjectAdmissionIn } from "../projects/project-admission";
 import { readSessionContextIn } from "../identity/identity-access";
 import {
   Injectable,
@@ -43,7 +45,7 @@ class StoryCareDto {
   @ApiProperty() @IsInt() @Min(1) expectedVersion!: number;
   @ApiProperty() @IsISO8601() expiresAt!: string;
   @ApiProperty()
-  @IsIn(["synthetic-d08-v1", "internal-participation-v1"])
+  @IsIn(["synthetic-d08-v1", "internal-participation-v1", E2E_NOTICE_VERSION])
   noticeVersion!: string;
   @ApiProperty()
   @Matches(/^(?:synthetic|internal):[^\r\n]{3,160}$/)
@@ -66,12 +68,15 @@ export class StoryCare {
     authorization: string | undefined,
     key: string,
   ) {
-    this.stories.validateNotice(body);
     return this.participation.withPlanAccess(
       projectId,
       authorization,
       undefined,
       async (tx, actor) => {
+        this.stories.validateNotice(
+          body,
+          (await readProjectAdmissionIn(tx, projectId)).snapshot,
+        );
         await this.participation.requireMaterialIn(tx, projectId, "activeData");
         if (
           !Number.isFinite(Date.parse(body.expiresAt)) ||
