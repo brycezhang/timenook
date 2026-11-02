@@ -35,6 +35,7 @@ Page({
   },
   projectId: "",
   storyId: "",
+  assistedSessionId: "",
   generation: 0,
   ownerContext: "",
   command: null as { input: string; key: string } | null,
@@ -44,6 +45,7 @@ Page({
     if (dataMode() === "live") {
       this.projectId = q.projectId || "";
       this.storyId = q.storyId || "";
+      this.assistedSessionId = q.assistedSessionId || "";
       this.setData({ live: true });
       return;
     }
@@ -252,7 +254,13 @@ Page({
     this.setData({ busy: true, error: "" });
     try {
       const collection = await sessionClient.request<PhotoCollection>(
-        `/projects/${this.projectId}/interviews/${current.interviewId}/photos`,
+        `/projects/${this.projectId}/interviews/${current.interviewId}/photos${this.assistedSessionId ? "/context" : ""}`,
+        this.assistedSessionId
+          ? {
+              key: paymentKey(),
+              data: { assistedSessionId: this.assistedSessionId },
+            }
+          : undefined,
       );
       if (this.current(generation, context))
         this.setData({

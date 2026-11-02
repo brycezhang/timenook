@@ -768,7 +768,10 @@ Page({
     }
   },
   editLivePhotos() {
-    go("photos", `projectId=${this.projectId}&interviewId=${this.interviewId}`);
+    go(
+      "photos",
+      `projectId=${this.projectId}&interviewId=${this.interviewId}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+    );
   },
   async stopLiveAudio() {
     ++this.audioSequence;

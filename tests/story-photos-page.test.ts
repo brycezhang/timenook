@@ -16,7 +16,7 @@ const login = {
 const compiled = await build({
   stdin: {
     contents:
-      'import "./miniprogram/pages/interview/index"; import "./miniprogram/pages/photos/index";',
+      'import "./miniprogram/pages/interview/index"; import "./miniprogram/pages/story/index"; import "./miniprogram/pages/photos/index";',
     resolveDir: process.cwd(),
     loader: "ts",
   },
@@ -152,6 +152,7 @@ function harness(options: { controlledTimers?: boolean } = {}) {
     page,
     timers,
     interviewPage: pages[0],
+    storyPage: pages[1],
     storage,
     requests,
     uploads,
@@ -218,6 +219,62 @@ async function choose(h: ReturnType<typeof harness>) {
   if (h.requests.length) respond(h.requests.shift(), { allowed: true }, 201);
   await choosing;
 }
+test("a completed assisted story opens photos with its collection session and can add originals without another recording", async () => {
+  const h = harness({ controlledTimers: true }),
+    assistedSessionId = "88888888-8888-4888-8888-888888888888";
+  h.storyPage.onLoad({
+    projectId: project,
+    interviewId: interview,
+    assistedSessionId,
+  });
+  const current = {
+    id: "55555555-5555-4555-8555-555555555555",
+    projectId: project,
+    interviewId: interview,
+    version: 1,
+    task: null,
+    decision: { confirmed: true, allowInBook: true },
+    revision: { paragraphs: [], reviewItems: [], sourceManifest: [] },
+  };
+  const showingStory = h.storyPage.onShow();
+  await tick();
+  respond(h.requests.shift(), {
+    interviewId: interview,
+    cloudSaved: true,
+    clipCount: 1,
+    story: current,
+  });
+  await tick();
+  respond(h.requests.shift(), current);
+  await showingStory;
+  assert.equal(h.storyPage.data.story.decision.confirmed, true);
+  h.storyPage.editLivePhotos();
+  h.storyPage.onHide();
+  const route = new URL(h.navigations[0], "https://example.test");
+  h.page.onLoad(Object.fromEntries(route.searchParams));
+  const showingPhotos = h.page.onShow();
+  await tick();
+  const opening = h.requests.shift();
+  assert.equal(
+    opening.url,
+    `${base}/projects/${project}/interviews/${interview}/photos/context`,
+  );
+  assert.equal(opening.method, "POST");
+  assert.equal(opening.data.assistedSessionId, assistedSessionId);
+  respond(opening, { photos: [], snapshot: null }, 201);
+  await showingPhotos;
+  const choosing = h.page.choose();
+  await tick();
+  const collectionCheck = h.requests.shift();
+  assert.equal(collectionCheck.data.assistedSessionId, assistedSessionId);
+  respond(collectionCheck, { allowed: true }, 201);
+  await choosing;
+  assert.deepEqual(
+    Array.from(h.page.data.photos, (photo: any) => photo.state),
+    ["local", "local"],
+  );
+  h.page.onUnload();
+});
 test("photo page saves each original independently and retries a failed manifest without copying the file again", async () => {
   const h = harness();
   await ready(h);
