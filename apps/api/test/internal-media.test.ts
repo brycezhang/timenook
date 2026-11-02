@@ -246,6 +246,30 @@ const notice = () => ({
   noticeVersion: "internal-participation-v1",
   evidenceRef: `internal:${randomUUID()}`,
 });
+test("controlled internal books publicly registers quality handling while denying anonymous care access", async () => {
+  const id = randomUUID();
+  const admin = await app.inject({
+    method: "GET",
+    url: `/v1/admin/quality/cases/${id}`,
+  });
+  assert.equal(admin.statusCode, 401, admin.body);
+  const actor = await login();
+  const product = await request("GET", `/v1/orders/${id}/quality-care`, actor);
+  assert.equal(product.statusCode, 404, product.body);
+  const invalidGrant = await request(
+    "POST",
+    `/v1/orders/${id}/quality-care/${randomUUID()}/access`,
+    actor,
+    {
+      expectedVersion: 1,
+      scopes: ["evidence"],
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+      consented: true,
+      noticeVersion: "internal-participation-v1",
+    },
+  );
+  assert.equal(invalidGrant.statusCode, 404, invalidGrant.body);
+});
 test("one unpaid Cookie project records, seals, transcribes, confirms its story and produces one PDF confirmed by both participants", async () => {
   const owner = await login(),
     narrator = await login(),

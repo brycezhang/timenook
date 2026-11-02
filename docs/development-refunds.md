@@ -1,12 +1,12 @@
 # 退款申请与原单对账
 
-T27 / [#28](https://github.com/brycezhang/timenook/issues/28) 的隔离本地工程。当前仅沿用 T10 的 `environment=test`、`payments.mode=local-verification` 及显式外部协议替身；没有生产凭据或真实资金入口。D07、真实商户退款能力和双端收退款尚待责任票验收。
+现有 T27 / [#28](https://github.com/brycezhang/timenook/issues/28) 退款用例已接入普通商户和显式隔离合成配置。2026-11-02 的原单真实 1 分退款已核实，准确适用范围见[真实资金运行记录](delivery/2026-11-02/fixed-package-runtime.md)；普通公开售卖政策、其他订单与实际质量赔付不由该结果代替验收。2026-11-02 [#154](https://github.com/brycezhang/timenook/issues/154) 在本地把已有退款处理嵌入订单详情，见[后台工程记录](delivery/2026-11-02/admin/154-engineering.md)，未部署。
 
 ## 公开流程
 
 买方从已付款订单打开「退款申请与进展」，申请原因与说明进入共享客服工单。付款账号仅处理自己的订单钱款，不取得讲述者资料授权。小程序查询实付、已退、处理中预留金额和实际进展；退款与内容删除分开。
 
-客服在「客服工单」打开退款申请，核对原购买快照中的固定 D07 金额、申请窗口、权益后果及核验证据，再批准。金额必须与该情形的原销售政策完全相同，不能临时改价。批准和处理期限只起算一次，立即暂停新投产；请求重放不重置期限。
+客服从订单待处理筛选进入订单详情，打开已有退款申请，核对原购买快照中的固定 D07 金额、申请窗口、权益后果及核验证据，再批准。金额必须与该情形的原销售政策完全相同，不能临时改价。批准和处理期限只起算一次，立即暂停新投产；请求重放不重置期限。
 
 申请资格按服务端收到并持久化的原申请时间与旧政策窗口比较，起点包含、终点不包含；相关使用/投产/交付事实也按原申请时刻判断。及时申请不因客服跨窗口处理而失效。核验时记录原窗口起止，处理期限另从本次核验事实起算；到期只如实显示逾期，不伪造资金终态或释放未知预留，执行和重试均不延长原截止时间。
 
@@ -20,7 +20,7 @@ T27 / [#28](https://github.com/brycezhang/timenook/issues/28) 的隔离本地工
 
 内部用户接口：
 
-- `POST /v1/orders/:orderId/refunds`：`{ reason, evidenceRef }`，携带 `Idempotency-Key`；当前证据格式仅接受 `synthetic:`，真实凭证未开放。
+- `POST /v1/orders/:orderId/refunds`：`{ reason, evidenceRef }`，携带 `Idempotency-Key`；证据引用接受 `internal:` 或隔离合成使用的 `synthetic:`。
 - `GET /v1/orders/:orderId/refunds`：原订单的金额汇总与申请进展，匿名/他人不能查询。
 
 内部运营接口均通过既有飞书管理会话、`care:write`、CSRF 和审计：
@@ -31,7 +31,7 @@ T27 / [#28](https://github.com/brycezhang/timenook/issues/28) 的隔离本地工
 - `POST /v1/admin/refunds/:id/submit`、`/reconcile`：空对象，复用同一退款单。
 - `POST /v1/admin/refunds/:id/reject`：只有尚未提交供应商的请求才可凭证据结束；不能人工解除未知资金的预留。
 
-通知为内部 `POST /v1/webhooks/wechat-pay/refunds`，公网登记路径为 `/timenook/v1/webhooks/wechat-pay/refunds`；退款通知 URL 沿用已核验支付配置的同一域名，只替换确定路径。T29 负责真实代理与平台验收。
+通知为内部 `POST /v1/webhooks/wechat-pay/refunds`，公网登记路径为 `/api/v1/webhooks/wechat-pay/refunds`；退款通知 URL 沿用已核验支付配置的同一域名，只替换确定路径。实际代理与平台结果见上述运行记录。
 
 T28 可在持有真实买方会话锁的服务端组合中复用 `Refunds.requestIn(tx, orderId, buyerId, key, body)`；审批使用 `approveIn`，后续提交/查询仍走同一执行用例。统一锁顺序为 Session → PaymentOrder → Project；调用者不能先持项目锁再反向申请订单锁。`productionFrozen`、`creationState` 与 `firstCopyCancellationRequired` 是独立于不可变销售快照的商业执行事实。
 

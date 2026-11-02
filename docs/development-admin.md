@@ -23,6 +23,8 @@
 
 用户查询与项目服务的路由、备注和无订单完整导出边界见 [#152 工程记录](delivery/2026-11-02/admin/152-engineering.md)。
 
+订单已有退款与质量申请在 `/admin/orders/:id?case=:caseId` 内处理，`caseId` 是共享申请编号，保留原列表查询及生产单返回位置。订单查询使用 `orders:read`，处理使用 `care:write`，原单重印另需 `fulfillment:write`。缺少原销售质量政策时明确不可批准；金额和资金结果仍由原退款用例处理，见 [#154 工程记录](delivery/2026-11-02/admin/154-engineering.md)。
+
 权限以[共享契约](../packages/contracts/src/admin.ts)为准。零业务权限账号可以登录，但不能执行受限操作。私人内容仍需适用工单、本人限时授权和版本核验；管理员登录或付款不代替本人授权。
 
 ## 配置与绑定

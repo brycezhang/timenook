@@ -7,6 +7,7 @@ export async function qualityAdmin() {
     "fulfillment:write",
     "care:write",
     "audit:read",
+    "orders:read",
   ]);
 }
 export function adminRequest(
