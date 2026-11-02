@@ -35,6 +35,7 @@ Page({
   },
   projectId: "",
   storyId: "",
+  assistedSessionId: "",
   generation: 0,
   ownerContext: "",
   command: null as { input: string; key: string } | null,
@@ -44,6 +45,7 @@ Page({
     if (dataMode() === "live") {
       this.projectId = q.projectId || "";
       this.storyId = q.storyId || "";
+      this.assistedSessionId = q.assistedSessionId || "";
       this.setData({ live: true });
       return;
     }

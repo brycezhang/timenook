@@ -1227,6 +1227,57 @@ test("collection-only assistance can recover only its current photo intents with
   }
 });
 
+test("collection context hides sealed material history until the initiator has separate sharing permission", async () => {
+  const p = await interview(),
+    bytes = await sharp({
+      create: { width: 40, height: 30, channels: 3, background: "white" },
+    })
+      .png()
+      .toBuffer(),
+    photo = await reserve(p, bytes);
+  await upload(p, photo, bytes);
+  data(
+    await request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
+  );
+  const current = await state(p, p.buyer.token),
+    assisted = data(
+      await request(
+        "POST",
+        `/v1/projects/${p.projectId}/assisted-sessions`,
+        p.buyer.token,
+        {
+          ...notice(),
+          purpose: "collection",
+          granted: true,
+          expectedBindingVersion: current.bindingVersion,
+          expectedAccessEpoch: current.accessEpoch,
+        },
+      ),
+    );
+  const context = data(
+    await request("POST", `${p.base}/context`, p.buyer.token, {
+      assistedSessionId: assisted.id,
+    }),
+  );
+  assert.deepEqual(context.photos, []);
+  assert.equal(context.snapshot, null);
+  assert.equal((await request("GET", p.base, p.buyer.token)).statusCode, 403);
+  data((await choose(p, p.narrator.token, "sharing", true)).response);
+  const shared = data(await request("GET", p.base, p.buyer.token), 200);
+  assert.equal(shared.snapshot.entries[0].photoId, photo.id);
+  assert.ok(
+    shared.snapshot.entries[0].assets.some((a: any) => a.kind === "preview"),
+  );
+  assert.equal(
+    data(
+      await request("POST", `${p.base}/context`, p.buyer.token, {
+        assistedSessionId: assisted.id,
+      }),
+    ).snapshot,
+    null,
+  );
+});
+
 test("a lost material-edit response replays its exact immutable result even after later revisions", async () => {
   const p = await interview(),
     bytes = await sharp({

@@ -16,7 +16,7 @@ const login = {
 const compiled = await build({
   stdin: {
     contents:
-      'import "./miniprogram/pages/interview/index"; import "./miniprogram/pages/photos/index";',
+      'import "./miniprogram/pages/interview/index"; import "./miniprogram/pages/story/index"; import "./miniprogram/pages/photos/index";',
     resolveDir: process.cwd(),
     loader: "ts",
   },
@@ -152,6 +152,7 @@ function harness(options: { controlledTimers?: boolean } = {}) {
     page,
     timers,
     interviewPage: pages[0],
+    storyPage: pages[1],
     storage,
     requests,
     uploads,
@@ -218,6 +219,70 @@ async function choose(h: ReturnType<typeof harness>) {
   if (h.requests.length) respond(h.requests.shift(), { allowed: true }, 201);
   await choosing;
 }
+test("a completed assisted story opens photos with its collection session and can add originals without another recording", async () => {
+  const h = harness({ controlledTimers: true }),
+    assistedSessionId = "88888888-8888-4888-8888-888888888888";
+  h.storyPage.onLoad({
+    projectId: project,
+    interviewId: interview,
+    assistedSessionId,
+  });
+  const current = {
+    id: "55555555-5555-4555-8555-555555555555",
+    projectId: project,
+    interviewId: interview,
+    version: 1,
+    task: null,
+    decision: { confirmed: true, allowInBook: true },
+    revision: { paragraphs: [], reviewItems: [], sourceManifest: [] },
+  };
+  const showingStory = h.storyPage.onShow();
+  await tick();
+  respond(h.requests.shift(), {
+    interviewId: interview,
+    cloudSaved: true,
+    clipCount: 1,
+    story: current,
+  });
+  await tick();
+  respond(h.requests.shift(), current);
+  await showingStory;
+  assert.equal(h.storyPage.data.story.decision.confirmed, true);
+  h.storyPage.editLivePhotos();
+  h.storyPage.onHide();
+  const route = new URL(h.navigations[0], "https://example.test");
+  h.page.onLoad(Object.fromEntries(route.searchParams));
+  const showingPhotos = h.page.onShow();
+  await tick();
+  const opening = h.requests.shift();
+  assert.equal(
+    opening.url,
+    `${base}/projects/${project}/interviews/${interview}/photos/context`,
+  );
+  assert.equal(opening.method, "POST");
+  assert.equal(opening.data.assistedSessionId, assistedSessionId);
+  respond(opening, { photos: [], snapshot: null }, 201);
+  await tick();
+  const shared = h.requests.shift();
+  assert.equal(
+    shared?.url,
+    `${base}/projects/${project}/interviews/${interview}/photos`,
+  );
+  assert.equal(shared.method, "GET");
+  respond(shared, undefined, 403);
+  await showingPhotos;
+  const choosing = h.page.choose();
+  await tick();
+  const collectionCheck = h.requests.shift();
+  assert.equal(collectionCheck.data.assistedSessionId, assistedSessionId);
+  respond(collectionCheck, { allowed: true }, 201);
+  await choosing;
+  assert.deepEqual(
+    Array.from(h.page.data.photos, (photo: any) => photo.state),
+    ["local", "local"],
+  );
+  h.page.onUnload();
+});
 test("photo page saves each original independently and retries a failed manifest without copying the file again", async () => {
   const h = harness();
   await ready(h);
@@ -261,6 +326,7 @@ async function uploading(
   id: string,
   fail = false,
   snapshot: any = { id: "material", revision: 1, entries: [] },
+  canRead = true,
 ) {
   const work = h.page.upload(event(local.clientPhotoId));
   await tick();
@@ -283,8 +349,13 @@ async function uploading(
   await tick();
   respond(h.requests.shift(), remote(local, id, "sealed"), fail ? 422 : 201);
   await tick();
-  if (!fail && h.requests.length)
-    respond(h.requests.shift(), { photos: [], snapshot });
+  if (!fail && h.requests.length) {
+    if (h.requests[0].url.endsWith("/context")) {
+      respond(h.requests.shift(), { photos: [], snapshot: null }, 201);
+      await tick();
+    }
+    respond(h.requests.shift(), { photos: [], snapshot }, canRead ? 200 : 403);
+  }
   await work;
 }
 test("each photo upload fails and retries independently while delayed completion stays in its original partition", async () => {
@@ -1113,6 +1184,9 @@ test("assisted collection-only photos keep a valid page through remote checks an
     },
     201,
   );
+  await tick();
+  assert.match(h.requests[0].url, /\/photos$/);
+  respond(h.requests.shift(), undefined, 403);
   await show;
   try {
     const check = h.timers
@@ -1131,8 +1205,17 @@ test("assisted collection-only photos keep a valid page through remote checks an
     assert.ok(h.page.owner, "no sharing permission is needed for collection");
     await choose(h);
     const first = h.page.data.photos[0];
-    await uploading(h, first, "55555555-5555-4555-8555-555555555555");
+    await uploading(
+      h,
+      first,
+      "55555555-5555-4555-8555-555555555555",
+      false,
+      null,
+      false,
+    );
     assert.equal(h.page.data.photos[0].state, "sealed");
+    assert.equal(h.page.data.snapshot, null);
+    assert.equal(h.downloads.length, 0);
     const denied = h.timers
       .filter((timer) => !timer.cleared)
       .slice(-1)[0]
@@ -1143,6 +1226,87 @@ test("assisted collection-only photos keep a valid page through remote checks an
     assert.equal(h.page.owner, null);
     assert.equal(h.page.data.photos.length, 0);
     assert.match(h.page.data.status, /授权已变化/);
+  } finally {
+    h.page.onHide();
+  }
+});
+
+test("assisted shared photos refresh sealed references for captions and private preview, then clear when sharing expires", async () => {
+  const h = harness({ controlledTimers: true }),
+    photoId = "55555555-5555-4555-8555-555555555555",
+    prior = {
+      photoId: "77777777-7777-4777-8777-777777777777",
+      caption: "原有照片说明",
+      assets: [],
+    },
+    snapshot = {
+      id: "sealed-material",
+      revision: 2,
+      entries: [prior, { ...reviewMaterial().entries[0], caption: "" }],
+    };
+  h.page.onLoad({
+    projectId: project,
+    interviewId: interview,
+    assistedSessionId: "88888888-8888-4888-8888-888888888888",
+  });
+  const show = h.page.onShow();
+  await tick();
+  respond(h.requests.shift(), { photos: [], snapshot: null }, 201);
+  await tick();
+  assert.match(h.requests[0].url, /\/photos$/);
+  respond(h.requests.shift(), {
+    photos: [],
+    snapshot: { id: "prior-material", revision: 1, entries: [prior] },
+  });
+  await show;
+  try {
+    await choose(h);
+    await uploading(h, h.page.data.photos[0], photoId, false, snapshot);
+    assert.equal(h.page.data.snapshot.id, snapshot.id);
+    h.page.caption({
+      currentTarget: { dataset: { id: photoId } },
+      detail: { value: "新照片的说明" },
+    });
+    const saving = h.page.saveCaption(event(photoId));
+    const command = h.requests.shift();
+    assert.equal(command.data.expectedRevision, 2);
+    assert.equal(command.data.entries[0].caption, "原有照片说明");
+    assert.equal(command.data.entries[1].caption, "新照片的说明");
+    respond(
+      command,
+      {
+        ...snapshot,
+        id: "caption-material",
+        revision: 3,
+        entries: [prior, { ...snapshot.entries[1], caption: "新照片的说明" }],
+      },
+      201,
+    );
+    await saving;
+    assert.equal(h.page.data.hasDraft, false);
+    const previewing = h.page.preview(event(photoId));
+    await tick();
+    h.downloads
+      .shift()
+      .success({ statusCode: 200, tempFilePath: "shared-preview" });
+    await previewing;
+    assert.equal(h.page.data.previewPath, "shared-preview");
+    const check = h.timers
+      .filter((timer) => !timer.cleared)
+      .slice(-1)[0]
+      .callback();
+    await tick();
+    respond(h.requests.shift(), { allowed: true }, 201);
+    await tick();
+    assert.match(h.requests[0].url, /\/participation$/);
+    respond(h.requests.shift(), { canRead: false });
+    await check;
+    assert.equal(h.page.data.snapshot, null);
+    assert.equal(h.page.data.previewPath, "");
+    assert.equal(h.page.owner, null);
+    await tick();
+    assert.ok(h.removed.includes("shared-preview"));
+    assert.ok(h.saved.every((path) => !h.removed.includes(path)));
   } finally {
     h.page.onHide();
   }

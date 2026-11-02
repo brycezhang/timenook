@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { computed, ref, onMounted, onUnmounted } from "vue";
 import { Button, Alert, Input, FormItem } from "antdv-next";
 import type { RefundView } from "@timenook/contracts";
 import { REFUND_REASON_LABELS, REFUND_STATE_LABELS } from "@timenook/contracts";
@@ -18,6 +18,11 @@ const view = ref<RefundView | null>(null),
   error = ref(""),
   evidence = ref(""),
   failureAt = ref("");
+const hasEvidence = computed(
+  () =>
+    evidence.value.startsWith("internal:") ||
+    evidence.value.startsWith("synthetic:"),
+);
 let active = true,
   generation = 0,
   intent: { input: string; key: string } | null = null;
@@ -147,7 +152,7 @@ onMounted(refresh);
         ><Input
           v-model:value="evidence"
           aria-label="退款核验证据"
-          placeholder="synthetic:核验记录引用"
+          placeholder="internal:核验记录引用（合成测试用 synthetic:）"
           :disabled="busy"
       /></FormItem>
       <label v-if="view.reason === 'platformUnableDeliver'"
@@ -160,20 +165,20 @@ onMounted(refresh);
       <Button
         v-if="view.state === 'requested'"
         type="primary"
-        :disabled="busy || !view.rule || !evidence.startsWith('synthetic:')"
+        :disabled="busy || !view.rule || !hasEvidence"
         @click="command('approve')"
         >按购买政策批准退款</Button
       >
       <Button
         v-if="view.state === 'requested' || view.state === 'approved'"
-        :disabled="busy || !evidence.startsWith('synthetic:')"
+        :disabled="busy || !hasEvidence"
         @click="command('reject')"
         >结束尚未执行的申请</Button
       >
       <div v-if="view.productionReviewRequired">
         <p>原交接结果须先在生产与物流中核实，未知结果不能执行退款。</p>
         <Button
-          :disabled="busy || !evidence.startsWith('synthetic:')"
+          :disabled="busy || !hasEvidence"
           @click="command('production-review')"
           >记录原生产核验结果</Button
         >

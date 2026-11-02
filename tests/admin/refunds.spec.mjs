@@ -318,10 +318,34 @@ test("buyer requests a refund and the shared support case approves, executes and
   await expect(admin.getByLabel("退款核验证据", { exact: true })).toBeVisible({
     timeout: 5000,
   });
-  await admin
-    .getByLabel("退款核验证据", { exact: true })
-    .fill("synthetic:policy-and-buyer-verified");
+  const evidence = admin.getByLabel("退款核验证据", { exact: true });
+  const approve = admin.getByRole("button", {
+    name: "按购买政策批准退款",
+    exact: true,
+  });
+  const reject = admin.getByRole("button", {
+    name: "结束尚未执行的申请",
+    exact: true,
+  });
+  await expect(approve).toBeDisabled();
+  await evidence.fill("unverified:policy");
+  await expect(approve).toBeDisabled();
+  await expect(reject).toBeDisabled();
+  await evidence.fill("synthetic:policy-and-buyer-verified");
+  await expect(approve).toBeEnabled();
+  await expect(reject).toBeEnabled();
+  await evidence.fill("internal:policy-and-buyer-verified");
+  await expect(approve).toBeEnabled();
+  await expect(reject).toBeEnabled();
+  const approvalRequest = admin.waitForRequest(
+    (request) =>
+      request.method() === "POST" && request.url().endsWith("/approve"),
+  );
   await command(admin, "按购买政策批准退款", "/approve");
+  expect((await approvalRequest).postDataJSON()).toEqual({
+    amountFen: 99900,
+    evidenceRef: "internal:policy-and-buyer-verified",
+  });
   await expect(
     admin.getByText("尚未参与 · 已批准，待执行", { exact: true }),
   ).toBeVisible();
