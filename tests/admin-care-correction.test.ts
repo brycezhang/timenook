@@ -42,7 +42,14 @@ function harness() {
     ref: (value: unknown) => ({ value }),
     onMounted() {},
     onUnmounted: (fn: () => void) => unmount.push(fn),
-    defineProps: () => ({ csrf: "synthetic-csrf" }),
+    defineProps: () => ({
+      csrf: "synthetic-csrf",
+      project: {
+        id: "synthetic-project",
+        bindingVersion: 1,
+        requests: [],
+      },
+    }),
     defineEmits: () => (event: string) => emitted.push(event),
     careApi: {
       story: () => new Promise((resolve) => loads.push({ resolve })),

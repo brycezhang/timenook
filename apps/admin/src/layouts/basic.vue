@@ -1,17 +1,26 @@
 <script setup lang="ts">
 import { BasicLayout } from "@vben/layouts";
+import type { AdminPermission } from "@timenook/contracts";
 import { Alert, Button } from "antdv-next";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { adminApi } from "../api/admin";
 import {
   clearPrivateState,
+  can,
   refreshSession,
   session,
   sessionError,
 } from "../session";
-import { ref } from "vue";
-const router = useRouter(),
+import { computed, ref } from "vue";
+const route = useRoute(),
+  router = useRouter(),
   busy = ref(false);
+const canRenderProtected = computed(() => {
+  const permission = route.meta.permission as AdminPermission | undefined;
+  return (
+    session.value?.authenticated === true && (!permission || can(permission))
+  );
+});
 async function logout() {
   if (busy.value) return;
   busy.value = true;
@@ -29,7 +38,7 @@ async function logout() {
 }
 </script>
 <template>
-  <BasicLayout @clear-preferences-and-logout="logout">
+  <BasicLayout v-if="canRenderProtected" @clear-preferences-and-logout="logout">
     <template #logo-text><span class="font-semibold">时光里</span></template>
     <template #user-dropdown
       ><div class="operator-actions">

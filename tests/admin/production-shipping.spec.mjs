@@ -202,16 +202,16 @@ async function openMini(
   await expect(page).toHaveTitle("时光里 · 岁月成书");
   return page;
 }
-async function openAdmin(browser) {
+async function openAdmin(browser, headers = adminHeaders) {
   const context = await browser.newContext({
     ignoreHTTPSErrors: true,
     viewport: { width: 1280, height: 900 },
   });
-  const split = adminHeaders.cookie.indexOf("=");
+  const split = headers.cookie.indexOf("=");
   await context.addCookies([
     {
-      name: adminHeaders.cookie.slice(0, split),
-      value: adminHeaders.cookie.slice(split + 1),
+      name: headers.cookie.slice(0, split),
+      value: headers.cookie.slice(split + 1),
       domain: "localhost",
       path: "/api/v1/admin",
       secure: true,
@@ -263,6 +263,147 @@ async function fillDate(page, label, date) {
       : value,
   );
 }
+
+test("logout unmounts private production details while session refresh and late materials are pending", async ({
+  browser,
+}) => {
+  const previous = process.cwd();
+  let target;
+  try {
+    process.chdir(resolve("apps/api"));
+    target = await apiRequire(
+      "./dist-test/test/first-copy-fixture.js",
+    ).readyReservedFirstCopy();
+  } finally {
+    process.chdir(previous);
+  }
+  const { createFeishuAccount, authenticateFeishu } = apiRequire(
+    "./dist-test/test/admin-feishu-fixture.js",
+  );
+  const account = createFeishuAccount(fixture.config, ["fulfillment:write"]);
+  const login = async () => {
+    const auth = await authenticateFeishu(fixture.config, fixture.app, account);
+    return {
+      cookie: auth.cookie,
+      origin: fixture.config.admin.origin,
+      "x-csrf-token": auth.csrf,
+    };
+  };
+  let headers = await login();
+  const base = `/v1/admin/fulfillment/${target.order.id}`;
+  const created = fixture.data(
+    await fixture.app.inject({
+      method: "POST",
+      url: `${base}/attempts`,
+      headers: { ...headers, "idempotency-key": randomUUID() },
+      payload: {
+        ...target.binding,
+        supplierRef: "record:synthetic-provider",
+        dueAt: new Date(Date.now() + 86400000).toISOString(),
+      },
+    }),
+  );
+  fixture.data(
+    await fixture.request(
+      "POST",
+      `/v1/projects/${target.projectId}/fulfillment/grants`,
+      target.narrator.token,
+      {
+        ...target.binding,
+        attemptId: created.current.id,
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:logout materials regression grant",
+      },
+    ),
+  );
+  for (const lateRead of [false, true]) {
+    await test.step(
+      lateRead ? "late material read" : "already displayed address",
+      async () => {
+        if (lateRead) headers = await login();
+        const admin = await openAdmin(browser, headers);
+        let releaseSession, releaseMaterials;
+        const sessionGate = new Promise((done) => {
+          releaseSession = done;
+        });
+        const materialsGate = new Promise((done) => {
+          releaseMaterials = done;
+        });
+        try {
+          await admin.goto(
+            `${adminOrigin}/admin/production/${target.order.id}`,
+          );
+          await admin
+            .getByRole("button", { name: "查看限时生产资料", exact: true })
+            .click();
+          await expect(
+            admin.getByText("合成收件人", { exact: false }).first(),
+          ).toBeVisible();
+          let sessionStarted;
+          const sessionPending = new Promise((done) => {
+            sessionStarted = done;
+          });
+          await admin.route("**/api/v1/admin/session", async (route) => {
+            const response = await route.fetch();
+            expect((await response.json()).data.authenticated).toBe(false);
+            sessionStarted();
+            await sessionGate;
+            await route.fulfill({ response });
+          });
+          let materialsPending;
+          if (lateRead) {
+            let materialsStarted;
+            materialsPending = new Promise((done) => {
+              materialsStarted = done;
+            });
+            await admin.route(
+              `**/api/v1/admin/fulfillment/${target.order.id}/attempts/${created.current.id}/materials`,
+              async (route) => {
+                const response = await route.fetch();
+                expect(response.status()).toBe(200);
+                materialsStarted();
+                await materialsGate;
+                await route.fulfill({ response });
+              },
+            );
+            await admin
+              .getByRole("button", { name: "查看限时生产资料", exact: true })
+              .click();
+            await materialsPending;
+          }
+          await admin
+            .getByRole("button", { name: "退出登录", exact: true })
+            .click();
+          await sessionPending;
+          await expect(admin.locator(".fulfillment-page")).toHaveCount(0);
+          await expect(
+            admin.getByText("合成收件人", { exact: false }),
+          ).toHaveCount(0);
+          if (lateRead) {
+            const response = admin.waitForResponse((value) =>
+              value.url().endsWith(`/attempts/${created.current.id}/materials`),
+            );
+            releaseMaterials();
+            await response;
+            await expect(admin.locator(".fulfillment-page")).toHaveCount(0);
+            await expect(
+              admin.getByText("合成地址一号", { exact: false }),
+            ).toHaveCount(0);
+          }
+          releaseSession();
+          await expect(
+            admin.getByRole("button", { name: "飞书登录", exact: true }),
+          ).toBeVisible();
+        } finally {
+          releaseMaterials();
+          releaseSession();
+          await admin.context().close();
+        }
+      },
+    );
+  }
+});
 
 test("operator hands off the authorized exact PDF, records supplier acceptance and shipping, and user sees the unique delivery", async ({
   browser,
