@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAdminTime } from "../utils/time";
 import { ref, watch, onBeforeUnmount } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Page } from "@vben/common-ui";
@@ -19,7 +20,7 @@ const columns = [
   { title: "账号 / 讲述者", key: "identity", width: 380 },
   { title: "类型", key: "kind", width: 180 },
   { title: "服务事项", key: "pending", width: 180 },
-  { title: "记录时间", dataIndex: "createdAt", width: 220 },
+  { title: "记录时间", key: "createdAt", width: 220 },
 ];
 async function load() {
   const token = ++serial,
@@ -147,6 +148,9 @@ onBeforeUnmount(() => {
             </div> </template
           ><template v-else-if="column.key === 'kind'">{{
             record.kind === "account" ? "产品账号" : "无账号讲述者"
+          }}</template>
+          <template v-else-if="column.key === 'createdAt'">{{
+            formatAdminTime(record.createdAt)
           }}</template>
           <template v-else-if="column.key === 'pending'"
             ><Tag v-if="record.pending" color="orange">待处理服务</Tag
