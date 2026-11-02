@@ -412,6 +412,19 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
         await tx.paymentCommand.create({
           data: { orderId: id, action: "close", key, requestHash: hash(body) },
         });
+      const current = await tx.paymentOrder.findUniqueOrThrow({
+        where: { id },
+      });
+      const submission = await tx.paymentSubmission.findUnique({
+        where: { orderId: id },
+      });
+      // prepare reserves a submission under this same order lock before I/O.
+      // Only an order that has never been submitted can be closed locally.
+      if (current.state === "pending" && !submission)
+        await tx.paymentOrder.update({
+          where: { id },
+          data: { state: "closed" },
+        });
     });
     await this.refresh(order);
     const current = await this.owned(authorization, id);
