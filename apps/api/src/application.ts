@@ -107,6 +107,7 @@ import cookie from "@fastify/cookie";
 import { AdminAccess } from "./admin/admin-access";
 import { ADMIN_FEISHU_FETCH } from "./admin/feishu";
 import { AdminController } from "./admin/admin-controller";
+import { AdminOrdersController } from "./admin/admin-orders-controller";
 import { randomUUID } from "node:crypto";
 import {
   Controller,
@@ -185,6 +186,7 @@ class HealthController {
     HealthController,
     IdentityController,
     AdminController,
+    AdminOrdersController,
     CatalogController,
     AdminCatalogController,
   ],

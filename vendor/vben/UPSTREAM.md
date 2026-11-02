@@ -26,3 +26,19 @@ CSS also requires the upstream @vben/tailwind-config package (an undeclared desi
 Compatibility changes: restored type-only dev dependencies needed when consuming source; made the shadcn CSS theme dependency explicit; removed one stale `@ts-expect-error` in layout-content.vue (Vue 3.5/vue-tsc 3.2 reports it unused). `apps/admin/src/route-meta.d.ts` retains only the route metadata augmentation from `packages/types/global.d.ts`, excluding reference app runtime configuration.
 
 The upstream menu helper now uses a redirect only when it is a string; Vue Router also permits redirect objects/functions, which cannot be a menu path. This narrows the original fallback and fixes source typechecking (the T07 app has no dynamic menu routes).
+
+#151 includes the source dependency closure of `@vben/layouts`, `@vben/stores` and `@vben/common-ui` from the same reference. Application state uses a plain Pinia instance (no persistence plugin) so no identities, permissions, credentials or private page data enter localStorage. Source tests and package tooling are omitted.
+
+| @vben/layouts | packages/effects/layouts |
+| @vben/stores | packages/stores |
+| @vben/common-ui | packages/effects/common-ui |
+| @vben-core/form-ui | packages/@core/ui-kit/form-ui |
+| @vben-core/menu-ui | packages/@core/ui-kit/menu-ui |
+| @vben-core/popup-ui | packages/@core/ui-kit/popup-ui |
+| @vben-core/tabs-ui | packages/@core/ui-kit/tabs-ui |
+| @vben/constants | packages/constants |
+| @vben/hooks | packages/effects/hooks |
+| @vben/icons | packages/icons |
+| @vben/types | packages/types |
+
+Source-consumption compatibility: removed unused ts-expect-error comments reported by vue-tsc 3.2 in form/popup/tabs; icon-picker pending-request map now marks absent entries optional. Retained the hooks-required global type-only export and json-bigint declaration dependency.
