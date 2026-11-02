@@ -515,10 +515,10 @@ test("mini-program invitation and separate choices feed the shared care form, wh
   watch(page);
   await feishuLogin(page, account);
   await expect(
-    page.getByRole("button", { name: "客服工单", exact: true }),
-  ).toBeVisible({ timeout: 5000 });
+    page.getByRole("link", { name: "用户管理", exact: true }).first(),
+  ).toBeVisible();
   adminCookies = await page.context().cookies();
-  await page.getByRole("button", { name: "客服工单", exact: true }).click();
+  await page.goto(`./users/projects/${projectId}`);
   await page
     .getByRole("button", { name: `查看 ${care.id}`, exact: true })
     .click();
@@ -811,9 +811,10 @@ test("assisted subject choices and Care manual intake preserve real actors, with
     await page.goto("./");
     await feishuLogin(page, account);
   }
-  await page.getByRole("button", { name: "客服工单", exact: true }).click();
-  await expect(page.getByLabel("代录项目编号")).toBeVisible();
-  await page.getByLabel("代录项目编号").fill(assistedProjectId);
+  await page.goto(`./users/projects/${assistedProjectId}`);
+  await expect(
+    page.getByRole("heading", { name: "项目详情", exact: true }),
+  ).toBeVisible();
   await page.getByLabel("代录申请类型").selectOption("withdraw");
   await page.getByRole("button", { name: "代录本人申请", exact: true }).click();
   await expect(

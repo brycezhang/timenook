@@ -36,10 +36,15 @@ const PATH = "/api/v1/admin";
 const FLOW_COOKIE = "__Secure-timenook_oauth";
 const CALLBACK_PATH = `${PATH}/feishu/callback`;
 const ROUTE_ACTIONS: Record<string, string> = {
+  "GET /v1/admin/users": "users.list",
+  "GET /v1/admin/users/:id": "users.read",
+  "GET /v1/admin/users/projects/:projectId": "users.project",
+  "POST /v1/admin/users/:id/notes": "users.note",
   "GET /v1/admin/orders": "orders.list",
   "GET /v1/admin/orders/:id": "orders.read",
   "POST /v1/admin/orders/:id/notes": "orders.note",
-  "POST /v1/admin/care-requests/:caseId/export/access-verification": "care.export.access-verification",
+  "POST /v1/admin/care-requests/:caseId/export/access-verification":
+    "care.export.access-verification",
   "POST /v1/admin/quality/cases/:caseId/review": "quality.review",
   "POST /v1/admin/quality/cases/:caseId/reprints": "quality.reprint",
   "GET /v1/admin/quality/cases/:caseId": "quality.read",

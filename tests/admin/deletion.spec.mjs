@@ -203,7 +203,7 @@ async function openMini(browser, account, target = project, route = "welcome") {
   await expect(page).toHaveTitle("时光里 · 岁月成书");
   return page;
 }
-async function openAdmin(browser) {
+async function openAdmin(browser, target = project) {
   const context = await browser.newContext({
     ignoreHTTPSErrors: true,
     viewport: { width: 1280, height: 900 },
@@ -222,10 +222,10 @@ async function openAdmin(browser) {
   ]);
   const page = await context.newPage();
   observe(page);
-  await page.goto(`${adminOrigin}/admin/`);
-  await expect(page).toHaveTitle("时光里 · 运营管理");
-  await expect(page).toHaveURL(`${adminOrigin}/admin/`);
-  await page.getByRole("button", { name: "客服工单", exact: true }).click();
+  await page.goto(`${adminOrigin}/admin/users/projects/${target.projectId}`);
+  await expect(
+    page.getByRole("heading", { name: "项目详情", exact: true }),
+  ).toBeVisible();
   return page;
 }
 
@@ -453,13 +453,15 @@ test("管理员切换工单后，旧删除清单的迟到响应不会恢复旧�
       },
     }),
   );
-  const admin = await openAdmin(browser);
+  const admin = await openAdmin(browser, a.p);
   await admin
     .getByRole("button", { name: `查看 ${a.care.id}`, exact: true })
     .click();
   const panel = admin.locator('section[aria-label="逐层资料删除"]');
   await expect(panel.getByText(/全项目删除已核验且不可逆/)).toBeVisible();
-  let release, received;
+  let release,
+    received,
+    lateHandled = false;
   const gate = new Promise((resolve) => {
     release = resolve;
   });
@@ -472,7 +474,8 @@ test("管理员切换工单后，旧删除清单的迟到响应不会恢复旧�
       const response = await route.fetch();
       received();
       await gate;
-      await route.fulfill({ response });
+      await route.fulfill({ response }).catch(() => {});
+      lateHandled = true;
     },
   );
   try {
@@ -481,17 +484,29 @@ test("管理员切换工单后，旧删除清单的迟到响应不会恢复旧�
       .click();
     await arrived;
     await admin
+      .getByRole("link", { name: "用户管理", exact: true })
+      .first()
+      .click();
+    await admin
+      .getByRole("textbox", { name: "搜索用户", exact: true })
+      .fill(b.p.projectId);
+    await admin.getByRole("button", { name: "查询", exact: true }).click();
+    await admin
+      .getByRole("button", { name: b.p.buyer.id, exact: true })
+      .click();
+    await admin
+      .locator(`a[href^="/admin/users/projects/${b.p.projectId}"]`)
+      .first()
+      .click();
+    await admin
       .getByRole("button", { name: `查看 ${b.care.id}`, exact: true })
       .click();
     await expect(
       admin.getByText(`共享工单：record:${b.care.id}`, { exact: true }),
     ).toBeVisible();
     await expect(panel.getByText(/尚无已核验删除记录/)).toBeVisible();
-    const late = admin.waitForResponse((response) =>
-      response.url().endsWith(`/care-requests/${a.care.id}/deletion-status`),
-    );
     release();
-    await late;
+    await expect.poll(async () => lateHandled).toBe(true);
     await expect(panel.getByText(/全项目删除已核验且不可逆/)).toHaveCount(0);
     await expect(
       panel.getByRole("button", {

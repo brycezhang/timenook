@@ -324,12 +324,18 @@ export const careApi = {
       )
     ).data;
   },
-  async verify(care: CareCase, evidenceRef: string, key: string, csrf: string) {
+  async verify(
+    care: CareCase,
+    evidenceRef: string,
+    key: string,
+    csrf: string,
+    noticeVersion = "synthetic-d08-v1",
+  ) {
     return (
       await client.post<ApiResponse<{ state: string }>>(
         `/care-requests/${care.id}/verify`,
         {
-          noticeVersion: "synthetic-d08-v1",
+          noticeVersion,
           evidenceRef,
           expectedBindingVersion: care.sourceBindingVersion,
           expectedAccessEpoch: care.sourceAccessEpoch,
@@ -350,7 +356,13 @@ export const careApi = {
     return (await client.get<ApiResponse<CareCase>>(`/care-requests/${id}`))
       .data;
   },
-  async rebind(care: CareCase, evidenceRef: string, key: string, csrf: string) {
+  async rebind(
+    care: CareCase,
+    evidenceRef: string,
+    key: string,
+    csrf: string,
+    noticeVersion = "synthetic-d08-v1",
+  ) {
     return (
       await client.post<
         ApiResponse<{ bindingVersion: number; accessEpoch: number }>
@@ -360,7 +372,7 @@ export const careApi = {
           supportCaseRef: `record:${care.id}`,
           targetUserId: care.targetUserId,
           expectedBindingVersion: care.sourceBindingVersion,
-          noticeVersion: "synthetic-d08-v1",
+          noticeVersion,
           evidenceRef,
         },
         { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },

@@ -107,6 +107,7 @@ import cookie from "@fastify/cookie";
 import { AdminAccess } from "./admin/admin-access";
 import { ADMIN_FEISHU_FETCH } from "./admin/feishu";
 import { AdminController } from "./admin/admin-controller";
+import { AdminUsersController } from "./admin/admin-users-controller";
 import { AdminOrdersController } from "./admin/admin-orders-controller";
 import { randomUUID } from "node:crypto";
 import {
@@ -187,6 +188,7 @@ class HealthController {
     IdentityController,
     AdminController,
     AdminOrdersController,
+    AdminUsersController,
     CatalogController,
     AdminCatalogController,
   ],
@@ -514,12 +516,18 @@ export async function createApplication(
               ? [
                   BooksController,
                   BookAudioController,
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
+                    ? [
+                        CompleteExportsController,
+                        AdminCompleteExportsController,
+                      ]
+                    : []),
                   ...(config.books.mode === "synthetic-local"
                     ? [
                         QualityCareController,
                         AdminQualityCareController,
-                        CompleteExportsController,
-                        AdminCompleteExportsController,
                         FirstCopyController,
                         FulfillmentController,
                         AdminFulfillmentController,
@@ -584,8 +592,13 @@ export async function createApplication(
               ? [
                   Books,
                   BookAudio,
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
+                    ? [CompleteExports]
+                    : []),
                   ...(config.books.mode === "synthetic-local"
-                    ? [QualityCare, FirstCopies, CompleteExports, Fulfillment]
+                    ? [QualityCare, FirstCopies, Fulfillment]
                     : []),
                   {
                     provide: BOOK_OBJECTS,
