@@ -29,6 +29,16 @@ export class AdminCareController {
     private readonly participation: Participation,
     private readonly deletions: Deletions,
   ) {}
+  private resource(request: FastifyRequest, projectId: string) {
+    Object.assign(request, {
+      adminResourceType: "project",
+      adminResourceId: projectId,
+    });
+  }
+  private async caseResource(request: FastifyRequest, id: string) {
+    const care = await this.participation.careCases(id);
+    if ("projectId" in care) this.resource(request, care.projectId);
+  }
   @Get("care-requests")
   @Header("Cache-Control", "no-store")
   async list(@Req() request: FastifyRequest) {
@@ -68,6 +78,7 @@ export class AdminCareController {
           request,
           ADMIN_PERMISSIONS.writeCare,
         );
+        this.resource(request, id);
         return this.access.command(request, ADMIN_PERMISSIONS.writeCare, (tx) =>
           this.participation.openCareCase(
             tx,
@@ -95,6 +106,7 @@ export class AdminCareController {
           request,
           ADMIN_PERMISSIONS.writeCare,
         );
+        await this.caseResource(request, id);
         const result = await this.access.command(
           request,
           ADMIN_PERMISSIONS.writeCare,
@@ -129,6 +141,7 @@ export class AdminCareController {
           request,
           ADMIN_PERMISSIONS.writeCare,
         );
+        this.resource(request, id);
         const result = await this.access.command(
           request,
           ADMIN_PERMISSIONS.writeCare,

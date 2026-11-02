@@ -43,11 +43,13 @@ export interface CompleteExportContext {
     startsAt: string | null;
     expiresAt: string | null;
   };
+  noticeVersion: string;
+  evidencePrefix: string;
   service: {
-    within: number;
+    within: number | null;
     unit: "business_days";
-    ownerRef: string;
-    calendarRef: string;
+    ownerRef: string | null;
+    calendarRef: string | null;
   };
   accessEpoch: number;
   requests: CompleteExportView[];

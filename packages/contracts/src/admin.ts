@@ -120,3 +120,57 @@ export interface AdminOrdersPage {
   page: number;
   pageSize: number;
 }
+
+export interface AdminServiceRequestSummary {
+  id: string;
+  projectId: string;
+  kind: string;
+  state: string;
+  createdAt: string;
+}
+export interface AdminUserSummary {
+  id: string;
+  kind: "account" | "narrator";
+  name: string | null;
+  projectId: string | null;
+  createdAt: string;
+  pending: boolean;
+}
+export interface AdminUsersPage {
+  items: AdminUserSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+export interface AdminProjectSummary {
+  id: string;
+  bookTitle: string | null;
+  initiatorUserId: string;
+  subjectId: string | null;
+  subjectName: string | null;
+  narratorUserId: string | null;
+  bindingVersion: number;
+  orderId: string | null;
+  source: "payment" | "internal-acceptance" | "unlinked";
+  physicalProduction: boolean;
+  pending: boolean;
+}
+export interface AdminProjectDetail extends AdminProjectSummary {
+  requests: AdminServiceRequestSummary[];
+  productionOrder: { id: string; state: string } | null;
+  noticeVersion: string;
+  evidencePrefix: string;
+  policyStatus: string;
+  exportAlternativeAvailable: boolean;
+  history: AdminAuditEntry[];
+}
+export interface AdminUserDetail {
+  id: string;
+  createdAt: string;
+  loginMethods: string[];
+  projects: AdminProjectSummary[];
+  orders: { id: string; outTradeNo: string; state: string }[];
+  requests: AdminServiceRequestSummary[];
+  notes: AdminOrderNote[];
+  history: AdminAuditEntry[];
+}

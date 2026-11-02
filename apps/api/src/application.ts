@@ -107,6 +107,7 @@ import cookie from "@fastify/cookie";
 import { AdminAccess } from "./admin/admin-access";
 import { ADMIN_FEISHU_FETCH } from "./admin/feishu";
 import { AdminController } from "./admin/admin-controller";
+import { AdminUsersController } from "./admin/admin-users-controller";
 import { AdminOrdersController } from "./admin/admin-orders-controller";
 import { randomUUID } from "node:crypto";
 import {
@@ -187,6 +188,7 @@ class HealthController {
     IdentityController,
     AdminController,
     AdminOrdersController,
+    AdminUsersController,
     CatalogController,
     AdminCatalogController,
   ],
@@ -518,13 +520,16 @@ export async function createApplication(
                   FulfillmentController,
                   AdminFulfillmentController,
                   AdminFirstCopyController,
-                  ...(config.books.mode === "synthetic-local"
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
                     ? [
-                        QualityCareController,
-                        AdminQualityCareController,
                         CompleteExportsController,
                         AdminCompleteExportsController,
                       ]
+                    : []),
+                  ...(config.books.mode === "synthetic-local"
+                    ? [QualityCareController, AdminQualityCareController]
                     : []),
                 ]
               : []),
@@ -586,8 +591,13 @@ export async function createApplication(
                   BookAudio,
                   FirstCopies,
                   Fulfillment,
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
+                    ? [CompleteExports]
+                    : []),
                   ...(config.books.mode === "synthetic-local"
-                    ? [QualityCare, CompleteExports]
+                    ? [QualityCare]
                     : []),
                   {
                     provide: BOOK_OBJECTS,
