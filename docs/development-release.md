@@ -1,10 +1,10 @@
 # 候选发布包
 
-本工具生成可核对的发布产物；T26/T28 工程已合并，T29 正在执行普通商户装配和受控发布。独立小程序尚未申请下来，微信身份留空，真实收退款与售卖保持关闭。运行证据与剩余正式条件见 [T29 记录](delivery/2026-10-28/t29-release.md)，人工输入见[清单](delivery/2026-10-26/manual-inputs.md)。
+本工具生成可核对的发布产物。独立小程序真实身份及普通商户已接入受控线上；2026-11-02 已发布固定标价999元、仅授权名单实付1分的E2E版本，实际到账仍待开发者本人扫码。普通公开售卖条款随后补齐。当前结果见[固定套餐运行记录](delivery/2026-11-02/fixed-package-runtime.md)，其余正式条件见 [T29 记录](delivery/2026-10-28/t29-release.md)。
 
 ## 生成与核验
 
-沿用锁定 Node/pnpm，先完成构建、字体准备与相关检查。源码必须已提交且已跟踪文件无修改；输出必须是源码目录外的新目录。Linux CI 在整仓检查、OpenAPI 和浏览器成功后生成候选包并上传 Actions artifact，保留 7 天。这是构建产物期限，与用户资料 D03 无关。
+沿用锁定 Node/pnpm，先完成构建、字体准备与相关检查。源码必须已提交且已跟踪文件无修改；输出必须是源码目录外的新目录。Linux CI 的 build job 在自身类型检查、构建、OpenAPI 与打包核验通过后上传候选 Actions artifact，保留 7 天；完整 PR 所选检查仍按工程约定用于合并。这是构建产物期限，与用户资料 D03 无关。
 
 ```sh
 pnpm release:candidate --platform linux --output /absolute/new/timenook-release
@@ -30,6 +30,8 @@ node extracted/scripts/release/package.mjs verify --root extracted --platform li
 
 Linux CI 使用锁文件安装依赖、生成 Prisma client 并执行真实 PostgreSQL/Redis API 测试；候选包不携带 `node_modules`。目标主机须核对 OS/架构/OpenSSL/Node/pnpm、可恢复数据库点和资源容量，在新 release 目录执行锁定安装与目标 Prisma 生成，再检验实际引擎、FFmpeg/FFprobe、Chromium、字体与权限。工作区包声明保留以解析锁文件；可使用 `pnpm install --frozen-lockfile --filter timenook --filter @timenook/api...` 安装 API 及根渲染依赖，之后 `pnpm db:generate`。目标环境结果不能由 CI 的 Ubuntu 构建代替。
 
-构建产物仍保留既有业务准入门禁。普通商户支付参数读取及验签已接入，但身份留空、商品未准入时不启用付款。参与/录音/AI/书稿正式配置仍待装配，Worker 不会凭候选包自动启用。正式 D01–D10 与身份/支付/供应商路径具备后，由受控工程改动接入并逐项验收；不把 `NODE_ENV=test` 或合成 transport 用作生产配置。
+同一目标机、相同锁文件和 Node 的已有 Linux 依赖，也可复制为新 release 的独立副本后重新生成 Prisma Client，实际加载 `fs-ext` 并验证服务；生成过程使用独立副本。解压可能将 release 根目录恢复成归档中的 `700`，须在启动前检查并设为服务用户及 Nginx 可遍历的目录权限（本轮为 `755`）。配置和商户文件继续保留各自受限权限。
+
+构建产物保留业务准入门禁。普通商户、参与、录音、AI 与候选书稿已由既有受控配置装配；本轮 E2E 商品另外要求显式开关与用户名单。普通正式版本继续要求完整真实商业材料。Worker 的能力由实际运行配置决定，候选包和配置均须逐项运行验收；不把 `NODE_ENV=test` 或合成 transport 用作生产配置。
 
 发布切换、受审迁移、systemd API/Worker/渲染资源、管理静态页面、Nginx 前缀/回调/Cookie、legal-agent 回归、备份/删除台账恢复与 RTO/RPO 仍按 [T29](delivery/2026-10-22/tickets/29-release-recovery.md)执行。此工具仅把待发布文件和版本变成可审查的固定产物，不授权部署或售卖。
