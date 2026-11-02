@@ -5,7 +5,8 @@ export interface InvitationView {
   process: string[];
   purposes: ConsentPurpose[];
   noticeVersion: string;
-  policyStatus: "synthetic-only" | "internal-acceptance" | "pending";
+  policyStatus:
+    "synthetic-only" | "internal-acceptance" | "paid-e2e" | "pending";
   evidencePrefix?: string;
   noticeText?: string;
   source?: "paid" | "internal-acceptance";
@@ -19,7 +20,8 @@ export interface ParticipationState {
   bindingVersion: number;
   accessEpoch: number;
   noticeVersion: string;
-  policyStatus: "synthetic-only" | "internal-acceptance" | "pending";
+  policyStatus:
+    "synthetic-only" | "internal-acceptance" | "paid-e2e" | "pending";
   evidencePrefix?: string;
   noticeText?: string;
   source?: "paid" | "internal-acceptance";
