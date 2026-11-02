@@ -242,7 +242,7 @@ test("release package excludes website and probe routes and ignores stored demo 
   for (const name of config.pages) {
     assert.doesNotMatch(
       await readFile(path.join(root, name + ".wxml"), "utf8"),
-      /网页|网站|官网|测试|演示|体验购买|useDemo|accountLink|copyInvitation|localVerification/,
+      /网页|网站|官网|测试|演示|内测|合成验证|本地验证|验证订单|体验购买|useDemo|accountLink|copyInvitation|localVerification/,
     );
   }
   const app = await harness("demo");
@@ -261,4 +261,7 @@ test("release package excludes website and probe routes and ignores stored demo 
   );
   const invite = await app.open("pages/invite/index", false);
   assert.equal(invite.copyInvitation, undefined);
+  const order = await app.open("pages/order/index", false);
+  assert.equal(order.retryPayment, undefined);
+  assert.equal(order.closeOrder, undefined);
 });

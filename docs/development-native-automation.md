@@ -50,6 +50,6 @@ SDK 探测连接失败时继续有界轮询；收到无法解析的 JSON，或�
 
 默认 `node scripts/build.mjs` 与 `pnpm build:miniprogram` 输出 release 包，API 默认使用项目独立 HTTPS 域名，固定 live 数据，移除网页关联、录音探针、网页邀请按钮及开发演示模板。显式 development 构建保留原演示回归。根上传基础库为已实测的稳定 `3.17.5`，正式包与自动化采用同一版本。
 
-`pnpm test:native-mvp` 强制检查正式构建和真实订单可用性，使用真实微信账号担任讲述者，HTTP 创建独立内部项目及合成发起人，验证邀请绑定、用途、原生文件保存、暂停继续、真实 OSS/ASR/AI、当前版本确认及 PDF。只有 RecorderManager 硬件输入替换为 macOS Tingting 合成的明确虚构中文；没有替换身份、HTTP、私有文件、数据库或 Worker。需本机 `say`、`ffmpeg`、`ffprobe` 及已有 ECS SSH 权限。
+`pnpm test:native-mvp` 强制检查正式构建和真实订单可用性，使用真实微信账号担任讲述者，HTTP 创建独立内部项目及合成发起人，验证邀请绑定、用途、原生文件保存、暂停继续、真实 OSS/ASR/AI、当前版本确认及 PDF。RecorderManager 与相册选择硬件边界分别输入 macOS Tingting 合成的明确虚构中文和生成色块 PNG；没有替换身份、HTTP、私有文件、数据库或 Worker。需本机 `say`、`ffmpeg`、`ffprobe` 及已有 ECS SSH 权限。
 
-虚构 MP3 临时存入现有 `/admin/assets/`，经已获允许的 API 域名下载为原生临时文件，测试结束删除；不增加域名豁免、关闭 `urlCheck` 或要求新增测试专用下载域名。所有账号、Cookie、CSRF、邀请 token 留在进程内；真实账号不截图。内部项目不冒充付款或实体制作权益。运行记录和双端真机/真实资金的剩余边界见[本轮验收](delivery/2026-11-02/miniprogram-release-mvp.md)。
+虚构 MP3 与色块 PNG 临时存入现有 `/admin/assets/`，经已获允许的 API 域名下载为原生临时文件，测试结束删除；不增加域名豁免、关闭 `urlCheck` 或要求新增测试专用下载域名。所有账号、Cookie、CSRF、邀请 token 留在进程内；真实账号不截图。内部项目不冒充付款或实体制作权益。运行记录和双端真机/真实资金的剩余边界见[本轮验收](delivery/2026-11-02/miniprogram-release-mvp.md)。

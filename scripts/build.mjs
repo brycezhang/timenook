@@ -66,7 +66,7 @@ await build({
         if (release)
           build.onLoad({ filter: /\.ts$/ }, async (args) => ({
             contents: (await fs.readFile(args.path, "utf8")).replace(
-              /\s*\/\/ @web-only:start[\s\S]*?\/\/ @web-only:end/g,
+              /\s*\/\/ @(web|development)-only:start[\s\S]*?\/\/ @\1-only:end/g,
               "",
             ),
             loader: "ts",
