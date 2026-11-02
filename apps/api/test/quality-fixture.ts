@@ -58,16 +58,17 @@ export async function deliveredQualityOrder() {
     }),
   );
   data(
+    await adminRequest("POST", attemptBase + "/printing", headers, {
+      printedAt: new Date().toISOString(),
+      evidenceRef: "synthetic:完成印制核验",
+    }),
+  );
+  data(
     await adminRequest("POST", attemptBase + "/shipping", headers, {
       carrier: "合成物流",
       number: "SYNTHETICQUALITY",
       shippedAt: new Date().toISOString(),
       evidenceRef: "synthetic:承运核验",
-      wechat: {
-        handling: "implemented_and_verified",
-        evidenceRef: "synthetic:微信发货",
-        result: "recorded",
-      },
     }),
   );
   const delivered = data(

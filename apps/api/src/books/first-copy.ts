@@ -33,7 +33,6 @@ import {
   IsUUID,
   IsIn,
   IsOptional,
-  Equals,
 } from "class-validator";
 import { Prisma, FirstCopyOrder } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
@@ -50,6 +49,7 @@ import { ADMIN_PERMISSIONS } from "@timenook/contracts";
 import { API_CONFIG, ApiConfig } from "../config";
 import { Participation } from "../identity/participation";
 import { ProjectServiceTerms } from "../projects/service-terms";
+import { participationNotice } from "../catalog/e2e-package";
 import { publicTerms } from "../catalog/package-terms";
 import { Books } from "./books";
 import { idempotencyKey } from "../payments/orders";
@@ -106,8 +106,10 @@ class BookConfirmationDto {
   @IsOptional()
   @Matches(/^[a-f0-9]{64}$/)
   addressHash?: string;
-  @ApiProperty() @Equals("synthetic-d08-v1") noticeVersion!: string;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty() @IsString() @MaxLength(100) noticeVersion!: string;
+  @ApiProperty()
+  @Matches(/^(synthetic|internal|record):[^\r\n]{3,160}$/)
+  evidenceRef!: string;
   @ApiProperty({ required: false })
   @IsOptional()
   @IsUUID()
@@ -117,7 +119,7 @@ class BookConfirmationDto {
 export class FirstCopies implements OnModuleDestroy {
   private readonly terms: ProjectServiceTerms;
   constructor(
-    @Inject(API_CONFIG) config: ApiConfig,
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
     private readonly participation: Participation,
     private readonly books: Books,
   ) {
@@ -143,10 +145,48 @@ export class FirstCopies implements OnModuleDestroy {
     const project = await tx.project.findUniqueOrThrow({
         where: { id: projectId },
       }),
-      order = await tx.paymentOrder.findUniqueOrThrow({
-        where: { id: project.orderId! },
-      }),
-      subject = await tx.projectSubject.findUniqueOrThrow({
+      order = project.orderId
+        ? await tx.paymentOrder.findUnique({ where: { id: project.orderId } })
+        : null;
+    if (!order) {
+      const context = await this.books.contextIn(
+        tx,
+        projectId,
+        actor.accessExpiresAt,
+      );
+      const terms = await this.terms.read(projectId, tx);
+      return {
+        projectId,
+        role: project.createdBy === actor.userId ? "initiator" : "narrator",
+        book: context.current,
+        address: { version: 0, hash: null, value: null },
+        confirmations: { narrator: false, initiator: false },
+        canConfirmNarrator: false,
+        payment: {
+          paidAmountFen: 0,
+          currency: "CNY",
+          copies: 1,
+          amountDueFen: 0,
+        },
+        shipping: { regionCodes: [], regionLabels: {}, terms: [] },
+        creation: {
+          state: terms.creation?.state ?? "pending",
+          expiresAt: terms.creation?.expiresAt ?? null,
+        },
+        blockers: [
+          "PHYSICAL_PRODUCTION_UNAVAILABLE",
+          "ENTITLEMENT_UNAVAILABLE",
+        ],
+        canSubmit: false,
+        canReviseProduction: false,
+        qualityRevisionRequestId: null,
+        production: null,
+        accessExpiresAt: context.accessExpiresAt,
+        noticeVersion: "internal-participation-v1",
+        evidencePrefix: "internal:",
+      };
+    }
+    const subject = await tx.projectSubject.findUniqueOrThrow({
         where: { projectId },
       }),
       context = await this.books.contextIn(
@@ -226,6 +266,15 @@ export class FirstCopies implements OnModuleDestroy {
       (code) => !snapshot.admission.d05.excludedRegionCodes.includes(code),
     );
     const blockers: FirstCopyBlocker[] = [];
+    if (
+      (order.packageSnapshot as Prisma.JsonObject).physicalProduction === false
+    )
+      blockers.push("PHYSICAL_PRODUCTION_UNAVAILABLE");
+    if (
+      this.config.books?.mode === "internal-acceptance" &&
+      !book?.snapshot.specification.productionReady
+    )
+      blockers.push("PRODUCTION_PDF_UNAPPROVED");
     if (book?.state !== "ready" || !book.pdf) blockers.push("BOOK_NOT_READY");
     const activeData = !(await this.participation.activeDataDeletedIn(
       tx,
@@ -290,7 +339,13 @@ export class FirstCopies implements OnModuleDestroy {
     if (order.productionFrozen && !blockers.includes("PROJECT_FROZEN"))
       blockers.push("PROJECT_FROZEN");
     if (production && !canReviseProduction) blockers.push("ALREADY_SUBMITTED");
+    const notice = participationNotice(
+      order.packageSnapshot as Prisma.JsonObject,
+      this.config.books?.mode === "internal-acceptance",
+    );
     return {
+      noticeVersion: notice.noticeVersion,
+      evidencePrefix: notice.evidencePrefix,
       projectId,
       role,
       book,
@@ -445,6 +500,20 @@ export class FirstCopies implements OnModuleDestroy {
       async (tx, actor) => {
         await this.participation.requireMaterialIn(tx, projectId, "activeData");
         const current = await this.contextIn(tx, projectId, actor);
+        if (
+          current.blockers.includes("PHYSICAL_PRODUCTION_UNAVAILABLE") ||
+          current.blockers.includes("PRODUCTION_PDF_UNAPPROVED")
+        )
+          throw new ConflictException(
+            "This project is not eligible for physical production",
+          );
+        if (
+          body.noticeVersion !== current.noticeVersion ||
+          !body.evidenceRef.startsWith(current.evidencePrefix)
+        )
+          throw new BadRequestException(
+            "Applicable book confirmation evidence required",
+          );
         if (current.production && !current.canReviseProduction)
           throw new ConflictException();
         if (body.role === "initiator" && current.role !== "initiator")

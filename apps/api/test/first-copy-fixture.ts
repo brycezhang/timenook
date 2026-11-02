@@ -9,6 +9,7 @@ export async function readyFirstCopyBook(
     maxPages?: number;
     bleedMm?: number;
   } = {},
+  physicalProduction?: false,
 ) {
   const snapshot = JSON.parse(
     readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
@@ -21,6 +22,7 @@ export async function readyFirstCopyBook(
   await db.packageDraft.create({
     data: { id: draftId, realm: "local", ...snapshot },
   });
+  if (physicalProduction === false) snapshot.physicalProduction = false;
   await db.packageVersion.create({
     data: {
       id: packageId,

@@ -8,7 +8,6 @@ export type FulfillmentState =
   | "cancellation_pending"
   | "cancelled";
 export interface FulfillmentWechat {
-  handling: "implemented_and_verified";
   evidenceRef: string;
   result: "recorded" | "pending" | "failed";
 }
@@ -24,6 +23,9 @@ export interface FulfillmentAttemptView extends FirstCopyBinding {
   receiptRef: string | null;
   tracking: { carrier: string; number: string; shippedAt: string } | null;
   wechat: FulfillmentWechat | null;
+  printedAt: string | null;
+  printedBy: string | null;
+  records: { kind: string; operatorAdminId: string; createdAt: string }[];
   deliveredAt: string | null;
   grantExpiresAt: string | null;
   cancellationNotice: string;
@@ -49,11 +51,13 @@ export interface FulfillmentView {
     } | null;
   };
   canGrant: boolean;
+  noticeVersion: string;
+  evidencePrefix: string;
 }
 export interface FulfillmentGrantCommand extends FirstCopyBinding {
   attemptId: string;
   expiresAt: string;
-  noticeVersion: "synthetic-d08-v1";
+  noticeVersion: string;
   evidenceRef: string;
   assistedSessionId?: string;
 }
@@ -70,7 +74,6 @@ export interface FulfillmentShippingCommand {
   number: string;
   shippedAt: string;
   evidenceRef: string;
-  wechat: FulfillmentWechat;
 }
 export interface FulfillmentDeliveryCommand {
   deliveredAt: string;
@@ -81,4 +84,28 @@ export interface FulfillmentMaterials {
   pdf: { sha256: string; bytes: number };
   grantExpiresAt: string;
   handoffId: string;
+}
+
+export interface FulfillmentPrintingCommand {
+  printedAt: string;
+  evidenceRef: string;
+}
+export interface AdminProductionSummary {
+  id: string;
+  projectId: string;
+  paymentOrderId: string;
+  outTradeNo: string;
+  subjectName: string | null;
+  bookTitle: string | null;
+  createdAt: string;
+  state: string;
+  pending: boolean;
+  exception: boolean;
+  printedAt: string | null;
+}
+export interface AdminProductionPage {
+  items: AdminProductionSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
 }

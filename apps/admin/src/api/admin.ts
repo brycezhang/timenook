@@ -406,11 +406,15 @@ import type {
   FulfillmentShippingCommand,
   FulfillmentDeliveryCommand,
   FulfillmentMaterials,
+  AdminProductionPage,
 } from "@timenook/contracts";
 export const fulfillmentApi = {
-  async list() {
-    return (await client.get<ApiResponse<FulfillmentView[]>>("/fulfillment"))
-      .data;
+  async list(query = "") {
+    return (
+      await client.get<ApiResponse<AdminProductionPage>>(
+        `/fulfillment?${query}`,
+      )
+    ).data;
   },
   async read(orderId: string) {
     return (
@@ -448,7 +452,14 @@ export const fulfillmentApi = {
   async command(
     orderId: string,
     attemptId: string,
-    action: "handoff" | "receipt" | "cancel" | "shipping" | "delivery",
+    action:
+      | "handoff"
+      | "receipt"
+      | "cancel"
+      | "printing"
+      | "shipping"
+      | "wechat"
+      | "delivery",
     input:
       | {}
       | FulfillmentReceiptCommand

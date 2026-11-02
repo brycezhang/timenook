@@ -58,6 +58,10 @@ const ROUTE_ACTIONS: Record<string, string> = {
   "POST /v1/admin/refunds/:id/production-review": "refund.production-review",
   "POST /v1/admin/refunds/:id/submit": "refund.submit",
   "POST /v1/admin/refunds/:id/reconcile": "refund.reconcile",
+  "POST /v1/admin/fulfillment/:id/attempts/:attemptId/printing":
+    "fulfillment.printing",
+  "POST /v1/admin/fulfillment/:id/attempts/:attemptId/wechat":
+    "fulfillment.wechat",
   "GET /v1/admin/fulfillment": "fulfillment.list",
   "GET /v1/admin/fulfillment/:id": "fulfillment.read",
   "POST /v1/admin/fulfillment/:id/attempts": "fulfillment.attempt",

@@ -25,6 +25,8 @@ function view(value: FulfillmentView, projectId: string): FulfillmentView {
     typeof value.canGrant !== "boolean" ||
     typeof value.canGrantNarrator !== "boolean" ||
     value.grantMaxMinutes !== 30 ||
+    typeof value.noticeVersion !== "string" ||
+    !["synthetic:", "internal:"].includes(value.evidencePrefix) ||
     !value.creation ||
     (value.accessExpiresAt !== null &&
       !Number.isFinite(Date.parse(value.accessExpiresAt))) ||
@@ -36,6 +38,9 @@ function view(value: FulfillmentView, projectId: string): FulfillmentView {
         !hash(value.current.addressHash) ||
         (value.current.grantExpiresAt !== null &&
           !Number.isFinite(Date.parse(value.current.grantExpiresAt))) ||
+        (value.current.printedAt !== null &&
+          !Number.isFinite(Date.parse(value.current.printedAt))) ||
+        (value.current.printedBy !== null && !uuid(value.current.printedBy)) ||
         !states.includes(value.current.state) ||
         typeof value.current.handoffId !== "string" ||
         (value.current.tracking &&
