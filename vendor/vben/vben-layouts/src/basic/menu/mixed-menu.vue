@@ -10,7 +10,7 @@ import { findMenuByPath } from '@vben/utils';
 
 import { NormalMenu } from '@vben-core/menu-ui';
 
-interface Props extends /* @vue-ignore */ NormalMenuProps {}
+interface Props extends NormalMenuProps {}
 
 const props = defineProps<Props>();
 
