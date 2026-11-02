@@ -287,8 +287,8 @@ test("ordinary merchant and controlled acceptance retain internal projects and n
     });
     assert.equal(
       purchase.statusCode,
-      403,
-      "merchant wiring does not authorize preview sales",
+      401,
+      "ordinary checkout still requires the actual authenticated buyer",
     );
     assert.equal(await db.paymentOrder.count(), 0);
     assert.equal(await db.paymentInbox.count(), 0);
@@ -829,4 +829,31 @@ test("ordinary merchant signed notifications and active queries share durable pa
     redis.disconnect();
     await closePrivacyFixture(cfg);
   }
+});
+
+test("one-fen checkout requires an explicit switch, ordinary merchant and product user UUID allowlist", () => {
+  const userId = randomUUID();
+  const enabled = {
+    ...ordinary,
+    INTERNAL_ACCEPTANCE_ENABLED: "1",
+    TIMENOOK_CHECKOUT_E2E_ENABLED: "1",
+    TIMENOOK_CHECKOUT_E2E_USER_IDS: userId,
+  };
+  assert.deepEqual(readConfig(enabled).checkoutE2e, {
+    enabled: true,
+    userIds: [userId],
+  });
+  for (const override of [
+    { TIMENOOK_CHECKOUT_E2E_ENABLED: undefined },
+    { TIMENOOK_CHECKOUT_E2E_ENABLED: "true" },
+    { TIMENOOK_CHECKOUT_E2E_USER_IDS: "" },
+    { TIMENOOK_CHECKOUT_E2E_USER_IDS: "openid-is-not-user-id" },
+    { INTERNAL_ACCEPTANCE_ENABLED: undefined },
+    { TIMENOOK_WECHAT_PAY_MODE: "" },
+  ])
+    assert.throws(
+      () => readConfig({ ...enabled, ...override }),
+      /E2E|payment/i,
+    );
+  assert.equal(readConfig(ordinary).checkoutE2e, undefined);
 });

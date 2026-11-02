@@ -122,7 +122,8 @@ Page({
       !current ||
       this.data.busy ||
       (current.policyStatus !== "synthetic-only" &&
-        current.policyStatus !== "internal-acceptance")
+        current.policyStatus !== "internal-acceptance" &&
+        current.policyStatus !== "paid-e2e")
     )
       return;
     if (!/^[^\r\n]{3,160}$/.test(evidence)) {
@@ -383,7 +384,9 @@ Page({
     if (
       !current ||
       this.data.busy ||
-      !["synthetic-only", "internal-acceptance"].includes(current.policyStatus)
+      !["synthetic-only", "internal-acceptance", "paid-e2e"].includes(
+        current.policyStatus,
+      )
     )
       return;
     const choices = this.data.purposes.map((row) => ({
@@ -440,7 +443,8 @@ Page({
       !current ||
       this.data.busy ||
       (current.policyStatus !== "synthetic-only" &&
-        current.policyStatus !== "internal-acceptance") ||
+        current.policyStatus !== "internal-acceptance" &&
+        current.policyStatus !== "paid-e2e") ||
       !["withdraw", "export", "delete"].includes(kind)
     )
       return;

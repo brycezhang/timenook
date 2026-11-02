@@ -14,7 +14,7 @@ import { paymentKey } from "./payments";
 const uuid = (s: string) => /^[0-9a-f-]{36}$/.test(s);
 const token = (s: string) => /^[A-Za-z0-9_-]{43}$/.test(s);
 function evidence(noticeVersion: string, text: string) {
-  return `${noticeVersion === "internal-participation-v1" ? "internal:" : "synthetic:"}${text}`;
+  return `${["internal-participation-v1", "paid-e2e-participation-v1"].includes(noticeVersion) ? "internal:" : "synthetic:"}${text}`;
 }
 function state(value: ParticipationState) {
   if (

@@ -172,9 +172,6 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
     body: CreateOrderDto,
   ) {
     const cfg = this.enabled();
-    // T05/T09/T30 have not authorized sales or a reviewed production template.
-    // Wiring a live merchant must never turn a local-preview package into a sale.
-    if (cfg.mode === "ordinary-merchant") throw new ForbiddenException();
     const buyer = await this.buyer(authorization);
     const requestHash = hash(body);
     const order = await this.database.$transaction(async (tx) => {
@@ -196,11 +193,22 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       const version = await tx.packageVersion.findFirst({
         where: {
           id: body.packageVersionId,
-          realm: "local",
-          purpose: "local_preview",
+          realm:
+            this.config.environment === "production" ? "production" : "local",
+          purpose:
+            cfg.mode === "ordinary-merchant"
+              ? { in: ["production", "e2e"] }
+              : "local_preview",
         },
       });
       if (!version) throw new BadRequestException();
+      const isE2e = version.purpose === "e2e";
+      if (
+        isE2e &&
+        (!this.config.checkoutE2e?.enabled ||
+          !this.config.checkoutE2e.userIds.includes(buyer.userId))
+      )
+        throw new ForbiddenException();
       const snapshot = version.snapshot as {
         admission?: { d05?: { includedRegionCodes?: string[] } };
       };
@@ -214,7 +222,10 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       const relationship = body.recipient.typeCode
         ? await tx.recipientType.findFirst({
             where: {
-              realm: "local",
+              realm:
+                this.config.environment === "production"
+                  ? "production"
+                  : "local",
               code: body.recipient.typeCode,
               active: true,
             },
@@ -239,7 +250,9 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
           outTradeNo: "TN" + randomUUID().replaceAll("-", "").slice(0, 30),
           idempotencyKey: key,
           requestHash,
-          amount: 99900,
+          listAmount: 99900,
+          isE2e,
+          amount: isE2e ? 1 : 99900,
           currency: "CNY",
           mode: this.mode(),
           packageVersionId: version.id,
@@ -270,6 +283,12 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
     if (session.method === "self_web") throw new ForbiddenException();
     const order = await this.owned(authorization, id);
     const cfg = this.enabled();
+    if (
+      order.isE2e &&
+      (!this.config.checkoutE2e?.enabled ||
+        !this.config.checkoutE2e.userIds.includes(order.buyerId))
+    )
+      throw new ForbiddenException();
     if (order.state !== "pending") throw new ConflictException();
     if (Object.keys(body).length) throw new BadRequestException();
     const reservation = await this.database.$transaction(async (tx) => {
@@ -393,6 +412,19 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
         await tx.paymentCommand.create({
           data: { orderId: id, action: "close", key, requestHash: hash(body) },
         });
+      const current = await tx.paymentOrder.findUniqueOrThrow({
+        where: { id },
+      });
+      const submission = await tx.paymentSubmission.findUnique({
+        where: { orderId: id },
+      });
+      // prepare reserves a submission under this same order lock before I/O.
+      // Only an order that has never been submitted can be closed locally.
+      if (current.state === "pending" && !submission)
+        await tx.paymentOrder.update({
+          where: { id },
+          data: { state: "closed" },
+        });
     });
     await this.refresh(order);
     const current = await this.owned(authorization, id);
@@ -477,6 +509,8 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
     return {
       id: order.id,
       outTradeNo: order.outTradeNo,
+      listAmount: order.listAmount,
+      isE2e: order.isE2e,
       amount: order.amount,
       currency: order.currency,
       mode: order.mode,

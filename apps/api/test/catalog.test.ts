@@ -758,7 +758,12 @@ test("production cannot read local catalog or preview versions and even its auth
       (
         await production.inject({ method: "GET", url: "/v1/packages/current" })
       ).json().data,
-      { purchasable: false, reason: "PACKAGE_PREPARING", version: null },
+      {
+        purchasable: false,
+        reason: "PACKAGE_PREPARING",
+        version: null,
+        checkout: null,
+      },
     );
     assert.deepEqual(
       (
@@ -794,6 +799,25 @@ test("production cannot read local catalog or preview versions and even its auth
         await production.inject({ method: "GET", url: "/v1/packages/current" })
       ).json().data.version,
       null,
+    );
+    const published = await production.inject({
+      method: "POST",
+      url: `/v1/admin/catalog/package-drafts/${draft.id}/publish`,
+      headers,
+      payload: { expectedRevision: 1, confirmRealParameters: true },
+    });
+    assert.equal(published.statusCode, 201, published.body);
+    assert.equal(published.json().data.purpose, "production");
+    const current = await production.inject({
+      method: "GET",
+      url: "/v1/packages/current",
+    });
+    assert.equal(current.json().data.version.id, published.json().data.id);
+    assert.equal(current.json().data.version.price.value, 99900);
+    assert.equal(
+      current.json().data.checkout,
+      null,
+      "merchant configuration is still required to sell",
     );
   } finally {
     await production.close();

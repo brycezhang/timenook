@@ -23,6 +23,8 @@ const pendingOrder = {
   id: "33333333-3333-4333-8333-333333333333",
   outTradeNo: "TN" + "a".repeat(30),
   amount: 99900,
+  listAmount: 99900,
+  isE2e: false,
   currency: "CNY",
   mode: "local-verification",
   state: "pending",
@@ -58,6 +60,7 @@ function harness() {
   ]);
   const requests: WechatMiniprogram.RequestOption[] = [];
   const routes: string[] = [];
+  const payments: WechatMiniprogram.RequestPaymentOption[] = [];
   let page: any;
   runInNewContext(bundle.outputFiles[0].text, {
     Page(value: any) {
@@ -74,10 +77,13 @@ function harness() {
       },
       reLaunch: ({ url }: { url: string }) => routes.push(url),
       navigateTo: ({ url }: { url: string }) => routes.push(url),
+      switchTab: ({ url }: { url: string }) => routes.push(url),
+      requestPayment: (p: WechatMiniprogram.RequestPaymentOption) =>
+        payments.push(p),
       showToast: () => {},
     },
   });
-  return { page, requests, storage, routes };
+  return { page, requests, storage, routes, payments };
 }
 function respond(request: WechatMiniprogram.RequestOption, data: unknown) {
   request.success?.({
@@ -125,4 +131,59 @@ test("order page discards late results after a page or account switch", async ()
     await action;
     assert.equal(page.data.activeOrder, null);
   }
+});
+
+test("pending merchant orders can reopen native payment and paid orders open their own project", async () => {
+  const { page, requests, payments, routes, storage } = harness();
+  const order = { ...pendingOrder, mode: "wechat", amount: 1, isE2e: true };
+  const showing = page.onShow();
+  respond(requests.shift()!, { orders: [order] });
+  await tick();
+  respond(requests.shift()!, order);
+  await showing;
+  const payment = page.retryPayment();
+  respond(requests.shift()!, {
+    mode: "wechat",
+    status: "prepared",
+    parameters: {
+      timeStamp: "1780000000",
+      nonceStr: "native",
+      package: "prepay_id=native",
+      signType: "RSA",
+      paySign: "signed",
+    },
+  });
+  await tick();
+  assert.equal(payments.length, 1);
+  payments[0].success?.({ errMsg: "requestPayment:ok" });
+  await tick();
+  respond(requests.shift()!, {
+    ...paidOrder,
+    mode: "wechat",
+    amount: 1,
+    isE2e: true,
+  });
+  await payment;
+  assert.equal(page.data.actualPrice, "0.01");
+  assert.equal(page.data.activeOrder.project.id, paidOrder.project.id);
+  page.project();
+  assert.equal(routes[0], "/pages/project/index");
+  assert.equal(
+    storage.get(
+      `timenook.live-project.v1:${login.user.id}:${login.session.id}`,
+    ),
+    paidOrder.project.id,
+  );
+});
+
+test("a saved order link queries that exact order even when it is absent from the latest list", async () => {
+  const { page, requests } = harness();
+  page.onLoad({ id: pendingOrder.id });
+  const shown = page.onShow();
+  respond(requests.shift()!, { orders: [] });
+  await tick();
+  assert.equal(requests[0]?.url, base + "/orders/" + pendingOrder.id);
+  respond(requests.shift()!, paidOrder);
+  await shown;
+  assert.equal(page.data.activeOrder.project.id, paidOrder.project.id);
 });

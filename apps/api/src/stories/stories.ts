@@ -1,3 +1,7 @@
+import {
+  E2E_NOTICE_VERSION,
+  participationNotice,
+} from "../catalog/e2e-package";
 import { readSessionContextIn } from "../identity/identity-access";
 import { readProjectAdmissionIn } from "../projects/project-admission";
 import {
@@ -107,7 +111,7 @@ class StoryDecisionDto {
   @ApiProperty() @IsBoolean() confirmed!: boolean;
   @ApiProperty() @IsBoolean() allowInBook!: boolean;
   @ApiProperty()
-  @IsIn(["synthetic-d08-v1", "internal-participation-v1"])
+  @IsIn(["synthetic-d08-v1", "internal-participation-v1", E2E_NOTICE_VERSION])
   noticeVersion!: string;
   @ApiProperty()
   @Matches(/^(?:synthetic|internal):[^\r\n]{3,160}$/)
@@ -162,12 +166,14 @@ export class Stories {
     private readonly participation: Participation,
     @Optional() private readonly photos?: Photos,
   ) {}
-  validateNotice(body: { noticeVersion: string; evidenceRef: string }) {
-    const internal = !!this.config.acceptance;
+  validateNotice(
+    body: { noticeVersion: string; evidenceRef: string },
+    snapshot: Prisma.JsonObject = {},
+  ) {
+    const notice = participationNotice(snapshot, !!this.config.acceptance);
     if (
-      body.noticeVersion !==
-        (internal ? "internal-participation-v1" : "synthetic-d08-v1") ||
-      !body.evidenceRef.startsWith(internal ? "internal:" : "synthetic:")
+      body.noticeVersion !== notice.noticeVersion ||
+      !body.evidenceRef.startsWith(notice.evidencePrefix)
     )
       throw new BadRequestException("Current participation notice is required");
   }
@@ -506,12 +512,15 @@ export class Stories {
   ) {
     if (!key || !/^[-A-Za-z0-9_:]{8,128}$/.test(key))
       throw new BadRequestException();
-    this.validateNotice(body);
     return this.participation.withPlanAccess(
       projectId,
       authorization,
       undefined,
       async (tx, actor) => {
+        this.validateNotice(
+          body,
+          (await readProjectAdmissionIn(tx, projectId)).snapshot,
+        );
         const story = await tx.story.findFirst({ where: { id, projectId } });
         if (
           !story ||
@@ -1285,9 +1294,10 @@ export class Stories {
             canDecide: actor.subjectDecision === "self",
             // A binding changes the operator, not this subject's explicit refusal.
             allowInBook: previous?.allowInBook ?? true,
-            noticeVersion: this.config.acceptance
-              ? "internal-participation-v1"
-              : "synthetic-d08-v1",
+            noticeVersion: participationNotice(
+              (await readProjectAdmissionIn(tx, projectId)).snapshot,
+              !!this.config.acceptance,
+            ).noticeVersion,
             evidencePrefix: this.config.acceptance ? "internal:" : "synthetic:",
           },
         };

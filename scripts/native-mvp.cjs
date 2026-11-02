@@ -184,8 +184,102 @@ async function prepare(run) {
   };
 }
 
+async function readPaidProjectInput(
+  file = process.env.TIMENOOK_PAID_PROJECT_INPUT,
+) {
+  try {
+    if (!file || !path.isAbsolute(file)) throw Error();
+    const stat = await fs.stat(file);
+    if (!stat.isFile() || (stat.mode & 0o077) !== 0) throw Error();
+    const input = JSON.parse(await fs.readFile(file, "utf8"));
+    if (
+      Object.keys(input).sort().join(",") !== "orderId,projectId" ||
+      ![input.orderId, input.projectId].every(
+        (id) => typeof id === "string" && /^[0-9a-f-]{36}$/.test(id),
+      )
+    )
+      throw Error();
+    return input;
+  } catch {
+    throw new Error(
+      "A restricted paid-project input file with orderId and projectId is required",
+    );
+  }
+}
+
+function requirePaidProject(order, input) {
+  assert.ok(
+    order?.id === input.orderId &&
+      order.state === "paid" &&
+      order.mode === "wechat" &&
+      order.listAmount === 99900 &&
+      order.amount === 1 &&
+      order.isE2e === true &&
+      order.project?.id === input.projectId,
+    "Paid continuation requires a verified one-fen WeChat order for the same project",
+  );
+  return order.project.id;
+}
+
 async function exercise(run) {
   const { page, call, navigate, evaluate } = run;
+  const paid = run.paidProjectInput;
+  async function ownerApi(route, data) {
+    const response = await evaluate(
+      function (route, data, method, key) {
+        var base = "https://timenookapi.threeminreading.com/api/v1";
+        var stored = wx.getStorageSync("timenook.session.v1:" + base);
+        if (!stored) return { status: 401 };
+        return new Promise(function (resolve) {
+          wx.request({
+            url: base + route,
+            method: method,
+            data: data,
+            timeout: 15000,
+            header: {
+              "content-type":
+                method === "GET" ? "text/plain" : "application/json",
+              authorization: "Bearer " + stored.session.token,
+              "idempotency-key": key,
+            },
+            success: function (r) {
+              resolve({ status: r.statusCode, data: r.data && r.data.data });
+            },
+            fail: function () {
+              resolve({ status: 0 });
+            },
+          });
+        });
+      },
+      route,
+      data ?? null,
+      data === undefined ? "GET" : "POST",
+      randomUUID(),
+    );
+    assert.ok(
+      response.status >= 200 && response.status < 300,
+      "Paid owner request failed",
+    );
+    return response.data;
+  }
+  async function confirmStory() {
+    if (!paid) return call("decideLive");
+    const current = await api(`/projects/${projectId}/stories/${storyId}`);
+    assert.equal(current.confirmation.canDecide, true);
+    await api(`/projects/${projectId}/stories/${storyId}/decisions`, {
+      revisionId: current.revision.id,
+      contentHash: current.revision.contentHash,
+      expectedVersion: current.version,
+      confirmed: true,
+      allowInBook: true,
+      noticeVersion: current.confirmation.noticeVersion,
+      evidenceRef:
+        current.confirmation.evidencePrefix +
+        "synthetic-paid-e2e-story:" +
+        randomUUID(),
+    });
+    await call("refreshLive");
+  }
   let cookie = "",
     csrf = "",
     projectId = "",
@@ -193,6 +287,24 @@ async function exercise(run) {
     storyId = "";
   let audioHash = "",
     oldRevision = "";
+  if (paid && run.paidNarratorStateFile) {
+    try {
+      const stat = await fs.stat(run.paidNarratorStateFile);
+      assert.equal(
+        stat.mode & 0o077,
+        0,
+        "Narrator account state must remain private",
+      );
+      const state = JSON.parse(
+        await fs.readFile(run.paidNarratorStateFile, "utf8"),
+      );
+      assert.equal(typeof state.cookie, "string");
+      cookie = state.cookie;
+    } catch (error) {
+      if (error.code !== "ENOENT")
+        throw new Error("Private narrator account state is invalid");
+    }
+  }
   async function api(
     route,
     data,
@@ -217,10 +329,34 @@ async function exercise(run) {
       ...(data === undefined ? {} : { body: JSON.stringify(data) }),
     });
     const cookies = response.headers.getSetCookie();
-    if (cookies.length) cookie = cookies.map((c) => c.split(";")[0]).join("; ");
+    if (cookies.length) {
+      const jar = new Map(
+        cookie
+          .split("; ")
+          .filter(Boolean)
+          .map((c) => {
+            const at = c.indexOf("=");
+            return [c.slice(0, at), c.slice(at + 1)];
+          }),
+      );
+      for (const item of cookies) {
+        const c = item.split(";")[0],
+          at = c.indexOf("=");
+        jar.set(c.slice(0, at), c.slice(at + 1));
+      }
+      cookie = [...jar].map(([key, value]) => key + "=" + value).join("; ");
+      // Keep only a restricted account-reentry file so a failed provider step
+      // can be retried on the same paid project and the same narrator account.
+      if (paid && run.paidNarratorStateFile)
+        await fs.writeFile(
+          run.paidNarratorStateFile,
+          JSON.stringify({ cookie }),
+          { mode: 0o600 },
+        );
+    }
     assert.ok(
       response.ok,
-      "Initiator HTTP " +
+      "Web participant HTTP " +
         response.status +
         " for " +
         route.replace(/[0-9a-f-]{36}|[A-Za-z0-9_-]{43}/g, ":id"),
@@ -259,24 +395,98 @@ async function exercise(run) {
     );
   }
   try {
-    await run.step("mvp-isolated-unpaid-project", async () => {
-      const account = await api("/web/mock-session", {});
-      csrf = account.csrfToken;
-      const project = await api("/web/mock-purchases", {
-        purchaseKey: randomUUID(),
-        bookTitle: "虚构河边纸船故事验收",
-        subjectName: "虚构讲述者",
-      });
-      projectId = project.projectId;
-      assert.match(projectId, /^[0-9a-f-]{36}$/);
-      run.result.project = {
-        id: projectId,
-        source: "internal-acceptance",
-        payment: false,
-        physicalProduction: false,
-      };
-    });
+    await run.step(
+      paid
+        ? "mvp-existing-verified-paid-project"
+        : "mvp-isolated-unpaid-project",
+      async () => {
+        const account = await api("/web/mock-session", {});
+        csrf = account.csrfToken;
+        if (paid) {
+          const order = await ownerApi("/orders/" + paid.orderId);
+          projectId = requirePaidProject(order, paid);
+          run.result.project = {
+            id: projectId,
+            source: "paid",
+            isE2e: true,
+            payment: true,
+            actualFen: 1,
+            listAmount: 99900,
+            physicalProduction: false,
+          };
+          run.result.actors = {
+            initiator: "real-wechat-owner",
+            narrator: "separate-web-acceptance-account",
+            input: "synthetic",
+            humanConsentAcceptance: false,
+          };
+          return;
+        }
+        const project = await api("/web/mock-purchases", {
+          purchaseKey: randomUUID(),
+          bookTitle: "虚构河边纸船故事验收",
+          subjectName: "虚构讲述者",
+        });
+        projectId = project.projectId;
+        assert.match(projectId, /^[0-9a-f-]{36}$/);
+        run.result.project = {
+          id: projectId,
+          source: "internal-acceptance",
+          payment: false,
+          physicalProduction: false,
+        };
+      },
+    );
     await run.step("mvp-native-invitation-binding-consent", async () => {
+      if (paid) {
+        const state = await ownerApi(`/projects/${projectId}/participation`);
+        assert.equal(state.role, "initiator");
+        assert.equal(state.source, "paid");
+        assert.equal(state.policyStatus, "paid-e2e");
+        // A distinct acceptance account acts as narrator. No account link or
+        // second internal project is created; every fact belongs to the paid order.
+        if (state.bindingVersion === 0) {
+          const invitation = await ownerApi(
+            `/projects/${projectId}/invitations`,
+            {},
+          );
+          const notice = await api(`/invitations/${invitation.token}`);
+          const request = await api(
+            `/invitations/${invitation.token}/requests`,
+            {
+              noticeVersion: notice.noticeVersion,
+              evidenceRef:
+                notice.evidencePrefix +
+                "synthetic-paid-e2e-narrator-application",
+            },
+          );
+          await ownerApi(`/binding-requests/${request.id}/approve`, {
+            expectedBindingVersion: state.bindingVersion,
+            evidenceRef:
+              state.evidencePrefix + "synthetic-paid-e2e-account-check",
+          });
+        }
+        const narrator = await api(`/projects/${projectId}/participation`);
+        assert.equal(narrator.role, "narrator");
+        await api(`/projects/${projectId}/consents/start`, {
+          noticeVersion: narrator.noticeVersion,
+          evidenceRef:
+            narrator.evidencePrefix + "synthetic-paid-e2e-purpose-start",
+          expectedBindingVersion: narrator.bindingVersion,
+          expectedAccessEpoch: narrator.accessEpoch,
+        });
+        await navigate(
+          "reLaunch",
+          `/pages/assisted/index?projectId=${projectId}`,
+        );
+        await page("assisted", (d) => d.participation?.role === "initiator");
+        await call("choicesChanged", {
+          detail: { value: ["collection", "ai", "sharing"] },
+        });
+        await call("submitChoices");
+        await page("interview", (d) => d.canRecord === true);
+        return;
+      }
       const invitation = await api(
         "/projects/" + projectId + "/invitations",
         {},
@@ -392,9 +602,9 @@ async function exercise(run) {
         await page("story", (d) => !!d.story?.revision);
         await call("refreshLive");
       }
-      d = await page("story", (d) => d.canDecide && !d.needsReview);
+      d = await page("story", (d) => (paid || d.canDecide) && !d.needsReview);
       oldRevision = d.story.revision.id;
-      await call("decideLive");
+      await confirmStory();
       d = await page("story", (d) => d.story?.decision?.confirmed === true);
       assert.equal(d.story.decision.allowInBook, true);
       run.result.story = {
@@ -474,7 +684,7 @@ async function exercise(run) {
         run.result.recording.intentId,
         "MVP_ORIGINAL_UPLOAD_INTENT_PRESERVED",
       );
-      await call("decideLive");
+      await confirmStory();
       d = await page("story", (d) => d.story?.decision?.confirmed === true);
       run.result.story.revisionId = d.story.revision.id;
       run.result.story.reconfirmed = true;
@@ -580,13 +790,15 @@ async function exercise(run) {
       await call("confirmContent");
       let d = await page(
         "manuscript",
-        (d) => d.confirmations?.confirmations.narrator === true,
+        (d) =>
+          d.confirmations?.confirmations[paid ? "initiator" : "narrator"] ===
+          true,
       );
       const context = await api(
         "/projects/" + projectId + "/book/confirmations",
       );
       await api("/projects/" + projectId + "/book/confirmations", {
-        role: "initiator",
+        role: paid ? "narrator" : "initiator",
         bookVersionId: context.bookVersionId,
         snapshotHash: context.snapshotHash,
         pdfHash: context.pdfHash,
@@ -671,4 +883,10 @@ async function cleanup(run) {
       fixtureObject("delete", key),
     );
 }
-module.exports = { prepare, exercise, cleanup };
+module.exports = {
+  prepare,
+  exercise,
+  cleanup,
+  readPaidProjectInput,
+  requirePaidProject,
+};

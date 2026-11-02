@@ -8,7 +8,7 @@
       <view class="recipients live-recipients section"><button wx:for="{{recipientTypes}}" wx:key="code" class="recipient {{selection && selection.recipientCode === item.code ? 'selected' : ''}}" data-code="{{item.code}}" bindtap="chooseType">送给{{item.label}}</button></view>
       <input data-field="custom-label" class="custom-label" maxlength="40" value="{{customLabelValue}}" placeholder="也可以自定义称呼，最多40字" bindinput="customLabel" />
       <view wx:if="{{selectedLabel}}" class="section section-title">这份礼物，送给{{selectedLabel}}</view>
-      <view class="paper section"><view class="section-title">一个项目 · 一本实体书</view><view class="note">一位成年讲述者本人参与，一位发起人。赠礼称呼不改变价格或双方权限。</view><view class="divider"/><view class="note">{{availability}}</view><view wx:if="{{!packagePrice}}" class="small muted">套餐准备完成后，这里将展示服务内容、配送和退款说明。</view></view>
+      <view class="paper section"><view class="section-title">{{packageTitle || '一个项目 · 一本实体书'}}</view><view class="note">一位成年讲述者本人参与，一位发起人。赠礼称呼不改变价格或双方权限。</view><view class="divider"/><view class="note">{{availability}}</view><view wx:if="{{!packagePrice}}" class="small muted">套餐准备完成后，这里将展示服务内容、配送和退款说明。</view></view>
       <view wx:if="{{packageTerms.length}}" class="section"><view class="section-title">套餐与服务说明</view><view wx:for="{{packageTerms}}" wx:key="label" class="catalog-term"><view class="term-label">{{item.label}}</view><view class="note">{{item.text}}</view></view></view>
     </block>
 <!-- @development:start -->
@@ -19,9 +19,17 @@
       <button class="btn secondary" loading="{{verificationBusy}}" disabled="{{verificationBusy}}" bindtap="verifyPurchase">验证并恢复订单</button>
     </view>
 <!-- @development:end -->
+    <view wx:if="{{purchasable && !hasOrderIntent}}" class="section">
+      <picker range="{{shippingRegions}}" range-key="label" bindchange="chooseShippingRegion"><view class="custom-label">配送地区：{{shippingRegionLabel || '请选择配送地区'}}</view></picker>
+      <button class="check-row" bindtap="agree"><view class="check-box {{agreed ? 'on' : ''}}"><image class="icon" src="/assets/icons/check-light.svg" /></view><text>我已了解套餐内容，并同意服务与隐私说明</text></button>
+      <button class="link" bindtap="privacy">查看服务与隐私说明</button>
+    </view>
+    <view wx:if="{{isE2e}}" class="soft section"><view class="section-title">受控支付验收 · 实付 ¥{{actualPrice}}</view><view class="note">套餐标价 ¥999。本次为已授权的支付验收，将通过微信实际支付 ¥{{actualPrice}}。</view></view>
+    <view wx:if="{{hasOrderIntent}}" class="soft section"><view>已保存原订单，请先恢复并核对结果。</view><view class="note">取消付款或结果暂未查明时，将继续查询同一订单。</view><button wx:if="{{restoredOrder && restoredOrder.state !== 'pending'}}" class="link" bindtap="newPurchase">为另一位讲述者选购</button></view>
+    <view wx:if="{{verificationError}}" class="soft section">{{verificationError}}</view>
     <button class="link" bindtap="orders">查询已有订单与项目</button>
   </view>
-  <view class="dock row"><view class="grow"><text wx:if="{{packagePrice}}" class="price">¥{{packagePrice}}</text><view class="small muted">一个项目 · 首本一本</view></view><button class="btn brown live-pay" disabled="{{true}}" bindtap="pay">暂未开放购买</button></view>
+  <view class="dock row"><view class="grow"><text wx:if="{{packagePrice}}" class="price">¥{{packagePrice}}</text><view class="small muted">一个项目 · 首本一本</view></view><button class="btn brown live-pay" loading="{{verificationBusy}}" disabled="{{loading || verificationBusy || (!hasOrderIntent && (!purchasable || !agreed || !selection || !shippingRegionCode))}}" bindtap="pay">{{hasOrderIntent ? '恢复原订单' : (purchasable ? '微信支付 ¥' + actualPrice : '暂未开放购买')}}</button></view>
 </block>
 <!-- @development:start -->
 <block wx:else="">

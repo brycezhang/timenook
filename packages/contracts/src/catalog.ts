@@ -26,7 +26,8 @@ export interface PackageVersion {
   id: string;
   sequence: number;
   contentHash: string;
-  purpose: "local_preview";
+  purpose: "local_preview" | "production" | "e2e";
+  shippingRegions: { code: string; label: string }[];
   title: string;
   price: { value: 99900; unit: "fen"; currency: "CNY" };
   scope: {
@@ -40,8 +41,14 @@ export interface PackageVersion {
   terms: PackageTerm[];
 }
 export interface CurrentPackage {
-  purchasable: false;
-  reason: "PACKAGE_PREPARING" | "PREVIEW_ONLY";
+  purchasable: boolean;
+  reason: "PACKAGE_PREPARING" | "PREVIEW_ONLY" | "E2E_ONLY" | "AVAILABLE";
+  checkout: null | {
+    listAmount: 99900;
+    amount: 1 | 99900;
+    currency: "CNY";
+    isE2e: boolean;
+  };
   version: PackageVersion | null;
 }
 export interface CatalogValidation {

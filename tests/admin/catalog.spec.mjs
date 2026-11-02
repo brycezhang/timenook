@@ -208,7 +208,7 @@ test("operator manages relationships and package drafts, freezes a local preview
   await page.getByLabel("套餐草稿名称").fill("待补套餐");
   await page.getByRole("button", { name: "保存草稿", exact: true }).click();
   await expect(
-    page.getByText("参数尚未完整，补齐后才能冻结预览。"),
+    page.getByText("参数尚未完整，补齐后才能正式发布。"),
   ).toBeVisible();
   const incompleteFreeze = page.waitForResponse(
     (response) =>
@@ -227,11 +227,11 @@ test("operator manages relationships and package drafts, freezes a local preview
     .setInputFiles(resolve("apps/api/test/fixtures/catalog-synthetic.json"));
   await page.getByRole("button", { name: "保存草稿", exact: true }).click();
   await expect(
-    page.getByText("结构完整；审批真实性未核验，销售未开放。"),
+    page.getByText("结构完整；请核实真实材料后勾选确认并发布。"),
   ).toBeVisible();
   await page.getByRole("button", { name: "冻结本地预览", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "不可变预览版本" }),
+    page.getByRole("heading", { name: "不可变套餐版本" }),
   ).toBeVisible();
   await expect(page.getByText("¥999.00").first()).toBeVisible();
   await page.reload();
@@ -316,7 +316,7 @@ test("operator manages relationships and package drafts, freezes a local preview
   await consumer.route("**/api/v1/packages/current", (route) => route.abort());
   await consumer.reload();
   await expect(
-    consumer.getByText("套餐加载失败，请检查网络后重试", { exact: true }),
+    consumer.getByText("套餐加载失败，请稍后重试", { exact: true }),
   ).toBeVisible();
   await expect(consumer.getByText("¥999.00", { exact: true })).toHaveCount(0);
   await consumer.setViewportSize({ width: 390, height: 844 });
@@ -350,6 +350,33 @@ test("operator manages relationships and package drafts, freezes a local preview
   expect(
     await consumer.evaluate(() => localStorage.getItem("timenook.frontend.v1")),
   ).toBeNull();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole("button", { name: "新建草稿", exact: true }).click();
+  await page
+    .getByLabel("导入套餐参数 JSON")
+    .setInputFiles(resolve("apps/api/test/fixtures/catalog-synthetic.json"));
+  await page.getByLabel("套餐草稿名称").fill("999元正式合成验收");
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  const publish = page.getByRole("button", {
+    name: "发布999元正式套餐",
+    exact: true,
+  });
+  await expect(publish).toBeDisabled();
+  await page
+    .getByRole("checkbox", {
+      name: "我已核对本草稿使用真实完整规格、政策与审核引用，确认发布999元正式套餐。",
+    })
+    .check();
+  await publish.click();
+  await expect(
+    page.getByText("999元正式套餐版本已发布。", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator("summary").filter({ hasText: "999元正式合成验收 · 正式售卖" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "发布受控1分验收版本", exact: true }),
+  ).toBeVisible();
   const expectedFailure = (error) =>
     error.kind === "console" &&
     ((error.url === incompleteFreezeUrl &&

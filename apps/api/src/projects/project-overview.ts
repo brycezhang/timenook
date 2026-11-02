@@ -1,3 +1,4 @@
+import { participationNotice } from "../catalog/e2e-package";
 import {
   Body,
   Controller,
@@ -28,7 +29,6 @@ import { Participation } from "../identity/participation";
 import { Stories } from "../stories/stories";
 import { Interviews } from "./interviews";
 import { readProjectAdmissionIn } from "./project-admission";
-import { INTERNAL_NOTICE_VERSION, INTERNAL_NOTICE } from "./internal-profile";
 import { ProductionTasks } from "../tasks/tasks";
 class ProjectMetadataDto {
   @ApiProperty() @IsInt() @Min(0) expectedVersion!: number;
@@ -109,20 +109,10 @@ export class ProjectOverview {
       projectId,
       bookTitle: p.bookTitle ?? admission.snapshot.bookTitle ?? "人生故事书",
       source: admission.source,
-      noticeVersion:
-        admission.source === "internal-acceptance"
-          ? INTERNAL_NOTICE_VERSION
-          : "synthetic-d08-v1",
-      evidencePrefix:
-        admission.source === "internal-acceptance" ? "internal:" : "synthetic:",
-      noticeText:
-        admission.source === "internal-acceptance"
-          ? INTERNAL_NOTICE
-          : undefined,
-      policyStatus:
-        admission.source === "internal-acceptance"
-          ? "internal-acceptance"
-          : "synthetic-only",
+      ...participationNotice(
+        admission.snapshot,
+        admission.source === "internal-acceptance",
+      ),
       metadataVersion: p.metadataVersion,
       subjectId: actor.subjectId,
       role: actor.subjectDecision === "self" ? "narrator" : "initiator",
