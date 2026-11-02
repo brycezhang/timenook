@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAdminTime } from "../utils/time";
 import { Alert, Button, Tag } from "antdv-next";
 import type { AdminAuditEntry, AdminRuntime } from "@timenook/contracts";
 defineProps<{
@@ -63,7 +64,7 @@ const emit = defineEmits<{ refresh: []; audit: [] }>();
           </thead>
           <tbody>
             <tr v-for="entry in audits" :key="entry.id">
-              <td>{{ new Date(entry.createdAt).toLocaleString("zh-CN") }}</td>
+              <td>{{ formatAdminTime(entry.createdAt) }}</td>
               <td>{{ entry.operatorId ?? "未认证 / 受控命令" }}</td>
               <td>{{ entry.action }}</td>
               <td>{{ entry.result }}</td>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAdminTime } from "../utils/time";
 import { ref, watch, onBeforeUnmount, computed } from "vue";
 import { useRoute, useRouter, RouterLink } from "vue-router";
 import { Page } from "@vben/common-ui";
@@ -133,7 +134,7 @@ onBeforeUnmount(() => {
       <Card title="本项目操作历史"
         ><p v-for="event in detail.history" :key="event.id">
           {{ event.action }} · {{ event.result }} · {{ event.operatorId }} ·
-          {{ event.createdAt }}
+          {{ formatAdminTime(event.createdAt) }}
         </p></Card
       ></template
     ></Page

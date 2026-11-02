@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { formatAdminTime } from "../utils/time";
+import { orderStateLabel } from "../utils/order-status";
 import { ref, watch, onBeforeUnmount, computed } from "vue";
 import { useRoute, useRouter, RouterLink } from "vue-router";
 import { Page } from "@vben/common-ui";
@@ -126,7 +128,7 @@ onBeforeUnmount(() => {
     <template v-if="detail && can(ADMIN_PERMISSIONS.writeCare)"
       ><Card title="产品账号"
         ><p class="identifier">{{ detail.id }}</p>
-        <p>创建时间：{{ detail.createdAt }}</p>
+        <p>创建时间：{{ formatAdminTime(detail.createdAt) }}</p>
         <p>
           登录方式：{{ detail.loginMethods.join("、") || "暂无已记录登录方式" }}
         </p>
@@ -182,7 +184,7 @@ onBeforeUnmount(() => {
             }"
             >{{ order.outTradeNo }}</RouterLink
           >
-          · {{ order.state }}
+          · {{ orderStateLabel(order.state) }}
         </p></Card
       >
       <Card title="服务申请"
@@ -194,7 +196,7 @@ onBeforeUnmount(() => {
               query: { from: route.fullPath, case: request.id },
             }"
             >{{ requestKind(request.kind) }} · {{ request.state }} ·
-            {{ request.createdAt }}</RouterLink
+            {{ formatAdminTime(request.createdAt) }}</RouterLink
           >
         </p></Card
       >
@@ -213,13 +215,13 @@ onBeforeUnmount(() => {
         >
         <section v-for="note in detail.notes" :key="note.id" class="section">
           <p class="note-content">{{ note.content }}</p>
-          <p>{{ note.operatorName }} · {{ note.createdAt }}</p>
+          <p>{{ note.operatorName }} · {{ formatAdminTime(note.createdAt) }}</p>
         </section></Card
       >
       <Card title="本账号操作历史"
         ><p v-for="event in detail.history" :key="event.id">
           {{ event.action }} · {{ event.result }} · {{ event.operatorId }} ·
-          {{ event.createdAt }}
+          {{ formatAdminTime(event.createdAt) }}
         </p></Card
       ></template
     ></Page

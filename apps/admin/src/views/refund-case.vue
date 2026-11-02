@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAdminTime, parseAdminTimeInput } from "../utils/time";
 import { computed, ref, onMounted, onUnmounted } from "vue";
 import { Button, Alert, Input, FormItem, Modal } from "antdv-next";
 import type { RefundView } from "@timenook/contracts";
@@ -87,7 +88,7 @@ async function command(
           ...(current.reason === "platformUnableDeliver"
             ? {
                 failureNotifiedAt: failureAt.value
-                  ? new Date(failureAt.value).toISOString()
+                  ? new Date(parseAdminTimeInput(failureAt.value)).toISOString()
                   : undefined,
               }
             : {}),
@@ -155,15 +156,26 @@ onMounted(refresh);
       </p>
       <p v-else>原购买政策不完整或当前执行路径不支持，不能批准。</p>
       <p v-if="view.approvedBy">
-        实际处理人：{{ view.approvedBy }}；处理期限：{{ view.dueAt }}
+        实际处理人：{{ view.approvedBy }}；处理期限：{{
+          formatAdminTime(view.dueAt)
+        }}
       </p>
       <p>
-        申请时间：{{ view.createdAt }}；原申请窗口：{{
-          view.requestWindowStartedAt ?? "待核验"
+        申请时间：{{ formatAdminTime(view.createdAt) }}；原申请窗口：{{
+          view.requestWindowStartedAt
+            ? formatAdminTime(view.requestWindowStartedAt)
+            : "待核验"
         }}
-        至 {{ view.requestWindowEndsAt ?? "待核验" }}
+        至
+        {{
+          view.requestWindowEndsAt
+            ? formatAdminTime(view.requestWindowEndsAt)
+            : "待核验"
+        }}
       </p>
-      <p v-if="view.completedAt">核实结果时间：{{ view.completedAt }}</p>
+      <p v-if="view.completedAt">
+        核实结果时间：{{ formatAdminTime(view.completedAt) }}
+      </p>
       <Alert
         v-if="view.processingState === 'overdue'"
         type="warning"
@@ -183,9 +195,11 @@ onMounted(refresh);
         >已核实的故障告知时间<input
           v-model="failureAt"
           type="datetime-local"
+          title="北京时间（UTC+8）"
           aria-label="已核实的故障告知时间"
           :disabled="busy"
       /></label>
+      <p>日期与时间均按北京时间（UTC+8）显示和填写。</p>
       <Button
         v-if="view.state === 'requested'"
         type="primary"

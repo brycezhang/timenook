@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import {
+  formatAdminTime,
+  parseAdminTimeInput,
+  formatAdminTimeInput,
+} from "../utils/time";
 import { ref, onMounted, onUnmounted } from "vue";
 import { Alert, Button } from "antdv-next";
 import type {
@@ -263,14 +268,6 @@ function accept(value: FulfillmentView) {
 function current(owner: number) {
   return active && owner === generation;
 }
-function localTime(value: string | null | undefined) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "";
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, -1);
-}
 function key(input: unknown) {
   const serialized = JSON.stringify(input);
   if (intent?.input !== serialized)
@@ -322,7 +319,9 @@ const open = (id: string) =>
       evidence.value = "";
       carrier.value = value.current?.tracking?.carrier || "";
       trackingNumber.value = value.current?.tracking?.number || "";
-      shippedAt.value = localTime(value.current?.tracking?.shippedAt);
+      shippedAt.value = formatAdminTimeInput(
+        value.current?.tracking?.shippedAt,
+      );
       shippingEvidence.value = "";
       wechatEvidence.value = "";
       wechatResult.value = value.current?.wechat?.result || "pending";
@@ -357,7 +356,7 @@ async function createAttempt() {
     (view.current && view.current.state !== "cancelled")
   )
     return;
-  const deadline = Date.parse(dueAt.value);
+  const deadline = parseAdminTimeInput(dueAt.value);
   if (
     !view.approvedSupplierRef ||
     !Number.isFinite(deadline) ||
@@ -443,7 +442,7 @@ function cancel() {
   return command("cancel", { evidenceRef: evidence.value.trim() });
 }
 function saveShipping() {
-  const shipped = Date.parse(shippedAt.value);
+  const shipped = parseAdminTimeInput(shippedAt.value);
   if (
     !carrier.value.trim() ||
     !trackingNumber.value.trim() ||
@@ -461,7 +460,7 @@ function saveShipping() {
   });
 }
 function completePrinting() {
-  const at = Date.parse(printedAt.value);
+  const at = parseAdminTimeInput(printedAt.value);
   if (!Number.isFinite(at) || !printingEvidence.value.trim()) {
     error.value = "请填写实际完成印制时间和核实证据。";
     return;
@@ -482,7 +481,7 @@ function saveWechat() {
   });
 }
 function deliver() {
-  const delivered = Date.parse(deliveredAt.value);
+  const delivered = parseAdminTimeInput(deliveredAt.value);
   if (!Number.isFinite(delivered) || !deliveryEvidence.value.trim()) {
     error.value = "请填写交付时间与交付证据。";
     return;
@@ -564,8 +563,10 @@ onUnmounted(() => {
           >本次处理期限<input
             v-model="dueAt"
             type="datetime-local"
+            title="北京时间（UTC+8）"
             :disabled="busy"
         /></label>
+        <p>日期与时间均按北京时间（UTC+8）显示和填写。</p>
         <p>请按购买时约定的人工时限与适用日历填写本次期限。</p>
         <p>
           印厂仅使用原订单已核验的供应商引用，不能在交接时另选未经准入的供应商。
@@ -586,14 +587,13 @@ onUnmounted(() => {
           }}
         </h2>
         <p v-if="selected.current.printedAt">
-          完成印制：{{ selected.current.printedAt }} · 操作人：{{
-            selected.current.printedBy
-          }}
+          完成印制：{{ formatAdminTime(selected.current.printedAt) }} ·
+          操作人：{{ selected.current.printedBy }}
         </p>
         <p>交接编号：{{ selected.current.handoffId }}</p>
         <p>
           第 {{ selected.current.sequence }} 次尝试 · 处理期限：{{
-            selected.current.dueAt
+            formatAdminTime(selected.current.dueAt)
           }}
         </p>
         <p>
@@ -616,7 +616,7 @@ onUnmounted(() => {
         <div v-if="materials" class="production-materials">
           <p>本次生产 PDF：{{ materials.pdf.sha256 }}</p>
           <p>交接编号：{{ materials.handoffId }}</p>
-          <p>授权截止：{{ materials.grantExpiresAt }}</p>
+          <p>授权截止：{{ formatAdminTime(materials.grantExpiresAt) }}</p>
           <p>
             收件人：{{ materials.address.recipientName }} ·
             {{ materials.address.phone }}
@@ -712,6 +712,7 @@ onUnmounted(() => {
             >完成印制时间<input
               v-model="printedAt"
               type="datetime-local"
+              title="北京时间（UTC+8）"
               step="0.001"
               :disabled="busy"
           /></label>
@@ -749,6 +750,7 @@ onUnmounted(() => {
             >发货时间<input
               v-model="shippedAt"
               type="datetime-local"
+              title="北京时间（UTC+8）"
               step="0.001"
               :disabled="busy || !!selected.current.tracking"
           /></label>
@@ -792,7 +794,9 @@ onUnmounted(() => {
             物流：{{ selected.current.tracking.carrier }} ·
             {{ selected.current.tracking.number }}
           </p>
-          <p>发货：{{ selected.current.tracking.shippedAt }}</p>
+          <p>
+            发货：{{ formatAdminTime(selected.current.tracking.shippedAt) }}
+          </p>
           <p>
             微信发货记录：{{
               selected.current.wechat
@@ -813,6 +817,7 @@ onUnmounted(() => {
             >交付时间<input
               v-model="deliveredAt"
               type="datetime-local"
+              title="北京时间（UTC+8）"
               step="0.001"
               :disabled="busy"
           /></label>
@@ -826,7 +831,7 @@ onUnmounted(() => {
           <p>交付事实只记录一次，资料服务长期有效。</p>
         </div>
         <p v-if="selected.current.deliveredAt" class="section">
-          交付完成：{{ selected.current.deliveredAt }}
+          交付完成：{{ formatAdminTime(selected.current.deliveredAt) }}
         </p>
       </div>
       <section class="section">
@@ -845,11 +850,15 @@ onUnmounted(() => {
             {{ attempt.supplierRef }}
           </p>
           <p v-if="attempt.printedAt">
-            完成印制：{{ attempt.printedAt }} · 操作人：{{ attempt.printedBy }}
+            完成印制：{{ formatAdminTime(attempt.printedAt) }} · 操作人：{{
+              attempt.printedBy
+            }}
           </p>
           <p v-for="(record, index) in attempt.records" :key="index">
             {{ recordLabels[record.kind] || record.kind }} ·
-            {{ record.createdAt }} · 操作人：{{ record.operatorAdminId }}
+            {{ formatAdminTime(record.createdAt) }} · 操作人：{{
+              record.operatorAdminId
+            }}
           </p>
         </div>
       </section>

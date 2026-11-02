@@ -381,7 +381,11 @@ test("quality request, personal scoped materials and original-order reprint use 
     .fill("synthetic:原D06日历与质量处理责任已核验");
   await admin
     .getByLabel("质量处理截止", { exact: true })
-    .fill(new Date(Date.now() + 86400000).toISOString().slice(0, 16));
+    .fill(
+      new Date(Date.now() + 86400000 + 8 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 16),
+    );
   await command(admin, "领取本次质量工单", "/assign");
   const narrator = await openMini(browser, narratorSession);
   const granted = await grant(narrator);

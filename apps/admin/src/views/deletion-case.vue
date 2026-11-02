@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAdminTime } from "../utils/time";
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { Alert, Button, Input } from "antdv-next";
 import type { DeletionStatus, DeletionItemView } from "@timenook/contracts";
@@ -210,7 +211,8 @@ onMounted(refresh);
           }}
         </p>
         <p>
-          原处理截止：{{ item.deadline || "规则或起算待确认"
+          原处理截止：{{
+            item.deadline ? formatAdminTime(item.deadline) : "规则或起算待确认"
           }}<span
             v-if="
               item.deadline &&
@@ -226,7 +228,9 @@ onMounted(refresh);
           }}
         </p>
         <p v-if="item.evidenceRef">本项回执：{{ item.evidenceRef }}</p>
-        <p v-if="item.completedAt">本层完成时间：{{ item.completedAt }}</p>
+        <p v-if="item.completedAt">
+          本层完成时间：{{ formatAdminTime(item.completedAt) }}
+        </p>
         <Button v-if="editable(item)" :disabled="busy" @click="select(item)"
           >录入此项核验记录</Button
         >

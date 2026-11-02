@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAdminTime, parseAdminTimeInput } from "../utils/time";
 import { computed, ref, watch, onUnmounted } from "vue";
 import { Alert, Button, Input } from "antdv-next";
 import type { CareCase, CompleteExportView } from "@timenook/contracts";
@@ -113,7 +114,7 @@ async function command(action: "accept" | "pack" | "delivery") {
       : action === "delivery"
         ? { evidenceRef: evidence.value }
         : {
-            dueAt: new Date(dueAt.value).toISOString(),
+            dueAt: new Date(parseAdminTimeInput(dueAt.value)).toISOString(),
             evidenceRef: evidence.value,
             ...(!value.value ? { recipientRef: recipientRef.value } : {}),
           };
@@ -251,7 +252,7 @@ async function download() {
           }}
         </p>
         <p v-if="value.ownerId">处理人：{{ value.ownerId }}</p>
-        <p v-if="value.dueAt">处理截止：{{ value.dueAt }}</p>
+        <p v-if="value.dueAt">处理截止：{{ formatAdminTime(value.dueAt) }}</p>
         <p>已完成的资料包长期有效，可依当前授权领取。</p>
         <p v-if="value.missingReason">
           缺失或待处理原因：{{ value.missingReason }}
@@ -261,10 +262,12 @@ async function download() {
         </p></template
       >
       <div v-if="!value || value.state === 'requested'" class="section">
+        <p>日期与时间均按北京时间（UTC+8）显示和填写。</p>
         <label
           >本次人工处理截止<input
             v-model="dueAt"
             type="datetime-local"
+            title="北京时间（UTC+8）"
             aria-label="导出处理截止"
             :disabled="busy" /></label
         ><label
@@ -301,7 +304,9 @@ async function download() {
         "
         ><p>
           客服私人资料授权截止：{{
-            value.staffAccess?.expiresAt || "尚无本次授权"
+            value.staffAccess?.expiresAt
+              ? formatAdminTime(value.staffAccess?.expiresAt)
+              : "尚无本次授权"
           }}。资料包本身长期有效。
         </p>
         <details class="section">
