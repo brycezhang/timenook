@@ -27,7 +27,7 @@ GitHub：[#9](https://github.com/brycezhang/timenook/issues/9) · 状态以 GitH
 
 - 覆盖模块：Commerce、LifeProject、运营与小程序目录。
 - 主入口：目录/套餐 HTTP + 管理端/小程序操作。通用约定见[父规格测试决策](../spec.md#测试决策)。
-- 现有范例：[catalog.test.ts](../../../../apps/api/test/catalog.test.ts)、[catalog.spec.mjs](../../../../tests/admin/catalog.spec.mjs)、[catalog-page.test.ts](../../../../tests/catalog-page.test.ts)；仅作测试方式参考。
+- 现有范例：[catalog.test.ts](../../../../apps/api/test/catalog.test.ts)、[catalog-page.test.ts](../../../../tests/catalog-page.test.ts)；仅作测试方式参考。原商品配置后台浏览器用例随页面退出，商品 API 与用户端目录验证保留。
 
 ## 阻塞依赖
 
