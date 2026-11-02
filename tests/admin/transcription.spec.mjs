@@ -646,7 +646,14 @@ test("authorized maintenance lists sanitized task failures and executes an audit
   expect(JSON.stringify(taskList)).not.toContain("signature=");
   const retried = await page.request.post(
     `https://localhost:5177/api/v1/admin/projects/${projectId}/tasks/${taskId}/retry`,
-    { headers: { "x-csrf-token": csrf, "idempotency-key": randomUUID() }, data: {} },
+    {
+      headers: {
+        origin: config.admin.origin,
+        "x-csrf-token": csrf,
+        "idempotency-key": randomUUID(),
+      },
+      data: {},
+    },
   );
   expect(retried.status()).toBe(202);
   expect((await retried.json()).data.id).toBe(taskId);
