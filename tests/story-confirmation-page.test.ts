@@ -1209,7 +1209,7 @@ test("switching accounts while a project overview is in flight removes the previ
   h.page.onUnload();
 });
 
-test("an assisted story keeps its collection session when applying new photos to a correction", async () => {
+test("an assisted story applies the shared photo snapshot to its correction without using collection-only context", async () => {
   const source = harness("story"),
     assistedSessionId = "88888888-8888-4888-8888-888888888888";
   source.page.onLoad({ projectId, interviewId, assistedSessionId });
@@ -1235,10 +1235,9 @@ test("an assisted story keeps its collection session when applying new photos to
   const applying = h.page.applyPhotos();
   assert.equal(
     h.requests[1].url,
-    `${base}/projects/${projectId}/interviews/${interviewId}/photos/context`,
+    `${base}/projects/${projectId}/interviews/${interviewId}/photos`,
   );
-  assert.equal(h.requests[1].method, "POST");
-  assert.equal(h.requests[1].data.assistedSessionId, assistedSessionId);
+  assert.equal(h.requests[1].method, "GET");
   const snapshot = {
     id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     projectId,

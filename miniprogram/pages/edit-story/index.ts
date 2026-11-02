@@ -254,13 +254,7 @@ Page({
     this.setData({ busy: true, error: "" });
     try {
       const collection = await sessionClient.request<PhotoCollection>(
-        `/projects/${this.projectId}/interviews/${current.interviewId}/photos${this.assistedSessionId ? "/context" : ""}`,
-        this.assistedSessionId
-          ? {
-              key: paymentKey(),
-              data: { assistedSessionId: this.assistedSessionId },
-            }
-          : undefined,
+        `/projects/${this.projectId}/interviews/${current.interviewId}/photos`,
       );
       if (this.current(generation, context))
         this.setData({

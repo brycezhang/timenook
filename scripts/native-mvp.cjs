@@ -616,22 +616,44 @@ async function exercise(run) {
     });
     await run.step("mvp-photo-after-story-without-rerecording", async () => {
       await call("editLivePhotos");
-      await page("photos");
+      const before = await page("photos");
+      const priorReferences = (before.snapshot?.entries ?? []).map(
+        (p) => p.photoId,
+      );
+      const priorLocalIds = before.photos.map((p) => p.clientPhotoId);
       await call("choose");
-      let photos = await page(
-        "photos",
-        (d) => d.photos.length === 1 && d.photos[0].state === "local",
+      let photos = await page("photos", (d) =>
+        d.photos.some(
+          (p) =>
+            !priorLocalIds.includes(p.clientPhotoId) && p.state === "local",
+        ),
       );
-      assert.equal(photos.photos[0].sha256, run.result.photoInput.sha256);
+      const localPhoto = photos.photos.find(
+        (p) => !priorLocalIds.includes(p.clientPhotoId),
+      );
+      assert.equal(localPhoto.sha256, run.result.photoInput.sha256);
       await call("upload", {
-        currentTarget: { dataset: { id: photos.photos[0].clientPhotoId } },
+        currentTarget: { dataset: { id: localPhoto.clientPhotoId } },
       });
-      photos = await page(
-        "photos",
-        (d) =>
-          d.photos[0]?.state === "sealed" && d.snapshot?.entries.length === 1,
+      photos = await page("photos", (d) => {
+        const uploaded = d.photos.find(
+          (p) => p.clientPhotoId === localPhoto.clientPhotoId,
+        );
+        return (
+          uploaded?.state === "sealed" &&
+          d.snapshot?.entries.some((p) => p.photoId === uploaded.serverId)
+        );
+      });
+      const photoId = photos.photos.find(
+        (p) => p.clientPhotoId === localPhoto.clientPhotoId,
+      ).serverId;
+      assert.ok(!priorReferences.includes(photoId), "MVP_NEW_PHOTO_REFERENCE");
+      assert.ok(
+        priorReferences.every((id) =>
+          photos.snapshot.entries.some((p) => p.photoId === id),
+        ),
+        "MVP_PRIOR_PHOTO_REFERENCES_PRESERVED",
       );
-      const photoId = photos.snapshot.entries[0].photoId;
       await call("caption", {
         currentTarget: { dataset: { id: photoId } },
         detail: { value: "虚构验收图：绿色色块，与真实人物无关" },
@@ -642,11 +664,13 @@ async function exercise(run) {
       await call("preview", { currentTarget: { dataset: { id: photoId } } });
       photos = await page("photos", (d) => !!d.previewPath);
       assert.equal(
-        photos.snapshot.entries[0].caption,
+        photos.snapshot.entries.find((p) => p.photoId === photoId).caption,
         "虚构验收图：绿色色块，与真实人物无关",
       );
       run.result.photo = {
         id: photoId,
+        baselineReferenceIds: priorReferences,
+        referenceCountAfterUpload: photos.snapshot.entries.length,
         cloudSealed: true,
         privatePreview: true,
         caption: true,
@@ -658,7 +682,9 @@ async function exercise(run) {
       await call("edit");
       await page("edit-story", (d) => !!d.story?.revision);
       await call("applyPhotos");
-      await page("edit-story", (d) => d.photoSnapshot?.entries.length === 1);
+      await page("edit-story", (d) =>
+        d.photoSnapshot?.entries.some((p) => p.photoId === run.result.photo.id),
+      );
       await call("input", {
         currentTarget: { dataset: { field: "title" } },
         detail: { value: "河边的纸船与陪伴（虚构验收校对）" },
@@ -674,9 +700,10 @@ async function exercise(run) {
         "MVP_CONFIRMATION_INVALIDATED",
       );
       assert.ok(d.liveAudioSources.length > 0, "MVP_ORIGINAL_AUDIO_PRESERVED");
-      assert.equal(
-        d.story.revision.photoSnapshot.entries[0].photoId,
-        run.result.photo.id,
+      assert.ok(
+        d.story.revision.photoSnapshot.entries.some(
+          (p) => p.photoId === run.result.photo.id,
+        ),
         "MVP_PHOTO_SNAPSHOT_MATCH",
       );
       assert.equal(
