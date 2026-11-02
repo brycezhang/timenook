@@ -8,19 +8,22 @@
       <view class="recipients live-recipients section"><button wx:for="{{recipientTypes}}" wx:key="code" class="recipient {{selection && selection.recipientCode === item.code ? 'selected' : ''}}" data-code="{{item.code}}" bindtap="chooseType">送给{{item.label}}</button></view>
       <input data-field="custom-label" class="custom-label" maxlength="40" value="{{customLabelValue}}" placeholder="也可以自定义称呼，最多40字" bindinput="customLabel" />
       <view wx:if="{{selectedLabel}}" class="section section-title">这份礼物，送给{{selectedLabel}}</view>
-      <view class="paper section"><view class="section-title">一个项目 · 一本实体书</view><view class="note">一位成年讲述者本人参与，一位发起人。赠礼称呼不改变价格或双方权限。</view><view class="divider"/><view class="note">{{availability}}</view><view wx:if="{{!packagePrice}}" class="small muted">套餐准备完成后，这里将展示服务期限、配送和退款说明。</view></view>
+      <view class="paper section"><view class="section-title">一个项目 · 一本实体书</view><view class="note">一位成年讲述者本人参与，一位发起人。赠礼称呼不改变价格或双方权限。</view><view class="divider"/><view class="note">{{availability}}</view><view wx:if="{{!packagePrice}}" class="small muted">套餐准备完成后，这里将展示服务内容、配送和退款说明。</view></view>
       <view wx:if="{{packageTerms.length}}" class="section"><view class="section-title">套餐与服务说明</view><view wx:for="{{packageTerms}}" wx:key="label" class="catalog-term"><view class="term-label">{{item.label}}</view><view class="note">{{item.text}}</view></view></view>
     </block>
+<!-- @development:start -->
     <view wx:if="{{localVerification}}" class="soft section">
       <view class="section-title">本地合成付款验证</view><view class="note">仅验证订单恢复，不会调用微信付款或产生真实扣款。再次操作会恢复原验证订单。</view>
       <input class="custom-label" value="{{shippingRegionCode}}" placeholder="合成配送区域代码" bindinput="shippingRegion" />
       <view wx:if="{{verificationError}}" class="note">{{verificationError}}</view>
       <button class="btn secondary" loading="{{verificationBusy}}" disabled="{{verificationBusy}}" bindtap="verifyPurchase">验证并恢复订单</button>
     </view>
+<!-- @development:end -->
     <button class="link" bindtap="orders">查询已有订单与项目</button>
   </view>
   <view class="dock row"><view class="grow"><text wx:if="{{packagePrice}}" class="price">¥{{packagePrice}}</text><view class="small muted">一个项目 · 首本一本</view></view><button class="btn brown live-pay" disabled="{{true}}" bindtap="pay">暂未开放购买</button></view>
 </block>
+<!-- @development:start -->
 <block wx:else="">
 <view class="page with-dock"
   ><view class="title">这本书，你想送给谁？</view
@@ -86,3 +89,4 @@
 ></view>
 
 </block>
+<!-- @development:end -->

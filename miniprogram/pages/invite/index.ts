@@ -179,6 +179,7 @@ Page({
     }
     home();
   },
+  // @web-only:start
   copyInvitation() {
     if (!this.data.inviteToken || this.shareContext !== sessionClient.context())
       return;
@@ -191,6 +192,7 @@ Page({
       fail: () => this.setData({ status: "邀请链接未复制，请重试。" }),
     });
   },
+  // @web-only:end
   onShareAppMessage() {
     if (dataMode() === "live")
       return this.data.inviteToken &&

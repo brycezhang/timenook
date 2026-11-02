@@ -22,3 +22,9 @@ export const PAYMENT_VERIFICATION_BUILD =
   typeof __TIMENOOK_PAYMENT_VERIFICATION__ === "boolean" &&
   __TIMENOOK_PAYMENT_VERIFICATION__ &&
   /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(?:\/api)?\/v1$/.test(API_BASE_URL);
+
+// The uploaded native package never uses local demonstration data.
+declare const __TIMENOOK_NATIVE_RELEASE__: boolean | undefined;
+export const NATIVE_RELEASE =
+  typeof __TIMENOOK_NATIVE_RELEASE__ === "boolean" &&
+  __TIMENOOK_NATIVE_RELEASE__;

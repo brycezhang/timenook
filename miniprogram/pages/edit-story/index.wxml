@@ -27,6 +27,7 @@
  </block>
 </view>
 </block>
+<!-- @development:start -->
 <block wx:else="">
 <view class="page with-dock"
   ><view class="note"
@@ -53,3 +54,4 @@
   ><button class="btn" bindtap="save">保存修改，重新确认</button></view
 >
 </block>
+<!-- @development:end -->

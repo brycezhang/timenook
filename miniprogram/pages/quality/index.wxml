@@ -1,6 +1,6 @@
 <view class="page quality-page">
  <view class="title">质量售后与进展</view>
- <view class="note section">隔离合成验证。质量问题由客服按购买时的政策核验；重印沿用原订单，不另付款，也不新增首本权益。</view>
+ <view class="note section">质量问题由客服按购买时的政策核验；重印沿用原订单，不另付款，也不新增首本权益。</view>
  <view wx:if="{{status}}" class="section note" role="alert">{{status}}</view>
  <button class="btn secondary" bindtap="refresh" disabled="{{busy}}">重新查询质量售后</button>
  <view wx:if="{{view}}">

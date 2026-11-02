@@ -53,6 +53,7 @@
   <button wx:if="{{loggedIn && statusProjectId}}" class="btn secondary section" bindtap="deletion">查看资料删除进度</button>
   <button class="link" bindtap="back">返回首页</button>
 </view>
+<!-- @development:start -->
 <block wx:else="">
 <view wx:if="{{missing}}" class="page"
   ><view class="title">这是一张示例邀请</view
@@ -72,6 +73,7 @@
   <button class="link section" bindtap="back">暂时不参加</button>
 </view>
 </block>
+<!-- @development:end -->
 
 <view wx:if="{{participation && showManagement}}" class="page withdrawal-status">
   <button class="btn secondary section" bindtap="showWithdrawal" disabled="{{busy}}">查看撤回处置进度</button>

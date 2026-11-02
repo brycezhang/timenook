@@ -6,6 +6,9 @@ const base = "https://timenookapi.threeminreading.com/api/v1";
 
 async function main() {
   const run = await createRun("live");
+  const mvp = process.argv.includes("--mvp")
+    ? require("./native-mvp.cjs")
+    : null;
   const { evaluate, page, navigate } = run;
   let error;
   const identityAction = (name) =>
@@ -62,13 +65,21 @@ async function main() {
     );
   try {
     await run.step("live-api-build", async () => {
-      assert.ok(
-        (await fs.readFile("dist/miniprogram/config.js", "utf8")).includes(
-          base,
-        ),
-        "Build the native app with the public API base first",
+      const module = { exports: {} };
+      require("node:vm").runInNewContext(
+        await fs.readFile("dist/miniprogram/config.js", "utf8"),
+        { module },
       );
+      assert.equal(module.exports.API_BASE_URL, base);
+      if (mvp)
+        assert.equal(
+          module.exports.NATIVE_RELEASE,
+          true,
+          "MVP acceptance requires the release package",
+        );
     });
+    if (mvp)
+      await run.step("synthetic-hardware-preparation", () => mvp.prepare(run));
     await run.start();
     await run.step("real-domain-enforcement", async () => {
       const blocked = await evaluate(function () {
@@ -204,9 +215,11 @@ async function main() {
           : Boolean(data.paymentError),
       );
     });
+    if (mvp) await mvp.exercise(run);
   } catch (failure) {
     error = failure;
   } finally {
+    if (mvp) await mvp.cleanup(run);
     if (run.mp)
       await run.cleanup("revoke-test-sessions", async () => {
         const cleaned = await run.run("cleanup:revoke-test-sessions", () =>

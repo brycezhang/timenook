@@ -4,6 +4,10 @@
   "appid": "wxa54f81265fba2439",
   "compileType": "miniprogram",
   "miniprogramRoot": "dist/miniprogram/",
-  "setting": { "es6": true, "minified": true, "urlCheck": true },
-  "libVersion": "3.10.0"
+  "setting": {
+    "es6": true,
+    "minified": true,
+    "urlCheck": true
+  },
+  "libVersion": "3.17.5"
 }

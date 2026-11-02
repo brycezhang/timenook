@@ -82,9 +82,11 @@ Page({
     }
     home("home");
   },
+  // @web-only:start
   accountLink() {
     go("account-link");
   },
+  // @web-only:end
   orders() {
     go("order");
   },

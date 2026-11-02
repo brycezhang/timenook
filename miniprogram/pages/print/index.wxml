@@ -1,7 +1,7 @@
 <block wx:if="{{live}}">
   <view class="page live-first-copy">
     <view class="title">确认书稿与首本制作</view>
-    <view class="note section">隔离合成验证，尚未开放正式生产。请双方分别核对同一版完整 PDF；付款不能代替讲述者本人确认。</view>
+    <view class="note section">请核对本版书稿、双方确认及制作资格。请双方分别核对同一版完整 PDF；付款不能代替讲述者本人确认。</view>
     <view wx:if="{{status}}" class="soft section" role="alert">{{status}}</view>
     <view wx:if="{{busy}}" class="note section" role="status">正在查询或保存，请稍候…</view>
     <block wx:if="{{context}}">
@@ -9,7 +9,7 @@
         <view class="section-title">首本实体书</view>
         <view class="section">已付 ¥999 · 制作 {{context.payment.copies}} 本</view>
         <view class="section">本次无需支付 · ¥0</view>
-        <view class="note">以上付款与配送信息来自本项目购买时的销售快照；当前仅为合成测试。</view>
+        <view class="note">以上付款与配送信息来自本项目购买时的销售快照；制作资格以服务端记录为准。</view>
         <view wx:for="{{context.shipping.terms}}" wx:key="index" class="section"><view>{{item.label}}</view><view class="note">{{item.text}}</view></view>
       </view>
       <view wx:if="{{context.qualityRevisionRequestId}}" class="soft section">本次为原订单质量售后的书稿修订。原已交付文件与首本消费事实保留；新稿须双方重新核对，再由客服创建原单重印尝试，不新增购买或首本权益。</view><view wx:if="{{context.canReviseProduction && !context.qualityRevisionRequestId}}" class="soft section">上次生产已确认取消。原生产单及历史版本记录保留；可更正地址或调整书稿，再按当前版本重新确认与提交。仅改地址由发起人重新确认；书稿内容变化须双方重新核对。</view>
@@ -53,6 +53,7 @@
     <button class="btn secondary section" bindtap="book" disabled="{{busy}}">返回成书总览</button>
   </view>
 </block>
+<!-- @development:start -->
 <block wx:else="">
 <view class="page with-dock"
   ><view class="row print-product"
@@ -131,3 +132,4 @@
   ><view class="dock-note">本次无需支付 · 不会创建真实印刷订单</view></view
 >
 </block>
+<!-- @development:end -->
