@@ -206,6 +206,7 @@ async function openMini(
 async function openAdmin(browser, headers = adminHeaders) {
   const context = await browser.newContext({
     ignoreHTTPSErrors: true,
+    timezoneId: "America/Los_Angeles",
     viewport: { width: 1280, height: 900 },
   });
   const split = headers.cookie.indexOf("=");
@@ -253,7 +254,7 @@ async function fillDate(page, label, date) {
     type === "datetime-local"
       ? await page.evaluate((iso) => {
           const value = new Date(iso);
-          return new Date(value.getTime() - value.getTimezoneOffset() * 60000)
+          return new Date(value.getTime() + 8 * 60 * 60 * 1000)
             .toISOString()
             .slice(0, 23);
         }, date.toISOString())
@@ -525,12 +526,14 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
   await expect(
     admin.getByRole("button", { name: "保存实际发货记录", exact: true }),
   ).toBeDisabled();
-  await fillDate(admin, "完成印制时间", new Date());
+  const printedAt = new Date();
+  await fillDate(admin, "完成印制时间", printedAt);
   await admin
     .getByLabel("完成印制证据", { exact: true })
     .fill("synthetic:核实实体书完成印制");
   const printed = await command(admin, "记录完成印制", "/printing");
   expect(printed.current.printedBy).toBeTruthy();
+  expect(printed.current.printedAt).toBe(printedAt.toISOString());
   await narrator
     .getByRole("button", { name: "重新查询生产与物流", exact: true })
     .click();
@@ -610,6 +613,12 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
     .getByLabel("交付证据", { exact: true })
     .fill("synthetic:人工核对签收");
   view = await command(admin, "记录交付完成", "/delivery");
+  await expect(
+    admin.getByText(
+      `交付完成：${new Date(Date.parse(deliveredAt) + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace("T", " ")}`,
+      { exact: true },
+    ),
+  ).toBeVisible();
   expect(view.serviceTerms.playback.expiresAt).toBeNull();
   const originalExpiry = view.serviceTerms.playback.expiresAt;
   await narrator

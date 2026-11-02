@@ -24,10 +24,11 @@ import {
 } from "@timenook/contracts";
 import { AdminAccess } from "./admin-access";
 import { PaymentIdempotencyConflict } from "../payments/errors";
+import { adminOrderState } from "./order-state";
 
 type SummaryRow = Omit<AdminOrderSummary, "createdAt"> & { createdAt: Date };
 const pending = Prisma.sql`(EXISTS(SELECT 1 FROM refunds r WHERE r.order_id=p.id AND r.state NOT IN ('succeeded','closed','rejected')) OR EXISTS(SELECT 1 FROM quality_requests q WHERE q.order_id=p.id AND q.state NOT IN ('completed','rejected','cancelled')))`;
-const summary = Prisma.sql`SELECT p.id, p.out_trade_no AS "outTradeNo",p.buyer_id AS "buyerId",j.id AS "projectId",s.id AS "subjectId",COALESCE(s.name,p.subject_name) AS "subjectName",s.bound_user_id AS "narratorUserId",COALESCE(j.book_title,p.book_title) AS "bookTitle",p.state,p.mode,p.is_e2e AS "isE2e",p.list_amount AS "listAmount",p.amount AS "payableAmount",COALESCE(t.amount,0)::int AS "paidAmount",COALESCE((SELECT sum(amount) FROM refunds WHERE order_id=p.id AND state='succeeded'),0)::int AS "refundedAmount",p.currency,p.created_at AS "createdAt",${pending} AS pending FROM payment_orders p LEFT JOIN projects j ON j.order_id=p.id LEFT JOIN project_subjects s ON s.project_id=j.id LEFT JOIN payment_transactions t ON t.order_id=p.id`;
+const summary = Prisma.sql`SELECT p.id, p.out_trade_no AS "outTradeNo",p.buyer_id AS "buyerId",j.id AS "projectId",s.id AS "subjectId",COALESCE(s.name,p.subject_name) AS "subjectName",s.bound_user_id AS "narratorUserId",COALESCE(j.book_title,p.book_title) AS "bookTitle",${adminOrderState} AS state,p.mode,p.is_e2e AS "isE2e",p.list_amount AS "listAmount",p.amount AS "payableAmount",COALESCE(t.amount,0)::int AS "paidAmount",COALESCE((SELECT sum(amount) FROM refunds WHERE order_id=p.id AND state='succeeded'),0)::int AS "refundedAmount",p.currency,p.created_at AS "createdAt",${pending} AS pending FROM payment_orders p LEFT JOIN projects j ON j.order_id=p.id LEFT JOIN project_subjects s ON s.project_id=j.id LEFT JOIN payment_transactions t ON t.order_id=p.id`;
 const serialize = (r: SummaryRow): AdminOrderSummary => ({
   ...r,
   createdAt: r.createdAt.toISOString(),
@@ -88,7 +89,13 @@ export class AdminOrdersController {
             throw new BadRequestException();
           if (
             query.state !== undefined &&
-            !["pending", "paid", "closed"].includes(String(query.state))
+            ![
+              "pending",
+              "paid",
+              "closed",
+              "refunded",
+              "partially_refunded",
+            ].includes(String(query.state))
           )
             throw new BadRequestException();
           if (
@@ -105,7 +112,7 @@ export class AdminOrdersController {
             );
           }
           if (query.state)
-            filters.push(Prisma.sql`p.state=${String(query.state)}`);
+            filters.push(Prisma.sql`${adminOrderState}=${String(query.state)}`);
           if (query.pending !== undefined)
             filters.push(Prisma.sql`${pending}=${query.pending === "true"}`);
           const where = Prisma.join(filters, " AND ");

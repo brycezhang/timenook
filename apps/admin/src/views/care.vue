@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAdminTime } from "../utils/time";
 import { ref, onMounted, onUnmounted } from "vue";
 import { Alert, Button, Form, FormItem, Input } from "antdv-next";
 import type {
@@ -498,7 +499,7 @@ onMounted(() => {
         <h3>本次受控故事校对</h3>
         <p>
           本人授权到期：{{
-            selected.correctionGrant.expiresAt
+            formatAdminTime(selected.correctionGrant.expiresAt)
           }}。仅核验本次工单的客服可读取和校对；新稿仍需本人重新确认。
         </p>
         <Button
@@ -552,7 +553,9 @@ onMounted(() => {
         <p v-if="selected.withdrawal.production">
           生产阶段：{{ selected.withdrawal.production.state }}；负责人：{{
             selected.withdrawal.production.ownerAdminId
-          }}；处理期限：{{ selected.withdrawal.production.dueAt }}
+          }}；处理期限：{{
+            formatAdminTime(selected.withdrawal.production.dueAt)
+          }}
         </p>
         <p v-for="change in selected.withdrawal.changes" :key="change.id">
           范围：{{

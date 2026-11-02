@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAdminTime } from "../utils/time";
 import { ref, watch, onBeforeUnmount } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Page } from "@vben/common-ui";
@@ -32,7 +33,7 @@ const columns = [
   { title: "生产单 / 原订单", key: "order", width: 300 },
   { title: "讲述者 / 书名", key: "identity", width: 230 },
   { title: "生产进度", key: "state", width: 230 },
-  { title: "创建时间", dataIndex: "createdAt", width: 220 },
+  { title: "创建时间", key: "createdAt", width: 220 },
 ];
 const exception = ref(String(route.query.exception ?? ""));
 async function load() {
@@ -190,6 +191,9 @@ onBeforeUnmount(() => {
             ><div>{{ record.subjectName ?? "未命名讲述者" }}</div>
             <div>{{ record.bookTitle }}</div></template
           >
+          <template v-else-if="column.key === 'createdAt'">{{
+            formatAdminTime(record.createdAt)
+          }}</template>
           <template v-else-if="column.key === 'state'"
             ><Tag>{{ stateLabels[String(record.state)] ?? record.state }}</Tag
             ><Tag v-if="record.pending" color="orange">待处理</Tag

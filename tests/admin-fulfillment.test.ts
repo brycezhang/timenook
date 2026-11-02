@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { transform } from "esbuild";
+import {
+  formatAdminTime,
+  formatAdminTimeInput,
+  parseAdminTimeInput,
+} from "../apps/admin/src/utils/time";
 async function harness() {
   const script = readFileSync("apps/admin/src/views/fulfillment.vue", "utf8")
     .split('<script setup lang="ts">')[1]
@@ -24,6 +29,9 @@ async function harness() {
   runInNewContext(code, {
     module,
     exports: module.exports,
+    formatAdminTime,
+    formatAdminTimeInput,
+    parseAdminTimeInput,
     ref: (value: unknown) => ({ value }),
     computed: (fn: () => unknown) => ({
       get value() {
@@ -94,7 +102,7 @@ test("operational creation binds the selected reservation and keeps one uncertai
   assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0].args[1])), {
     ...view.reservation,
     supplierRef: "synthetic:local-printer",
-    dueAt: new Date("2098-10-26T14:30").toISOString(),
+    dueAt: "2098-10-26T06:30:00.000Z",
   });
   const key = h.calls[0].args[2];
   h.calls[0].reject(new Error("synthetic network failure"));

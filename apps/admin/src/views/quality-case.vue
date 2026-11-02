@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAdminTime, parseAdminTimeInput } from "../utils/time";
 import { ref, onMounted, onUnmounted } from "vue";
 import { Alert, Button, Input, FormItem, Modal } from "antdv-next";
 import type { QualityMaterials, QualityRequestView } from "@timenook/contracts";
@@ -49,7 +50,7 @@ async function command(action: "assign" | "review" | "reprints") {
   if (!active || !source || busy.value) return;
   let body: object;
   if (action === "assign") {
-    const due = Date.parse(dueAt.value);
+    const due = parseAdminTimeInput(dueAt.value);
     if (
       !Number.isFinite(due) ||
       !/^(internal:|synthetic:)/.test(evidence.value)
@@ -322,7 +323,7 @@ onMounted(refresh);
       <p>
         原制作第{{ view.original.sequence }}次；书稿第{{
           view.original.bookVersion
-        }}版；原交付：{{ view.original.deliveredAt }}
+        }}版；原交付：{{ formatAdminTime(view.original.deliveredAt) }}
       </p>
       <p>原 PDF hash：{{ view.original.pdfHash }}</p>
       <p v-if="view.original.tracking">
@@ -331,7 +332,7 @@ onMounted(refresh);
       </p>
       <p>
         处理人：{{ view.ownerLabel || "待领取" }}；实际处理截止：{{
-          view.dueAt || "待按原 D06 核验"
+          view.dueAt ? formatAdminTime(view.dueAt) : "待按原 D06 核验"
         }}
       </p>
       <p>
@@ -354,9 +355,11 @@ onMounted(refresh);
           >按原 D06 核验的实际处理截止<input
             v-model="dueAt"
             type="datetime-local"
+            title="北京时间（UTC+8）"
             aria-label="质量处理截止"
             :disabled="busy"
         /></label>
+        <p>日期与时间均按北京时间（UTC+8）显示和填写。</p>
         <Button
           type="primary"
           :disabled="
@@ -371,8 +374,11 @@ onMounted(refresh);
       </div>
       <div v-if="view.ownerLabel">
         <p>
-          本人授权截止：{{ view.grant?.expiresAt || "尚无当前有效授权" }}。PDF
-          和问题说明分别授权，不包含地址。
+          本人授权截止：{{
+            view.grant?.expiresAt
+              ? formatAdminTime(view.grant?.expiresAt)
+              : "尚无当前有效授权"
+          }}。PDF 和问题说明分别授权，不包含地址。
         </p>
         <Button :disabled="busy || !view.grant" @click="loadMaterials"
           >查看本次获授权资料</Button

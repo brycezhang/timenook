@@ -288,7 +288,7 @@ test("narrator requests a complete export, operator verifies and packs it, recip
   await expect(admin.getByText("状态：待核验", { exact: true })).toBeVisible();
   const due = await admin.evaluate(() => {
     const v = new Date(Date.now() + 86400000);
-    return new Date(v.getTime() - v.getTimezoneOffset() * 60000)
+    return new Date(v.getTime() + 8 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 16);
   });
