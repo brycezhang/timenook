@@ -21,6 +21,7 @@ const build = spawnSync(process.execPath, [path.resolve("scripts/build.mjs")], {
   encoding: "utf8",
   env: {
     ...process.env,
+    TIMENOOK_MINIPROGRAM_PROFILE: "development",
     TIMENOOK_AUDIO_PROBE_BUILD: "0",
     TIMENOOK_PAYMENT_VERIFICATION: "",
     TIMENOOK_API_BASE_URL: "https://example.test/api/v1",
@@ -206,3 +207,61 @@ for (const recipient of ["妈妈", "爸爸"]) {
     assert.equal(welcome.data.p.id, invite.data.p.id);
   });
 }
+
+test("release package excludes website and probe routes and ignores stored demo mode", async () => {
+  const release = spawnSync(
+    process.execPath,
+    [path.resolve("scripts/build.mjs")],
+    {
+      cwd: fixture,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        TIMENOOK_MINIPROGRAM_PROFILE: "release",
+        TIMENOOK_AUDIO_PROBE_BUILD: "0",
+        TIMENOOK_PAYMENT_VERIFICATION: "",
+        TIMENOOK_API_BASE_URL: "https://example.test/api/v1",
+      },
+    },
+  );
+  assert.equal(release.status, 0, release.stderr);
+  const config = JSON.parse(
+    await readFile(path.join(root, "app.json"), "utf8"),
+  );
+  assert.ok(config.pages.includes("pages/interview/index"));
+  assert.ok(config.pages.includes("pages/manuscript/index"));
+  for (const name of ["account-link", "audio-probe"]) {
+    assert.ok(!config.pages.includes(`pages/${name}/index`));
+    await assert.rejects(readFile(path.join(root, `pages/${name}/index.js`)), {
+      code: "ENOENT",
+    });
+    await assert.rejects(readFile(path.join(root, `services/${name}.js`)), {
+      code: "ENOENT",
+    });
+  }
+  for (const name of config.pages) {
+    assert.doesNotMatch(
+      await readFile(path.join(root, name + ".wxml"), "utf8"),
+      /网页|网站|官网|测试|演示|内测|合成验证|本地验证|验证订单|体验购买|useDemo|accountLink|copyInvitation|localVerification/,
+    );
+  }
+  const app = await harness("demo");
+  const home = await app.open("pages/home/index", false);
+  assert.equal(
+    home.data.mode,
+    "live",
+    "cached demo mode cannot change the release package",
+  );
+  assert.equal(home.accountLink, undefined);
+  home.onLoad({});
+  assert.equal(
+    app.route(),
+    "",
+    "a stored demonstration project cannot auto-open",
+  );
+  const invite = await app.open("pages/invite/index", false);
+  assert.equal(invite.copyInvitation, undefined);
+  const order = await app.open("pages/order/index", false);
+  assert.equal(order.retryPayment, undefined);
+  assert.equal(order.closeOrder, undefined);
+});

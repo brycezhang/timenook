@@ -32,7 +32,7 @@
           <view class="section-title">{{item.title}}</view><text class="excerpt-body">{{item.text}}</text>
         </view>
         <button wx:if="{{version.state === 'failed'}}" class="btn section" bindtap="retry" disabled="{{busy || !draftAvailable}}">重试生成本版</button>
-        <view class="note section">{{context.physicalProduction === false ? '内部功能验收书稿，无付款或实体书生产。' : '当前为合成测试规格，尚未开放正式生产。'}}</view>
+        <view class="note section">{{context.physicalProduction === false ? '此项目支持书稿下载，未包含实体书制作。' : '本版书稿尚未开放实体书制作。'}}</view>
       </block>
       <view wx:if="{{!version && !context.eligibleStories.length}}" class="empty"><view class="serif section-title">书的第一页，等你来讲。</view><view class="subtitle">先留下一段往事，确认后就能收进书里。</view><button class="btn section" bindtap="project">回到项目，开始第一篇故事</button></view>
       <view class="section-title section">书稿与目录</view>
@@ -69,7 +69,7 @@
         <button class="btn section" bindtap="saveDirectory" disabled="{{busy || !dirty}}">保存入书目录</button>
       </block>
       <view class="decision-panel"><view class="section-title">离成书，还有哪一步？</view>
-        <view class="note section">{{context.physicalProduction === false ? '内部功能验收书稿，无付款或实体书生产。' : '同一版完整 PDF 须由双方分别核对，首本制作仍由服务端核验。'}}</view>
+        <view class="note section">{{context.physicalProduction === false ? '此项目支持书稿下载，未包含实体书制作。' : '同一版完整 PDF 须由双方分别核对，首本制作仍由服务端核验。'}}</view>
         <button wx:if="{{version && version.state === 'ready' && context.physicalProduction !== false}}" class="btn secondary section" bindtap="print" disabled="{{busy}}">双方确认与首本制作</button>
         <button wx:if="{{context.physicalProduction !== false}}" class="text-action" bindtap="quality" disabled="{{busy}}">质量售后与原单重印</button>
       </view>
@@ -80,6 +80,7 @@
   </view>
   <view wx:if="{{!nativeTabs}}" class="tabs live-tabs"><button class="tab" bindtap="project"><image class="icon" src="/assets/icons/book-open.svg"/><text class="tab-label">项目</text></button><button class="tab active" bindtap="book"><image class="icon" src="/assets/icons/file-text.svg"/><text>成书</text></button><button class="tab" bindtap="account"><image class="icon" src="/assets/icons/user.svg"/><text>我的</text></button></view>
 </block>
+<!-- @development:start -->
 <block wx:else="">
 <view class="book-page with-tabs"
   ><view class="book-heading center"
@@ -161,3 +162,4 @@
   ></view
 >
 </block>
+<!-- @development:end -->

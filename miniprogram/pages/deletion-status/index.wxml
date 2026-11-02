@@ -1,6 +1,6 @@
 <view class="page deletion-page">
   <view class="title">资料删除进度</view>
-  <view class="soft section">隔离合成验证 · 真实处理规则、备份与供应商回执仍待核验。</view>
+  <view class="soft section">删除申请核验后执行，各层资料的处理结果分别记录。</view>
   <view wx:if="{{status}}" class="soft section" role="alert">{{status}}</view>
   <view wx:if="{{busy}}" class="section" role="status">正在查询当前进度…</view>
   <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">重新查询删除进度</button>

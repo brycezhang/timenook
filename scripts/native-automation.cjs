@@ -86,7 +86,7 @@ async function waitForPage(
               return new Promise(function (resolve) {
                 wx.createSelectorQuery()
                   .selectAll(
-                    ".page, .home, .book-page, .interview-focus, .focus-sheet",
+                    ".page, .home, .book-page, .interview-focus, .focus-sheet, .original-audio-page, .photos-page",
                   )
                   .boundingClientRect(function (rects) {
                     resolve(

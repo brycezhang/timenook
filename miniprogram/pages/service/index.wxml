@@ -15,6 +15,7 @@
   </view>
   <view class="note section">制作、回听、导出申请与已完成资料包下载长期有效；当前用途授权、首本权益和退款规则仍分别适用。</view>
 </view>
+<!-- @development:start -->
 <block wx:else="">
 <view class="page"
   ><block wx:if="{{kind==='privacy'||kind==='terms'}}"
@@ -105,3 +106,4 @@
 >
 
 </block>
+<!-- @development:end -->

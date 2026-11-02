@@ -9,7 +9,10 @@ if (!fs.existsSync(compiler + "/wcc")) {
   );
   process.exit(1);
 }
-const pages = JSON.parse(fs.readFileSync("miniprogram/app.json", "utf8")).pages;
+const root = process.argv.includes("--built")
+  ? "dist/miniprogram"
+  : "miniprogram";
+const pages = JSON.parse(fs.readFileSync(root + "/app.json", "utf8")).pages;
 const sources = [...pages, "custom-tab-bar/index"];
 for (const [tool, ext, extra] of [
   ["wcc", ".wxml", []],
@@ -18,7 +21,7 @@ for (const [tool, ext, extra] of [
   const result = spawnSync(
     compiler + "/" + tool,
     ["-o", "/dev/null", ...sources.map((p) => p + ext), ...extra],
-    { cwd: "miniprogram", encoding: "utf8" },
+    { cwd: root, encoding: "utf8" },
   );
   if (result.status !== 0) {
     console.error(result.stderr);

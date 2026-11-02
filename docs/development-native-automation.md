@@ -9,10 +9,15 @@
 要求 Mac 官方微信开发者工具已登录、允许命令行服务，并在「详情 → 本地设置」安装基础库 `3.17.5`。脚本默认使用这一本机已安装的稳定版本；只修改临时项目的版本，不修改根 `project.config.json` 或上传包。可用 `TIMENOOK_NATIVE_LIBRARY=x.y.z` 显式选择另一个已安装版本；实际解析版本必须与请求一致，否则以 `startup:library-version` / `NativeLibraryMismatch` 失败。结果同时记录源配置、测试请求与实际解析版本。
 
 ```bash
-TIMENOOK_API_BASE_URL=https://timenookapi.threeminreading.com/api/v1 pnpm build:frontend
+pnpm build:miniprogram
 pnpm test:native-automation
-pnpm test:native-e2e
+node scripts/check-native.mjs --built
 pnpm test:native-login
+pnpm test:native-mvp
+
+# 本机演示回归单独构建，不作为正式功能验收
+pnpm build:miniprogram:development
+pnpm test:native-e2e
 ```
 
 `test:native-login -- --orders-required` 要求已启用订单模块、`GET /orders` 为 200 且符合订单数组契约；可直接运行 `node scripts/test-native-login.cjs --orders-required`。默认模式记录订单可用性，允许旧内部验收装配的 404，核心登录检查不因此跳过。真实服务的装配、部署和付款验收仍单独记录。
@@ -39,3 +44,12 @@ SDK 探测连接失败时继续有界轮询；收到无法解析的 JSON，或�
 运行目录打印为系统临时目录下 `timenook-native-demo-*` 或 `timenook-native-live-*`；目录权限 700，机器结果 `evidence/result.json` 为 600，均不进入 Git。无论成功失败都撤销真实模式缓存的测试会话并清除本机会话，断开 SDK，关闭本次临时项目；清理失败会使整次结果失败。不会清除用户原项目或其他项目缓存。
 
 单账号开发者工具结果不替代 iOS/Android 微信真机、真实麦克风/采集、实际资金或实物验收。
+
+
+## 正式包与核心内容验收（2026-11-02）
+
+默认 `node scripts/build.mjs` 与 `pnpm build:miniprogram` 输出 release 包，API 默认使用项目独立 HTTPS 域名，固定 live 数据，移除网页关联、录音探针、网页邀请按钮及开发演示模板。显式 development 构建保留原演示回归。根上传基础库为已实测的稳定 `3.17.5`，正式包与自动化采用同一版本。
+
+`pnpm test:native-mvp` 强制检查正式构建和真实订单可用性，使用真实微信账号担任讲述者，HTTP 创建独立内部项目及合成发起人，验证邀请绑定、用途、原生文件保存、暂停继续、真实 OSS/ASR/AI、当前版本确认及 PDF。RecorderManager 与相册选择硬件边界分别输入 macOS Tingting 合成的明确虚构中文和生成色块 PNG；没有替换身份、HTTP、私有文件、数据库或 Worker。需本机 `say`、`ffmpeg`、`ffprobe` 及已有 ECS SSH 权限。
+
+虚构 MP3 与色块 PNG 临时存入现有 `/admin/assets/`，经已获允许的 API 域名下载为原生临时文件，测试结束删除；不增加域名豁免、关闭 `urlCheck` 或要求新增测试专用下载域名。所有账号、Cookie、CSRF、邀请 token 留在进程内；真实账号不截图。内部项目不冒充付款或实体制作权益。运行记录和双端真机/真实资金的剩余边界见[本轮验收](delivery/2026-11-02/miniprogram-release-mvp.md)。

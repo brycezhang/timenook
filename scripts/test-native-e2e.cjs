@@ -10,6 +10,16 @@ async function main() {
   let audioServer, error;
   let d, purchased, sample;
   try {
+    const module = { exports: {} };
+    require("node:vm").runInNewContext(
+      await fs.readFile("dist/miniprogram/config.js", "utf8"),
+      { module },
+    );
+    assert.equal(
+      module.exports.NATIVE_RELEASE,
+      false,
+      "Build the explicit development profile for demo E2E",
+    );
     // DevTools loads this service before SDK mocks can attach. Substitute only
     // the hardware factory in the disposable copy; all persistence code stays real.
     const audio = await fs.readFile("tests/native-fixtures/silence-1s.mp3");

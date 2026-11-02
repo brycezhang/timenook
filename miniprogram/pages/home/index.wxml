@@ -1,20 +1,21 @@
 <view wx:if="{{mode === 'live'}}" class="page">
-  <view class="title">真实服务</view>
+  <view class="title">时光里 · 岁月成书</view>
   <view class="section">{{status}}</view>
-  <view wx:if="{{userId}}" class="small muted">服务端账号：{{userId}}</view>
-  <view class="section muted">可查看套餐、订单与本人参与授权。当前暂未开放购买，资料采集仍待验收。</view>
+
+  <view class="section muted">把重要的人和故事，认真留下。登录后继续讲述、核对故事和查看书稿。</view>
   <view class="action-stack action-section">
     <button wx:if="{{userId}}" class="btn secondary" bindtap="participation">我的参与与授权</button>
     <button wx:if="{{userId}}" class="btn secondary" bindtap="orders">查看订单与恢复项目</button>
     <button class="btn" bindtap="catalog">查看套餐与赠礼称呼</button>
     <button wx:if="{{!userId}}" class="btn" loading="{{busy}}" disabled="{{busy}}" bindtap="login">微信登录</button>
-    <button class="btn secondary" disabled="{{busy}}" bindtap="accountLink">关联已有网页账号</button>
+
   </view>
   <view class="action-stack action-stack--quiet action-section">
     <button class="link" disabled="{{busy}}" bindtap="logout">退出登录</button>
-    <button class="link" disabled="{{busy}}" bindtap="useDemo">切换到本机演示</button>
+    <!-- @development:start --><button class="link" disabled="{{busy}}" bindtap="useDemo">切换到本机演示</button><!-- @development:end -->
   </view>
 </view>
+<!-- @development:start -->
 <view wx:else="" class="home"
   ><view class="home-hero"
     ><image
@@ -28,8 +29,7 @@
     ><text class="hero-label">效果示意</text></view
     ><view class="home-content"
     ><view class="demo-note">本机演示 · 不会付款，资料不属于服务端账号</view
-    ><view class="action-stack action-stack--quiet home-entry-actions"><button class="link" bindtap="accountLink">关联已有网页账号</button
-    ><button class="link" bindtap="login">切换到真实服务</button
+    ><view class="action-stack action-stack--quiet home-entry-actions"><button class="link" bindtap="login">切换到真实服务</button
     ><button wx:if="{{hasProject}}" class="home-return" bindtap="project">回到我的项目 <image class="icon small" src="/assets/icons/arrow-right.svg" /></button></view
     ><view class="gift-options"
       ><button class="gift-option" data-recipient="妈妈" bindtap="choose"
@@ -82,3 +82,5 @@
     ></view></view
   ></view
 >
+
+<!-- @development:end -->

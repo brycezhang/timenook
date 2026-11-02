@@ -1,5 +1,5 @@
 <view wx:if="{{mode === 'live'}}" class="page">
- <view class="title">我的订单与项目</view><view class="section note">本地合成验证 · 不会产生真实扣款，正式购买尚未开放。</view>
+ <view class="title">我的订单与项目</view><view class="section note">订单与付款状态以实际查询结果为准。</view>
  <view wx:if="{{loading}}" class="section">正在查询服务端订单…</view>
  <view wx:if="{{paymentError}}" class="soft section">{{paymentError}}</view>
  <button class="link" bindtap="restoreOrders" disabled="{{loading}}">重新查询订单</button>
@@ -7,9 +7,12 @@
  <button wx:for="{{orders}}" wx:key="id" class="btn secondary section" data-id="{{item.id}}" bindtap="chooseOrder">{{item.bookTitle}} · 送给{{item.recipient.relationshipLabel}}</button>
  <view wx:if="{{activeOrder}}" class="paper section"><view class="section-title">{{activeOrder.bookTitle}}</view><view class="note">{{paymentStatus}}</view><view class="small muted">订单：{{activeOrder.outTradeNo}}</view>
  <view wx:if="{{activeOrder.project}}" class="section"><view>首本制作权益：1本</view><view class="note">项目已恢复。付款不代表讲述者已授权；请邀请本人分别选择资料用途。</view><view class="small muted">项目：{{activeOrder.project.id}}</view><button class="btn secondary section" bindtap="invite">邀请与参与管理</button><button class="btn secondary section" bindtap="production">查看生产与物流</button><button class="btn secondary section" bindtap="refunds">退款申请与进展</button><button class="btn secondary section" bindtap="quality">质量售后与原单重印</button></view></view>
+<!-- @development:start -->
  <view wx:if="{{activeOrder && activeOrder.state === 'pending'}}" class="action-stack section"><button class="btn" disabled="{{loading}}" bindtap="retryPayment">继续本地验证并查询</button><button class="link" disabled="{{loading}}" bindtap="closeOrder">关闭此验证订单</button></view>
+<!-- @development:end -->
  <button class="btn secondary section" bindtap="catalog">查看套餐与赠礼称呼</button>
 </view>
+<!-- @development:start -->
 <block wx:else="">
 <view class="page"
   ><view class="success-icon"
@@ -61,3 +64,4 @@
 >
 
 </block>
+<!-- @development:end -->

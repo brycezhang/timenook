@@ -96,6 +96,7 @@ Page({
     this.selectedOrderId = e.currentTarget.dataset.id;
     await this.restoreOrders();
   },
+  // @development-only:start
   async retryPayment() {
     const order = this.data.activeOrder;
     if (!order || this.data.loading) return;
@@ -157,6 +158,7 @@ Page({
         this.setData({ loading: false });
     }
   },
+  // @development-only:end
   production() {
     const project = this.data.activeOrder?.project;
     if (project) go("production", `projectId=${project.id}`);

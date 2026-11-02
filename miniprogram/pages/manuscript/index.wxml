@@ -18,7 +18,7 @@
         </view>
       </view>
       <view class="note section">{{version.snapshot.provenance.notice}}</view>
-      <view class="note section">{{version.snapshot.specification.status === 'internal-acceptance-candidate' ? '内部验收候选规格' : '合成测试规格'}} {{version.snapshot.specification.widthMm}} × {{version.snapshot.specification.heightMm}} mm，尚未开放正式生产。</view>
+      <view class="note section">书稿尺寸 {{version.snapshot.specification.widthMm}} × {{version.snapshot.specification.heightMm}} mm，尚未开放正式生产。</view>
       <view wx:if="{{confirmations}}" class="section card">
         <view class="section-title">核对本版完整 PDF</view>
         <view class="note section">讲述者：{{confirmations.confirmations.narrator ? '已确认本版' : '待确认'}} · 发起人：{{confirmations.confirmations.initiator ? '已确认本版' : '待确认'}}</view>
@@ -35,6 +35,7 @@
     <button class="btn secondary section" bindtap="book">返回成书总览</button>
   </view>
 </block>
+<!-- @development:start -->
 <block wx:else="">
 <view class="page with-dock manuscript"
   ><view class="manuscript-cover"
@@ -88,3 +89,4 @@
 >
 
 </block>
+<!-- @development:end -->
