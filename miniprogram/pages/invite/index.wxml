@@ -7,7 +7,7 @@
   <button class="link" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button></view>
   <view wx:if="{{participation}}" class="section">
 
-    <button wx:if="{{participation.bindingVersion === 0}}" class="btn section" bindtap="share" disabled="{{busy || participation.bindingVersion > 0 || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance')}}">准备本人邀请</button>
+    <button wx:if="{{participation.bindingVersion === 0}}" class="btn section" bindtap="share" disabled="{{busy || participation.bindingVersion > 0 || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance' && participation.policyStatus !== 'paid-e2e')}}">准备本人邀请</button>
     <!-- @development:start --><button wx:if="{{inviteToken}}" class="btn secondary section" bindtap="copyInvitation">复制网页邀请链接</button><!-- @development:end -->
     <button wx:if="{{inviteToken}}" class="btn secondary section" open-type="share">发送已准备的邀请</button>
     <view wx:if="{{inviteToken}}" class="note">邀请仅用于申请参与，24小时到期；重新准备会使旧邀请失效。</view>
