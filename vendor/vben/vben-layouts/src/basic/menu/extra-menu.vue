@@ -9,7 +9,7 @@ import { Menu } from '@vben-core/menu-ui';
 
 import { useNavigation } from './use-navigation';
 
-interface Props extends /* @vue-ignore */ MenuProps {
+interface Props extends MenuProps {
   collapse?: boolean;
   menus?: MenuRecordRaw[];
 }
