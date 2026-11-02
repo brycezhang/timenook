@@ -1544,3 +1544,16 @@ model AdminOrderNote {
  @@index([orderId,createdAt],map:"admin_order_notes_order_created")
  @@map("admin_order_notes")
 }
+
+model AdminUserNote {
+ id String @id @db.Uuid
+ userId String @map("user_id") @db.Uuid
+ operatorId String @map("operator_id") @db.Uuid
+ key String
+ content String
+ requestHash String @map("request_hash") @db.Char(64)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([userId,operatorId,key])
+ @@index([userId,createdAt])
+ @@map("admin_user_notes")
+}

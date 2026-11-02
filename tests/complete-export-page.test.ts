@@ -97,6 +97,8 @@ function view() {
     projectId,
     canRequest: true,
     amountDueFen: 0,
+    noticeVersion: "synthetic-d08-v1",
+    evidencePrefix: "synthetic:",
     requestWindow: { state: "active", startsAt: null, expiresAt: null },
     service: {
       within: 3,

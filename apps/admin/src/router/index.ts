@@ -93,7 +93,7 @@ export const router = createRouter({
             {
               path: "",
               name: "Users",
-              component: pending,
+              component: () => import("../views/users.vue"),
               meta: {
                 title: "用户管理",
                 hideInBreadcrumb: true,
@@ -103,7 +103,7 @@ export const router = createRouter({
             {
               path: `:id(${uuid})`,
               name: "UserDetail",
-              component: pending,
+              component: () => import("../views/user-detail.vue"),
               meta: {
                 title: "用户详情",
                 activePath: "/users",
@@ -113,7 +113,7 @@ export const router = createRouter({
             {
               path: `projects/:projectId(${uuid})`,
               name: "ProjectDetail",
-              component: pending,
+              component: () => import("../views/user-project.vue"),
               meta: {
                 title: "项目详情",
                 activePath: "/users",

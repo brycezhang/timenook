@@ -287,7 +287,9 @@ test("HTTPS operator searches historical orders, navigates actual Vben tabs/deta
     page.getByText("合成浏览器沟通备注", { exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: buyerId, exact: true }).click();
-  await expect(page.getByText("此功能待交付", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "用户详情", exact: true }),
+  ).toBeVisible();
   await page.goBack();
   await expect(
     page.getByRole("heading", { name: "订单详情", exact: true }),

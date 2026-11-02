@@ -1,18 +1,31 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { Alert, Button, Form, FormItem, Input } from "antdv-next";
-import type { CareCase, StoryView } from "@timenook/contracts";
+import type {
+  AdminProjectDetail,
+  AdminServiceRequestSummary,
+  CareCase,
+  StoryView,
+} from "@timenook/contracts";
 import { careApi } from "../api/admin";
+import { adminRequest, sessionEpoch } from "../session";
 import CompleteExport from "./complete-export.vue";
-import RefundCase from "./refund-case.vue";
 import DeletionCase from "./deletion-case.vue";
-import QualityCase from "./quality-case.vue";
 const correction = ref<StoryView | null>(null),
   correctionTitle = ref(""),
   correctionParagraphs = ref<{ text: string; sourceRefs: string[] }[]>([]),
   reviewReasons = ref<{ item: string; reason: string }[]>([]);
 let correctionTimer: ReturnType<typeof setTimeout> | undefined;
 let correctionGeneration = 0;
+let mounted = true,
+  selection = 0;
+onUnmounted(() => {
+  mounted = false;
+  ++selection;
+  selected.value = null;
+  cases.value = [];
+  evidence.value = "";
+});
 let intent: { input: string; key: string } | null = null;
 function clearCorrection() {
   ++correctionGeneration;
@@ -25,16 +38,24 @@ function clearCorrection() {
   intent = null;
 }
 onUnmounted(clearCorrection);
-const props = defineProps<{ csrf: string }>();
-const emit = defineEmits<{ expired: []; production: [orderId: string] }>();
-const cases = ref<CareCase[]>([]),
+const props = defineProps<{
+  csrf: string;
+  project: AdminProjectDetail;
+  initialCase?: string;
+}>();
+const emit = defineEmits<{
+  expired: [];
+  changed: [];
+  production: [orderId: string];
+}>();
+const cases = ref<AdminServiceRequestSummary[]>(props.project.requests),
   selected = ref<CareCase | null>(null),
   busy = ref(false),
   error = ref(""),
   evidence = ref("");
-const intakeProject = ref(""),
+const intakeProject = ref(props.project.id),
   intakeKind = ref<"withdraw" | "export" | "delete">("withdraw"),
-  intakeVersion = ref(0),
+  intakeVersion = ref(props.project.bindingVersion),
   intakePurpose = ref<"all" | "collection" | "ai" | "sharing">("all"),
   notice = ref("");
 const kindLabel = (kind: string) =>
@@ -72,6 +93,7 @@ async function perform(work: () => Promise<void>) {
   try {
     await work();
   } catch (failure) {
+    if (!mounted) return;
     const code = (failure as { error?: { code?: string } }).error?.code;
     if (code === "UNAUTHENTICATED") {
       clearCorrection();
@@ -79,7 +101,11 @@ async function perform(work: () => Promise<void>) {
       cases.value = [];
       emit("expired");
     } else {
-      if (code === "FORBIDDEN") clearCorrection();
+      if (code === "FORBIDDEN") {
+        clearCorrection();
+        selected.value = null;
+        cases.value = [];
+      }
       error.value =
         code === "CONFLICT"
           ? "绑定或工单已变化，请重新查询后核验。"
@@ -91,17 +117,31 @@ async function perform(work: () => Promise<void>) {
     busy.value = false;
   }
 }
-const refresh = () =>
-  perform(async () => {
-    cases.value = (await careApi.list()).requests;
-  });
+async function refreshCases() {
+  const epoch = sessionEpoch;
+  const result = await adminRequest<AdminProjectDetail>(
+    `/users/projects/${props.project.id}`,
+  );
+  if (mounted && epoch === sessionEpoch) cases.value = result.requests;
+}
+const refresh = () => perform(refreshCases);
 const open = (id: string) =>
   perform(async () => {
+    if (!cases.value.some((c) => c.id === id)) return;
+    const token = ++selection,
+      epoch = sessionEpoch;
     clearCorrection();
     selected.value = null;
     evidence.value = "";
     intent = null;
-    selected.value = await careApi.read(id);
+    const result = await careApi.read(id);
+    if (
+      mounted &&
+      token === selection &&
+      epoch === sessionEpoch &&
+      result.projectId === props.project.id
+    )
+      selected.value = result;
   });
 async function loadCorrection() {
   const care = selected.value;
@@ -193,10 +233,18 @@ async function rebind() {
       evidence: evidence.value,
     });
     if (intent?.input !== input) intent = { input, key: crypto.randomUUID() };
-    await careApi.rebind(care, evidence.value, intent.key, props.csrf);
+    await careApi.rebind(
+      care,
+      evidence.value,
+      intent.key,
+      props.csrf,
+      props.project.noticeVersion,
+    );
     intent = null;
-    selected.value = await careApi.read(care.id);
-    cases.value = (await careApi.list()).requests;
+    const updated = await careApi.read(care.id);
+    if (!mounted || updated.projectId !== props.project.id) return;
+    selected.value = updated;
+    await refreshCases();
   });
 }
 async function intake() {
@@ -219,9 +267,11 @@ async function intake() {
         ? intakePurpose.value
         : undefined,
     );
-    selected.value = await careApi.read(care.id);
+    const updated = await careApi.read(care.id);
+    if (!mounted || updated.projectId !== props.project.id) return;
+    selected.value = updated;
     evidence.value = "";
-    cases.value = (await careApi.list()).requests;
+    await refreshCases();
     intent = null;
     notice.value = "代录申请已记录，等待独立核验。";
   });
@@ -238,23 +288,34 @@ async function verify() {
       sequence: care.verificationScope?.accessSequence,
     });
     if (intent?.input !== input) intent = { input, key: crypto.randomUUID() };
-    await careApi.verify(care, evidence.value, intent.key, props.csrf);
+    await careApi.verify(
+      care,
+      evidence.value,
+      intent.key,
+      props.csrf,
+      props.project.noticeVersion,
+    );
     intent = null;
-    selected.value = await careApi.read(care.id);
-    cases.value = (await careApi.list()).requests;
+    const updated = await careApi.read(care.id);
+    if (!mounted || updated.projectId !== props.project.id) return;
+    selected.value = updated;
+    await refreshCases();
   });
 }
-onMounted(refresh);
+onMounted(() => {
+  if (props.initialCase) void open(props.initialCase);
+});
 </script>
 <template>
   <section class="runtime">
     <div class="page-title">
       <div>
-        <h1>客服工单</h1>
-        <p>按本人核验结果执行原项目换绑，保留同一讲述者与历史记录。</p>
+        <h2>项目服务申请</h2>
+        <p>核验本项目的实际申请，保留讲述者、进度和处理依据。</p>
       </div>
     </div>
     <Alert
+      v-if="project.policyStatus === 'synthetic-only'"
       type="info"
       message="隔离合成验证：D08 真实核验与告知规则尚未冻结。本表单不得作为真实本人核验。"
       show-icon
@@ -262,12 +323,6 @@ onMounted(refresh);
     <Alert v-if="error" type="error" :message="error" role="alert" />
     <Alert v-if="notice" type="info" :message="notice" />
     <Form layout="vertical" class="section">
-      <FormItem label="代录项目编号"
-        ><Input
-          v-model:value="intakeProject"
-          aria-label="代录项目编号"
-          :disabled="busy"
-      /></FormItem>
       <label
         >代录申请类型<select
           v-model="intakeKind"
@@ -291,14 +346,6 @@ onMounted(refresh);
           <option value="sharing">向发起人共享</option>
         </select></label
       >
-      <label
-        >来源绑定版本<input
-          v-model.number="intakeVersion"
-          aria-label="代录来源绑定版本"
-          type="number"
-          min="0"
-          :disabled="busy"
-      /></label>
       <p>
         记录实际申请人是本项目讲述者、操作人是当前客服；代录不等于核验通过。真实渠道与时限待冻结。
       </p>
@@ -306,7 +353,7 @@ onMounted(refresh);
         >代录本人申请</Button
       >
     </Form>
-    <Button :loading="busy" @click="refresh">重新查询工单</Button>
+    <Button :loading="busy" @click="refresh">重新查询申请</Button>
     <div class="section">
       <p v-if="!cases.length">暂无本人申请。</p>
       <div v-for="care in cases" :key="care.id" class="audit-section">
@@ -327,10 +374,24 @@ onMounted(refresh);
     </div>
     <section v-if="selected" class="audit-section">
       <CompleteExport
-        v-if="selected.kind === 'export'"
+        v-if="
+          selected.kind === 'export' &&
+          (project.narratorUserId || project.exportAlternativeAvailable)
+        "
         :care="selected"
+        :notice-version="project.noticeVersion"
+        :evidence-prefix="project.evidencePrefix"
         :csrf="props.csrf"
         @expired="emit('expired')"
+      />
+      <Alert
+        v-if="
+          selected.kind === 'export' &&
+          !project.narratorUserId &&
+          !project.exportAlternativeAvailable
+        "
+        type="info"
+        message="本人导出申请已记录。无账号讲述者的替代接收人核验流程与交付渠道尚未确定，当前不能受理或领取；不得默认交给发起人。"
       />
       <h2>
         {{
@@ -399,7 +460,7 @@ onMounted(refresh);
           ><Input
             v-model:value="evidence"
             aria-label="D08 核验证据引用"
-            placeholder="synthetic:隔离本人核验证据"
+            :placeholder="`${project.evidencePrefix}本人核验证据`"
             :disabled="busy"
         /></FormItem>
         <p>
@@ -415,7 +476,7 @@ onMounted(refresh);
         </p>
         <Button
           type="primary"
-          :disabled="busy || !evidence.startsWith('synthetic:')"
+          :disabled="busy || !evidence.startsWith(project.evidencePrefix)"
           :loading="busy"
           @click="selected.kind === 'rebind' ? rebind() : verify()"
           >{{
@@ -429,23 +490,6 @@ onMounted(refresh);
         :case-id="selected.id"
         :csrf="props.csrf"
         @expired="emit('expired')"
-      />
-      <RefundCase
-        v-if="selected.kind === 'refund'"
-        :key="selected.id"
-        :case-id="selected.id"
-        :csrf="props.csrf"
-        @expired="emit('expired')"
-        @changed="refresh"
-      />
-      <QualityCase
-        v-if="selected.kind === 'quality'"
-        :key="selected.id"
-        :case-id="selected.id"
-        :csrf="props.csrf"
-        @expired="emit('expired')"
-        @changed="refresh"
-        @production="(orderId) => emit('production', orderId)"
       />
       <section
         v-if="selected.kind === 'correction' && selected.correctionGrant"
@@ -552,3 +596,28 @@ onMounted(refresh);
     </section>
   </section>
 </template>
+<style scoped>
+.runtime label {
+  display: block;
+  margin: 12px 0;
+}
+.runtime select {
+  display: block;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: white;
+}
+.runtime :deep(.audit-section > .ant-btn) {
+  height: auto;
+  min-height: 32px;
+  max-width: 100%;
+  white-space: normal;
+}
+.runtime :deep(.audit-section > .ant-btn > span) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+</style>

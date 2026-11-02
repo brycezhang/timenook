@@ -1501,6 +1501,15 @@ test("Care correction needs a narrator's expiring story grant and verified case,
   assert.equal(corrected.revision.origin, "participant");
   assert.equal(corrected.revision.operatorRealm, "admin");
   assert.equal(corrected.decision, null);
+  const projectDetail = data(
+    await adminRequest("GET", `/v1/admin/users/projects/${p.projectId}`),
+    200,
+  );
+  assert.ok(
+    projectDetail.history.some(
+      (entry: { action: string }) => entry.action === "care.story.revise",
+    ),
+  );
   t.mock.method(Date, "now", () => Date.parse(grant.expiresAt));
   assert.equal((await adminRequest("GET", path)).statusCode, 403);
   t.mock.restoreAll();
