@@ -1,5 +1,7 @@
 # T08 · 发布动态赠礼关系与不可变套餐
 
+2026-11-02：动态关系/商品配置后台已退出首版，旧 #9 因被替代按 not_planned 关闭。固定套餐复用 #142，长期服务归 #105，新后台归 #150；历史未勾选商业准入不据此视作通过。
+
 2026-10-29 当前目标按 [ADR 0017](../../../adr/0017-lifetime-service-and-retention.md) 更新；长期规则及工程调整见 [#105](https://github.com/brycezhang/timenook/issues/105)；正式环境、设备及供应商验收仍按原责任票留证。
 
 GitHub：[#9](https://github.com/brycezhang/timenook/issues/9) · 状态以 GitHub 为准。
