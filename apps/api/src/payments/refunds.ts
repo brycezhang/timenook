@@ -1047,6 +1047,16 @@ export class AdminRefundsController {
         req,
         ADMIN_PERMISSIONS.writeCare,
       );
+      const params = req.params as { id?: string; caseId?: string };
+      const row = await this.refunds.database.refund.findUnique({
+        where: params.caseId ? { caseId: params.caseId } : { id: params.id! },
+        select: { orderId: true },
+      });
+      if (!row) throw new NotFoundException();
+      Object.assign(req, {
+        adminResourceType: "order",
+        adminResourceId: row.orderId,
+      });
       return this.access.command(
         req,
         ADMIN_PERMISSIONS.writeCare,

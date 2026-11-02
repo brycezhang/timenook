@@ -1,3 +1,7 @@
+import {
+  participationNotice,
+  E2E_NOTICE_VERSION,
+} from "../catalog/e2e-package";
 import { PrivacyRights } from "./privacy-rights";
 import {
   Body,
@@ -67,7 +71,9 @@ class QualityVersionDto {
 }
 class AssignQualityDto extends QualityVersionDto {
   @ApiProperty() @IsISO8601() dueAt!: string;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  evidenceRef!: string;
 }
 class QualityAccessDto extends QualityVersionDto {
   @ApiProperty({ enum: ["pdf", "evidence"], isArray: true })
@@ -79,7 +85,9 @@ class QualityAccessDto extends QualityVersionDto {
   scopes!: QualityScope[];
   @ApiProperty() @IsISO8601() expiresAt!: string;
   @ApiProperty() @Equals(true) consented!: true;
-  @ApiProperty() @Equals("synthetic-d08-v1") noticeVersion!: string;
+  @ApiProperty()
+  @IsIn(["synthetic-d08-v1", "internal-participation-v1", E2E_NOTICE_VERSION])
+  noticeVersion!: string;
   @ApiProperty({ required: false })
   @IsOptional()
   @IsUUID()
@@ -93,7 +101,9 @@ class ReviewQualityDto extends QualityVersionDto {
   @IsOptional()
   @IsIn(["original", "revised"])
   mode?: "original" | "revised";
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  evidenceRef!: string;
 }
 class QualityReprintDto extends QualityVersionDto {
   @ApiProperty() @IsUUID() bookVersionId!: string;
@@ -229,7 +239,39 @@ export class QualityCare implements OnModuleDestroy {
         where: { qualityRequestId: row.id },
         orderBy: { sequence: "desc" },
       });
+    const order = await tx.paymentOrder.findUniqueOrThrow({
+      where: { id: row.orderId },
+    });
+    const snapshot = order.packageSnapshot as any;
+    const d06 = snapshot.admission?.d06,
+      d07 = snapshot.admission?.d07,
+      rule = d07?.[row.reason];
+    const assignmentAvailable =
+      d06?.review?.state === "frozen" &&
+      !!d06.businessCalendarRef &&
+      !!d06.afterSales?.ownerRef &&
+      !!d06.afterSales?.procedureRef;
+    const reviewAvailable =
+      d07?.review?.state === "frozen" &&
+      d07.qualityReprintUsesOriginalOrder === true &&
+      !!rule?.policyRef &&
+      !!rule?.ownerRef &&
+      rule.requestWindow?.startsAt === "delivered" &&
+      rule.requestWindow.duration?.unit === "calendar_days" &&
+      Number.isSafeInteger(rule.requestWindow.duration.value) &&
+      rule.requestWindow.duration.value > 0;
     return {
+      noticeVersion: participationNotice(snapshot, !!this.config.acceptance)
+        .noticeVersion,
+      handling: {
+        assignmentAvailable,
+        reviewAvailable,
+        unavailableReason: !assignmentAvailable
+          ? "原销售尚未冻结 D06 处理责任与时限，不能领取核验。"
+          : !reviewAvailable
+            ? "原销售尚无适用的 D07 质量救济政策，不能批准重印或退款。"
+            : null,
+      },
       id: row.id,
       caseId: row.caseId,
       orderId: row.orderId,
@@ -472,6 +514,12 @@ export class QualityCare implements OnModuleDestroy {
       orderId,
       authorization,
       async (tx, { order, project, subject }, userId) => {
+        const notice = participationNotice(
+          order.packageSnapshot as Prisma.JsonObject,
+          !!this.config.acceptance,
+        );
+        if (body.noticeVersion !== notice.noticeVersion)
+          throw new BadRequestException();
         const row = await tx.qualityRequest.findFirst({
           where: { id, orderId },
         });
@@ -517,7 +565,7 @@ export class QualityCare implements OnModuleDestroy {
             },
             action: "quality_care_access",
             noticeVersion: body.noticeVersion,
-            evidenceRef: `synthetic:quality-${row.id}-${hash(key).slice(0, 16)}`,
+            evidenceRef: `${notice.evidencePrefix}quality-${row.id}-${hash(key).slice(0, 16)}`,
             idempotencyKey: key,
           });
         }
@@ -784,6 +832,10 @@ export class QualityCare implements OnModuleDestroy {
       authorization,
       async (tx, { order }, userId) => {
         if (userId !== order.buyerId) throw new ForbiddenException();
+        const notice = participationNotice(
+          order.packageSnapshot as Prisma.JsonObject,
+          !!this.config.acceptance,
+        );
         const row = await tx.qualityRequest.findFirst({
           where: { id, orderId },
         });
@@ -805,7 +857,7 @@ export class QualityCare implements OnModuleDestroy {
           `quality:${row.id}`,
           {
             reason: row.reason as QualityReason,
-            evidenceRef: `synthetic:quality-${row.id}`,
+            evidenceRef: `${notice.evidencePrefix}quality-${row.id}`,
           },
           row.createdAt,
         );
@@ -921,6 +973,15 @@ export class AdminQualityCareController {
         req,
         ADMIN_PERMISSIONS.writeCare,
       );
+      const row = await this.care.db.qualityRequest.findUnique({
+        where: { caseId: (req.params as { caseId: string }).caseId },
+        select: { orderId: true },
+      });
+      if (!row) throw new NotFoundException();
+      Object.assign(req, {
+        adminResourceType: "order",
+        adminResourceId: row.orderId,
+      });
       return this.access.command(
         req,
         ADMIN_PERMISSIONS.writeCare,

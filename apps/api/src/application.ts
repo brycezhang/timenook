@@ -528,7 +528,9 @@ export async function createApplication(
                         AdminCompleteExportsController,
                       ]
                     : []),
-                  ...(config.books.mode === "synthetic-local"
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
                     ? [QualityCareController, AdminQualityCareController]
                     : []),
                 ]
@@ -596,7 +598,9 @@ export async function createApplication(
                     config.acceptance)
                     ? [CompleteExports]
                     : []),
-                  ...(config.books.mode === "synthetic-local"
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
                     ? [QualityCare]
                     : []),
                   {

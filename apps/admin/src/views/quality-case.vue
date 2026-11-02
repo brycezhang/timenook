@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
-import { Alert, Button, Input, FormItem } from "antdv-next";
+import { Alert, Button, Input, FormItem, Modal } from "antdv-next";
 import type { QualityMaterials, QualityRequestView } from "@timenook/contracts";
 import { qualityApi } from "../api/admin";
 import {
@@ -11,7 +11,11 @@ import {
   openPdfDocument,
   closePdfDocument,
 } from "../../../../preview/pdf-viewer";
-const props = defineProps<{ caseId: string; csrf: string }>();
+const props = defineProps<{
+  caseId: string;
+  csrf: string;
+  canProduce: boolean;
+}>();
 const emit = defineEmits<{
   expired: [];
   changed: [];
@@ -26,13 +30,30 @@ const dueAt = ref(""),
 const resolution = ref<"reprint" | "refund">("reprint"),
   mode = ref<"original" | "revised">("original");
 let intent: { input: string; key: string } | null = null;
+let confirmation: ReturnType<typeof Modal.confirm> | undefined;
+function confirmCommand(action: "review" | "reprints") {
+  confirmation?.destroy();
+  confirmation = Modal.confirm({
+    title: "确认质量处理操作",
+    content:
+      action === "reprints"
+        ? "将在原生产单新增制作尝试，继续核验当前授权与确定文件，不新增购买或首本权益。"
+        : "请确认已按原销售政策核验本次质量情形、原文件和所选救济方案。",
+    okText: "确认操作",
+    cancelText: "返回核对",
+    onOk: () => command(action),
+  });
+}
 async function command(action: "assign" | "review" | "reprints") {
   const source = view.value;
   if (!active || !source || busy.value) return;
   let body: object;
   if (action === "assign") {
     const due = Date.parse(dueAt.value);
-    if (!Number.isFinite(due) || !evidence.value.startsWith("synthetic:")) {
+    if (
+      !Number.isFinite(due) ||
+      !/^(internal:|synthetic:)/.test(evidence.value)
+    ) {
       error.value = "请记录按原 D06 核验的截止时间与证据引用。";
       return;
     }
@@ -42,7 +63,7 @@ async function command(action: "assign" | "review" | "reprints") {
       evidenceRef: evidence.value,
     };
   } else if (action === "review") {
-    if (!evidence.value.startsWith("synthetic:")) {
+    if (!/^(internal:|synthetic:)/.test(evidence.value)) {
       error.value = "请记录原 D07 情形及救济的核验证据。";
       return;
     }
@@ -114,6 +135,8 @@ function clearMaterials() {
   pdfSource.value = "";
 }
 onUnmounted(() => {
+  confirmation?.destroy();
+  confirmation = undefined;
   active = false;
   ++generation;
   clearMaterials();
@@ -312,14 +335,18 @@ onMounted(refresh);
         }}
       </p>
       <p>
-        质量政策与处理时限以原销售快照为准。当前仅合成验证，真实 D06/D07
-        和印厂责任流程仍待冻结。
+        质量政策与处理时限以原销售快照为准。缺少适用政策时不能批准救济；原文件重印和改稿重新确认分别核验。
       </p>
+      <Alert
+        v-if="view.handling?.unavailableReason"
+        type="warning"
+        :message="view.handling.unavailableReason"
+      />
       <FormItem label="质量政策核验证据"
         ><Input
           v-model:value="evidence"
           aria-label="质量政策核验证据"
-          placeholder="synthetic:原政策与实际情况核验引用"
+          placeholder="internal:原政策与实际情况核验引用（合成测试用 synthetic:）"
           :disabled="busy"
       /></FormItem>
       <div v-if="view.state === 'requested'">
@@ -332,7 +359,12 @@ onMounted(refresh);
         /></label>
         <Button
           type="primary"
-          :disabled="busy || !dueAt || !evidence.startsWith('synthetic:')"
+          :disabled="
+            busy ||
+            !view.handling?.assignmentAvailable ||
+            !dueAt ||
+            !/^(internal:|synthetic:)/.test(evidence)
+          "
           @click="command('assign')"
           >领取本次质量工单</Button
         >
@@ -388,8 +420,12 @@ onMounted(refresh);
         >
         <Button
           type="primary"
-          :disabled="busy || !evidence.startsWith('synthetic:')"
-          @click="command('review')"
+          :disabled="
+            busy ||
+            !view.handling?.reviewAvailable ||
+            !/^(internal:|synthetic:)/.test(evidence)
+          "
+          @click="confirmCommand('review')"
           >记录原政策核验方案</Button
         >
       </div>
@@ -408,9 +444,11 @@ onMounted(refresh);
         <Button
           type="primary"
           :disabled="
-            busy || (view.reprintMode === 'revised' && !view.replacement)
+            busy ||
+            !props.canProduce ||
+            (view.reprintMode === 'revised' && !view.replacement)
           "
-          @click="command('reprints')"
+          @click="confirmCommand('reprints')"
           >创建原订单重印尝试</Button
         >
       </div>
@@ -419,17 +457,16 @@ onMounted(refresh);
       </p>
       <p v-if="view.refund">
         已关联原退款：{{ view.refund.id }} ·
-        {{ view.refund.state }}。请在同一共享工单列表打开对应退款申请处理。
+        {{ view.refund.state }}。请在本订单的退款申请中继续处理。
       </p>
       <Button
-        v-if="view.productionAttemptId"
+        v-if="view.productionAttemptId && props.canProduce"
         :disabled="busy"
         @click="emit('production', view.productionOrderId)"
         >继续原单生产与物流</Button
       >
       <p v-if="view.productionAttemptId">
-        重印仍沿原首本生产单处理，不新增购买或首本权益，首次交付和 D03
-        期限不会重置。
+        重印仍沿原首本生产单处理，不新增购买或首本权益，首次交付事实保留，资料服务继续长期有效。
       </p>
     </div>
   </section>
