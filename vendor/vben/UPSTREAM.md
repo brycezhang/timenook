@@ -42,3 +42,5 @@ The upstream menu helper now uses a redirect only when it is a string; Vue Route
 | @vben/types | packages/types |
 
 Source-consumption compatibility: removed unused ts-expect-error comments reported by vue-tsc 3.2 in form/popup/tabs; icon-picker pending-request map now marks absent entries optional. Retained the hooks-required global type-only export and json-bigint declaration dependency.
+
+Vue SFC source-consumption adjustment: MenuProps and NormalMenuProps have explicit type re-exports so inherited menu properties are emitted at runtime. Layout wrappers retain their typed inheritance without @vue-ignore; this fixes the observed undefined menu-prop warnings.
