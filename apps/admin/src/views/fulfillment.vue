@@ -10,7 +10,11 @@ import type {
   FulfillmentDeliveryCommand,
 } from "@timenook/contracts";
 import { fulfillmentApi } from "../api/admin";
-const props = defineProps<{ csrf: string; initialOrderId?: string }>();
+const props = defineProps<{
+  csrf: string;
+  initialOrderId?: string;
+  returnPath?: string;
+}>();
 const emit = defineEmits<{ expired: [] }>();
 const rows = ref<FulfillmentView[]>([]),
   selected = ref<FulfillmentView | null>(null),
@@ -28,7 +32,9 @@ const evidence = ref(""),
   wechatEvidence = ref(""),
   wechatResult = ref<"recorded" | "pending" | "failed">("pending"),
   deliveredAt = ref(""),
-  deliveryEvidence = ref("");
+  deliveryEvidence = ref(""),
+  printedAt = ref(""),
+  printingEvidence = ref("");
 let generation = 0,
   active = true;
 let intent: { input: string; key: string } | null = null;
@@ -41,13 +47,28 @@ const labels: Record<FulfillmentState, string> = {
   cancellation_pending: "取消待人工核实",
   cancelled: "已确认取消",
 };
+const recordLabels: Record<string, string> = {
+  handoff: "开始交接",
+  receipt_accepted: "核实印厂接单",
+  receipt_unknown: "结果待核实",
+  receipt_cancelled: "确认取消",
+  receipt_cancellation_rejected: "核实取消未成功",
+  cancel: "请求取消",
+  printing_completed: "完成印制",
+  shipping: "实际发货",
+  wechat: "微信处理结果",
+  delivery: "实际交付",
+};
 let materialsGeneration = 0;
 let materialsTimer: ReturnType<typeof setTimeout> | undefined;
+let materialsPollTimer: ReturnType<typeof setTimeout> | undefined;
 let pdfUrl = "";
 function clearMaterials() {
   ++materialsGeneration;
   if (materialsTimer) clearTimeout(materialsTimer);
+  if (materialsPollTimer) clearTimeout(materialsPollTimer);
   materialsTimer = undefined;
+  materialsPollTimer = undefined;
   if (pdfUrl) URL.revokeObjectURL(pdfUrl);
   pdfUrl = "";
   materials.value = null;
@@ -64,6 +85,45 @@ function validMaterials(
     materialOwner === materialsGeneration &&
     Number.isFinite(expires) &&
     Date.now() < expires
+  );
+}
+function watchMaterials(
+  owner: number,
+  view: FulfillmentView,
+  materialOwner: number,
+  expires: number,
+) {
+  materialsTimer = setTimeout(
+    async () => {
+      if (!validMaterials(owner, view, materialOwner, expires)) {
+        if (
+          current(owner) &&
+          selected.value === view &&
+          materialOwner === materialsGeneration
+        )
+          clearMaterials();
+        return;
+      }
+      try {
+        await fulfillmentApi.materials(
+          view.orderId!,
+          view.current!.id,
+          props.csrf,
+        );
+        if (validMaterials(owner, view, materialOwner, expires))
+          watchMaterials(owner, view, materialOwner, expires);
+      } catch {
+        if (
+          current(owner) &&
+          selected.value === view &&
+          materialOwner === materialsGeneration
+        ) {
+          clearMaterials();
+          error.value = "本次生产资料授权已变化，请重新核验。";
+        }
+      }
+    },
+    Math.max(1, Math.min(1000, expires - Date.now())),
   );
 }
 async function loadMaterials() {
@@ -94,6 +154,7 @@ async function loadMaterials() {
     )
       throw new Error("生产资料与本次授权不一致");
     materials.value = value;
+    watchMaterials(owner, view, materialOwner, returnedExpiry);
     materialsTimer = setTimeout(
       () => {
         if (
@@ -145,7 +206,7 @@ async function downloadPdf() {
       URL.revokeObjectURL(pdfUrl);
       pdfUrl = "";
       notice.value =
-        "本次确定 PDF 已下载，请人工核对交接编号和文件 hash。下载副本不会远程回收。";
+        "本次确定 PDF 已下载，文件完整性已核验，请人工核对交接编号和书稿内容。下载副本不会远程回收。";
     } finally {
       if (
         current(owner) &&
@@ -154,6 +215,43 @@ async function downloadPdf() {
       )
         clearMaterials();
     }
+  });
+}
+async function downloadAddress() {
+  const view = selected.value,
+    attempt = view?.current,
+    cached = materials.value;
+  if (!view?.orderId || !attempt || !cached || busy.value) return;
+  await perform(async (owner) => {
+    const materialOwner = materialsGeneration,
+      expires = Date.parse(cached.grantExpiresAt);
+    const value = await fulfillmentApi.materials(
+      view.orderId!,
+      attempt.id,
+      props.csrf,
+    );
+    if (!validMaterials(owner, view, materialOwner, expires)) return;
+    if (
+      value.handoffId !== attempt.handoffId ||
+      value.pdf.sha256 !== attempt.pdfHash ||
+      Date.parse(value.grantExpiresAt) <= Date.now()
+    )
+      throw new Error("本次资料授权已变化");
+    const address = value.address;
+    const url = URL.createObjectURL(
+      new Blob(
+        [
+          `交接编号：${value.handoffId}\n收件人：${address.recipientName}\n电话：${address.phone}\n地区：${address.regionCode}\n地址：${address.detail}\n`,
+        ],
+        { type: "text/plain;charset=utf-8" },
+      ),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${attempt.handoffId}-address.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    notice.value = "本次配送地址已下载，仅用于本次确定书稿的寄送。";
   });
 }
 function accept(value: FulfillmentView) {
@@ -210,13 +308,7 @@ async function perform(work: (owner: number) => Promise<void>) {
   }
 }
 const refresh = () =>
-  perform(async (owner) => {
-    selected.value = null;
-    clearMaterials();
-    intent = null;
-    const values = await fulfillmentApi.list();
-    if (current(owner)) rows.value = values;
-  });
+  props.initialOrderId ? open(props.initialOrderId) : Promise.resolve();
 const open = (id: string) =>
   perform(async (owner) => {
     selected.value = null;
@@ -295,7 +387,14 @@ async function createAttempt() {
   });
 }
 async function command(
-  action: "handoff" | "receipt" | "cancel" | "shipping" | "delivery",
+  action:
+    | "handoff"
+    | "receipt"
+    | "cancel"
+    | "printing"
+    | "shipping"
+    | "wechat"
+    | "delivery",
   input:
     | {}
     | FulfillmentReceiptCommand
@@ -349,10 +448,9 @@ function saveShipping() {
     !carrier.value.trim() ||
     !trackingNumber.value.trim() ||
     !Number.isFinite(shipped) ||
-    !shippingEvidence.value.trim() ||
-    !wechatEvidence.value.trim()
+    !shippingEvidence.value.trim()
   ) {
-    error.value = "请填写物流公司、单号、发货时间、物流证据和微信发货证据。";
+    error.value = "请填写物流公司、单号、发货时间和物流证据。";
     return;
   }
   return command("shipping", {
@@ -360,11 +458,27 @@ function saveShipping() {
     number: trackingNumber.value.trim(),
     shippedAt: new Date(shipped).toISOString(),
     evidenceRef: shippingEvidence.value.trim(),
-    wechat: {
-      handling: "implemented_and_verified",
-      evidenceRef: wechatEvidence.value.trim(),
-      result: wechatResult.value,
-    },
+  });
+}
+function completePrinting() {
+  const at = Date.parse(printedAt.value);
+  if (!Number.isFinite(at) || !printingEvidence.value.trim()) {
+    error.value = "请填写实际完成印制时间和核实证据。";
+    return;
+  }
+  return command("printing", {
+    printedAt: new Date(at).toISOString(),
+    evidenceRef: printingEvidence.value.trim(),
+  });
+}
+function saveWechat() {
+  if (!wechatEvidence.value.trim()) {
+    error.value = "请填写微信平台处理证据。";
+    return;
+  }
+  return command("wechat", {
+    evidenceRef: wechatEvidence.value.trim(),
+    result: wechatResult.value,
   });
 }
 function deliver() {
@@ -379,8 +493,7 @@ function deliver() {
   });
 }
 onMounted(async () => {
-  await refresh();
-  if (active && props.initialOrderId) await open(props.initialOrderId);
+  if (props.initialOrderId) await open(props.initialOrderId);
 });
 onUnmounted(() => {
   active = false;
@@ -396,8 +509,8 @@ onUnmounted(() => {
   <section class="catalog-page fulfillment-page">
     <div class="page-title">
       <div>
-        <h1>生产与物流</h1>
-        <p>人工核对回执与物流，按确定版本交接。当前为隔离合成验证。</p>
+        <h2>生产与物流</h2>
+        <p>人工核对回执、完成印制和物流，按确定版本交接。</p>
       </div>
       <Button :disabled="busy" @click="refresh">重新查询生产单</Button>
     </div>
@@ -415,27 +528,27 @@ onUnmounted(() => {
       role="status"
       class="notice"
     />
-    <section class="catalog-card">
-      <h2>首本生产单</h2>
-      <p v-if="!rows.length">当前没有可查询的首本生产单。</p>
-      <div
-        v-for="row in rows"
-        :key="row.orderId || row.projectId"
-        class="production-row"
-      >
-        <p>
-          生产单：{{ row.orderId }} ·
-          {{ row.current ? labels[row.current.state] : "等待审核与安排" }}
-        </p>
-        <Button :disabled="busy || !row.orderId" @click="open(row.orderId!)"
-          >查看此生产单</Button
-        >
-      </div>
-    </section>
     <section v-if="selected" class="catalog-card">
       <h2>当前生产记录</h2>
       <p>生产单：{{ selected.orderId }}</p>
       <p>项目：{{ selected.projectId }}</p>
+      <div class="catalog-actions">
+        <RouterLink
+          v-if="selected.paymentOrderId"
+          :to="{
+            path: `/orders/${selected.paymentOrderId}`,
+            query: { from: props.returnPath ?? '/production' },
+          }"
+          ><Button>查看原订单</Button></RouterLink
+        >
+        <RouterLink
+          :to="{
+            path: `/users/projects/${selected.projectId}`,
+            query: { from: props.returnPath ?? '/production' },
+          }"
+          ><Button>查看用户项目与服务</Button></RouterLink
+        >
+      </div>
       <p>制作服务长期有效 · 当前状态：{{ selected.creation.state }}</p>
       <div
         v-if="!selected.current || selected.current.state === 'cancelled'"
@@ -464,7 +577,19 @@ onUnmounted(() => {
         >
       </div>
       <div v-if="selected.current" class="section">
-        <h2>{{ labels[selected.current.state] }}</h2>
+        <h2>
+          {{
+            selected.current.state === "in_production" &&
+            selected.current.printedAt
+              ? "已生产"
+              : labels[selected.current.state]
+          }}
+        </h2>
+        <p v-if="selected.current.printedAt">
+          完成印制：{{ selected.current.printedAt }} · 操作人：{{
+            selected.current.printedBy
+          }}
+        </p>
         <p>交接编号：{{ selected.current.handoffId }}</p>
         <p>
           第 {{ selected.current.sequence }} 次尝试 · 处理期限：{{
@@ -484,6 +609,8 @@ onUnmounted(() => {
             >查看限时生产资料</Button
           ><Button :disabled="busy || !materials" @click="downloadPdf"
             >下载本次生产 PDF</Button
+          ><Button :disabled="busy || !materials" @click="downloadAddress"
+            >下载本次配送地址</Button
           >
         </div>
         <div v-if="materials" class="production-materials">
@@ -574,16 +701,40 @@ onUnmounted(() => {
         </div>
         <div
           v-if="
+            selected.current.state === 'in_production' &&
+            !selected.current.printedAt
+          "
+          class="production-form"
+        >
+          <h2>实际完成印制</h2>
+          <p>印厂接单仅表示开始制作；核实实体书完成印制后登记已生产。</p>
+          <label
+            >完成印制时间<input
+              v-model="printedAt"
+              type="datetime-local"
+              step="0.001"
+              :disabled="busy"
+          /></label>
+          <label
+            >完成印制证据<input
+              v-model="printingEvidence"
+              :disabled="busy"
+              placeholder="record:印厂完成印制回执"
+          /></label>
+          <Button :disabled="busy" @click="completePrinting"
+            >记录完成印制</Button
+          >
+        </div>
+        <div
+          v-if="
             ['in_production', 'shipped', 'delivered'].includes(
               selected.current.state,
             )
           "
           class="production-form"
         >
-          <h2>物流与微信发货</h2>
-          <p>
-            按原订单冻结的微信发货路径执行并记录结果；物流发货不代表平台核验成功。
-          </p>
+          <h2>实际发货</h2>
+          <p>按实际物流登记。微信平台处理结果独立记录。</p>
           <label
             >物流公司<input
               v-model="carrier"
@@ -607,6 +758,16 @@ onUnmounted(() => {
               :disabled="busy"
               placeholder="synthetic:物流回执"
           /></label>
+          <Button
+            :disabled="
+              busy || !selected.current.printedAt || !!selected.current.tracking
+            "
+            @click="saveShipping"
+            >保存实际发货记录</Button
+          >
+        </div>
+        <div v-if="selected.current.tracking" class="production-form">
+          <h2>微信发货处理</h2>
           <label
             >微信发货证据<input
               v-model="wechatEvidence"
@@ -614,15 +775,17 @@ onUnmounted(() => {
               placeholder="synthetic:平台处理证据"
           /></label>
           <label
-            >微信发货处理结果<select v-model="wechatResult" :disabled="busy">
+            >微信发货处理结果<select
+              v-model="wechatResult"
+              aria-label="微信发货处理结果"
+              :disabled="busy"
+            >
               <option value="pending">待核实</option>
               <option value="recorded">已核实记录</option>
               <option value="failed">处理失败</option>
             </select></label
           >
-          <Button :disabled="busy" @click="saveShipping"
-            >保存物流与微信发货记录</Button
-          >
+          <Button :disabled="busy" @click="saveWechat">保存微信处理结果</Button>
         </div>
         <div v-if="selected.current.tracking" class="section">
           <p>
@@ -658,6 +821,30 @@ onUnmounted(() => {
           交付完成：{{ selected.current.deliveredAt }}
         </p>
       </div>
+      <section class="section">
+        <h2>各次制作记录</h2>
+        <div
+          v-for="attempt in selected.attempts"
+          :key="attempt.id"
+          class="production-row"
+        >
+          <p>
+            第 {{ attempt.sequence }} 次 · {{ labels[attempt.state] }} ·
+            交接编号 {{ attempt.handoffId }}
+          </p>
+          <p>
+            PDF 版本 {{ attempt.bookVersionId }} · 印厂
+            {{ attempt.supplierRef }}
+          </p>
+          <p v-if="attempt.printedAt">
+            完成印制：{{ attempt.printedAt }} · 操作人：{{ attempt.printedBy }}
+          </p>
+          <p v-for="(record, index) in attempt.records" :key="index">
+            {{ recordLabels[record.kind] || record.kind }} ·
+            {{ record.createdAt }} · 操作人：{{ record.operatorAdminId }}
+          </p>
+        </div>
+      </section>
     </section>
   </section>
 </template>

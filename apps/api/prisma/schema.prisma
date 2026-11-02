@@ -1366,6 +1366,8 @@ model FulfillmentOutbox {
 }
 
 model FulfillmentAttempt {
+ printedAt DateTime? @map("printed_at") @db.Timestamptz(3)
+ printedBy String? @map("printed_by") @db.Uuid
  qualityRequestId String? @map("quality_request_id") @db.Uuid
  id String @id @db.Uuid
  reservationRevision Int @map("reservation_revision")

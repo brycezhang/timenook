@@ -8,6 +8,7 @@
       <view class="note">本次生产：第 {{view.current.sequence}} 次尝试</view>
       <view class="note section">交接编号：{{view.current.handoffId}}</view>
       <view wx:if="{{cancellationNotice}}" class="soft section">{{cancellationNotice}}</view>
+      <view wx:if="{{view.current.printedAt}}" class="section">完成印制：{{view.current.printedAt}}</view>
       <view wx:if="{{view.current.tracking}}" class="section">
         <view>物流：{{view.current.tracking.carrier}}</view>
         <view class="section">单号：{{view.current.tracking.number}}</view>

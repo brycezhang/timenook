@@ -247,16 +247,17 @@ test("quality original reprint preserves delivered history, consumes no extra fi
     }),
   );
   data(
+    await adminRequest("POST", attemptBase + "/printing", p.headers, {
+      printedAt: new Date().toISOString(),
+      evidenceRef: "synthetic:完成印制核验",
+    }),
+  );
+  data(
     await adminRequest("POST", attemptBase + "/shipping", p.headers, {
       carrier: "合成物流",
       number: "SYNTHETICREPRINT",
       shippedAt: new Date().toISOString(),
       evidenceRef: "synthetic:重印承运",
-      wechat: {
-        handling: "implemented_and_verified",
-        evidenceRef: "synthetic:重印微信发货",
-        result: "recorded",
-      },
     }),
   );
   const delivered = data(
