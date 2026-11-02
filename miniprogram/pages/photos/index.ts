@@ -11,6 +11,7 @@ import { interviewRecordingClient } from "../../services/interview-recording";
 import type {
   PhotoCollection,
   PhotoMaterials,
+  ParticipationState,
 } from "../../../packages/contracts/src";
 type Event = {
   currentTarget: { dataset: Record<string, string> };
@@ -50,6 +51,28 @@ Page({
       (context === sessionClient.context() || !sessionClient.context())
     );
   },
+  async readCollection(): Promise<PhotoCollection> {
+    const base = `/projects/${this.projectId}/interviews/${this.interviewId}/photos`;
+    const collection = this.assistedSessionId
+      ? await sessionClient.request<PhotoCollection>(`${base}/context`, {
+          key: paymentKey(),
+          data: { assistedSessionId: this.assistedSessionId },
+        })
+      : null;
+    try {
+      return await sessionClient.request<PhotoCollection>(base);
+    } catch (error) {
+      // Collection alone permits uploading own originals, not reading material history.
+      if (
+        collection &&
+        !this.data.snapshot &&
+        error instanceof ApiFailure &&
+        error.status === 403
+      )
+        return collection;
+      throw error;
+    }
+  },
   async onShow() {
     this.stopSessionWatch?.();
     this.stopSessionWatch = undefined;
@@ -88,15 +111,7 @@ Page({
         !/^[a-f0-9-]{36}$/.test(this.interviewId)
       )
         throw Error("请从本人采访进入");
-      const result = await sessionClient.request<PhotoCollection>(
-        `/projects/${this.projectId}/interviews/${this.interviewId}/photos${this.assistedSessionId ? "/context" : ""}`,
-        this.assistedSessionId
-          ? {
-              key: paymentKey(),
-              data: { assistedSessionId: this.assistedSessionId },
-            }
-          : undefined,
-      );
+      const result = await this.readCollection();
       if (!this.current(g, context)) return;
       this.ownerContext = context;
       this.owner = PhotoFiles.open(this.projectId, this.interviewId);
@@ -110,14 +125,19 @@ Page({
       this.stopProjectWatch?.();
       this.stopProjectWatch = watchPermission(
         () => this.current(g, context),
-        async () =>
-          (
-            await interviewRecordingClient.authorizeCollection(
-              this.projectId,
-              this.interviewId,
-              this.assistedSessionId || undefined,
-            )
-          ).allowed === true,
+        async () => {
+          const collection = await interviewRecordingClient.authorizeCollection(
+            this.projectId,
+            this.interviewId,
+            this.assistedSessionId || undefined,
+          );
+          if (!collection.allowed) return false;
+          if (!this.data.snapshot) return true;
+          const participation = await sessionClient.request<ParticipationState>(
+            `/projects/${this.projectId}/participation`,
+          );
+          return participation.canRead === true;
+        },
         () => {
           this.onHide();
           this.setData({
@@ -218,15 +238,7 @@ Page({
         this.assistedSessionId || undefined,
       );
       if (!this.current(g, context)) return;
-      const result = await sessionClient.request<PhotoCollection>(
-        `/projects/${this.projectId}/interviews/${this.interviewId}/photos${this.assistedSessionId ? "/context" : ""}`,
-        this.assistedSessionId
-          ? {
-              key: paymentKey(),
-              data: { assistedSessionId: this.assistedSessionId },
-            }
-          : undefined,
-      );
+      const result = await this.readCollection();
       if (this.current(g, context)) {
         if (
           this.data.hasDraft &&
