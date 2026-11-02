@@ -29,10 +29,8 @@
   <button wx:if="{{view && view.current && view.canGrant && !canGrant}}" class="btn secondary section" bindtap="assist" disabled="{{busy}}">本人在场，协助本次生产资料授权</button>
   <view wx:if="{{view && view.current && view.current.grantExpiresAt}}" class="note section">本次在线资料授权截止：{{view.current.grantExpiresAt}}</view>
   <view wx:if="{{view && view.serviceTerms.playback}}" class="paper section">
-    <view class="section-title">原声回听期限</view>
-    <view class="note section">{{view.serviceTerms.playback.startsAt ? '约定起算：' + view.serviceTerms.playback.startsAt : '尚未发生约定起算事件'}}</view>
-    <view wx:if="{{view.serviceTerms.playback.expiresAt}}" class="note section">约定截止：{{view.serviceTerms.playback.expiresAt}}</view>
-    <view class="note section">以购买时约定及当前授权为准；重复物流和交付记录不会延长期限。</view>
+    <view class="section-title">原声回听</view>
+    <view class="note section">原声回听长期有效，按本人当前授权访问；本人可主动撤回或删除资料。</view>
   </view>
   <button class="btn secondary section" bindtap="refresh" disabled="{{busy}}">重新查询生产与物流</button>
   <view wx:if="{{view && view.current && view.current.state === 'cancelled'}}" class="soft section">上次生产已确认取消，原尝试的版本与地址记录不会被本次更正覆盖。可返回当前书稿与首本确认页，按服务端允许范围更正、重新确认和提交；不会再次付款。</view>

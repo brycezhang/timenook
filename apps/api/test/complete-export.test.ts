@@ -132,6 +132,8 @@ test("verified complete export produces independently readable full ZIP with exa
   assert.equal(inspected.status, 0, inspected.stderr);
   const archive = JSON.parse(inspected.stdout);
   assert.ok(archive.files.includes("README.txt"));
+  assert.match(archive.text["README.txt"], /已完成资料包可持续下载/);
+  assert.doesNotMatch(archive.text["README.txt"], /包下载期限|延长下载期限/);
   assert.ok(
     archive.files.some(
       (x: string) => x.startsWith("audio/") && x.endsWith(".mp3"),
@@ -441,7 +443,7 @@ test("without-WeChat export uses a separately verified subject recipient and lea
   );
 });
 
-test("missing source bytes never publish an incomplete package and orphan cleanup survives a process restart", async () => {
+test("missing sources block packing while restart and orphan cleanup beyond 2099 retain ready and delivered packages", async (t) => {
   const p = await acceptedBook(),
     asset = await db.recordingAsset.findFirstOrThrow({
       where: { projectId: p.projectId },
@@ -472,24 +474,57 @@ test("missing source bytes never publish an incomplete package and orphan cleanu
     `${randomUUID()}-9.zip`,
   );
   await writeFile(orphan, Buffer.from("orphaned synthetic bytes"));
-  await restartBookApplication();
-  const worker = await startProductionWorker(app);
+  await db.session.updateMany({
+    where: { userId: p.narrator.id },
+    data: { expiresAt: new Date("2200-01-01T00:00:00Z") },
+  });
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: Date.parse("2100-01-01T00:00:00Z"),
+  });
   try {
-    await worker.recoverDue();
+    await restartBookApplication();
+    const worker = await startProductionWorker(app);
+    try {
+      await worker.recoverDue();
+      await assert.rejects(access(orphan));
+      const downloadUrl = `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`;
+      for (const state of ["ready", "delivered"]) {
+        const view = data(
+          await request(
+            "GET",
+            `/v1/projects/${p.projectId}/exports`,
+            p.narrator.token,
+          ),
+          200,
+        ).requests[0];
+        assert.equal(view.state, state);
+        assert.equal(view.expiresAt, null);
+        assert.equal(view.canDownload, true);
+        const downloaded = await request("GET", downloadUrl, p.narrator.token);
+        assert.equal(downloaded.statusCode, 200);
+        assert.equal(
+          createHash("sha256").update(downloaded.rawPayload).digest("hex"),
+          packed.sha256,
+        );
+        if (state === "ready") {
+          data(
+            await request(
+              "POST",
+              `/v1/projects/${p.projectId}/exports/${p.exp.id}/receipt`,
+              p.narrator.token,
+              { sha256: packed.sha256 },
+            ),
+          );
+          await worker.recoverDue();
+        }
+      }
+    } finally {
+      await worker.close();
+    }
   } finally {
-    await worker.close();
+    t.mock.timers.reset();
   }
-  await assert.rejects(access(orphan));
-  assert.equal(
-    (
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
-        p.narrator.token,
-      )
-    ).statusCode,
-    200,
-  );
 });
 
 test("incomplete original transcript is reported in the shared case instead of offering a partial archive", async () => {
