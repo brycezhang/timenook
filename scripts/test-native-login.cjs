@@ -9,6 +9,12 @@ async function main() {
   const mvp = process.argv.includes("--mvp")
     ? require("./native-mvp.cjs")
     : null;
+  if (process.argv.includes("--paid-project")) {
+    assert.ok(mvp, "--paid-project requires --mvp");
+    run.paidProjectInput = await mvp.readPaidProjectInput();
+    run.paidNarratorStateFile =
+      process.env.TIMENOOK_PAID_PROJECT_INPUT + ".narrator.json";
+  }
   const { evaluate, page, navigate } = run;
   let error;
   const identityAction = (name) =>

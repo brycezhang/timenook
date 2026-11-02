@@ -16,6 +16,8 @@ const order = {
   id,
   outTradeNo: "TN" + "a".repeat(30),
   amount: 99900,
+  listAmount: 99900,
+  isE2e: false,
   currency: "CNY",
   mode: "local-verification",
   state: "pending",
@@ -140,4 +142,48 @@ test("synthetic parameters never launch native payment, and account/page changes
       await running;
     }
   }
+});
+
+test("server-priced one-fen orders keep the 999 list amount and reject inconsistent pricing", async () => {
+  const { client, requests } = harness();
+  const running = client.get(id);
+  respond(requests.shift()!, {
+    ...order,
+    mode: "wechat",
+    listAmount: 99900,
+    amount: 1,
+    isE2e: true,
+  });
+  const actual = await running;
+  assert.equal(actual.amount, 1);
+  assert.equal(actual.listAmount, 99900);
+  for (const invalid of [
+    { amount: 1, isE2e: false },
+    { amount: 99900, isE2e: true },
+    { amount: 2, isE2e: true },
+  ]) {
+    const invalidOrder = client.get(id);
+    const rejected = assert.rejects(invalidOrder, /订单结果无效/);
+    respond(requests.shift()!, {
+      ...order,
+      mode: "wechat",
+      listAmount: 99900,
+      ...invalid,
+    });
+    await rejected;
+  }
+});
+
+test("an unknown close result queries the original order and keeps a late paid project", async () => {
+  const { client, requests } = harness();
+  const closing = client.close(id);
+  requests
+    .shift()!
+    .fail?.({
+      errMsg: "request:fail timeout",
+    } as WechatMiniprogram.RequestFailCallbackErr);
+  await tick();
+  assert.equal(requests[0]?.url, base + "/orders/" + id);
+  respond(requests.shift()!, { ...order, state: "closed" });
+  assert.equal((await closing).state, "closed");
 });

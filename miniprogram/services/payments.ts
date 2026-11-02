@@ -15,7 +15,10 @@ function order(value: unknown): value is PaymentOrderView {
   if (
     !record(value) ||
     !uuid(value.id) ||
-    value.amount !== 99900 ||
+    value.listAmount !== 99900 ||
+    typeof value.isE2e !== "boolean" ||
+    value.amount !== (value.isE2e ? 1 : 99900) ||
+    (value.isE2e && value.mode !== "wechat") ||
     value.currency !== "CNY" ||
     !["local-verification", "wechat"].includes(String(value.mode)) ||
     !["pending", "paid", "closed"].includes(String(value.state)) ||
@@ -100,12 +103,24 @@ export const paymentClient = {
     return paymentClient.get(id);
   },
   async close(id: string) {
-    const result = await sessionClient.request<unknown>(`/orders/${id}/close`, {
-      data: {},
-      key: paymentKey(),
-    });
-    if (!order(result)) throw new Error("订单结果无效，请重新查询");
-    return result;
+    const context = sessionClient.context();
+    try {
+      const result = await sessionClient.request<unknown>(
+        `/orders/${id}/close`,
+        {
+          data: {},
+          key: paymentKey(),
+        },
+      );
+      if (!order(result) || result.id !== id)
+        throw new Error("订单结果无效，请重新查询");
+      return result;
+    } catch {
+      if (context !== sessionClient.context())
+        throw new Error("账号已切换，请重新查询订单");
+      // A lost close response can hide either a closed order or a late payment.
+      return paymentClient.get(id);
+    }
   },
   async list() {
     const result = await sessionClient.request<{ orders: unknown[] }>(

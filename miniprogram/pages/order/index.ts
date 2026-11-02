@@ -15,6 +15,7 @@ Page({
     mode: dataMode(),
     orders: [] as PaymentOrderView[],
     activeOrder: null as PaymentOrderView | null,
+    actualPrice: "",
     paymentStatus: "",
     paymentError: "",
     loading: false,
@@ -70,8 +71,7 @@ Page({
     try {
       const orders = await paymentClient.list();
       if (!current()) return;
-      const id =
-        orders.find((o) => o.id === this.selectedOrderId)?.id ?? orders[0]?.id;
+      const id = this.selectedOrderId || orders[0]?.id;
       this.setData({ orders });
       if (id) {
         const activeOrder = await paymentClient.get(id);
@@ -80,6 +80,7 @@ Page({
         this.setData({
           activeOrder,
           paymentStatus: paymentStatus(activeOrder),
+          actualPrice: (activeOrder.amount / 100).toFixed(2),
         });
       }
     } catch (error) {
@@ -96,10 +97,9 @@ Page({
     this.selectedOrderId = e.currentTarget.dataset.id;
     await this.restoreOrders();
   },
-  // @development-only:start
   async retryPayment() {
     const order = this.data.activeOrder;
-    if (!order || this.data.loading) return;
+    if (!order || order.state !== "pending" || this.data.loading) return;
     const context = sessionClient.context();
     const generation = this.orderGeneration;
     this.setData({ loading: true, paymentError: "" });
@@ -108,13 +108,14 @@ Page({
       generation === this.orderGeneration;
     try {
       const activeOrder = await paymentClient.pay(order.id, {
-        localOnly: true,
+        localOnly: false,
         isCurrent: current,
       });
       if (current())
         this.setData({
           activeOrder,
           paymentStatus: paymentStatus(activeOrder),
+          actualPrice: (activeOrder.amount / 100).toFixed(2),
         });
     } catch (error) {
       if (current())
@@ -127,7 +128,7 @@ Page({
   },
   async closeOrder() {
     const order = this.data.activeOrder;
-    if (!order || this.data.loading) return;
+    if (!order || order.state !== "pending" || this.data.loading) return;
     const context = sessionClient.context();
     const generation = this.orderGeneration;
     this.setData({ loading: true, paymentError: "" });
@@ -140,6 +141,7 @@ Page({
         this.setData({
           activeOrder,
           paymentStatus: paymentStatus(activeOrder),
+          actualPrice: (activeOrder.amount / 100).toFixed(2),
         });
     } catch (error) {
       if (
@@ -158,7 +160,6 @@ Page({
         this.setData({ loading: false });
     }
   },
-  // @development-only:end
   production() {
     const project = this.data.activeOrder?.project;
     if (project) go("production", `projectId=${project.id}`);
@@ -171,6 +172,11 @@ Page({
     if (project) go("invite", `projectId=${project.id}`);
   },
   project() {
+    const project = this.data.activeOrder?.project;
+    if (dataMode() === "live") {
+      if (project) go("project", `projectId=${project.id}`);
+      return;
+    }
     home();
   },
   book() {

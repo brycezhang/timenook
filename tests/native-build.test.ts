@@ -262,6 +262,12 @@ test("release package excludes website and probe routes and ignores stored demo 
   const invite = await app.open("pages/invite/index", false);
   assert.equal(invite.copyInvitation, undefined);
   const order = await app.open("pages/order/index", false);
-  assert.equal(order.retryPayment, undefined);
-  assert.equal(order.closeOrder, undefined);
+  assert.equal(typeof order.retryPayment, "function");
+  assert.equal(typeof order.closeOrder, "function");
+  const markup = await readFile(
+    path.join(root, "pages/order/index.wxml"),
+    "utf8",
+  );
+  assert.match(markup, /bindtap="retryPayment"/);
+  assert.match(markup, /bindtap="closeOrder"/);
 });

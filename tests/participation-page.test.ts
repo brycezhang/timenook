@@ -997,53 +997,57 @@ test("本人可从用途页提交删除申请，核验前不会声称删除完�
   assert.doesNotMatch(h.page.data.status, /已删除/);
 });
 
-test("internal notice enables native invitation and separate choices without claiming the user's channel", async () => {
-  const internal = {
-    ...current,
-    noticeVersion: "internal-participation-v1",
-    policyStatus: "internal-acceptance",
-    evidencePrefix: "internal:",
-    noticeText: "内部功能验收告知",
-  };
-  const invite = harness("invite");
-  invite.page.onLoad({ projectId });
-  const showing = invite.page.onShow();
-  respond(invite.requests.shift()!, { ...internal, role: "initiator" });
-  await tick();
-  respond(invite.requests.shift()!, { requests: [] });
-  await showing;
-  const sharing = invite.page.share();
-  respond(
-    invite.requests.shift()!,
-    { token: "i".repeat(43), expiresAt: "2099-01-01T00:00:00.000Z" },
-    201,
-  );
-  await sharing;
-  invite.page.copyInvitation();
-  assert.equal(
-    invite.clipboard[0],
-    `https://sgl.wootoon.cn/app/invitation/${"i".repeat(43)}`,
-  );
-  const welcome = harness("welcome");
-  welcome.page.onLoad({ projectId });
-  const refreshing = welcome.page.onShow();
-  await completeProjectState(welcome.requests, internal);
-  await refreshing;
-  const choosing = welcome.page.chooseConsent({
-    currentTarget: { dataset: { purpose: "collection", granted: "true" } },
+for (const [policyStatus, noticeVersion] of [
+  ["internal-acceptance", "internal-participation-v1"],
+  ["paid-e2e", "paid-e2e-participation-v1"],
+])
+  test(`${policyStatus} notice enables native invitation and separate choices with its server evidence`, async () => {
+    const internal = {
+      ...current,
+      noticeVersion,
+      policyStatus,
+      evidencePrefix: "internal:",
+      noticeText: "内部功能验收告知",
+    };
+    const invite = harness("invite");
+    invite.page.onLoad({ projectId });
+    const showing = invite.page.onShow();
+    respond(invite.requests.shift()!, { ...internal, role: "initiator" });
+    await tick();
+    respond(invite.requests.shift()!, { requests: [] });
+    await showing;
+    const sharing = invite.page.share();
+    respond(
+      invite.requests.shift()!,
+      { token: "i".repeat(43), expiresAt: "2099-01-01T00:00:00.000Z" },
+      201,
+    );
+    await sharing;
+    invite.page.copyInvitation();
+    assert.equal(
+      invite.clipboard[0],
+      `https://sgl.wootoon.cn/app/invitation/${"i".repeat(43)}`,
+    );
+    const welcome = harness("welcome");
+    welcome.page.onLoad({ projectId });
+    const refreshing = welcome.page.onShow();
+    await completeProjectState(welcome.requests, internal);
+    await refreshing;
+    const choosing = welcome.page.chooseConsent({
+      currentTarget: { dataset: { purpose: "collection", granted: "true" } },
+    });
+    const data = welcome.requests[0].data as Record<string, unknown>;
+    assert.equal(data.noticeVersion, noticeVersion);
+    assert.match(String(data.evidenceRef), /^internal:/);
+    assert.equal(data.method, undefined);
+    respond(
+      welcome.requests.shift()!,
+      { ...internal, canCollect: true, canRead: true },
+      201,
+    );
+    await choosing;
+    assert.equal(welcome.page.data.participation.canCollect, true);
   });
-  const data = welcome.requests[0].data as Record<string, unknown>;
-  assert.equal(data.noticeVersion, "internal-participation-v1");
-  assert.match(String(data.evidenceRef), /^internal:/);
-  assert.equal(data.method, undefined);
-  respond(
-    welcome.requests.shift()!,
-    { ...internal, canCollect: true, canRead: true },
-    201,
-  );
-  await choosing;
-  assert.equal(welcome.page.data.participation.canCollect, true);
-});
 
 async function respondAssistedLoad(
   h: ReturnType<typeof harness>,
