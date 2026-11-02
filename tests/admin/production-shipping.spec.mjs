@@ -261,7 +261,10 @@ async function fillDate(page, label, date) {
   await input.fill(
     type === "datetime-local"
       ? step
-        ? value.replace(/\.000$/, "").replace(/:00$/, "")
+        ? value
+            .replace(/(\.\d*?[1-9])0+$/, "$1")
+            .replace(/\.0+$/, "")
+            .replace(/:00$/, "")
         : value.slice(0, 16)
       : value,
   );

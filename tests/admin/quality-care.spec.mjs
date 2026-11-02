@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { waitForAdminStartup } from "./admin-startup.mjs";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { resolve, join } from "node:path";
@@ -220,9 +221,13 @@ async function openAdmin(browser, headers = adminHeaders) {
   ]);
   const page = await context.newPage();
   observe(page);
-  await page.goto(`${adminOrigin}/admin/`);
-  await expect(page).toHaveTitle("时光里 · 运营管理");
-  await expect(page).toHaveURL(`${adminOrigin}/admin/orders`);
+  await waitForAdminStartup(page, async () => {
+    await page.goto(`${adminOrigin}/admin/`);
+    await expect(page).toHaveTitle("时光里 · 运营管理");
+    await expect(page).toHaveURL(`${adminOrigin}/admin/orders`, {
+      timeout: 30000,
+    });
+  });
   await expect(
     page.getByRole("menuitem", { name: "客服工单", exact: true }),
   ).toHaveCount(0);

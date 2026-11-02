@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { waitForAdminStartup } from "./admin-startup.mjs";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { resolve, join } from "node:path";
@@ -222,10 +223,12 @@ async function openAdmin(browser, target = project) {
   ]);
   const page = await context.newPage();
   observe(page);
-  await page.goto(`${adminOrigin}/admin/users/projects/${target.projectId}`);
-  await expect(
-    page.getByRole("heading", { name: "项目详情", exact: true }),
-  ).toBeVisible();
+  await waitForAdminStartup(page, async () => {
+    await page.goto(`${adminOrigin}/admin/users/projects/${target.projectId}`);
+    await expect(
+      page.getByRole("heading", { name: "项目详情", exact: true }),
+    ).toBeVisible({ timeout: 30000 });
+  });
   return page;
 }
 
