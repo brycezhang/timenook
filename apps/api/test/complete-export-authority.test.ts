@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from "node:crypto";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   startBookFixture,
   stopBookFixture,
@@ -89,11 +90,7 @@ test("a new product ZIP request cannot use pre-refusal export authority after sa
     }),
   );
   const packed = data(await adminRequest("POST", base + "/pack", admin, {}));
-  assert.equal(
-    packed.bytes,
-    9959,
-    "the review's one-recording archive is unchanged",
-  );
+  assert.equal(packed.state, "ready");
   const pending = data(
     await request("POST", url, p.narrator.token, {
       recipient: "self",
@@ -245,6 +242,27 @@ test("a new product ZIP request cannot use pre-refusal export authority after sa
     createHash("sha256").update(restored.rawPayload).digest("hex"),
     packed.sha256,
   );
+  const inspected = spawnSync(
+    "python3",
+    [
+      "-c",
+      `import sys,io,zipfile,json,hashlib\nz=zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())); assert z.testzip() is None; print(json.dumps({'manifest':json.loads(z.read('manifest.json')),'audioHashes':{n:hashlib.sha256(z.read(n)).hexdigest() for n in z.namelist() if n.startswith('audio/')}}))`,
+    ],
+    { input: restored.rawPayload, encoding: "utf8" },
+  );
+  assert.equal(inspected.status, 0, inspected.stderr);
+  const archive = JSON.parse(inspected.stdout),
+    audioPaths = Object.keys(archive.audioHashes),
+    audioFiles = archive.manifest.files.filter((f: { path: string }) =>
+      f.path.startsWith("audio/"),
+    );
+  assert.equal(audioPaths.length, 1);
+  assert.equal(archive.audioHashes[audioPaths[0]], sealed.sealed.asset.sha256);
+  assert.equal(audioFiles.length, 1);
+  assert.equal(audioFiles[0].path, audioPaths[0]);
+  assert.equal(audioFiles[0].sha256, sealed.sealed.asset.sha256);
+  assert.equal(audioFiles[0].source.assetId, sealed.sealed.asset.id);
+  assert.equal(audioFiles[0].source.interviewId, i.id);
   const restoredView = data(
     await request("GET", url, p.narrator.token),
     200,
