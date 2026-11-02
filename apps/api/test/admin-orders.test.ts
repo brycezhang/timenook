@@ -217,6 +217,12 @@ test("operator searches all historical orders with stable server pagination and 
     [99900, 1, 1, true],
   );
   assert.equal(detail.json().data.refundedAmount, 1);
+  assert.equal(detail.json().data.state, "refunded");
+  assert.equal(
+    (await db.paymentOrder.findUniqueOrThrow({ where: { id: orderIds[0] } }))
+      .state,
+    "paid",
+  );
   assert.equal(detail.json().data.refunds[0].state, "succeeded");
   assert.equal(detail.json().data.entitlement.state, "revoked");
   assert.equal(
@@ -232,8 +238,40 @@ test("operator searches all historical orders with stable server pagination and 
     0,
   );
   assert.equal((await get("/v1/admin/orders?pageSize=101")).statusCode, 400);
-  assert.equal((await get("/v1/admin/orders?state=refunded")).statusCode, 400);
+  const refunded = await get("/v1/admin/orders?state=refunded");
+  assert.equal(refunded.statusCode, 200, refunded.body);
+  assert.equal(refunded.json().data.total, 1);
+  assert.equal(refunded.json().data.items[0].id, orderIds[0]);
+  assert.equal((await get("/v1/admin/orders?state=paid")).json().data.total, 0);
+  assert.equal((await get("/v1/admin/orders?state=invalid")).statusCode, 400);
   assert.equal((await get("/v1/admin/orders", restricted)).statusCode, 403);
+});
+test("linked user orders show confirmed refunds while original payment facts stay unchanged", async () => {
+  const care = await authenticateFeishu(
+    config,
+    app,
+    createFeishuAccount(config, ["care:write"]),
+  );
+  const user = await get(`/v1/admin/users/${buyerId}`, care);
+  assert.equal(user.statusCode, 200, user.body);
+  assert.equal(
+    user.json().data.orders.find((o: { id: string }) => o.id === orderIds[0])
+      .state,
+    "refunded",
+  );
+  assert.equal(
+    (await db.paymentOrder.findUniqueOrThrow({ where: { id: orderIds[0] } }))
+      .state,
+    "paid",
+  );
+  assert.equal(
+    (
+      await db.paymentTransaction.findUniqueOrThrow({
+        where: { orderId: orderIds[0] },
+      })
+    ).amount,
+    1,
+  );
 });
 test("notes append once with operator/time and transactional audit, conflict on key reuse, and reject CSRF or revoked permissions", async () => {
   const id = orderIds[0],

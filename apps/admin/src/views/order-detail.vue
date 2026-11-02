@@ -30,6 +30,7 @@ import RefundCase from "./refund-case.vue";
 import QualityCase from "./quality-case.vue";
 import { expireSession } from "../session";
 import { safeReturn } from "../router";
+import { formatAdminTime } from "../utils/time";
 const narrow = useMediaQuery("(max-width:767px)");
 const route = useRoute(),
   router = useRouter(),
@@ -89,6 +90,8 @@ const financialState = (state: string) =>
     ({
       pending: "待付款",
       paid: "已付款",
+      refunded: "已退款",
+      partially_refunded: "部分退款",
       requested: "待审核",
       approved: "已批准",
       submitting: "提交中",
@@ -207,11 +210,13 @@ onBeforeUnmount(() => {
           ><DescriptionsItem label="实际退款">{{
             money(detail.refundedAmount)
           }}</DescriptionsItem
-          ><DescriptionsItem label="付款状态">{{
+          ><DescriptionsItem label="订单状态">{{
             financialState(detail.state)
           }}</DescriptionsItem
           ><DescriptionsItem label="付款时间">{{
-            detail.payment?.paidAt ?? "暂无付款事实"
+            detail.payment
+              ? formatAdminTime(detail.payment.paidAt)
+              : "暂无付款事实"
           }}</DescriptionsItem
           ><DescriptionsItem label="微信支付交易号">{{
             detail.payment?.providerTransactionId ?? "—"
@@ -220,7 +225,7 @@ onBeforeUnmount(() => {
             detail.entitlement?.state ?? "尚未生成"
           }}</DescriptionsItem
           ><DescriptionsItem label="创建时间">{{
-            detail.createdAt
+            formatAdminTime(detail.createdAt)
           }}</DescriptionsItem></Descriptions
         ></Card
       ><Card title="关联资源"
@@ -280,6 +285,9 @@ onBeforeUnmount(() => {
             }}</span
             ><span v-if="column.key === 'amount'">{{
               record.amount === null ? "尚未确定" : money(record.amount)
+            }}</span
+            ><span v-if="column.dataIndex === 'completedAt'">{{
+              formatAdminTime(record.completedAt)
             }}</span
             ><Button
               v-if="column.key === 'care' && can(ADMIN_PERMISSIONS.writeCare)"
@@ -367,7 +375,10 @@ onBeforeUnmount(() => {
         <p v-if="!detail.notes.length" class="muted">暂无内部备注。</p>
         <article v-for="note in detail.notes" :key="note.id" class="order-note">
           <p class="note-content">{{ note.content }}</p>
-          <small>{{ note.operatorName }} · {{ note.createdAt }}</small>
+          <small
+            >{{ note.operatorName }} ·
+            {{ formatAdminTime(note.createdAt) }}</small
+          >
         </article></Card
       ><Card title="本单操作历史"
         ><Table
@@ -393,6 +404,9 @@ onBeforeUnmount(() => {
                 : record.result === "denied"
                   ? "已拒绝"
                   : record.result
+            }}</span
+            ><span v-if="column.dataIndex === 'createdAt'">{{
+              formatAdminTime(record.createdAt)
             }}</span></template
           ></Table
         ></Card

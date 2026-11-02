@@ -275,6 +275,9 @@ test("HTTPS operator searches historical orders, navigates actual Vben tabs/deta
   await expect(
     page.getByText("BROWSER-ORDER-000", { exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByText("2023-11-15 06:13:20", { exact: true }),
+  ).toBeVisible();
   await page
     .getByRole("textbox", { name: "搜索订单" })
     .fill("BROWSER-ORDER-000");
@@ -283,6 +286,9 @@ test("HTTPS operator searches historical orders, navigates actual Vben tabs/deta
   await page
     .getByRole("button", { name: "BROWSER-ORDER-000", exact: true })
     .click();
+  await expect(
+    page.getByText("2026-11-02 09:00:00", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "订单详情", exact: true }),
   ).toBeVisible();
