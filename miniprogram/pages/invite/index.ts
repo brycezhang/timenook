@@ -133,7 +133,8 @@ Page({
       !state ||
       this.data.busy ||
       (state.policyStatus !== "synthetic-only" &&
-        state.policyStatus !== "internal-acceptance")
+        state.policyStatus !== "internal-acceptance" &&
+        state.policyStatus !== "paid-e2e")
     )
       return;
     const input = JSON.stringify({
@@ -213,7 +214,8 @@ Page({
       if (
         this.data.busy ||
         (this.data.participation?.policyStatus !== "synthetic-only" &&
-          this.data.participation?.policyStatus !== "internal-acceptance")
+          this.data.participation?.policyStatus !== "internal-acceptance" &&
+          this.data.participation?.policyStatus !== "paid-e2e")
       )
         return;
       const context = sessionClient.context();

@@ -14,6 +14,17 @@ const bundle = await build({
     __TIMENOOK_PAYMENT_VERIFICATION__: "true",
   },
 });
+const liveBundle = await build({
+  entryPoints: ["miniprogram/pages/purchase/index.ts"],
+  bundle: true,
+  write: false,
+  format: "cjs",
+  platform: "neutral",
+  define: {
+    __TIMENOOK_API_BASE_URL__: JSON.stringify(base),
+    __TIMENOOK_NATIVE_RELEASE__: "true",
+  },
+});
 const token = {
   user: { id: "11111111-1111-4111-8111-111111111111" },
   session: {
@@ -26,6 +37,8 @@ const order = {
   id: "33333333-3333-4333-8333-333333333333",
   outTradeNo: "TN" + "a".repeat(30),
   amount: 99900,
+  listAmount: 99900,
+  isE2e: false,
   currency: "CNY",
   mode: "local-verification",
   state: "pending",
@@ -38,11 +51,13 @@ function harness(
     ["timenook.mode.v1", "live"],
     [`timenook.session.v1:${base}`, token],
   ]),
+  live = false,
 ) {
   const requests: WechatMiniprogram.RequestOption[] = [];
   const calls: string[] = [];
+  const payments: WechatMiniprogram.RequestPaymentOption[] = [];
   let page: any;
-  runInNewContext(bundle.outputFiles[0].text, {
+  runInNewContext((live ? liveBundle : bundle).outputFiles[0].text, {
     Page(v: any) {
       page = v;
       page.setData = (p: object) => Object.assign(page.data, p);
@@ -55,12 +70,15 @@ function harness(
         requests.push(r);
         return {};
       },
-      requestPayment: () => calls.push("native-payment"),
+      requestPayment: (p: WechatMiniprogram.RequestPaymentOption) => {
+        calls.push("native-payment");
+        payments.push(p);
+      },
       navigateTo: ({ url }: { url: string }) => calls.push(url),
       showToast: () => {},
     },
   });
-  return { page, requests, calls, storage };
+  return { page, requests, calls, storage, payments };
 }
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 function respond(r: WechatMiniprogram.RequestOption, data: unknown) {
@@ -103,7 +121,6 @@ test("actual purchase action persists one local order intent, skips native payme
   });
   const action = page.verifyPurchase();
   assert.equal(requests[0].url, base + "/orders");
-  const key = requests[0].header?.["Idempotency-Key"];
   respond(requests.shift()!, order);
   await tick();
   respond(requests.shift()!, {
@@ -122,7 +139,7 @@ test("actual purchase action persists one local order intent, skips native payme
   await action;
   assert.deepEqual(calls, ["/pages/order/index?id=" + order.id]);
   const retry = page.verifyPurchase();
-  assert.equal(requests[0].header?.["Idempotency-Key"], key);
+  assert.equal(requests[0].url, base + "/orders/" + order.id);
   respond(requests.shift()!, order);
   await tick();
   respond(requests.shift()!, {
@@ -144,6 +161,7 @@ test("a definitive create rejection lets the purchase page send the corrected re
   const first = requests.shift()!;
   reject(first, 400, "INVALID_REQUEST");
   await rejected;
+  assert.equal(page.data.hasOrderIntent, false);
   page.shippingRegion({ detail: { value: "CN-110000" } });
   page.customLabel({ detail: { value: "老师" } });
   const corrected = page.verifyPurchase();
@@ -248,4 +266,110 @@ test("a late rejection from the previous account cannot clear or replace either 
   assert.equal(JSON.stringify(sameOrder.data), JSON.stringify(original.data));
   timeout(sameOrder);
   await retry;
+});
+
+const nativeOrder = {
+  ...order,
+  mode: "wechat",
+  listAmount: 99900,
+  amount: 1,
+  isE2e: true,
+};
+const paidNativeOrder = {
+  ...nativeOrder,
+  state: "paid",
+  project: {
+    id: "88888888-8888-4888-8888-888888888888",
+    subject: { id: "99999999-9999-4999-8999-999999999999" },
+    entitlement: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", copies: 1 },
+  },
+};
+test("release checkout persists the order before native payment, reconciles cancellation and restores the same paid project after restart", async () => {
+  const h = harness(undefined, true);
+  h.page.setData({
+    purchasable: true,
+    actualPrice: "0.01",
+    isE2e: true,
+    agreed: true,
+    packageVersionId: "44444444-4444-4444-8444-444444444444",
+    shippingRegionCode: "CN-110000",
+    selection: { recipientCode: null, customLabel: "恩师" },
+    selectedLabel: "恩师",
+  });
+  const action = h.page.pay();
+  assert.equal(h.requests[0]?.url, base + "/orders");
+  assert.equal("amount" in (h.requests[0].data as object), false);
+  const intents = () =>
+    [...h.storage.entries()].filter(([k]) =>
+      k.startsWith("timenook.payment-intent"),
+    );
+  assert.equal(intents().length, 1);
+  assert.equal(h.page.data.hasOrderIntent, true);
+  respond(h.requests.shift()!, nativeOrder);
+  await tick();
+  assert.equal((intents()[0][1] as { orderId: string }).orderId, order.id);
+  respond(h.requests.shift()!, {
+    mode: "wechat",
+    status: "prepared",
+    parameters: {
+      timeStamp: "1780000000",
+      nonceStr: "native",
+      package: "prepay_id=native",
+      signType: "RSA",
+      paySign: "signed",
+    },
+  });
+  await tick();
+  assert.equal(h.payments.length, 1);
+  h.payments[0].fail?.({ errMsg: "requestPayment:fail cancel" });
+  await tick();
+  assert.equal(h.requests[0].url, base + "/orders/" + order.id);
+  respond(h.requests.shift()!, nativeOrder);
+  await action;
+  assert.ok(h.calls.includes("/pages/order/index?id=" + order.id));
+  const restarted = harness(h.storage, true);
+  const recovered = restarted.page.pay();
+  assert.equal(restarted.requests[0]?.url, base + "/orders/" + order.id);
+  respond(restarted.requests.shift()!, paidNativeOrder);
+  await recovered;
+  assert.deepEqual(restarted.calls, ["/pages/order/index?id=" + order.id]);
+  assert.equal(restarted.requests.length, 0);
+});
+
+test("reopening the purchase page exposes the original pending order without opening WeChat again", async () => {
+  const h = harness(undefined, true);
+  h.storage.set(`timenook.payment-intent.v1:${base}:${token.user.id}`, {
+    key: "kept-intent",
+    command: {
+      packageVersionId: "44444444-4444-4444-8444-444444444444",
+      recipient: { relationshipLabel: "恩师" },
+      shippingRegionCode: "CN-110000",
+    },
+    orderId: order.id,
+  });
+  const shown = h.page.onShow();
+  const recipients = h.requests.find((r) => r.url.endsWith("recipient-types"))!;
+  const current = h.requests.find((r) => r.url.endsWith("packages/current"))!;
+  respond(recipients, {
+    types: [],
+    customLabelAllowed: true,
+    scope: "one_adult_subject_one_initiator",
+  });
+  respond(current, {
+    purchasable: false,
+    reason: "PACKAGE_PREPARING",
+    version: null,
+    checkout: null,
+  });
+  await tick();
+  const original = h.requests.find(
+    (r) => r.url === base + "/orders/" + order.id,
+  );
+  assert.ok(original);
+  respond(original, nativeOrder);
+  await shown;
+  assert.equal(h.page.data.hasOrderIntent, true);
+  assert.equal(h.page.data.restoredOrder.id, order.id);
+  assert.equal(h.page.data.actualPrice, "0.01");
+  assert.equal(h.payments.length, 0);
 });

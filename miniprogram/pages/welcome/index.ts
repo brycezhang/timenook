@@ -221,7 +221,8 @@ Page({
       this.data.busy ||
       state.role !== "narrator" ||
       (state.policyStatus !== "synthetic-only" &&
-        state.policyStatus !== "internal-acceptance") ||
+        state.policyStatus !== "internal-acceptance" &&
+        state.policyStatus !== "paid-e2e") ||
       !CONSENT_PURPOSES.includes(purpose)
     )
       return;
@@ -276,7 +277,9 @@ Page({
       !state ||
       this.data.busy ||
       state.role !== "narrator" ||
-      !["synthetic-only", "internal-acceptance"].includes(state.policyStatus)
+      !["synthetic-only", "internal-acceptance", "paid-e2e"].includes(
+        state.policyStatus,
+      )
     )
       return;
     const input = JSON.stringify({
@@ -388,7 +391,8 @@ Page({
         !this.data.invitation ||
         !sessionClient.context() ||
         (this.data.invitation.policyStatus !== "synthetic-only" &&
-          this.data.invitation.policyStatus !== "internal-acceptance")
+          this.data.invitation.policyStatus !== "internal-acceptance" &&
+          this.data.invitation.policyStatus !== "paid-e2e")
       )
         return;
       const context = sessionClient.context();
@@ -439,7 +443,8 @@ Page({
       this.data.busy ||
       state?.role !== "narrator" ||
       (state.policyStatus !== "synthetic-only" &&
-        state.policyStatus !== "internal-acceptance")
+        state.policyStatus !== "internal-acceptance" &&
+        state.policyStatus !== "paid-e2e")
     )
       return;
     const context = sessionClient.context(),
