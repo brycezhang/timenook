@@ -316,7 +316,7 @@ test("operator manages relationships and package drafts, freezes a local preview
   await consumer.route("**/api/v1/packages/current", (route) => route.abort());
   await consumer.reload();
   await expect(
-    consumer.getByText("套餐加载失败，请检查网络后重试", { exact: true }),
+    consumer.getByText("套餐加载失败，请稍后重试", { exact: true }),
   ).toBeVisible();
   await expect(consumer.getByText("¥999.00", { exact: true })).toHaveCount(0);
   await consumer.setViewportSize({ width: 390, height: 844 });
