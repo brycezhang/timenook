@@ -146,6 +146,26 @@ before(async () => {
     401,
     "controlled internal export route is assembled",
   );
+  assert.equal(
+    (
+      await realComposition.inject({
+        method: "GET",
+        url: "/v1/admin/fulfillment",
+      })
+    ).statusCode,
+    401,
+    "controlled internal admin fulfillment route is assembled",
+  );
+  assert.equal(
+    (
+      await realComposition.inject({
+        method: "GET",
+        url: `/v1/projects/${randomUUID()}/fulfillment`,
+      })
+    ).statusCode,
+    401,
+    "controlled internal user fulfillment route is assembled",
+  );
   await realComposition.close();
   config.environment = "test";
   config.transcription!.pollIntervalMs = 0;
@@ -454,6 +474,19 @@ test("one unpaid Cookie project records, seals, transcribes, confirms its story 
     ).sha256,
     sha256,
   );
+  const firstCopy = data(
+    await request("GET", `${base}/first-copy`, narrator),
+    200,
+  );
+  assert.equal(firstCopy.canSubmit, false);
+  assert.equal(firstCopy.payment.paidAmountFen, 0);
+  assert.ok(firstCopy.blockers.includes("PHYSICAL_PRODUCTION_UNAVAILABLE"));
+  assert.ok(firstCopy.blockers.includes("ENTITLEMENT_UNAVAILABLE"));
+  const fulfillment = data(
+    await request("GET", `${base}/fulfillment`, narrator),
+    200,
+  );
+  assert.equal(fulfillment.orderId, null);
   const exportBase = `${base}/exports`;
   assert.equal(
     (

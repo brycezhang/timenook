@@ -247,7 +247,19 @@ export class AdminStoryCareController {
       return this.access.command(
         req,
         ADMIN_PERMISSIONS.writeCare,
-        (tx) => work(tx, actor.adminId!),
+        async (tx) => {
+          const caseId = (req.params as { caseId: string }).caseId;
+          const care = await tx.careRequest.findUnique({
+            where: { id: caseId },
+            select: { projectId: true },
+          });
+          if (care)
+            Object.assign(req, {
+              adminResourceType: "project",
+              adminResourceId: care.projectId,
+            });
+          return work(tx, actor.adminId!);
+        },
         req.method === "GET",
       );
     });

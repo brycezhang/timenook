@@ -474,6 +474,10 @@ export class AdminDeletionController {
     const actor = await this.access.authorized(r, ADMIN_PERMISSIONS.writeCare);
     return this.access.command(r, ADMIN_PERMISSIONS.writeCare, async (tx) => {
       const projectId = await this.deletions.caseProject(caseId);
+      Object.assign(r, {
+        adminResourceType: "project",
+        adminResourceId: projectId,
+      });
       await tx.$queryRaw`SELECT id FROM projects WHERE id=${projectId}::uuid FOR UPDATE`;
       if (
         await this.deletions.commandIn(
@@ -495,7 +499,12 @@ export class AdminDeletionController {
     return {
       data: await this.access.run("deletion.read", r, async () => {
         await this.access.authorized(r, ADMIN_PERMISSIONS.writeCare);
-        return this.deletions.status(await this.deletions.caseProject(id));
+        const projectId = await this.deletions.caseProject(id);
+        Object.assign(r, {
+          adminResourceType: "project",
+          adminResourceId: projectId,
+        });
+        return this.deletions.status(projectId);
       }),
       meta: { requestId: r.id },
     };
