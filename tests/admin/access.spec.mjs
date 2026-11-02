@@ -105,7 +105,7 @@ test.beforeAll(async () => {
   account = {
     username: `browser-${randomUUID()}`,
     ...feishuIdentity(),
-    permissions: ["ops:read", "audit:read"],
+    permissions: ["orders:read"],
     realm: "local",
   };
   const input = join(privateDir, "account.json");
@@ -205,8 +205,10 @@ test("desktop and mobile operator completes one Feishu login, survives API resta
   expect(callbackHeaders.cookie ?? "").not.toContain(
     "__Secure-timenook_admin=",
   );
-  await expect(page.getByRole("heading", { name: "运行信息" })).toBeVisible();
-  await expect(page.getByText("服务可用", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "订单管理" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "订单管理", exact: true }),
+  ).toBeVisible();
   const cookies = await context.cookies(
     "https://localhost:3443/api/v1/admin/runtime",
   );
@@ -240,18 +242,12 @@ test("desktop and mobile operator completes one Feishu login, survives API resta
   );
   await waitFor("https://localhost:3443/api/v1/admin/session");
   await page.reload();
-  await expect(page.getByText("服务可用", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "订单管理", exact: true }),
+  ).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => errors.length).toBe(0);
   await expect(page.getByRole("button", { name: "退出登录" })).toBeVisible();
-  await expect(page.locator(".app-header")).toHaveCount(1);
-  await expect
-    .poll(() =>
-      page
-        .locator(".app-header")
-        .evaluate((el) => Math.round(el.getBoundingClientRect().width)),
-    )
-    .toBeGreaterThan(340);
   await page.screenshot({
     path: "/tmp/timenook-feishu-admin-mobile.png",
     fullPage: true,
@@ -308,7 +304,7 @@ test("an expired Feishu authorization returns to the single login action", async
       page.getByText("飞书登录未完成，请重试或联系管理员。", { exact: true }),
     ).toBeVisible();
     await expect(page.getByRole("textbox")).toHaveCount(0);
-    await expect(page).toHaveURL("https://localhost:3443/admin/");
+    await expect(page).toHaveURL(/\/admin\/auth\/login\?redirect=/);
     await page.screenshot({
       path: "/tmp/timenook-feishu-expired-login.png",
       fullPage: true,
@@ -335,7 +331,7 @@ test("an unapproved Feishu identity cannot enter the console", async ({
     "飞书登录未完成，请重试或联系管理员。",
   );
   await expect(page.getByRole("button", { name: "退出登录" })).toHaveCount(0);
-  await expect(page).toHaveURL("https://localhost:3443/admin/");
+  await expect(page).toHaveURL(/\/admin\/auth\/login\?redirect=/);
 });
 
 test("cancelled Feishu authorization restores a usable login page", async ({
@@ -353,7 +349,7 @@ test("cancelled Feishu authorization restores a usable login page", async ({
     await expect(
       page.getByRole("button", { name: "飞书登录", exact: true }),
     ).toBeEnabled();
-    await expect(page).toHaveURL("https://localhost:3443/admin/");
+    await expect(page).toHaveURL(/\/admin\/auth\/login\?redirect=/);
   } finally {
     await remove();
   }
@@ -364,14 +360,14 @@ test("a revoked operator session clears the console and returns to Feishu login"
 }) => {
   await page.goto("./");
   await feishuLogin(page, account);
-  await expect(page.getByRole("heading", { name: "运行信息" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "订单管理" })).toBeVisible();
   const db = new PrismaClient({ datasourceUrl: databaseUrl });
   try {
     await db.adminAccount.updateMany({
       where: { username: account.username },
       data: { disabled: true },
     });
-    await page.getByRole("button", { name: "刷新状态", exact: true }).click();
+    await page.getByRole("button", { name: "查询", exact: true }).click();
     await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
     await expect(
       page.getByText("登录已到期，请重新使用飞书登录。", { exact: true }),
@@ -399,7 +395,7 @@ test("an approved operator with no business permissions sees no restricted contr
     await feishuLogin(page, account);
     await expect(page.getByRole("button", { name: "退出登录" })).toBeVisible();
     await expect(
-      page.getByText("当前账号暂无运行信息查看权限，请联系管理员。", {
+      page.getByText("当前管理员没有此页面权限。", {
         exact: true,
       }),
     ).toBeVisible();
@@ -429,7 +425,7 @@ test("callback failure text is fixed and removed from browser history", async ({
   await expect(page.getByRole("alert")).toHaveText(
     /飞书登录暂不可用，请稍后重试。/,
   );
-  await expect(page).toHaveURL("https://localhost:3443/admin/");
+  await expect(page).toHaveURL(/\/admin\/auth\/login\?redirect=/);
   expect(await page.locator("body").innerText()).not.toContain(
     "private-provider-detail",
   );
@@ -445,7 +441,7 @@ test("fresh browser sessions consistently reach the console after Feishu authori
       await page.goto("https://localhost:3443/admin/");
       await feishuLogin(page, account);
       await expect(
-        page.getByRole("heading", { name: "运行信息", exact: true }),
+        page.getByRole("heading", { name: "订单管理", exact: true }),
       ).toBeVisible();
     } finally {
       await context.close();

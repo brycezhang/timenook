@@ -122,19 +122,19 @@ p {
   border: 1px solid #e5e8ed;
   border-radius: 8px;
 }
-table {
+.audit-table table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
   text-align: left;
   white-space: nowrap;
 }
-th,
-td {
+.audit-table th,
+.audit-table td {
   padding: 14px 16px;
   border-bottom: 1px solid #edf0f3;
 }
-th {
+.audit-table th {
   color: #647084;
   font-weight: 500;
   background: #fafbfc;
@@ -312,4 +312,124 @@ th {
   white-space: normal;
   height: auto;
   min-height: 40px;
+}
+/* Business content lives inside the upstream Vben layout. */
+.operator-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  font-size: 13px;
+}
+.login-form {
+  width: 100%;
+  max-width: 400px;
+  margin: auto;
+  padding: 24px;
+  display: grid;
+  gap: 20px;
+}
+.login-form h1 {
+  font-size: 26px;
+  font-weight: 600;
+}
+.query-form {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.query-form > .ant-input-affix-wrapper {
+  flex: 1;
+  min-width: 240px;
+}
+.query-form > .ant-select {
+  min-width: 160px;
+}
+.identifier {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.note-form {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.note-form > button {
+  justify-self: start;
+}
+.order-note {
+  padding: 16px 0;
+  border-top: 1px solid #eee;
+}
+.note-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-bottom: 8px;
+}
+.muted,
+.order-note small {
+  color: #666;
+}
+@media (max-width: 767px) {
+  .query-form > * {
+    width: 100%;
+  }
+  .operator-actions {
+    gap: 8px;
+  }
+  .operator-actions > span {
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.session-error {
+  position: fixed;
+  top: 100px;
+  right: 20px;
+  z-index: 500;
+}
+.ant-card + .ant-card {
+  margin-top: 16px;
+}
+
+.operator-actions {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.operator-actions > span {
+  white-space: nowrap;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.order-details .ant-descriptions-view table {
+  table-layout: fixed;
+  width: 100%;
+}
+.order-details .ant-descriptions-item-content {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.order-details a {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 767px) {
+  .operator-actions > span {
+    display: none;
+  }
+  .operator-actions {
+    padding: 0 8px;
+  }
+  .order-details .ant-descriptions-item-label {
+    width: 40%;
+  }
+}
+
+.order-details .ant-descriptions-item-label,
+.order-details .ant-descriptions-item-content {
+  white-space: normal;
 }

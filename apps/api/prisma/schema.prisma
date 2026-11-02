@@ -258,6 +258,9 @@ model AdminSession {
   @@map("admin_sessions")
 }
 model AdminAudit {
+  resourceType String? @map("resource_type")
+  resourceId String? @map("resource_id")
+  @@index([resourceType,resourceId,createdAt],map:"admin_audit_resource")
   id String @id @db.Uuid
   operatorId String? @map("operator_id") @db.Uuid
   action String
@@ -1525,4 +1528,17 @@ model QualityGrant {
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@index([requestId,sequence])
  @@map("quality_grants")
+}
+
+model AdminOrderNote {
+ id String @id @db.Uuid
+ orderId String @map("order_id") @db.Uuid
+ operatorId String @map("operator_id") @db.Uuid
+ key String
+ content String
+ requestHash String @map("request_hash") @db.Char(64)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([orderId,operatorId,key])
+ @@index([orderId,createdAt],map:"admin_order_notes_order_created")
+ @@map("admin_order_notes")
 }
