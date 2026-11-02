@@ -16,8 +16,10 @@
 
 本地定向验证：真实 PostgreSQL/Redis 的 fulfillment、first-copy、quality-care HTTP 回归 42/42；新增完成印制、检索分页、仅内容套餐拒绝实物制作的定向验证 3/3；后台交互及共用生产/首本页面 28/28。合约/API 测试编译、网页/小程序类型检查、后台类型检查和生产构建通过。测试只替换外部供应商网络；随机隔离 schema 和 Redis 前缀均按原夹具清理。构建仅有既存的大包非阻塞提示。
 
-HTTPS 主生产流程已跑到授权 PDF 校验、完成印制、实际发货、独立失败的微信处理、取消失败恢复、唯一交付与双方同事实、详情刷新/前后退、列表查询位置返回及窄屏断言；此前最终控制台检查发现的共用菜单 props 警告由集成分支 `f12ce39` 修复。本分支已合入该修复，用户项目服务组合后的最终浏览器结果另补。
+最终 HTTPS Chromium 生产浏览器 5/5 通过（35.6 秒），已合入集成分支 `c8e836a` 的 #151/#152 与共用菜单修复：授权 PDF 字节/hash、再次鉴权的地址下载、接单与完成印制区分、实际发货与独立失败的微信结果、取消失败恢复、唯一交付与双方同事实、详情刷新/前后退、列表查询位置返回、窄屏及用户项目内撤回核验均通过；浏览器控制台无错误或警告，未屏蔽菜单告警。
 
-可复现：仓库根目录执行 `pnpm --filter @timenook/contracts build`、`pnpm --filter @timenook/api exec tsc -p tsconfig.test.json`、`pnpm exec tsx --test tests/production-page.test.ts tests/admin-fulfillment.test.ts tests/first-copy-page.test.ts`、`pnpm run typecheck:frontend` 及后台 typecheck/build；API 目录下以根 `.env.example` 的 loopback 配置执行 `NODE_ENV=test node --env-file=../../.env.example --test dist-test/test/fulfillment.test.js dist-test/test/first-copy.test.js dist-test/test/quality-care.test.js`。
+公开装配消费 #152 的[受控组合证据](152-engineering.md)：非测试内部验收组合实际启动，管理/用户履约路由匿名返回 401；同一内部项目的首本条件返回实收 0、不可提交及明确无实物/权益原因，履约返回无生产单。相关断言在 `internal-media.test.ts`，与导出回归合计 9/9。此结果证明当前受控能力装配及业务拒绝，不表示候选 PDF、1 分订单或未冻结供应商取得了实物制作资格。
+
+可复现：仓库根目录执行 `pnpm --filter @timenook/contracts build`、`pnpm --filter @timenook/api exec tsc -p tsconfig.test.json`、`pnpm exec tsx --test tests/production-page.test.ts tests/admin-fulfillment.test.ts tests/first-copy-page.test.ts`、`pnpm run typecheck:frontend` 及后台 typecheck/build；生产浏览器以 `NODE_ENV=test node --env-file=.env.example node_modules/@playwright/test/cli.js test tests/admin/production-shipping.spec.mjs -c playwright.admin.config.mjs` 运行；API 目录下以根 `.env.example` 的 loopback 配置执行 `NODE_ENV=test node --env-file=../../.env.example --test dist-test/test/fulfillment.test.js dist-test/test/first-copy.test.js dist-test/test/quality-care.test.js`。
 
 真实飞书、生产权限分配、公开环境迁移、微信平台处理、印厂交接与实体书验收继续单独记录。

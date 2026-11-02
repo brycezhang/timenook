@@ -652,7 +652,7 @@ onUnmounted(() => {
             >回执或处理证据<input
               v-model="evidence"
               :disabled="busy"
-              placeholder="synthetic:独立核对回执引用"
+              placeholder="record:独立核对回执引用"
           /></label>
           <div class="catalog-actions">
             <Button
@@ -756,7 +756,7 @@ onUnmounted(() => {
             >物流证据<input
               v-model="shippingEvidence"
               :disabled="busy"
-              placeholder="synthetic:物流回执"
+              placeholder="record:物流回执"
           /></label>
           <Button
             :disabled="
@@ -772,7 +772,7 @@ onUnmounted(() => {
             >微信发货证据<input
               v-model="wechatEvidence"
               :disabled="busy"
-              placeholder="synthetic:平台处理证据"
+              placeholder="record:平台处理证据"
           /></label>
           <label
             >微信发货处理结果<select
@@ -794,7 +794,15 @@ onUnmounted(() => {
           </p>
           <p>发货：{{ selected.current.tracking.shippedAt }}</p>
           <p>
-            微信发货记录：{{ selected.current.wechat?.result || "尚未记录" }}
+            微信发货记录：{{
+              selected.current.wechat
+                ? {
+                    pending: "待核实",
+                    failed: "处理失败",
+                    recorded: "已核实记录",
+                  }[selected.current.wechat.result]
+                : "尚未记录"
+            }}
           </p>
         </div>
         <div
@@ -812,7 +820,7 @@ onUnmounted(() => {
             >交付证据<input
               v-model="deliveryEvidence"
               :disabled="busy"
-              placeholder="synthetic:交付回执"
+              placeholder="record:交付回执"
           /></label>
           <Button :disabled="busy" @click="deliver">记录交付完成</Button>
           <p>交付事实只记录一次，资料服务长期有效。</p>
