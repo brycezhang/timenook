@@ -13,7 +13,7 @@ node scripts/release/package.mjs verify --root /absolute/new/timenook-release --
 
 Mac 可省略 `--platform linux` 生成仅供检查的本机候选；清单如实记录 Darwin/arm64，不能称为 Linux 构建。指定平台与实际构建主机不同会失败；Node 与 `.node-version` 不符也失败。CLI 不加载 `.env`，不读取云端配置或访问供应商。
 
-产物为候选目录、同级 `.tgz` 和 `.tgz.sha256`。`release-manifest.json` 记录源码提交、Node/pnpm 固定版本、构建平台/架构/Node OpenSSL，以及每个文件的相对路径、字节数和 SHA256。目录包含 API/Worker 编译文件、contracts、Vben 静态页、Prisma schema/全部迁移、运行时进程限制工具、固定渲染脚本/字体许可/字体、workspace 包声明、依赖锁及 `ops/` 下的 Nginx/systemd 模板；不复制开发身份、环境文件、私人样本、测试输出或本机 `node_modules`。
+产物为候选目录、同级 `.tgz` 和 `.tgz.sha256`。`release-manifest.json` 记录源码提交、Node/pnpm 固定版本、构建平台/架构/Node OpenSSL，以及每个文件的相对路径、字节数和 SHA256。目录包含 API/Worker 编译文件、contracts、Vben 和产品网页静态页、Prisma schema/全部迁移、运行时进程限制工具、固定渲染脚本/字体许可/字体、workspace 包声明、依赖锁及 `ops/` 下的 Nginx/systemd 模板；不复制开发身份、环境文件、私人样本、测试输出或本机 `node_modules`。产品网页使用候选内的 `apps/web/dist`，部署为网页发布目录的 `app/` 子目录，以同步用户端的生产进度等共享变更。
 
 示例核验顺序（在受限的新目录中执行）：
 
