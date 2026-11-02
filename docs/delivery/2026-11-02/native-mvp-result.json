@@ -170,8 +170,8 @@
     "id": "9da33653-623c-4dcd-b8b6-03ce50b56256",
     "revisionId": "d948ac70-c59c-4715-924b-d0f022312c36",
     "confirmed": true,
-    "origin": "ai",
-    "reconfirmed": true
+    "reconfirmed": true,
+    "generationOrigin": "ai"
   },
   "photo": {
     "id": "311711da-ed40-4014-b88f-8577e6cfd444",
@@ -195,5 +195,18 @@
   },
   "nativeSourceCommit": "7dcb8cc4a501e73b53572c7d7dc90a9d01b1e53c",
   "testScriptSha256": "450340816691864efb93f9aeef593985fb6663b62f06b3759ac5893ceebe861a",
-  "packageSha256": "b902516522d1bd4b8781cd303a2ed3a21154cda74f8df61b504ee3af2606f1ff"
+  "packageSha256": "b902516522d1bd4b8781cd303a2ed3a21154cda74f8df61b504ee3af2606f1ff",
+  "executedTestScriptCommit": "75557b2cf065b90588d0c5162c63e789c21ad3b1",
+  "evidenceCorrections": [
+    "story.origin is labeled generationOrigin to distinguish initial AI generation from the final participant revision; raw run evidence is unchanged"
+  ],
+  "artifactReview": {
+    "method": "PDF rendered to six PNG pages and visually inspected",
+    "samePdfHash": true,
+    "chineseBodyVisible": true,
+    "photoAndCaptionVisible": true,
+    "qrVisible": true,
+    "noClippingOrOverlapObserved": true,
+    "productionReady": false
+  }
 }

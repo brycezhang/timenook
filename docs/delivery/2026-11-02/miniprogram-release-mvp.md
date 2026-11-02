@@ -19,9 +19,13 @@
 
 音频是明确虚构的 46.144 秒普通话 TTS；相册选择输入为生成 PNG，均不是实际麦克风/相册/相机采集。微信身份、HTTPS、OSS、ASR、追问/故事模型、数据库、Worker、原生文件持久化/播放均真实执行。
 
-脱敏机器证据见 [native-mvp-result.json](native-mvp-result.json)。其中记录正式包源码 `7dcb8cc`、测试脚本 SHA-256 和实际上传目录文件指纹；后续只更新脚本/记录时，不把它冒充另一份原生业务产物。正式包指纹为 `b902516522d1bd4b8781cd303a2ed3a21154cda74f8df61b504ee3af2606f1ff`。
+脱敏机器证据见 [native-mvp-result.json](native-mvp-result.json)。其中记录正式包源码 `7dcb8cc`、实际执行的测试脚本提交 `75557b2`/SHA-256 和实际上传目录文件指纹；后续只更新脚本/记录时，不把它冒充另一份原生业务产物。正式包指纹为 `b902516522d1bd4b8781cd303a2ed3a21154cda74f8df61b504ee3af2606f1ff`。
 
 PDF 为 `4dc8e02c-8dfc-4954-b84a-d40e388af48a`，6 页，SHA-256 `d6f73d2506767a476f57f83b09aa3cfb5a5919d3994d6c91c2d0000da43c3110`。原声 SHA-256 `10fc3172f556d9a6f14d469b83f837ea039f81272ddcc136f9a0652cbd30a6ed`。原始受限结果在系统临时目录 `timenook-native-live-R31BRN/evidence/`；本机合成 PDF 副本在 Git 外 `.probe-local/release-mvp-20261102/`。
+
+PDF 额外检查：从服务端仅取本次合成书稿，同原生下载 hash 一致；渲染全部 6 页目检，中文正文、目录页码、照片/说明及原声二维码可见，没有观察到乱码、裁切或重叠。实际文件仍标有“书稿预览／制作规格待核验”和“技术试验文件／规格待印厂确认”，因此这里只验收内部书稿预览，**不认定正式生产 PDF 或 D01/印厂规格已通过**。
+
+最终审查还修正一项证据标签：原始运行 `story.origin=ai` 描述首次生成来源，改稿后 final revisionId 已变化。脱敏结果和后续脚本将该字段明确为 `generationOrigin`；原始受限结果保留，未重跑供应商或把人工改稿标为新的 AI 版本。
 
 ### 已完成的基础核心运行
 

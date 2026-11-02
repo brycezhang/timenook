@@ -401,7 +401,7 @@ async function exercise(run) {
         id: storyId,
         revisionId: d.story.revision.id,
         confirmed: true,
-        origin: "ai",
+        generationOrigin: "ai",
       };
     });
     await run.step("mvp-photo-after-story-without-rerecording", async () => {
