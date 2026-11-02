@@ -1209,6 +1209,53 @@ test("switching accounts while a project overview is in flight removes the previ
   h.page.onUnload();
 });
 
+test("an assisted story keeps its collection session when applying new photos to a correction", async () => {
+  const source = harness("story"),
+    assistedSessionId = "88888888-8888-4888-8888-888888888888";
+  source.page.onLoad({ projectId, interviewId, assistedSessionId });
+  const showingStory = source.page.onShow();
+  await tick();
+  source.respond(0, {
+    interviewId,
+    cloudSaved: true,
+    clipCount: 1,
+    story: story(),
+  });
+  await tick();
+  source.respond(1, story());
+  await showingStory;
+  source.page.edit();
+  source.page.onHide();
+  const route = new URL(source.routes[0], "https://example.test"),
+    h = harness("edit-story");
+  h.page.onLoad(Object.fromEntries(route.searchParams));
+  const showing = h.page.onShow();
+  h.respond(0, story());
+  await showing;
+  const applying = h.page.applyPhotos();
+  assert.equal(
+    h.requests[1].url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/photos/context`,
+  );
+  assert.equal(h.requests[1].method, "POST");
+  assert.equal(h.requests[1].data.assistedSessionId, assistedSessionId);
+  const snapshot = {
+    id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    projectId,
+    interviewId,
+    revision: 1,
+    hash: "c".repeat(64),
+    entries: [],
+  };
+  h.respond(1, { photos: [], snapshot });
+  await applying;
+  const saving = h.page.save();
+  assert.equal(h.requests[2].data.photoSnapshotId, snapshot.id);
+  h.respond(2, { ...story(), version: 2 });
+  await saving;
+  h.page.onUnload();
+});
+
 test("correction explicitly applies the latest photo snapshot and selected audio order, while an unknown save result retains the draft and command key", async () => {
   const h = harness("edit-story");
   h.page.onLoad({ projectId, storyId });
@@ -1327,6 +1374,16 @@ test("opening an existing story with story-confirmation assistance never submits
   assert.equal(h.requests[2].data.assistedSessionId, confirmationSessionId);
   h.respond(2, story());
   await saving;
+  h.page.editLivePhotos();
+  assert.equal(
+    h.routes[h.routes.length - 1],
+    `/pages/photos/index?projectId=${projectId}&interviewId=${interviewId}`,
+  );
+  h.page.edit();
+  assert.equal(
+    h.routes[h.routes.length - 1],
+    `/pages/edit-story/index?projectId=${projectId}&storyId=${storyId}`,
+  );
   h.page.recoverInterview();
   assert.equal(
     h.routes[h.routes.length - 1],
