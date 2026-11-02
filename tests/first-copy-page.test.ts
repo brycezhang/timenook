@@ -94,6 +94,8 @@ function harness() {
 function context(): any {
   return {
     projectId,
+    noticeVersion: "synthetic-d08-v1",
+    evidencePrefix: "synthetic:",
     role: "initiator",
     book: {
       id: versionId,
@@ -584,5 +586,25 @@ test("existing production without the definitive revision capability cannot save
   await h.page.confirmInitiator();
   await h.page.submit();
   assert.equal(h.requests.length, 1);
+  h.page.onUnload();
+});
+
+test("an internal project without payment shows its actual zero payment and denies physical production", async () => {
+  const h = harness();
+  h.page.onLoad({ projectId });
+  const loading = h.page.onShow();
+  const value = context();
+  value.payment.paidAmountFen = 0;
+  value.blockers = [
+    "PHYSICAL_PRODUCTION_UNAVAILABLE",
+    "ENTITLEMENT_UNAVAILABLE",
+  ];
+  value.canSubmit = false;
+  value.canConfirmNarrator = false;
+  h.respond(0, value);
+  await loading;
+  assert.equal(h.page.data.paidAmount, "0.00");
+  assert.equal(h.page.data.canSubmit, false);
+  assert.match(h.page.data.blockerLabels.join(" "), /不含实物制作权益/);
   h.page.onUnload();
 });

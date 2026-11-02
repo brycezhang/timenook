@@ -7,7 +7,7 @@
     <block wx:if="{{context}}">
       <view class="paper section">
         <view class="section-title">首本实体书</view>
-        <view class="section">已付 ¥999 · 制作 {{context.payment.copies}} 本</view>
+        <view class="section">实际支付 ¥{{paidAmount}} · 首本制作资格以当前核验为准</view>
         <view class="section">本次无需支付 · ¥0</view>
         <view class="note">以上付款与配送信息来自本项目购买时的销售快照；制作资格以服务端记录为准。</view>
         <view wx:for="{{context.shipping.terms}}" wx:key="index" class="section"><view>{{item.label}}</view><view class="note">{{item.text}}</view></view>

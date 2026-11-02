@@ -514,16 +514,16 @@ export async function createApplication(
               ? [
                   BooksController,
                   BookAudioController,
+                  FirstCopyController,
+                  FulfillmentController,
+                  AdminFulfillmentController,
+                  AdminFirstCopyController,
                   ...(config.books.mode === "synthetic-local"
                     ? [
                         QualityCareController,
                         AdminQualityCareController,
                         CompleteExportsController,
                         AdminCompleteExportsController,
-                        FirstCopyController,
-                        FulfillmentController,
-                        AdminFulfillmentController,
-                        AdminFirstCopyController,
                       ]
                     : []),
                 ]
@@ -584,8 +584,10 @@ export async function createApplication(
               ? [
                   Books,
                   BookAudio,
+                  FirstCopies,
+                  Fulfillment,
                   ...(config.books.mode === "synthetic-local"
-                    ? [QualityCare, FirstCopies, CompleteExports, Fulfillment]
+                    ? [QualityCare, CompleteExports]
                     : []),
                   {
                     provide: BOOK_OBJECTS,

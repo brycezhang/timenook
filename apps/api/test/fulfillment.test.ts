@@ -28,7 +28,10 @@ test("fulfillment progress is private and does not expose manuscript or address"
   assert.equal(view.address, undefined);
 });
 import { randomUUID } from "node:crypto";
-import { readyReservedFirstCopy } from "./first-copy-fixture";
+import {
+  readyFirstCopyBook,
+  readyReservedFirstCopy,
+} from "./first-copy-fixture";
 import { paymentAdmin } from "./payment-admin-fixture";
 import { app, config } from "./book-fixture";
 async function operator() {
@@ -334,23 +337,74 @@ test("physical delivery records one delivery fact and repeated logistics preserv
     }),
   );
   assert.equal(accepted.current.state, "in_production");
+  assert.equal(accepted.current.printedAt, null);
+  const printedAt = new Date().toISOString();
+  const printBody = { printedAt, evidenceRef: "synthetic:实际完成印制回执" };
+  assert.equal(
+    (
+      await admin("POST", p.attemptBase + "/shipping", headers, {
+        carrier: "合成物流",
+        number: "SYNTHETIC123",
+        shippedAt: printedAt,
+        evidenceRef: "synthetic:不能用接单代替印制",
+      })
+    ).statusCode,
+    409,
+  );
+  const printKey = randomUUID();
+  const printed = data(
+    await admin(
+      "POST",
+      p.attemptBase + "/printing",
+      headers,
+      printBody,
+      printKey,
+    ),
+  );
+  assert.equal(printed.current.printedAt, printedAt);
+  assert.ok(printed.current.printedBy);
+  assert.equal(
+    data(
+      await admin(
+        "POST",
+        p.attemptBase + "/printing",
+        headers,
+        printBody,
+        printKey,
+      ),
+    ).current.printedAt,
+    printedAt,
+  );
+  assert.equal(
+    (
+      await admin("POST", p.attemptBase + "/printing", headers, {
+        ...printBody,
+        printedAt: new Date(Date.now() - 1).toISOString(),
+      })
+    ).statusCode,
+    409,
+  );
+  const visible = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/fulfillment`,
+      p.buyer.token,
+    ),
+    200,
+  );
+  assert.equal(visible.current.printedAt, printedAt);
   const shippedAt = new Date().toISOString();
   const body = {
     carrier: "合成物流",
     number: "SYNTHETIC123",
     shippedAt,
     evidenceRef: "synthetic:承运接收回执",
-    wechat: {
-      handling: "implemented_and_verified",
-      evidenceRef: "synthetic:微信发货管理结果",
-      result: "pending",
-    },
   };
   const shipped = data(
     await admin("POST", p.attemptBase + "/shipping", headers, body),
   );
   assert.equal(shipped.current.state, "shipped");
-  assert.equal(shipped.current.wechat.result, "pending");
+  assert.equal(shipped.current.wechat, null);
   assert.equal(shipped.serviceTerms.playback.state, "active");
   const deliveredAt = new Date().toISOString(),
     delivery = { deliveredAt, evidenceRef: "synthetic:实际签收凭证" };
@@ -366,13 +420,13 @@ test("physical delivery records one delivery fact and repeated logistics preserv
   );
   assert.equal(replay.serviceTerms.playback.expiresAt, expiresAt);
   const shipReplay = data(
-    await admin("POST", p.attemptBase + "/shipping", headers, {
-      ...body,
-      wechat: { ...body.wechat, result: "recorded" },
+    await admin("POST", p.attemptBase + "/wechat", headers, {
+      evidenceRef: "synthetic:微信发货管理失败",
+      result: "failed",
     }),
   );
   assert.equal(shipReplay.current.state, "delivered");
-  assert.equal(shipReplay.current.wechat.result, "recorded");
+  assert.equal(shipReplay.current.wechat.result, "failed");
   assert.equal(shipReplay.serviceTerms.playback.expiresAt, expiresAt);
   assert.equal(
     (
@@ -647,16 +701,17 @@ test("verified cancellation rejection resumes the existing physical stage before
       .statusCode,
     409,
   );
+  data(
+    await admin("POST", p.attemptBase + "/printing", p.headers, {
+      printedAt: new Date().toISOString(),
+      evidenceRef: "synthetic:完成印制核验",
+    }),
+  );
   const shipping = {
     carrier: "合成物流",
     number: "CONTINUE123",
     shippedAt: new Date().toISOString(),
     evidenceRef: "synthetic:实际承运接收",
-    wechat: {
-      handling: "implemented_and_verified",
-      evidenceRef: "synthetic:微信发货管理结果",
-      result: "recorded",
-    },
   };
   const shipped = data(
     await admin("POST", p.attemptBase + "/shipping", p.headers, shipping),
@@ -728,11 +783,6 @@ test("a rejected cancellation with no accepted-production fact preserves the unk
         number: "UNKNOWN123",
         shippedAt: new Date().toISOString(),
         evidenceRef: "synthetic:未经核实发货",
-        wechat: {
-          handling: "implemented_and_verified",
-          evidenceRef: "synthetic:微信待核验",
-          result: "pending",
-        },
       })
     ).statusCode,
     409,
@@ -930,4 +980,50 @@ test("a corrected manuscript after definitive cancellation requires both new con
     (await admin("GET", p.attemptBase + "/pdf", p.headers)).statusCode,
     403,
   );
+});
+
+test("production search covers linked identifiers with stable filtered pagination and separates pending exceptions", async () => {
+  const a = await readyReservedFirstCopy(),
+    b = await readyReservedFirstCopy(),
+    h = await operator();
+  const list = async (q: string) =>
+    data(await admin("GET", `/v1/admin/fulfillment?${q}`, h), 200);
+  const first = await list("page=1&pageSize=1&state=pdf_ready");
+  const next = await list("page=2&pageSize=1&state=pdf_ready");
+  assert.ok(first.total >= 2);
+  assert.equal(first.items.length, 1);
+  assert.notEqual(first.items[0].id, next.items[0].id);
+  assert.equal((await list(`q=${a.order.id}`)).items[0].id, a.order.id);
+  assert.equal(
+    (await list(`q=${a.projectId}&pending=true&exception=false`)).total,
+    1,
+  );
+  assert.equal(
+    (await list(`q=${a.orderId}`)).items[0].paymentOrderId,
+    a.orderId,
+  );
+  assert.equal((await list(`q=${b.projectId}&exception=true`)).total, 0);
+  assert.equal(
+    (await admin("GET", "/v1/admin/fulfillment?pageSize=101", h)).statusCode,
+    400,
+  );
+  assert.equal(
+    (await admin("GET", "/v1/admin/fulfillment?state=arbitrary", h)).statusCode,
+    400,
+  );
+});
+
+test("a paid content-only package does not acquire physical rights from a ready candidate PDF or payment", async () => {
+  const p = await readyFirstCopyBook({}, false);
+  const value = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/first-copy`,
+      p.buyer.token,
+    ),
+    200,
+  );
+  assert.equal(value.payment.paidAmountFen, 99900);
+  assert.ok(value.blockers.includes("PHYSICAL_PRODUCTION_UNAVAILABLE"));
+  assert.equal(value.canSubmit, false);
 });

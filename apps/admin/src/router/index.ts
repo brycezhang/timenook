@@ -133,7 +133,7 @@ export const router = createRouter({
             {
               path: "",
               name: "Production",
-              component: pending,
+              component: () => import("../views/production.vue"),
               meta: {
                 title: "生产单管理",
                 hideInBreadcrumb: true,
@@ -143,7 +143,7 @@ export const router = createRouter({
             {
               path: `:id(${uuid})`,
               name: "ProductionDetail",
-              component: pending,
+              component: () => import("../views/production-detail.vue"),
               meta: {
                 title: "生产单详情",
                 activePath: "/production",
