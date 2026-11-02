@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { waitForAdminStartup } from "./admin-startup.mjs";
 import { createRequire } from "node:module";
 import { createHash, randomUUID } from "node:crypto";
 import { resolve, join } from "node:path";
@@ -221,13 +222,15 @@ async function openAdmin(browser, headers = adminHeaders) {
   ]);
   const page = await context.newPage();
   observe(page);
-  await page.goto(`${adminOrigin}/admin/`);
-  await page.goto(
-    `${adminOrigin}/admin/production?q=${project.order.id}&page=1&pageSize=20`,
-  );
-  await expect(
-    page.getByRole("heading", { name: "生产单管理", exact: true }),
-  ).toBeVisible();
+  await waitForAdminStartup(page, async () => {
+    await page.goto(`${adminOrigin}/admin/`);
+    await page.goto(
+      `${adminOrigin}/admin/production?q=${project.order.id}&page=1&pageSize=20`,
+    );
+    await expect(
+      page.getByRole("heading", { name: "生产单管理", exact: true }),
+    ).toBeVisible({ timeout: 30000 });
+  });
   return page;
 }
 
