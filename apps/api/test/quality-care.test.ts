@@ -247,16 +247,17 @@ test("quality original reprint preserves delivered history, consumes no extra fi
     }),
   );
   data(
+    await adminRequest("POST", attemptBase + "/printing", p.headers, {
+      printedAt: new Date().toISOString(),
+      evidenceRef: "synthetic:完成印制核验",
+    }),
+  );
+  data(
     await adminRequest("POST", attemptBase + "/shipping", p.headers, {
       carrier: "合成物流",
       number: "SYNTHETICREPRINT",
       shippedAt: new Date().toISOString(),
       evidenceRef: "synthetic:重印承运",
-      wechat: {
-        handling: "implemented_and_verified",
-        evidenceRef: "synthetic:重印微信发货",
-        result: "recorded",
-      },
     }),
   );
   const delivered = data(
@@ -1044,4 +1045,35 @@ test("original quality reprint obeys the exact story version's current book perm
     }),
   );
   assert.ok(reprinted.productionAttemptId);
+});
+
+test("an existing quality request accepts internal review evidence and its actions belong to the original order history", async () => {
+  const p = await deliveredQualityOrder();
+  const created = data(
+    await request("POST", p.qualityBase, p.buyer.token, {
+      attemptId: p.attempt.id,
+      reason: "qualityMissingPages",
+      description: "合成订单详情质量核对说明",
+    }),
+  );
+  const base = `/v1/admin/quality/cases/${created.caseId}`;
+  const assigned = data(
+    await adminRequest("POST", base + "/assign", p.headers, {
+      expectedVersion: created.version,
+      dueAt: new Date(Date.now() + 86400000).toISOString(),
+      evidenceRef: "internal:原D06负责人和处理截止已核验",
+    }),
+  );
+  assert.equal(assigned.state, "assigned");
+  const detail = data(
+    await adminRequest("GET", `/v1/admin/orders/${p.orderId}`, p.headers),
+    200,
+  );
+  assert.equal(detail.qualityRequests[0].caseId, created.caseId);
+  assert.ok(
+    detail.history.some(
+      (entry: any) =>
+        entry.action === "quality.assign" && entry.result === "success",
+    ),
+  );
 });

@@ -1,5 +1,7 @@
 # T07 · 建立独立运营登录与受限管理入口
 
+2026-11-02：当前登录能力复用 #81，Vben/订单入口由 #151 交付；旧 #8 已因被替代按 not_planned 关闭。以下为历史规格/证据，不再单独推进运行信息页面，实际环境责任仍归 #30。
+
 GitHub：[#8](https://github.com/brycezhang/timenook/issues/8) · 状态以 GitHub 为准。
 阶段：S1
 

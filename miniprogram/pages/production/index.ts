@@ -179,7 +179,9 @@ Page({
     this.setData({
       view: value,
       stageLabel: value.current
-        ? stageLabels[value.current.state]
+        ? value.current.state === "in_production" && value.current.printedAt
+          ? "已生产"
+          : stageLabels[value.current.state]
         : "尚未安排生产交接",
       cancellationNotice: value.current?.cancellationNotice || "",
       canGrant:
@@ -240,8 +242,8 @@ Page({
           pdfHash: attempt.pdfHash,
           addressHash: attempt.addressHash,
           expiresAt: new Date(Date.now() + minutes * 60000).toISOString(),
-          noticeVersion: "synthetic-d08-v1",
-          evidenceRef: `synthetic:${evidence}`,
+          noticeVersion: value.noticeVersion,
+          evidenceRef: `${value.evidencePrefix}${evidence}`,
           ...(this.assistedSessionId
             ? { assistedSessionId: this.assistedSessionId }
             : {}),

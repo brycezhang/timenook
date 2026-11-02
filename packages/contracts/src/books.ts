@@ -69,7 +69,7 @@ export interface BookVersionView {
   pdf: { sha256: string; bytes: number } | null;
   toc: { title: string; page: number }[] | null;
   renderer: object | null;
-  /** Frozen book access follows bookPdf; source editing/generation expires separately. */
+  /** Current private access deadline; necessary book/source retention is lifetime. */
   accessExpiresAt: string | null;
   draftAccess: { allowed: boolean; expiresAt: string | null };
   /** Live access to the separate raw thumbnail; never part of the book snapshot. */
@@ -146,6 +146,8 @@ export interface FirstCopyOrderView extends FirstCopyBinding {
   amountDueFen: 0;
 }
 export type FirstCopyBlocker =
+  | "PHYSICAL_PRODUCTION_UNAVAILABLE"
+  | "PRODUCTION_PDF_UNAPPROVED"
   | "BOOK_NOT_READY"
   | "ADDRESS_REQUIRED"
   | "NARRATOR_CONFIRMATION_REQUIRED"
@@ -156,6 +158,8 @@ export type FirstCopyBlocker =
   | "PROJECT_FROZEN"
   | "ALREADY_SUBMITTED";
 export interface FirstCopyContext {
+  noticeVersion: string;
+  evidencePrefix: string;
   projectId: string;
   role: "initiator" | "narrator";
   book: BookVersionView | null;

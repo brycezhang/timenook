@@ -111,6 +111,9 @@ function summary(): any {
       supplierRef: "synthetic:print-v1",
       receiptRef: null,
       tracking: null,
+      printedAt: null,
+      printedBy: null,
+      records: [],
       deliveredAt: null,
       grantExpiresAt: null,
       cancellationNotice: "交接结果待核实，不会自动重发；取消须人工核实。",
@@ -121,6 +124,8 @@ function summary(): any {
     canGrant: false,
     canGrantNarrator: false,
     grantMaxMinutes: 30,
+    noticeVersion: "synthetic-d08-v1",
+    evidencePrefix: "synthetic:",
     accessExpiresAt: null,
   };
 }
@@ -138,10 +143,16 @@ test("production Page reads the server's pending handoff and never invents suppl
   h.page.onUnload();
 });
 test("production Page opens quality care for the original payment order without asking for technical identifiers", async () => {
-  const h = await harness(); h.page.onLoad({ projectId });
-  const shown = h.page.onShow(); h.respond(0, { ...summary(), paymentOrderId: orderId }); await shown;
+  const h = await harness();
+  h.page.onLoad({ projectId });
+  const shown = h.page.onShow();
+  h.respond(0, { ...summary(), paymentOrderId: orderId });
+  await shown;
   h.page.quality();
-  assert.equal(h.routes[0], `/pages/quality/index?orderId=${orderId}&projectId=${projectId}`);
+  assert.equal(
+    h.routes[0],
+    `/pages/quality/index?orderId=${orderId}&projectId=${projectId}`,
+  );
   h.page.onUnload();
 });
 
@@ -268,5 +279,24 @@ test("production Page clears progress when remote sharing is withdrawn while it 
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(h.page.data.view, null);
   assert.match(h.page.data.status, /授权|访问/);
+  h.page.onUnload();
+});
+
+test("completed printing is distinct from printer acceptance in user progress", async () => {
+  const h = await harness();
+  h.page.onLoad({ projectId });
+  const loading = h.page.onShow();
+  const value = summary();
+  value.current.state = "in_production";
+  value.current.printedAt = null;
+  h.respond(0, value);
+  await loading;
+  assert.match(h.page.data.stageLabel, /接单/);
+  const refreshed = h.page.refresh();
+  value.current.printedAt = "2026-11-02T01:00:00.000Z";
+  value.current.printedBy = "77777777-7777-4777-8777-777777777777";
+  h.respond(1, value);
+  await refreshed;
+  assert.equal(h.page.data.stageLabel, "已生产");
   h.page.onUnload();
 });

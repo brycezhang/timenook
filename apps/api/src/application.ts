@@ -107,6 +107,8 @@ import cookie from "@fastify/cookie";
 import { AdminAccess } from "./admin/admin-access";
 import { ADMIN_FEISHU_FETCH } from "./admin/feishu";
 import { AdminController } from "./admin/admin-controller";
+import { AdminUsersController } from "./admin/admin-users-controller";
+import { AdminOrdersController } from "./admin/admin-orders-controller";
 import { randomUUID } from "node:crypto";
 import {
   Controller,
@@ -185,6 +187,8 @@ class HealthController {
     HealthController,
     IdentityController,
     AdminController,
+    AdminOrdersController,
+    AdminUsersController,
     CatalogController,
     AdminCatalogController,
   ],
@@ -512,17 +516,22 @@ export async function createApplication(
               ? [
                   BooksController,
                   BookAudioController,
-                  ...(config.books.mode === "synthetic-local"
+                  FirstCopyController,
+                  FulfillmentController,
+                  AdminFulfillmentController,
+                  AdminFirstCopyController,
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
                     ? [
-                        QualityCareController,
-                        AdminQualityCareController,
                         CompleteExportsController,
                         AdminCompleteExportsController,
-                        FirstCopyController,
-                        FulfillmentController,
-                        AdminFulfillmentController,
-                        AdminFirstCopyController,
                       ]
+                    : []),
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
+                    ? [QualityCareController, AdminQualityCareController]
                     : []),
                 ]
               : []),
@@ -582,8 +591,17 @@ export async function createApplication(
               ? [
                   Books,
                   BookAudio,
-                  ...(config.books.mode === "synthetic-local"
-                    ? [QualityCare, FirstCopies, CompleteExports, Fulfillment]
+                  FirstCopies,
+                  Fulfillment,
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
+                    ? [CompleteExports]
+                    : []),
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
+                    ? [QualityCare]
                     : []),
                   {
                     provide: BOOK_OBJECTS,

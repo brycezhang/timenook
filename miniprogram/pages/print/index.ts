@@ -24,6 +24,8 @@ Page({
     regionLabels: [] as string[],
     regionOptions: [] as { label: string; selected: boolean }[],
     blockerLabels: [] as string[],
+    paidAmount: "",
+    canPrepareProduction: false,
     narratorChecked: false,
     initiatorChecked: false,
     narratorEvidence: "",
@@ -114,13 +116,23 @@ Page({
       NARRATOR_CONFIRMATION_REQUIRED: "等待讲述者确认本版内容",
       INITIATOR_CONFIRMATION_REQUIRED: "等待发起人确认本版 PDF 与当前地址",
       POLICY_PENDING: "销售规则仍待确认，暂不能提交制作",
+      PHYSICAL_PRODUCTION_UNAVAILABLE:
+        "本项目仅限受控内容验收，不含实物制作权益",
+      PRODUCTION_PDF_UNAPPROVED: "当前 PDF 为候选稿，尚未批准实物制作",
       SPECIFICATION_MISMATCH: "书稿超出或不符合约定制作规格",
       ENTITLEMENT_UNAVAILABLE: "首本制作权益当前不可用",
       PROJECT_FROZEN: "项目当前已冻结，请联系服务人员",
       ALREADY_SUBMITTED: "首本已提交，无需再次提交",
     };
+    const canPrepareProduction = !value.blockers.some((code) =>
+      ["PHYSICAL_PRODUCTION_UNAVAILABLE", "PRODUCTION_PDF_UNAPPROVED"].includes(
+        code,
+      ),
+    );
     this.setData({
       context: value,
+      canPrepareProduction,
+      paidAmount: (value.payment.paidAmountFen / 100).toFixed(2),
       versionMismatch,
       canSubmit: value.canSubmit && !versionMismatch,
       name: address?.recipientName || "",
@@ -143,6 +155,7 @@ Page({
       addressDirty: false,
       canConfirmNarrator:
         (value.canConfirmNarrator || !!this.assistedSessionId) &&
+        canPrepareProduction &&
         !versionMismatch,
       narratorChecked: false,
       initiatorChecked: false,
@@ -428,8 +441,8 @@ Page({
         snapshotHash: book.snapshotHash,
         pdfHash: book.pdf.sha256,
         ...(role === "initiator" ? { addressHash: value.address.hash! } : {}),
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: `synthetic:${evidence}`,
+        noticeVersion: value.noticeVersion,
+        evidenceRef: `${value.evidencePrefix}${evidence}`,
         ...(role === "narrator" && this.assistedSessionId
           ? { assistedSessionId: this.assistedSessionId }
           : {}),

@@ -1,49 +1,57 @@
 <script setup lang="ts">
-import { VbenAdminLayout } from "@vben-core/layout-ui";
-import { useMediaQuery } from "@vueuse/core";
-import OperatorHeader from "./operator-header.vue";
-defineProps<{ username: string; busy: boolean }>();
-const emit = defineEmits<{ logout: [] }>();
-const mobile = useMediaQuery("(max-width: 767px)");
+import { BasicLayout } from "@vben/layouts";
+import type { AdminPermission } from "@timenook/contracts";
+import { Alert, Button } from "antdv-next";
+import { useRoute, useRouter } from "vue-router";
+import { adminApi } from "../api/admin";
+import {
+  clearPrivateState,
+  can,
+  refreshSession,
+  session,
+  sessionError,
+} from "../session";
+import { computed, ref } from "vue";
+const route = useRoute(),
+  router = useRouter(),
+  busy = ref(false);
+const canRenderProtected = computed(() => {
+  const permission = route.meta.permission as AdminPermission | undefined;
+  return (
+    session.value?.authenticated === true && (!permission || can(permission))
+  );
+});
+async function logout() {
+  if (busy.value) return;
+  busy.value = true;
+  try {
+    await adminApi.logout(session.value!.csrfToken);
+    clearPrivateState();
+    sessionStorage.removeItem("timenook-admin-return");
+    await refreshSession();
+    await router.replace("/auth/login");
+  } catch {
+    sessionError.value = "退出未完成，请重试。";
+  } finally {
+    busy.value = false;
+  }
+}
 </script>
 <template>
-  <VbenAdminLayout
-    :key="mobile ? 'mobile' : 'desktop'"
-    :header-mode="mobile ? 'static' : 'fixed'"
-    :is-mobile="mobile"
-    :header-visible="!mobile"
-    :sidebar-hidden="mobile"
-    :sidebar-width="220"
-    :sidebar-draggable="false"
-    :sidebar-enable="!mobile"
-    :sidebar-collapsed-button="false"
-    :sidebar-fixed-button="false"
-    :tabbar-enable="false"
-    :header-toggle-sidebar-button="false"
-    :content-padding-left="mobile ? 20 : 36"
-    :content-padding-right="mobile ? 20 : 36"
-    :content-padding-top="mobile ? 24 : 36"
-    :content-padding-bottom="36"
-    :header-height="68"
-  >
-    <template v-if="!mobile" #logo
-      ><div class="sidebar-brand">时光里</div></template
+  <BasicLayout v-if="canRenderProtected" @clear-preferences-and-logout="logout">
+    <template #logo-text><span class="font-semibold">时光里</span></template>
+    <template #user-dropdown
+      ><div class="operator-actions">
+        <span>{{ session?.operator?.username }}</span
+        ><Button :loading="busy" @click="logout">退出登录</Button>
+      </div></template
     >
-    <template #menu><div class="sidebar-menu">运营入口</div></template>
-    <template #header
-      ><OperatorHeader
-        :username="username"
-        :busy="busy"
-        @logout="emit('logout')"
-    /></template>
-    <template #content>
-      <OperatorHeader
-        v-if="mobile"
-        :username="username"
-        :busy="busy"
-        @logout="emit('logout')"
-      />
-      <slot />
-    </template>
-  </VbenAdminLayout>
+    <template #extra
+      ><Alert
+        v-if="sessionError"
+        role="alert"
+        type="error"
+        :message="sessionError"
+        class="session-error" /></template
+  ></BasicLayout>
 </template>

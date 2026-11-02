@@ -54,6 +54,12 @@ import {
 import { join } from "node:path";
 import type { CompleteExportView } from "@timenook/contracts";
 import { API_CONFIG, ApiConfig } from "../config";
+import { readProjectAdmissionIn } from "../projects/project-admission";
+import {
+  participationNotice,
+  E2E_NOTICE_VERSION,
+} from "../catalog/e2e-package";
+import { INTERNAL_NOTICE_VERSION } from "../projects/internal-profile";
 import { Participation } from "../identity/participation";
 import { IdentityAccess } from "../identity/identity-access";
 import { ProjectServiceTerms } from "../projects/service-terms";
@@ -65,19 +71,27 @@ export class ExportRequestDto {
   @ApiProperty({ enum: ["self", "initiator"] })
   @IsIn(["self", "initiator"])
   recipient!: "self" | "initiator";
-  @ApiProperty() @Equals("synthetic-d08-v1") noticeVersion!: string;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @IsIn(["synthetic-d08-v1", INTERNAL_NOTICE_VERSION, E2E_NOTICE_VERSION])
+  noticeVersion!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  evidenceRef!: string;
 }
 export class ExportReviewDto {
   @ApiProperty() @IsISO8601() dueAt!: string;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  evidenceRef!: string;
   @ApiProperty({ required: false })
   @IsOptional()
-  @Matches(/^synthetic:[^\r\n]{3,160}$/)
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
   recipientRef?: string;
 }
 export class ExportDeliveryDto {
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  evidenceRef!: string;
 }
 export class ExportReceiptDto {
   @ApiProperty() @Matches(/^[a-f0-9]{64}$/) sha256!: string;
@@ -88,7 +102,9 @@ export class ExportStaffVerificationDto {
   @ApiProperty() @IsInt() @Min(0) expectedAccessEpoch!: number;
   @ApiProperty() @IsISO8601() expiresAt!: string;
   @ApiProperty() @Equals("complete_export_delivery") purpose!: string;
-  @ApiProperty() @Equals("synthetic-d08-v1") noticeVersion!: string;
+  @ApiProperty()
+  @IsIn(["synthetic-d08-v1", INTERNAL_NOTICE_VERSION, E2E_NOTICE_VERSION])
+  noticeVersion!: string;
   @ApiProperty() @Equals(true) identityVerified!: boolean;
   @ApiProperty() @Equals(true) subjectConsented!: boolean;
   @ApiProperty()
@@ -98,9 +114,11 @@ export class ExportStaffVerificationDto {
   @Matches(/^record:[-A-Za-z0-9_:]{3,120}$/)
   confirmationChannelRef!: string;
   @ApiProperty()
-  @Matches(/^record:synthetic-[-A-Za-z0-9_:]{3,120}$/)
+  @Matches(/^record:(?:synthetic|internal)-[-A-Za-z0-9_:]{3,120}$/)
   verificationRef!: string;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) recipientRef!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  recipientRef!: string;
 }
 const STAFF_ACCESS_MS = 30 * 60000;
 type ExportSource = {
@@ -166,16 +184,43 @@ export class CompleteExports implements OnModuleDestroy {
   }
   private async projectIn(tx: Prisma.TransactionClient, id: string) {
     await tx.$queryRaw`SELECT id FROM projects WHERE id=${id}::uuid FOR UPDATE`;
-    const project = await tx.project.findUnique({ where: { id } });
-    if (!project) throw new NotFoundException();
+    const admission = await readProjectAdmissionIn(tx, id);
     await tx.$queryRaw`SELECT id FROM project_subjects WHERE project_id=${id}::uuid FOR UPDATE`;
     const subject = await tx.projectSubject.findUniqueOrThrow({
-        where: { projectId: id },
-      }),
-      order = await tx.paymentOrder.findUniqueOrThrow({
-        where: { id: project.orderId! },
-      });
-    return { project, subject, order };
+      where: { projectId: id },
+    });
+    return { ...admission, subject };
+  }
+  private manual(p: Awaited<ReturnType<CompleteExports["projectIn"]>>) {
+    return (
+      !!this.config.acceptance &&
+      ["internal-acceptance", "paid-e2e"].includes(String(p.snapshot.scope))
+    );
+  }
+  private validateEvidence(
+    p: Awaited<ReturnType<CompleteExports["projectIn"]>>,
+    body: {
+      noticeVersion?: string;
+      evidenceRef?: string;
+      recipientRef?: string;
+      verificationRef?: string;
+    },
+  ) {
+    const notice = participationNotice(p.snapshot, !!this.config.acceptance);
+    if (
+      (body.noticeVersion !== undefined &&
+        body.noticeVersion !== notice.noticeVersion) ||
+      [body.evidenceRef, body.recipientRef].some(
+        (v) => v !== undefined && !v.startsWith(notice.evidencePrefix),
+      ) ||
+      (body.verificationRef !== undefined &&
+        !body.verificationRef.startsWith(
+          notice.evidencePrefix === "internal:"
+            ? "record:internal-"
+            : "record:synthetic-",
+        ))
+    )
+      throw new BadRequestException();
   }
   private user<T>(
     id: string,
@@ -189,7 +234,7 @@ export class CompleteExports implements OnModuleDestroy {
     return this.database.$transaction(async (tx) => {
       const user = await this.identity.current(authorization, tx),
         p = await this.projectIn(tx, id);
-      if (user.id !== p.subject.boundUserId && user.id !== p.order.buyerId)
+      if (user.id !== p.subject.boundUserId && user.id !== p.initiatorUserId)
         throw new ForbiddenException();
       return work(tx, p, user.id);
     });
@@ -238,6 +283,7 @@ export class CompleteExports implements OnModuleDestroy {
   ) {
     return this.user(id, authorization, async (tx, p, userId) => {
       if (p.subject.boundUserId !== userId) throw new ForbiddenException();
+      this.validateEvidence(p, body);
       const prior = await tx.careRequest.findUnique({
         where: {
           projectId_operatorId_operatorRealm_idempotencyKey: {
@@ -280,7 +326,8 @@ export class CompleteExports implements OnModuleDestroy {
           bindingVersion: p.subject.bindingVersion,
           accessEpoch: p.project.accessEpoch,
           recipient: body.recipient,
-          recipientUserId: body.recipient === "self" ? userId : p.order.buyerId,
+          recipientUserId:
+            body.recipient === "self" ? userId : p.initiatorUserId,
           evidenceRef: body.evidenceRef,
         },
       });
@@ -295,7 +342,7 @@ export class CompleteExports implements OnModuleDestroy {
     await this.cleanupTemporary();
     return this.user(id, authorization, async (tx, p, userId) => {
       const terms = await this.policy(tx, id),
-        snapshot = p.order.packageSnapshot as unknown as ExportSales;
+        snapshot = p.snapshot as unknown as ExportSales;
       const rows = await tx.careExport.findMany({
         where: {
           projectId: id,
@@ -312,12 +359,20 @@ export class CompleteExports implements OnModuleDestroy {
           terms.exportRequests!.state !== "deleted",
         amountDueFen: 0,
         requestWindow: terms.exportRequests,
-        service: {
-          within: snapshot.admission.d06.completeExport.within.value,
-          unit: "business_days",
-          ownerRef: snapshot.admission.d06.completeExport.ownerRef,
-          calendarRef: snapshot.admission.d06.businessCalendarRef,
-        },
+        ...participationNotice(p.snapshot, !!this.config.acceptance),
+        service: this.manual(p)
+          ? {
+              within: null,
+              unit: "business_days",
+              ownerRef: null,
+              calendarRef: null,
+            }
+          : {
+              within: snapshot.admission.d06.completeExport.within.value,
+              unit: "business_days",
+              ownerRef: snapshot.admission.d06.completeExport.ownerRef,
+              calendarRef: snapshot.admission.d06.businessCalendarRef,
+            },
         accessEpoch: p.project.accessEpoch,
         requests: await Promise.all(
           rows.map(async (row) => {
@@ -475,16 +530,18 @@ export class CompleteExports implements OnModuleDestroy {
   ) {
     const p = await this.scopeIn(tx, id, adminId, false),
       reviewHash = digest(body);
+    this.validateEvidence(p, body);
     if (p.row?.acceptedAt) {
       if (p.row.reviewHash !== reviewHash || p.row.ownerId !== adminId)
         throw new ConflictException();
       return this.view(p.row, undefined, p.contentAllowed);
     }
     if (Date.parse(body.dueAt) <= Date.now()) throw new BadRequestException();
-    const snapshot = p.order.packageSnapshot as unknown as ExportSales;
+    const snapshot = p.snapshot as unknown as ExportSales;
     if (
-      !snapshot.admission?.d06?.completeExport ||
-      !snapshot.admission.d06.businessCalendarRef
+      !this.manual(p) &&
+      (!snapshot.admission?.d06?.completeExport ||
+        !snapshot.admission.d06.businessCalendarRef)
     )
       throw new ConflictException();
     let row = p.row;
@@ -531,8 +588,8 @@ export class CompleteExports implements OnModuleDestroy {
   private verificationPolicy(
     p: Awaited<ReturnType<CompleteExports["scopeIn"]>>,
   ) {
-    const policy = (p.order.packageSnapshot as unknown as ExportSales).admission
-      ?.d08?.withoutWechat?.export;
+    const policy = (p.snapshot as unknown as ExportSales).admission?.d08
+      ?.withoutWechat?.export;
     if (
       !policy?.identityVerificationRef ||
       !policy.confirmationChannelRef ||
@@ -651,6 +708,7 @@ export class CompleteExports implements OnModuleDestroy {
   ) {
     const p = await this.scopeIn(tx, id, adminId),
       policy = this.verificationPolicy(p);
+    this.validateEvidence(p, body);
     if (
       p.row!.ownerId !== adminId ||
       body.expectedBindingVersion !== p.subject.bindingVersion ||
@@ -1016,7 +1074,7 @@ export class CompleteExports implements OnModuleDestroy {
     files.unshift({
       path: "README.txt",
       bytes: Buffer.from(
-        "岁月成书 · 完整资料导出\n\n无需登录平台即可读取。audio/ 为原始录音，非合成音频；transcripts/ 为未经校对的文件 ASR 原始转录；stories/ 为指定版本本人确认稿，逐份标明 AI 整理及人工校对来源；photos/ 为原始照片；books/ 为当时可交付的固定 PDF。manifest.json 记录每份文件的相对路径、字节数、SHA256 与版本/来源关系。某类数量为 0 表示该类尚未创建或未获确认交付，不能据此认定已删除。\n\n录音是讲述者真实原声；当前测试素材为合成样本，不代表已取得真实私人素材。原始转录可能有识别错误，确认稿以本人核验的具体版本为准。使用任意 ZIP 工具解压后，核对 manifest.json 的全部路径与 SHA256；缺件或 hash 不一致请联系原服务方。manifest 本身由下载包的 SHA256 保护。\n\n下载后副本由接收人保管，平台撤回或到期不能收回已传输文件或纸书。包下载期限与原始资料保留期限分别执行；重试和重复领取不会延长下载期限。完整导出已包含，不额外收费。\n",
+        "岁月成书 · 完整资料导出\n\n无需登录平台即可读取。audio/ 为原始录音，非合成音频；transcripts/ 为未经校对的文件 ASR 原始转录；stories/ 为指定版本本人确认稿，逐份标明 AI 整理及人工校对来源；photos/ 为原始照片；books/ 为当时可交付的固定 PDF。manifest.json 记录每份文件的相对路径、字节数、SHA256 与版本/来源关系。某类数量为 0 表示该类尚未创建或未获确认交付，不能据此认定已删除。\n\n录音是讲述者真实原声；当前测试素材为合成样本，不代表已取得真实私人素材。原始转录可能有识别错误，确认稿以本人核验的具体版本为准。使用任意 ZIP 工具解压后，核对 manifest.json 的全部路径与 SHA256；缺件或 hash 不一致请联系原服务方。manifest 本身由下载包的 SHA256 保护。\n\n已完成资料包可持续下载，必要资料长期保留；下载时仍须具备本人当前授权。本人可主动撤回或删除资料；下载后副本由接收人保管，平台无法收回已传输文件或纸书。完整导出已包含，不额外收费。\n",
       ),
       provenance: "资料包可读说明",
       source: { counts: batch.counts },
@@ -1159,6 +1217,7 @@ export class CompleteExports implements OnModuleDestroy {
   ) {
     const p = await this.scopeIn(tx, id, adminId),
       row = p.row;
+    this.validateEvidence(p, body);
     if (
       !row ||
       row.recipient !== "verified_alternative" ||
@@ -1385,7 +1444,21 @@ export class AdminCompleteExportsController {
     return this.access.command(
       req,
       ADMIN_PERMISSIONS.writeCare,
-      work,
+      async (tx) => {
+        const caseId = (req.params as { caseId?: string }).caseId;
+        if (caseId) {
+          const care = await tx.careRequest.findUnique({
+            where: { id: caseId },
+            select: { projectId: true },
+          });
+          if (care)
+            Object.assign(req, {
+              adminResourceType: "project",
+              adminResourceId: care.projectId,
+            });
+        }
+        return work(tx);
+      },
       req.method === "GET",
     );
   }

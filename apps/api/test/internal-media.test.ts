@@ -8,6 +8,11 @@ import { spawnSync } from "node:child_process";
 import { after, before, test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
+import {
+  createAdminApplication,
+  syntheticFeishu,
+} from "./admin-feishu-fixture";
+import { paymentAdmin } from "./payment-admin-fixture";
 import { createApplication } from "../src/application";
 import { readConfig, type ApiConfig } from "../src/config";
 import { createInternalProject } from "../src/projects/internal-project";
@@ -112,6 +117,13 @@ before(async () => {
     TIMENOOK_PRODUCT_DEEPSEEK_BASE_URL: "https://cf.api.fan/v1",
     TIMENOOK_PRODUCT_DEEPSEEK_MODEL: "deepseek-flash",
   });
+  config.admin = {
+    origin,
+    sessionKey: randomBytes(32).toString("base64"),
+    sessionTtlSeconds: 28800,
+    challengeTtlSeconds: 300,
+    feishu: { ...syntheticFeishu },
+  };
   const migrated = spawnSync(
     process.execPath,
     ["node_modules/prisma/build/index.js", "migrate", "deploy"],
@@ -124,11 +136,44 @@ before(async () => {
   await bootPrivacyFixture(config);
   // Non-test composition must boot with native adapters before replacing only the two external boundaries.
   const realComposition = await createApplication(config);
+  assert.equal(
+    (
+      await realComposition.inject({
+        method: "GET",
+        url: `/v1/projects/${randomUUID()}/exports`,
+      })
+    ).statusCode,
+    401,
+    "controlled internal export route is assembled",
+  );
+  assert.equal(
+    (
+      await realComposition.inject({
+        method: "GET",
+        url: "/v1/admin/fulfillment",
+      })
+    ).statusCode,
+    401,
+    "controlled internal admin fulfillment route is assembled",
+  );
+  assert.equal(
+    (
+      await realComposition.inject({
+        method: "GET",
+        url: `/v1/projects/${randomUUID()}/fulfillment`,
+      })
+    ).statusCode,
+    401,
+    "controlled internal user fulfillment route is assembled",
+  );
   await realComposition.close();
   config.environment = "test";
   config.transcription!.pollIntervalMs = 0;
   objects = new Objects(root);
-  app = await createApplication(config, { recordingObjects: objects, aiFetch });
+  app = await createAdminApplication(config, {
+    recordingObjects: objects,
+    aiFetch,
+  });
   db = new PrismaClient({ datasourceUrl: config.databaseUrl });
 });
 after(async () => {
@@ -200,6 +245,30 @@ function request(
 const notice = () => ({
   noticeVersion: "internal-participation-v1",
   evidenceRef: `internal:${randomUUID()}`,
+});
+test("controlled internal books publicly registers quality handling while denying anonymous care access", async () => {
+  const id = randomUUID();
+  const admin = await app.inject({
+    method: "GET",
+    url: `/v1/admin/quality/cases/${id}`,
+  });
+  assert.equal(admin.statusCode, 401, admin.body);
+  const actor = await login();
+  const product = await request("GET", `/v1/orders/${id}/quality-care`, actor);
+  assert.equal(product.statusCode, 404, product.body);
+  const invalidGrant = await request(
+    "POST",
+    `/v1/orders/${id}/quality-care/${randomUUID()}/access`,
+    actor,
+    {
+      expectedVersion: 1,
+      scopes: ["evidence"],
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+      consented: true,
+      noticeVersion: "internal-participation-v1",
+    },
+  );
+  assert.equal(invalidGrant.statusCode, 404, invalidGrant.body);
 });
 test("one unpaid Cookie project records, seals, transcribes, confirms its story and produces one PDF confirmed by both participants", async () => {
   const owner = await login(),
@@ -428,6 +497,102 @@ test("one unpaid Cookie project records, seals, transcribes, confirms its story 
       })
     ).sha256,
     sha256,
+  );
+  const firstCopy = data(
+    await request("GET", `${base}/first-copy`, narrator),
+    200,
+  );
+  assert.equal(firstCopy.canSubmit, false);
+  assert.equal(firstCopy.payment.paidAmountFen, 0);
+  assert.ok(firstCopy.blockers.includes("PHYSICAL_PRODUCTION_UNAVAILABLE"));
+  assert.ok(firstCopy.blockers.includes("ENTITLEMENT_UNAVAILABLE"));
+  const fulfillment = data(
+    await request("GET", `${base}/fulfillment`, narrator),
+    200,
+  );
+  assert.equal(fulfillment.orderId, null);
+  const exportBase = `${base}/exports`;
+  assert.equal(
+    (
+      await request("POST", exportBase, narrator, {
+        recipient: "self",
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:wrong-scope",
+      })
+    ).statusCode,
+    400,
+  );
+  const requested = data(
+    await request("POST", exportBase, narrator, {
+      recipient: "self",
+      ...notice(),
+    }),
+  );
+  assert.equal(requested.recipientUserId, narrator.id);
+  assert.equal(requested.state, "requested");
+  const exports = data(await request("GET", exportBase, narrator), 200);
+  assert.equal(exports.requests[0].id, requested.id);
+  assert.equal(
+    exports.service.within,
+    null,
+    "internal manual handling does not manufacture a sales SLA",
+  );
+  const admin = await paymentAdmin(config, app, ["care:write"]);
+  const adminGet = (url: string) =>
+    app.inject({ method: "GET", url, headers: admin });
+  const adminPost = (url: string, payload: object) =>
+    app.inject({
+      method: "POST",
+      url,
+      headers: { ...admin, "idempotency-key": randomUUID() },
+      payload,
+    });
+  const care = data(
+    await adminGet(`/v1/admin/care-requests/${requested.id}`),
+    200,
+  );
+  data(
+    await adminPost(`/v1/admin/care-requests/${requested.id}/verify`, {
+      ...notice(),
+      expectedBindingVersion: care.sourceBindingVersion,
+      expectedAccessEpoch: care.sourceAccessEpoch,
+      expectedAccessSequence: care.verificationScope.accessSequence,
+    }),
+  );
+  const exportAdminBase = `/v1/admin/care-requests/${requested.id}/export`;
+  const accepted = data(
+    await adminPost(`${exportAdminBase}/accept`, {
+      dueAt: new Date(Date.now() + 86400000).toISOString(),
+      evidenceRef: `internal:manual-reviewed-${randomUUID()}`,
+    }),
+  );
+  assert.ok(accepted.ownerId);
+  const packed = data(await adminPost(`${exportAdminBase}/pack`, {}));
+  assert.equal(packed.state, "ready");
+  const repeated = data(await adminPost(`${exportAdminBase}/pack`, {}));
+  assert.equal(repeated.sha256, packed.sha256);
+  const before = data(await request("GET", exportBase, narrator), 200);
+  assert.equal(before.requests[0].canDownload, true);
+  const bundle = await request(
+    "GET",
+    `${exportBase}/${requested.id}/download`,
+    narrator,
+  );
+  assert.equal(bundle.statusCode, 200, bundle.body);
+  assert.equal(
+    createHash("sha256").update(bundle.rawPayload).digest("hex"),
+    packed.sha256,
+  );
+  data(
+    await request("POST", `${exportBase}/${requested.id}/receipt`, narrator, {
+      sha256: packed.sha256,
+    }),
+  );
+  const after = data(await request("GET", exportBase, narrator), 200);
+  assert.equal(
+    after.requests[0].canDownload,
+    true,
+    "completed package remains claimable under current authorization",
   );
   assert.equal(await db.paymentOrder.count(), 0);
   assert.equal(await db.wechatIdentity.count(), 0);

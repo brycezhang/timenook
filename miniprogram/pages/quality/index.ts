@@ -378,7 +378,7 @@ Page({
           scopes,
           expiresAt: new Date(Date.now() + minutes * 60000).toISOString(),
           consented: true,
-          noticeVersion: "synthetic-d08-v1",
+          noticeVersion: selected.noticeVersion,
           ...(this.assistedSessionId
             ? { assistedSessionId: this.assistedSessionId }
             : {}),

@@ -470,7 +470,7 @@ test("the real interview page shows processing, retry and restored failure actio
   expect(errors).toEqual([]);
   await page.context().close();
 });
-test("the operator page lists sanitized task failures and executes an audited retry", async ({
+test("authorized maintenance lists sanitized task failures and executes an audited retry", async ({
   browser,
 }) => {
   // Prepare this view independently through the real production recording entry.
@@ -633,21 +633,30 @@ test("the operator page lists sanitized task failures and executes an audited re
   });
   await page.goto("https://localhost:5177/admin/");
   await feishuLogin(page, account);
-  await expect(
-    page.getByRole("button", { name: "处理任务", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "处理任务", exact: true }).click();
-  await expect(
-    page.getByText("PROVIDER_FAILED", { exact: true }).first(),
-  ).toBeVisible();
-  expect(await page.locator("body").innerText()).not.toContain("signature=");
-  await page
-    .getByRole("button", { name: `重试任务 ${taskId}`, exact: true })
-    .click();
-  await expect(
-    page.getByText("重试已受理，仍使用原业务任务。", { exact: true }),
-  ).toBeVisible();
-  await page.screenshot({ path: "/tmp/timenook-t15-admin-retry-1280.png" });
+  // Task operations remain a protected maintenance HTTP capability; the
+  // simplified business console no longer has a task management page.
+  await expect(page.getByRole("button", { name: "处理任务", exact: true })).toHaveCount(0);
+  const state = await page.request.get("https://localhost:5177/api/v1/admin/session");
+  expect(state.status()).toBe(200);
+  const csrf = (await state.json()).data.csrfToken;
+  const tasks = await page.request.get("https://localhost:5177/api/v1/admin/tasks");
+  expect(tasks.status()).toBe(200);
+  const taskList = await tasks.json();
+  expect(JSON.stringify(taskList)).toContain("PROVIDER_FAILED");
+  expect(JSON.stringify(taskList)).not.toContain("signature=");
+  const retried = await page.request.post(
+    `https://localhost:5177/api/v1/admin/projects/${projectId}/tasks/${taskId}/retry`,
+    {
+      headers: {
+        origin: config.admin.origin,
+        "x-csrf-token": csrf,
+        "idempotency-key": randomUUID(),
+      },
+      data: {},
+    },
+  );
+  expect(retried.status()).toBe(202);
+  expect((await retried.json()).data.id).toBe(taskId);
   expect(errors).toEqual([]);
   await context.close();
 });

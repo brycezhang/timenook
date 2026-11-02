@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { waitForAdminStartup } from "./admin-startup.mjs";
 import { createRequire } from "node:module";
 import { createHash, randomUUID } from "node:crypto";
 import { resolve, join } from "node:path";
@@ -203,7 +204,7 @@ async function openMini(browser, account, target = project, route = "export") {
   await expect(page).toHaveTitle("时光里 · 岁月成书");
   return page;
 }
-async function openAdmin(browser) {
+async function openAdmin(browser, target = project) {
   const context = await browser.newContext({
     ignoreHTTPSErrors: true,
     viewport: { width: 1280, height: 900 },
@@ -222,10 +223,12 @@ async function openAdmin(browser) {
   ]);
   const page = await context.newPage();
   observe(page);
-  await page.goto(`${adminOrigin}/admin/`);
-  await expect(page).toHaveTitle("时光里 · 运营管理");
-  await expect(page).toHaveURL(`${adminOrigin}/admin/`);
-  await page.getByRole("button", { name: "客服工单", exact: true }).click();
+  await waitForAdminStartup(page, async () => {
+    await page.goto(`${adminOrigin}/admin/users/projects/${target.projectId}`);
+    await expect(
+      page.getByRole("heading", { name: "项目详情", exact: true }),
+    ).toBeVisible({ timeout: 30000 });
+  });
   return page;
 }
 
@@ -468,7 +471,7 @@ test("alternative delivery records a fresh subject verification before renewing 
     process.chdir(previous);
   }
   await new Promise((resolve) => setTimeout(resolve, 1100));
-  const admin = await openAdmin(browser);
+  const admin = await openAdmin(browser, p);
   await admin
     .getByRole("button", { name: `查看 ${p.exp.id}`, exact: true })
     .click();

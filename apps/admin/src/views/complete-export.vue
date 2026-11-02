@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, onUnmounted } from "vue";
 import { Alert, Button, Input } from "antdv-next";
 import type { CareCase, CompleteExportView } from "@timenook/contracts";
 import { completeExportApi } from "../api/admin";
-const props = defineProps<{ care: CareCase; csrf: string }>();
+const props = defineProps<{
+  care: CareCase;
+  csrf: string;
+  noticeVersion: string;
+  evidencePrefix: string;
+}>();
 const emit = defineEmits<{ expired: [] }>();
 const value = ref<CompleteExportView | null>(null),
   error = ref(""),
@@ -19,6 +24,14 @@ const contentBlocked = computed(
 );
 let generation = 0,
   intent: { input: string; key: string; body?: object } | null = null;
+onUnmounted(() => {
+  ++generation;
+  value.value = null;
+  evidence.value = "";
+  recipientRef.value = "";
+  verificationRef.value = "";
+  intent = null;
+});
 const stateLabel: Record<string, string> = {
   requested: "待核验",
   accepted: "已受理，等待打包",
@@ -129,7 +142,9 @@ async function verifyAccess() {
     !identityVerified.value ||
     !subjectConsented.value ||
     !recipientRef.value ||
-    !/^record:synthetic-[-A-Za-z0-9_:]{3,120}$/.test(verificationRef.value)
+    !/^record:(?:synthetic|internal)-[-A-Za-z0-9_:]{3,120}$/.test(
+      verificationRef.value,
+    )
   )
     return;
   await perform(async (id, g) => {
@@ -148,7 +163,7 @@ async function verifyAccess() {
           expectedAccessEpoch: scope.accessEpoch,
           expectedAccessSequence: scope.accessSequence,
           purpose: "complete_export_delivery",
-          noticeVersion: "synthetic-d08-v1",
+          noticeVersion: props.noticeVersion,
           identityVerified: true,
           subjectConsented: true,
           identityProcedureRef: scope.identityProcedureRef,
@@ -247,7 +262,7 @@ async function download() {
       >
       <div v-if="!value || value.state === 'requested'" class="section">
         <label
-          >按原订单工作日历核算的处理截止<input
+          >本次人工处理截止<input
             v-model="dueAt"
             type="datetime-local"
             aria-label="导出处理截止"
@@ -266,8 +281,8 @@ async function download() {
           :disabled="
             busy ||
             !dueAt ||
-            !evidence.startsWith('synthetic:') ||
-            (!value && !recipientRef.startsWith('synthetic:'))
+            !evidence.startsWith(evidencePrefix) ||
+            (!value && !recipientRef.startsWith(evidencePrefix))
           "
           @click="command('accept')"
           >核验范围与接收人并受理</Button
@@ -348,7 +363,7 @@ async function download() {
             :disabled="busy" /></label
         ><Button
           :disabled="
-            busy || contentBlocked || !evidence.startsWith('synthetic:')
+            busy || contentBlocked || !evidence.startsWith(evidencePrefix)
           "
           @click="command('delivery')"
           >记录替代渠道实际交付回执</Button
@@ -357,7 +372,7 @@ async function download() {
       <p>
         ZIP 含原声、原始转录、指定版本确认稿、照片、可交付 PDF、manifest
         和可读说明。缺失或 hash
-        不符不会标为可领取。资料包期限从首次完成起算，重试不延长；资料原件保留与删除另行处理。
+        不符不会标为可领取。已完成资料包可持续下载，必要资料长期保留；本人可主动撤回或删除，客服访问仍须当次限时授权。
       </p></template
     >
   </section>

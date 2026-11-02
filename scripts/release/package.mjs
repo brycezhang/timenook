@@ -25,6 +25,8 @@ const required = [
   "packages/contracts/dist",
   "apps/admin/package.json",
   "apps/admin/dist",
+  "apps/web/package.json",
+  "apps/web/dist",
   "scripts/print-probe",
   "scripts/release/package.mjs",
   "ops",

@@ -324,12 +324,18 @@ export const careApi = {
       )
     ).data;
   },
-  async verify(care: CareCase, evidenceRef: string, key: string, csrf: string) {
+  async verify(
+    care: CareCase,
+    evidenceRef: string,
+    key: string,
+    csrf: string,
+    noticeVersion = "synthetic-d08-v1",
+  ) {
     return (
       await client.post<ApiResponse<{ state: string }>>(
         `/care-requests/${care.id}/verify`,
         {
-          noticeVersion: "synthetic-d08-v1",
+          noticeVersion,
           evidenceRef,
           expectedBindingVersion: care.sourceBindingVersion,
           expectedAccessEpoch: care.sourceAccessEpoch,
@@ -350,7 +356,13 @@ export const careApi = {
     return (await client.get<ApiResponse<CareCase>>(`/care-requests/${id}`))
       .data;
   },
-  async rebind(care: CareCase, evidenceRef: string, key: string, csrf: string) {
+  async rebind(
+    care: CareCase,
+    evidenceRef: string,
+    key: string,
+    csrf: string,
+    noticeVersion = "synthetic-d08-v1",
+  ) {
     return (
       await client.post<
         ApiResponse<{ bindingVersion: number; accessEpoch: number }>
@@ -360,7 +372,7 @@ export const careApi = {
           supportCaseRef: `record:${care.id}`,
           targetUserId: care.targetUserId,
           expectedBindingVersion: care.sourceBindingVersion,
-          noticeVersion: "synthetic-d08-v1",
+          noticeVersion,
           evidenceRef,
         },
         { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
@@ -394,11 +406,15 @@ import type {
   FulfillmentShippingCommand,
   FulfillmentDeliveryCommand,
   FulfillmentMaterials,
+  AdminProductionPage,
 } from "@timenook/contracts";
 export const fulfillmentApi = {
-  async list() {
-    return (await client.get<ApiResponse<FulfillmentView[]>>("/fulfillment"))
-      .data;
+  async list(query = "") {
+    return (
+      await client.get<ApiResponse<AdminProductionPage>>(
+        `/fulfillment?${query}`,
+      )
+    ).data;
   },
   async read(orderId: string) {
     return (
@@ -436,7 +452,14 @@ export const fulfillmentApi = {
   async command(
     orderId: string,
     attemptId: string,
-    action: "handoff" | "receipt" | "cancel" | "shipping" | "delivery",
+    action:
+      | "handoff"
+      | "receipt"
+      | "cancel"
+      | "printing"
+      | "shipping"
+      | "wechat"
+      | "delivery",
     input:
       | {}
       | FulfillmentReceiptCommand
