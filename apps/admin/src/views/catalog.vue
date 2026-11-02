@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { Alert, Button, Form, FormItem, Input } from "antdv-next";
+import { Alert, Button, Checkbox, Form, FormItem, Input } from "antdv-next";
 import { ADMIN_PERMISSIONS } from "@timenook/contracts";
 import type {
   AdminPermission,
@@ -18,6 +18,7 @@ const canWrite = computed(() =>
 const canFreeze = computed(() =>
   props.permissions.includes(ADMIN_PERMISSIONS.freezeCatalog),
 );
+const realParametersConfirmed = ref(false);
 const busy = ref(false),
   error = ref(""),
   message = ref("");
@@ -58,7 +59,7 @@ async function run(work: () => Promise<void>) {
         code === "CONFLICT"
           ? "内容已被更新，请重新打开最新记录后再修改。"
           : code === "INVALID_PACKAGE"
-            ? "参数不完整，不能冻结预览，请补齐所列缺口。"
+            ? "参数不完整，不能发布，请补齐所列缺口。"
             : code === "FORBIDDEN"
               ? "当前权限或运行环境不允许此操作。"
               : "操作未完成，请检查输入并重试。";
@@ -108,6 +109,7 @@ function openDraft(draft: PackageDraft | null) {
     shippingRegionLabels: draft?.shippingRegionLabels ?? {},
   };
   dirty.value = false;
+  realParametersConfirmed.value = false;
   error.value = "";
 }
 async function importFile(event: Event) {
@@ -177,6 +179,21 @@ function freeze() {
     message.value = "本地预览版本已冻结，销售仍未开放。";
   });
 }
+function publish() {
+  if (!selected.value || dirty.value || !realParametersConfirmed.value) return;
+  void run(async () => {
+    await catalogApi.publish(selected.value!, props.csrf);
+    await refresh();
+    message.value = "999元正式套餐版本已发布。";
+  });
+}
+function publishE2e() {
+  void run(async () => {
+    await catalogApi.publishE2e(props.csrf);
+    await refresh();
+    message.value = "受控支付验收版本已发布；仅服务端白名单账号实付0.01元。";
+  });
+}
 onMounted(() => {
   void run(refresh);
 });
@@ -186,13 +203,13 @@ onMounted(() => {
     <div class="page-title">
       <div>
         <h1>关系与套餐</h1>
-        <p>维护赠礼称呼，准备套餐条款与不可变预览。</p>
+        <p>维护赠礼称呼、套餐条款及确定发布版本。</p>
       </div>
       <Button :loading="busy" @click="run(refresh)">刷新目录</Button>
     </div>
     <Alert
       type="info"
-      message="本地预览不代表正式销售授权。首批关系文案与商业参数尚待审核，当前不会开放购买。"
+      message="正式发布须填写真实完整参数并由运营确认。受控E2E版本标价999元，仅服务端白名单账号实付0.01元，不代表商业准入审核通过。"
       class="notice"
       show-icon
     />
@@ -337,8 +354,8 @@ onMounted(() => {
         <p v-if="selected" class="catalog-validation">
           {{
             selected.validation.completeness === "complete"
-              ? "结构完整；审批真实性未核验，销售未开放。"
-              : "参数尚未完整，补齐后才能冻结预览。"
+              ? "结构完整；请核实真实材料后勾选确认并发布。"
+              : "参数尚未完整，补齐后才能正式发布。"
           }}
         </p>
         <details v-if="selected?.validation.issues.length">
@@ -356,6 +373,12 @@ onMounted(() => {
           </ul>
         </details>
         <p v-if="dirty" class="catalog-validation">存在尚未保存的修改。</p>
+        <Checkbox
+          v-if="canFreeze"
+          v-model:checked="realParametersConfirmed"
+          :disabled="busy || dirty"
+          >我已核对本草稿使用真实完整规格、政策与审核引用，确认发布999元正式套餐。</Checkbox
+        >
         <div class="catalog-actions">
           <Button
             v-if="canWrite"
@@ -369,20 +392,45 @@ onMounted(() => {
             @click="freeze"
             >冻结本地预览</Button
           >
+          <Button
+            v-if="canFreeze"
+            :disabled="
+              !selected ||
+              dirty ||
+              busy ||
+              !realParametersConfirmed ||
+              selected.validation.completeness !== 'complete'
+            "
+            @click="publish"
+            >发布999元正式套餐</Button
+          >
         </div>
       </Form>
     </section>
     <section class="catalog-card">
-      <h2>不可变预览版本</h2>
-      <p>冻结后仅追加新版本；草稿修改不会覆盖旧版本。预览仅在本地环境可用。</p>
-      <p v-if="!versions.length">尚无预览版本。</p>
+      <h2>不可变套餐版本</h2>
+      <Button v-if="canFreeze" :disabled="busy" @click="publishE2e"
+        >发布受控1分验收版本</Button
+      >
+      <p>
+        发布后仅追加新版本；草稿修改不会覆盖旧版本。本地预览不可购买，E2E版本仅向服务端白名单开放1分支付。
+      </p>
+      <p v-if="!versions.length">尚无套餐版本。</p>
       <details
         v-for="version in versions"
         :key="version.id"
         class="version-detail"
       >
         <summary>
-          {{ version.title }} · 版本 {{ version.sequence }} · ¥{{
+          {{ version.title }} ·
+          {{
+            version.purpose === "e2e"
+              ? "受控E2E实付0.01元"
+              : version.purpose === "production"
+                ? "正式售卖"
+                : "本地预览"
+          }}
+          · 版本 {{ version.sequence }} · ¥{{
             (version.price.value / 100).toFixed(2)
           }}
         </summary>

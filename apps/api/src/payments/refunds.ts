@@ -77,18 +77,24 @@ export class RequestRefundDto {
   @ApiProperty({ enum: REFUND_REASONS })
   @IsIn(REFUND_REASONS)
   reason!: RefundReason;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  evidenceRef!: string;
 }
 export class ApproveRefundDto {
   @ApiProperty() @IsInt() @Min(1) @Max(99900) amountFen!: number;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  evidenceRef!: string;
   @ApiProperty({ required: false })
   @IsOptional()
   @IsISO8601()
   failureNotifiedAt?: string;
 }
 export class RefundEvidenceDto {
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  evidenceRef!: string;
 }
 export class RefundProductionReviewDto extends RefundEvidenceDto {
   @ApiProperty() @IsUUID() attemptId!: string;
@@ -324,6 +330,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       !rule ||
       !Number.isSafeInteger(rule.refundAmount?.value) ||
       rule.refundAmount.value <= 0 ||
+      rule.refundAmount.value > order.amount ||
       rule.refundAmount.unit !== "fen" ||
       !Number.isSafeInteger(rule.requestWindow?.duration?.value) ||
       rule.requestWindow.duration.value <= 0 ||

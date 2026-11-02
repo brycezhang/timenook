@@ -49,15 +49,24 @@ export class PackageVersionDto {
   @ApiProperty({ format: "uuid" }) id!: string;
   @ApiProperty({ minimum: 1 }) sequence!: number;
   @ApiProperty({ pattern: "^[a-f0-9]{64}$" }) contentHash!: string;
-  @ApiProperty({ enum: ["local_preview"] }) purpose!: string;
+  @ApiProperty({ enum: ["local_preview", "production", "e2e"] })
+  purpose!: string;
+  @ApiProperty({ type: [Object] }) shippingRegions!: {
+    code: string;
+    label: string;
+  }[];
   @ApiProperty() title!: string;
   @ApiProperty({ type: PackagePriceDto }) price!: PackagePriceDto;
   @ApiProperty({ type: PackageScopeDto }) scope!: PackageScopeDto;
   @ApiProperty({ type: [PackageTermDto] }) terms!: PackageTermDto[];
 }
 class CurrentPackageDto {
-  @ApiProperty({ enum: [false] }) purchasable!: false;
-  @ApiProperty({ enum: ["PACKAGE_PREPARING", "PREVIEW_ONLY"] }) reason!: string;
+  @ApiProperty() purchasable!: boolean;
+  @ApiProperty({ type: Object, nullable: true }) checkout!: object | null;
+  @ApiProperty({
+    enum: ["PACKAGE_PREPARING", "PREVIEW_ONLY", "E2E_ONLY", "AVAILABLE"],
+  })
+  reason!: string;
   @ApiProperty({ type: PackageVersionDto, nullable: true })
   version!: PackageVersionDto | null;
 }

@@ -1,3 +1,6 @@
+import { IdentityAccess } from "../identity/identity-access";
+import { e2eSnapshot, E2E_SHIPPING_REGIONS } from "./e2e-package";
+import { Equals } from "class-validator";
 import { InvalidPackageException } from "./errors";
 import { ErrorResponseDto } from "../health-contract";
 import {
@@ -92,6 +95,11 @@ class DraftDto {
 class UpdateDraftDto extends DraftDto {
   @ApiProperty() @IsInt() @Min(1) expectedRevision!: number;
 }
+class PublishDto {
+  @ApiProperty() @IsInt() @Min(1) expectedRevision!: number;
+  @ApiProperty({ enum: [true] }) @Equals(true) confirmRealParameters!: true;
+}
+class E2eVersionDto {}
 class RevisionDto {
   @ApiProperty() @IsInt() @Min(1) expectedRevision!: number;
 }
@@ -99,7 +107,10 @@ class RevisionDto {
 export class Catalog implements OnModuleDestroy {
   readonly database: PrismaClient;
   readonly realm: "local" | "production";
-  constructor(@Inject(API_CONFIG) config: ApiConfig) {
+  constructor(
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
+    private readonly identity: IdentityAccess,
+  ) {
     this.database = new PrismaClient({ datasourceUrl: config.databaseUrl });
     this.realm = config.environment === "production" ? "production" : "local";
   }
@@ -288,6 +299,7 @@ export class Catalog implements OnModuleDestroy {
     const publicOffer = {
       contentHash,
       purpose: "local_preview",
+      shippingRegions: this.shippingRegions(row),
       title: row.title,
       price: { value: 99900, unit: "fen", currency: "CNY" },
       scope: {
@@ -316,26 +328,218 @@ export class Catalog implements OnModuleDestroy {
       }),
     );
   }
+  private shippingRegions(row: {
+    admission: Prisma.JsonValue;
+    shippingRegionLabels: Prisma.JsonValue;
+  }) {
+    const admission = row.admission as {
+      d05?: { includedRegionCodes?: string[] };
+    };
+    const labels = row.shippingRegionLabels as Record<string, string>;
+    return (admission.d05?.includedRegionCodes ?? []).map((code) => ({
+      code,
+      label: labels[code],
+    }));
+  }
+  async publish(tx: Prisma.TransactionClient, id: string, body: PublishDto) {
+    await tx.$queryRaw`SELECT id FROM package_drafts WHERE id = ${id}::uuid FOR UPDATE`;
+    const draft = await tx.packageDraft.findFirst({
+      where: { id, realm: this.realm },
+    });
+    if (!draft || draft.revision !== body.expectedRevision)
+      throw new ConflictException();
+    if (
+      !body.confirmRealParameters ||
+      validatePackage(draft.d01, draft.admission, draft.shippingRegionLabels)
+        .completeness !== "complete"
+    )
+      throw new InvalidPackageException();
+    const existing = await tx.packageVersion.findUnique({
+      where: {
+        realm_draftId_draftRevision: {
+          realm: this.realm,
+          draftId: id,
+          draftRevision: body.expectedRevision,
+        },
+      },
+    });
+    if (existing) {
+      if (existing.purpose !== "production") throw new ConflictException();
+      return this.versionView(existing);
+    }
+    const snapshot = {
+      title: draft.title,
+      d01: draft.d01,
+      admission: draft.admission,
+      shippingRegionLabels: draft.shippingRegionLabels,
+    };
+    return this.persistVersion(
+      tx,
+      draft.id,
+      draft.revision,
+      "production",
+      snapshot,
+      draft.title,
+      publicTerms(draft.d01, draft.admission, draft.shippingRegionLabels),
+      this.shippingRegions(draft),
+    );
+  }
+  private async persistVersion(
+    tx: Prisma.TransactionClient,
+    draftId: string,
+    revision: number,
+    purpose: "production" | "e2e",
+    snapshot: object,
+    title: string,
+    terms: { label: string; text: string }[],
+    shippingRegions: { code: string; label: string }[],
+  ) {
+    const contentHash = createHash("sha256")
+      .update(JSON.stringify(snapshot))
+      .digest("hex");
+    const publicOffer = {
+      contentHash,
+      purpose,
+      title,
+      price: { value: 99900, unit: "fen", currency: "CNY" },
+      scope: {
+        projects: 1,
+        adultSubjects: 1,
+        initiators: 1,
+        firstCopies: 1,
+        agreedShippingIncluded: true,
+        completeExportIncluded: true,
+      },
+      terms,
+      shippingRegions,
+    };
+    return this.versionView(
+      await tx.packageVersion.create({
+        data: {
+          id: randomUUID(),
+          realm: this.realm,
+          purpose,
+          draftId,
+          draftRevision: revision,
+          snapshot: snapshot as Prisma.InputJsonValue,
+          publicOffer,
+        },
+      }),
+    );
+  }
+  async publishE2e(tx: Prisma.TransactionClient) {
+    if (
+      !this.config.checkoutE2e?.enabled ||
+      this.config.payments?.mode !== "ordinary-merchant" ||
+      !this.config.acceptance
+    )
+      throw new ForbiddenException();
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${this.realm + ":fixed-e2e-v1"},0))`;
+    const existing = await tx.packageVersion.findFirst({
+      where: { realm: this.realm, purpose: "e2e" },
+      orderBy: { sequence: "desc" },
+    });
+    if (existing) return this.versionView(existing);
+    const snapshot = e2eSnapshot();
+    const draft = await tx.packageDraft.create({
+      data: {
+        id: randomUUID(),
+        realm: this.realm,
+        title: "岁月成书",
+        d01: snapshot.d01!,
+        admission: snapshot.admission!,
+        shippingRegionLabels: snapshot.shippingRegionLabels!,
+      },
+    });
+    return this.persistVersion(
+      tx,
+      draft.id,
+      draft.revision,
+      "e2e",
+      snapshot,
+      draft.title,
+      [
+        {
+          label: "固定套餐",
+          text: "标价999元，一个人生项目、一位成年讲述者及一位发起人、首本实体书一本。",
+        },
+        {
+          label: "受控支付验收",
+          text: "本版本仅用于授权账号的真实微信支付验收，实付0.01元；退款上限为实际收到的0.01元。",
+        },
+        { label: "长期服务", text: "制作、原声回听、下载和必要资料长期有效。" },
+        {
+          label: "当前验收额度",
+          text: "单段120秒、总录音1200秒、照片10张、追问10次、故事整理10次、主动重新整理3次。",
+        },
+        {
+          label: "商业待定事项",
+          text: "印刷规格、正式配送和商业售后尚未审批；本次不安排实体书生产，不代表正式售卖准入。",
+        },
+        {
+          label: "验收退款",
+          text: "未参与时从付款、使用后未投产时从首次使用起365个自然日内可提交验收退款申请，核验后7个自然日内处理。退款按实付，终止制作及首本权益，不自动删除资料。",
+        },
+      ],
+      E2E_SHIPPING_REGIONS,
+    );
+  }
   async versions() {
     return (
       await this.database.packageVersion.findMany({
-        where: { realm: this.realm, purpose: "local_preview" },
+        where: { realm: this.realm },
         orderBy: { sequence: "desc" },
       })
     ).map((row) => this.versionView(row));
   }
-  async current(): Promise<CurrentPackage> {
+  async current(authorization?: string): Promise<CurrentPackage> {
+    const user = authorization
+      ? await this.identity.current(authorization)
+      : null;
+    const allowed =
+      !!user &&
+      !!this.config.checkoutE2e?.enabled &&
+      this.config.checkoutE2e.userIds.includes(user.id);
+    const production = await this.database.packageVersion.findFirst({
+      where: { realm: this.realm, purpose: "production" },
+      orderBy: { sequence: "desc" },
+    });
+    const e2e = await this.database.packageVersion.findFirst({
+      where: { realm: this.realm, purpose: "e2e" },
+      orderBy: { sequence: "desc" },
+    });
     const row =
-      this.realm === "local"
+      (allowed ? e2e : null) ??
+      production ??
+      (this.realm === "local"
         ? await this.database.packageVersion.findFirst({
             where: { realm: "local", purpose: "local_preview" },
             orderBy: { sequence: "desc" },
           })
-        : null;
+        : null);
+    const isE2e = row?.purpose === "e2e";
+    const purchasable =
+      !!row &&
+      this.config.payments?.mode === "ordinary-merchant" &&
+      (isE2e ? allowed : row.purpose === "production");
     return {
-      purchasable: false,
-      reason: row ? "PREVIEW_ONLY" : "PACKAGE_PREPARING",
+      purchasable,
+      reason: purchasable
+        ? "AVAILABLE"
+        : row
+          ? isE2e
+            ? "E2E_ONLY"
+            : "PREVIEW_ONLY"
+          : "PACKAGE_PREPARING",
       version: row ? this.versionView(row) : null,
+      checkout: purchasable
+        ? {
+            listAmount: 99900,
+            amount: isE2e ? 1 : 99900,
+            currency: "CNY",
+            isE2e,
+          }
+        : null,
     };
   }
   async onModuleDestroy() {
@@ -350,7 +554,10 @@ export class CatalogController {
   @Header("Cache-Control", "no-store")
   @ApiOkResponse({ type: CurrentPackageResponseDto })
   async current(@Req() req: FastifyRequest) {
-    return { data: await this.catalog.current(), meta: { requestId: req.id } };
+    return {
+      data: await this.catalog.current(req.headers.authorization),
+      meta: { requestId: req.id },
+    };
   }
   @Get("recipient-types")
   @Header("Cache-Control", "no-store")
@@ -514,6 +721,40 @@ export class AdminCatalogController {
       data: await this.access.run("catalog.preview.freeze", req, () =>
         this.access.command(req, ADMIN_PERMISSIONS.freezeCatalog, (tx) =>
           this.catalog.freeze(tx, id, body),
+        ),
+      ),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post("package-drafts/:id/publish")
+  @Header("Cache-Control", "no-store")
+  @ApiCreatedResponse({ type: PackageVersionResponseDto })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiHeader({ name: "Origin", required: true })
+  async publish(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() body: PublishDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.access.run("catalog.production.publish", req, () =>
+        this.access.command(req, ADMIN_PERMISSIONS.freezeCatalog, (tx) =>
+          this.catalog.publish(tx, id, body),
+        ),
+      ),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post("e2e-versions")
+  @Header("Cache-Control", "no-store")
+  @ApiCreatedResponse({ type: PackageVersionResponseDto })
+  @ApiHeader({ name: "X-CSRF-Token", required: true })
+  @ApiHeader({ name: "Origin", required: true })
+  async publishE2e(@Body() _body: E2eVersionDto, @Req() req: FastifyRequest) {
+    return {
+      data: await this.access.run("catalog.e2e.publish", req, () =>
+        this.access.command(req, ADMIN_PERMISSIONS.freezeCatalog, (tx) =>
+          this.catalog.publishE2e(tx),
         ),
       ),
       meta: { requestId: req.id },

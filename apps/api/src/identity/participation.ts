@@ -1,3 +1,7 @@
+import {
+  E2E_NOTICE_VERSION,
+  participationNotice,
+} from "../catalog/e2e-package";
 import { PrivacyRights } from "../care/privacy-rights";
 import { isDeepStrictEqual } from "node:util";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -53,10 +57,7 @@ import {
   readSessionContextIn,
 } from "./identity-access";
 import { readProjectAdmissionIn } from "../projects/project-admission";
-import {
-  INTERNAL_NOTICE_VERSION,
-  INTERNAL_NOTICE,
-} from "../projects/internal-profile";
+import { INTERNAL_NOTICE_VERSION } from "../projects/internal-profile";
 import { closeProjectStreams } from "../media/project-streams";
 import { ProjectServiceTerms } from "../projects/service-terms";
 import { idempotencyKey } from "../payments/orders";
@@ -108,8 +109,10 @@ function careView(
   };
 }
 class ParticipationNoticeDto {
-  @ApiProperty({ enum: ["synthetic-d08-v1", INTERNAL_NOTICE_VERSION] })
-  @IsIn(["synthetic-d08-v1", INTERNAL_NOTICE_VERSION])
+  @ApiProperty({
+    enum: ["synthetic-d08-v1", INTERNAL_NOTICE_VERSION, E2E_NOTICE_VERSION],
+  })
+  @IsIn(["synthetic-d08-v1", INTERNAL_NOTICE_VERSION, E2E_NOTICE_VERSION])
   noticeVersion!: string;
   @ApiProperty({
     description:
@@ -247,19 +250,15 @@ export class Participation
       snapshot: admission.snapshot,
     };
   }
-  private validateNotice(body: {
-    noticeVersion: string;
-    evidenceRef?: string;
-  }) {
+  private validateNotice(
+    body: { noticeVersion: string; evidenceRef?: string },
+    snapshot: Prisma.JsonObject,
+  ) {
+    const notice = participationNotice(snapshot, !!this.config.acceptance);
     if (
-      body.noticeVersion !==
-        (this.config.acceptance
-          ? INTERNAL_NOTICE_VERSION
-          : "synthetic-d08-v1") ||
+      body.noticeVersion !== notice.noticeVersion ||
       (body.evidenceRef !== undefined &&
-        !body.evidenceRef.startsWith(
-          this.config.acceptance ? "internal:" : "synthetic:",
-        ))
+        !body.evidenceRef.startsWith(notice.evidencePrefix))
     )
       throw new BadRequestException();
   }
@@ -324,17 +323,8 @@ export class Participation
       inviter: `发起人账号尾号 ${p.initiatorUserId.slice(-6)}`,
       process: ["说一段", "保存后看看故事", "确认成书"],
       purposes: [...CONSENT_PURPOSES],
-      noticeVersion: this.config.acceptance
-        ? INTERNAL_NOTICE_VERSION
-        : "synthetic-d08-v1",
-      evidencePrefix: this.config.acceptance ? "internal:" : "synthetic:",
-      noticeText: this.config.acceptance ? INTERNAL_NOTICE : undefined,
+      ...participationNotice(p.snapshot, !!this.config.acceptance),
       source: p.source,
-      policyStatus: this.config.acceptance
-        ? "internal-acceptance"
-        : this.config.participation
-          ? "synthetic-only"
-          : "pending",
       choice:
         "采集保存讲述与照片；AI处理素材；向本项目发起人共享。可分别拒绝或撤回；入书须另行确认。请向邀请人核对账号尾号，提示不能替代本人核验。",
     };
@@ -350,7 +340,7 @@ export class Participation
       const found = await this.invitation(tx, token);
       const p = await this.project(tx, found.projectId, true);
       const invite = await this.invitation(tx, token);
-      this.validateNotice(body);
+      this.validateNotice(body, p.snapshot);
       const evidenceRef = await this.evidenceIn(
         tx,
         authorization,
@@ -730,17 +720,8 @@ export class Participation
       bindingVersion: subject.bindingVersion,
       accessEpoch: p.accessEpoch,
       role: narrator ? "narrator" : "initiator",
-      noticeVersion: this.config.acceptance
-        ? INTERNAL_NOTICE_VERSION
-        : "synthetic-d08-v1",
-      evidencePrefix: this.config.acceptance ? "internal:" : "synthetic:",
-      noticeText: this.config.acceptance ? INTERNAL_NOTICE : undefined,
+      ...participationNotice(p.snapshot, !!this.config.acceptance),
       source: p.source,
-      policyStatus: enabled
-        ? this.config.acceptance
-          ? "internal-acceptance"
-          : "synthetic-only"
-        : "pending",
       choices: CONSENT_PURPOSES.map((purpose) => ({
         purpose,
         granted:
@@ -787,7 +768,7 @@ export class Participation
       const p = await this.project(tx, id, true);
       await this.rights.requireAvailableIn(tx, id);
       const subject = await this.subject(tx, id);
-      this.validateNotice(body);
+      this.validateNotice(body, p.snapshot);
       if (
         subject.boundUserId !== user.id ||
         subject.bindingVersion !== body.expectedBindingVersion
@@ -1890,9 +1871,10 @@ export class Participation
       !/^[-a-f0-9]{36}$/.test(command.content.versionId) ||
       !/^([a-f0-9]{64})$/.test(command.content.hash) ||
       command.noticeVersion !==
-        (this.config.acceptance
-          ? INTERNAL_NOTICE_VERSION
-          : "synthetic-d08-v1") ||
+        participationNotice(
+          (await this.project(tx, command.projectId)).snapshot,
+          !!this.config.acceptance,
+        ).noticeVersion ||
       !/^(?:synthetic:|internal:)[^\r\n]{3,160}$/.test(command.evidenceRef) ||
       !/^[-A-Za-z0-9_:]{8,128}$/.test(command.idempotencyKey)
     )
@@ -2039,6 +2021,7 @@ export class Participation
           ),
         };
       }
+      this.validateNotice(body, p.snapshot);
       const latest = await this.latestAssisted(tx, id, body.purpose);
       const hash = digest(JSON.stringify(body));
       const prior = await tx.assistedSession.findUnique({
