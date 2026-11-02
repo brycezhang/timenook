@@ -5,6 +5,8 @@ import { Page } from "@vben/common-ui";
 import { Alert, Button, Card, Input, Select, Table, Tag } from "antdv-next";
 import type { AdminOrdersPage } from "@timenook/contracts";
 import { adminRequest, errorText, sessionEpoch } from "../session";
+import { formatAdminTime } from "../utils/time";
+import { orderStateLabels as stateLabels } from "../utils/order-status";
 const route = useRoute(),
   router = useRouter(),
   data = ref<AdminOrdersPage | null>(null),
@@ -16,11 +18,6 @@ const search = ref(String(route.query.q ?? "")),
 let serial = 0,
   abort: AbortController | undefined;
 const money = (n: number) => `¥${(n / 100).toFixed(2)}`;
-const stateLabels: Record<string, string> = {
-  pending: "待付款",
-  paid: "已付款",
-  closed: "已关闭",
-};
 const showTotal = (total: number) => `共 ${total} 条订单`;
 const columns = [
   { title: "订单号", key: "order", width: 250 },
@@ -108,11 +105,13 @@ onBeforeUnmount(() => {
           allow-clear
         /><Select
           v-model:value="state"
-          aria-label="付款状态"
+          aria-label="订单状态"
           :options="[
-            { value: '', label: '全部付款状态' },
+            { value: '', label: '全部订单状态' },
             { value: 'pending', label: '待付款' },
             { value: 'paid', label: '已付款' },
+            { value: 'refunded', label: '已退款' },
+            { value: 'partially_refunded', label: '部分退款' },
             { value: 'closed', label: '已关闭' },
           ]"
         /><Select
@@ -167,13 +166,21 @@ onBeforeUnmount(() => {
               {{ money(record.refundedAmount) }}
             </div></template
           ><template v-else-if="column.key === 'state'"
-            ><Tag :color="record.state === 'paid' ? 'green' : 'default'">{{
-              stateLabels[record.state] ?? record.state
-            }}</Tag
+            ><Tag
+              :color="
+                record.state === 'paid'
+                  ? 'green'
+                  : record.state === 'refunded'
+                    ? 'blue'
+                    : 'default'
+              "
+              >{{ stateLabels[record.state] ?? record.state }}</Tag
             ><Tag v-if="record.pending" color="orange"
               >待处理售后</Tag
             ></template
-          ></template
+          ><span v-else-if="column.dataIndex === 'createdAt'">{{
+            formatAdminTime(record.createdAt)
+          }}</span></template
         ></Table
       ></Card
     ></Page

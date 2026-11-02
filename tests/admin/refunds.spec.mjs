@@ -391,6 +391,15 @@ test("buyer requests a refund and the shared support case approves, executes and
   await expect(
     admin.getByText("尚未参与 · 退款处理中", { exact: true }),
   ).toBeVisible();
+  await expect(
+    admin
+      .getByRole("row")
+      .filter({
+        has: admin.getByRole("rowheader", { name: "订单状态", exact: true }),
+      })
+      .getByRole("cell")
+      .first(),
+  ).toHaveText("已付款");
   await buyer
     .getByRole("button", { name: "重新查询退款", exact: true })
     .click();
@@ -424,6 +433,15 @@ test("buyer requests a refund and the shared support case approves, executes and
   await expect(
     admin.getByText("尚未参与 · 已退款", { exact: true }),
   ).toBeVisible();
+  await expect(
+    admin
+      .getByRole("row")
+      .filter({
+        has: admin.getByRole("rowheader", { name: "订单状态", exact: true }),
+      })
+      .getByRole("cell")
+      .first(),
+  ).toHaveText("已退款");
   await buyer
     .getByRole("button", { name: "重新查询退款", exact: true })
     .click();

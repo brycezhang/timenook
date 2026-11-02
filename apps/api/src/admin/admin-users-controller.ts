@@ -28,6 +28,7 @@ import { AdminAccess } from "./admin-access";
 import { PaymentIdempotencyConflict } from "../payments/errors";
 import { API_CONFIG, type ApiConfig } from "../config";
 import { participationNotice } from "../catalog/e2e-package";
+import { adminOrderState } from "./order-state";
 
 // The relationship includes requests and old bindings, so rebind does not hide a person's service history.
 const related = (user: Prisma.Sql) =>
@@ -213,21 +214,14 @@ export class AdminUsersController {
       const projects = await tx.$queryRaw<
         AdminProjectSummary[]
       >`${projectSelect} WHERE ${related(Prisma.sql`${id}`)} ORDER BY j.id DESC`;
+      const orderIds = projects.flatMap((p) => (p.orderId ? [p.orderId] : []));
+      const linkedOrders = orderIds.length
+        ? Prisma.sql`OR p.id IN (${Prisma.join(orderIds.map((orderId) => Prisma.sql`${orderId}::uuid`))})`
+        : Prisma.empty;
       const [orders, requests, notes, history] = await Promise.all([
-        tx.paymentOrder.findMany({
-          where: {
-            OR: [
-              { buyerId: id },
-              {
-                id: {
-                  in: projects.flatMap((p) => (p.orderId ? [p.orderId] : [])),
-                },
-              },
-            ],
-          },
-          select: { id: true, outTradeNo: true, state: true },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        }),
+        tx.$queryRaw<
+          AdminUserDetail["orders"]
+        >`SELECT p.id,p.out_trade_no AS "outTradeNo",${adminOrderState} AS state FROM payment_orders p WHERE p.buyer_id=${id}::uuid ${linkedOrders} ORDER BY p.created_at DESC,p.id DESC`,
         tx.careRequest.findMany({
           where: {
             projectId: { in: projects.map((p) => p.id) },
