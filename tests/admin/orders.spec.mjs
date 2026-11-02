@@ -60,6 +60,7 @@ const buyerId = randomUUID(),
   packageId = randomUUID(),
   orderIds = Array.from({ length: 121 }, () => randomUUID());
 test.beforeAll(async () => {
+  test.setTimeout(120000);
   privateDir = mkdtempSync(join(tmpdir(), "t07-browser-"));
   if (existsSync(".env")) process.loadEnvFile(".env");
   const url = new URL(process.env.DATABASE_URL);
@@ -197,9 +198,22 @@ test.beforeAll(async () => {
     [resolve("tests/admin/feishu-api-runner.mjs")],
     { cwd: apiCwd, env },
   );
+  const build = spawnSync(
+    process.execPath,
+    ["node_modules/vite/bin/vite.js", "build"],
+    { cwd: resolve("apps/admin"), env: process.env, encoding: "utf8" },
+  );
+  expect(build.status, build.stdout + build.stderr).toBe(0);
   vite = start(
     process.execPath,
-    ["node_modules/vite/bin/vite.js", "--host", "localhost"],
+    [
+      "node_modules/vite/bin/vite.js",
+      "preview",
+      "--host",
+      "localhost",
+      "--port",
+      "3443",
+    ],
     {
       cwd: resolve("apps/admin"),
       env: {
