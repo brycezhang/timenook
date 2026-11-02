@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { transform } from "esbuild";
+import {
+  formatAdminTime,
+  parseAdminTimeInput,
+} from "../apps/admin/src/utils/time";
 const script = readFileSync("apps/admin/src/views/quality-case.vue", "utf8")
   .split('<script setup lang="ts">')[1]
   .split("</script>")[0]
@@ -30,6 +34,8 @@ function harness() {
   runInNewContext(code, {
     module,
     exports: module.exports,
+    formatAdminTime,
+    parseAdminTimeInput,
     ref: (value: unknown) => ({ value }),
     onMounted() {},
     onUnmounted: (f: () => void) => unmounts.push(f),
@@ -120,6 +126,7 @@ test("shared quality assignment uses the original case version and keeps an unce
   assert.equal(call.args[0], "synthetic-case");
   assert.equal(call.args[1], "assign");
   assert.equal(call.args[2].expectedVersion, 2);
+  assert.equal(call.args[2].dueAt, "2026-10-28T04:00:00.000Z");
   assert.equal(call.args[2].evidenceRef, "synthetic:original-d06-reviewed");
   assert.equal(call.args[4], "synthetic-csrf");
   call.reject({ error: { code: "UNAVAILABLE" } });
