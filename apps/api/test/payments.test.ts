@@ -360,6 +360,119 @@ test("verified notification and active query concurrently activate exactly one p
   assert.equal(next.state, "paid");
   assert.notEqual(next.project.id, result.project.id);
 });
+test("buyer cancels an order before payment preparation without contacting WeChat or granting a project", async () => {
+  const token = await login("cancel-before-prepare");
+  const order = (await create(token)).json().data;
+  const headers = {
+    authorization: `Bearer ${token}`,
+    "idempotency-key": randomUUID(),
+  };
+  const before = paymentRequests.length;
+  const closed = await app.inject({
+    method: "POST",
+    url: `/v1/orders/${order.id}/close`,
+    headers,
+    payload: {},
+  });
+  assert.equal(closed.statusCode, 201, closed.body);
+  assert.equal(closed.json().data.state, "closed");
+  assert.equal(closed.json().data.project, null);
+  const recovered = await readOrder(token, order.id);
+  assert.equal(recovered.json().data.state, "closed");
+  assert.equal(recovered.json().data.project, null);
+  const prepared = await app.inject({
+    method: "POST",
+    url: `/v1/orders/${order.id}/payment`,
+    headers,
+    payload: {},
+  });
+  assert.equal(prepared.statusCode, 409, prepared.body);
+  assert.equal(
+    paymentRequests.length,
+    before,
+    "no provider order exists to close or query",
+  );
+});
+
+test("cancellation preserves an in-flight payment until the original WeChat order can be reconciled", async () => {
+  const token = await login("cancel-prepare-race");
+  const order = (await create(token)).json().data;
+  const headers = {
+    authorization: `Bearer ${token}`,
+    "idempotency-key": randomUUID(),
+  };
+  let reached!: () => void, release!: () => void;
+  const gated = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const resume = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const concurrent = await createApplication(config, {
+    wechatFetch,
+    paymentFetch: async (input, init) => {
+      if (new URL(String(input)).pathname === "/v3/pay/transactions/jsapi") {
+        reached();
+        await resume;
+      }
+      return paymentFetch(input, init);
+    },
+  });
+  try {
+    const preparing = concurrent.inject({
+      method: "POST",
+      url: `/v1/orders/${order.id}/payment`,
+      headers,
+      payload: {},
+    });
+    // Hold the external request after the durable submission reservation.
+    await gated;
+    const before = paymentRequests.length;
+    const uncertain = await concurrent.inject({
+      method: "POST",
+      url: `/v1/orders/${order.id}/close`,
+      headers,
+      payload: {},
+    });
+    assert.equal(uncertain.statusCode, 201, uncertain.body);
+    assert.equal(uncertain.json().data.state, "pending");
+    assert.equal(uncertain.json().data.project, null);
+    const trace = paymentRequests.slice(before);
+    assert.ok(
+      trace.some(
+        (request) =>
+          request.method === "GET" && request.path.includes(order.outTradeNo),
+      ),
+      "unknown submissions are queried by their original order number",
+    );
+    assert.ok(
+      trace.some((request) =>
+        request.path.includes(`${order.outTradeNo}/close`),
+      ),
+      "a reserved payment must be closed through its original provider order",
+    );
+    release();
+    const prepared = await preparing;
+    assert.equal(prepared.statusCode, 201, prepared.body);
+    assert.equal(prepared.json().data.status, "prepared");
+    const recovered = (await readOrder(token, order.id)).json().data;
+    assert.equal(recovered.state, "pending");
+    assert.equal(recovered.project, null);
+    const closed = await concurrent.inject({
+      method: "POST",
+      url: `/v1/orders/${order.id}/close`,
+      headers,
+      payload: {},
+    });
+    assert.equal(closed.statusCode, 201, closed.body);
+    assert.equal(closed.json().data.state, "closed");
+    assert.equal(closed.json().data.project, null);
+  } finally {
+    release();
+    await concurrent.close();
+  }
+});
+
 test("close reconciles the provider and preserves a racing payment; unpaid closed orders never get entitlement or another payment attempt", async () => {
   const token = await login("closing");
   const order = await prepareOrder(token);
