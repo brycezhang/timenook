@@ -82,8 +82,9 @@ async function fixtureObject(action, key, audio) {
 }
 
 async function prepare(run) {
+  // Explicitly fictional input; disclosure stays in the run manifest.
   const text =
-    "这是一段虚构的验收故事，不是真实人物经历。我小时候住在一座小城，每逢周末就和爷爷去河边散步。河边有一棵大柳树，爷爷教我用纸折小船。我们把纸船放进水里，看着它慢慢漂远。那天阳光很好，我记得自己笑得很开心。这段回忆让我学会了珍惜家人陪伴的时间。";
+    "我小时候住在一座小城，每逢周末就和爷爷去河边散步。河边有一棵大柳树，树下有几块平整的石头，我们总坐在那里。爷爷从口袋里拿出一张旧报纸，耐心地教我折纸船。我第一次折的船歪歪扭扭，刚放进水里就翻了。爷爷没有笑话我，重新拿出一张纸，让我把每一条边都压平。第二只纸船终于浮起来了，我们沿着河岸跟着它走，直到它漂过一座小石桥。那天阳光很好，河水照得亮晶晶，我高兴得一直笑。现在每次看到河边的柳树，我都会想起爷爷低头教我折纸船的样子。我最怀念的就是那段有人耐心陪伴的日子。";
   await fs.writeFile(path.join(run.output, "synthetic-story.txt"), text, {
     mode: 0o600,
   });
@@ -235,6 +236,15 @@ async function exercise(run) {
         while (!signal.aborted) {
           const data = await page(name);
           if (predicate(data)) return data;
+          if (name === "story" && data.story?.task?.state === "no_content") {
+            run.result.providerOutcome = {
+              state: "no_content",
+              transcriptVisible: data.liveTranscripts.length > 0,
+            };
+            const error = new Error("Story provider produced no content");
+            error.name = "MvpStoryNoContent";
+            throw error;
+          }
           assert.ok(
             !data.error && !data.privateError,
             "Page reported failure at " + name,
@@ -296,7 +306,9 @@ async function exercise(run) {
       await page("interview", (d) => d.canRecord === true);
     });
     await run.step("mvp-native-select-pause-resume-save", async () => {
-      await call("selectQuestion");
+      await call("selectQuestion", {
+        currentTarget: { dataset: { kind: "free-narration" } },
+      });
       let d = await page("interview", (d) => !!d.interview);
       interviewId = d.interview.id;
       await call("startSpeaking");
@@ -342,7 +354,7 @@ async function exercise(run) {
       assert.equal(d.localClips[0].sha256, audioHash);
       run.result.recording = {
         interviewId,
-        clipId: d.localClips[0].serverId,
+        intentId: d.localClips[0].serverId,
         cloudSaved: true,
         storage: "oss",
         sha256: audioHash,
@@ -446,13 +458,22 @@ async function exercise(run) {
         "story",
         (d) => !!d.story?.revision && d.story.revision.id !== oldRevision,
       );
-      assert.notEqual(d.story.decision?.confirmed, true);
-      assert.ok(d.liveAudioSources.length > 0);
+      assert.notEqual(
+        d.story.decision?.confirmed,
+        true,
+        "MVP_CONFIRMATION_INVALIDATED",
+      );
+      assert.ok(d.liveAudioSources.length > 0, "MVP_ORIGINAL_AUDIO_PRESERVED");
       assert.equal(
         d.story.revision.photoSnapshot.entries[0].photoId,
         run.result.photo.id,
+        "MVP_PHOTO_SNAPSHOT_MATCH",
       );
-      assert.equal(d.story.task.sources[0].clipId, run.result.recording.clipId);
+      assert.equal(
+        d.story.task.sources[0].intentId,
+        run.result.recording.intentId,
+        "MVP_ORIGINAL_UPLOAD_INTENT_PRESERVED",
+      );
       await call("decideLive");
       d = await page("story", (d) => d.story?.decision?.confirmed === true);
       run.result.story.revisionId = d.story.revision.id;

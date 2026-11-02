@@ -1,0 +1,199 @@
+{
+  "passed": true,
+  "mode": "live",
+  "urlCheck": true,
+  "library": {
+    "sourceRequested": "3.17.5",
+    "testRequested": "3.17.5",
+    "resolved": "3.17.5"
+  },
+  "steps": [
+    {
+      "name": "live-api-build",
+      "passed": true
+    },
+    {
+      "name": "synthetic-hardware-preparation",
+      "passed": true
+    },
+    {
+      "name": "startup",
+      "passed": true
+    },
+    {
+      "name": "real-domain-enforcement",
+      "passed": true
+    },
+    {
+      "name": "real-wechat-login-current-account",
+      "passed": true
+    },
+    {
+      "name": "persisted-session-restore",
+      "passed": true
+    },
+    {
+      "name": "logout-rejects-old-session",
+      "passed": true
+    },
+    {
+      "name": "real-relogin-same-account-new-session",
+      "passed": true
+    },
+    {
+      "name": "authenticated-participation-page",
+      "passed": true
+    },
+    {
+      "name": "authenticated-order-availability",
+      "passed": true
+    },
+    {
+      "name": "mvp-isolated-unpaid-project",
+      "passed": true
+    },
+    {
+      "name": "mvp-native-invitation-binding-consent",
+      "passed": true
+    },
+    {
+      "name": "mvp-native-select-pause-resume-save",
+      "passed": true
+    },
+    {
+      "name": "mvp-native-cloud-save-real-asr",
+      "passed": true
+    },
+    {
+      "name": "mvp-optional-real-followup",
+      "passed": true
+    },
+    {
+      "name": "mvp-real-story-confirmation",
+      "passed": true
+    },
+    {
+      "name": "mvp-photo-after-story-without-rerecording",
+      "passed": true
+    },
+    {
+      "name": "mvp-edit-invalidates-and-reconfirm",
+      "passed": true
+    },
+    {
+      "name": "mvp-native-tabs-project-and-pdf",
+      "passed": true
+    },
+    {
+      "name": "mvp-both-confirm-same-pdf",
+      "passed": true
+    },
+    {
+      "name": "mvp-book-audio-and-anonymous-denial",
+      "passed": true
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "initiator-session",
+      "passed": true
+    },
+    {
+      "name": "synthetic-https-input:mp3",
+      "passed": true
+    },
+    {
+      "name": "synthetic-https-input:png",
+      "passed": true
+    },
+    {
+      "name": "revoke-test-sessions",
+      "passed": true
+    },
+    {
+      "name": "disconnect",
+      "passed": true
+    },
+    {
+      "name": "close-project",
+      "passed": true
+    }
+  ],
+  "photoInput": {
+    "synthetic": true,
+    "width": 800,
+    "height": 600,
+    "sha256": "12afab4da80ec4105b90d473f3666e1216cfcef2e3d9694e57b8695e3cd0496b"
+  },
+  "suite": "release-mvp",
+  "input": {
+    "synthetic": true,
+    "hardware": "substituted",
+    "bytes": 277605,
+    "durationMs": 46144,
+    "sha256": "10fc3172f556d9a6f14d469b83f837ea039f81272ddcc136f9a0652cbd30a6ed"
+  },
+  "devtools": {
+    "version": "2.02.2609240",
+    "SDKVersion": "3.17.5"
+  },
+  "domainEnforcement": true,
+  "orders": {
+    "status": 200,
+    "available": true,
+    "required": true
+  },
+  "project": {
+    "id": "725328fd-f437-40e6-92dd-8e8d98c6a1cd",
+    "source": "internal-acceptance",
+    "payment": false,
+    "physicalProduction": false
+  },
+  "hardwareObservation": {
+    "stage": "local",
+    "flowStep": "review",
+    "clips": 1,
+    "inputError": null
+  },
+  "recording": {
+    "interviewId": "d75a648f-e723-47e7-8c51-9846f13409b0",
+    "intentId": "f17e7057-0af8-4cc7-b8dc-787541cdeb47",
+    "cloudSaved": true,
+    "storage": "oss",
+    "sha256": "10fc3172f556d9a6f14d469b83f837ea039f81272ddcc136f9a0652cbd30a6ed",
+    "transcription": true
+  },
+  "followup": {
+    "action": "finish"
+  },
+  "story": {
+    "id": "9da33653-623c-4dcd-b8b6-03ce50b56256",
+    "revisionId": "d948ac70-c59c-4715-924b-d0f022312c36",
+    "confirmed": true,
+    "origin": "ai",
+    "reconfirmed": true
+  },
+  "photo": {
+    "id": "311711da-ed40-4014-b88f-8577e6cfd444",
+    "cloudSealed": true,
+    "privatePreview": true,
+    "caption": true
+  },
+  "book": {
+    "versionId": "4dc8e02c-8dfc-4954-b84a-d40e388af48a",
+    "sha256": "d6f73d2506767a476f57f83b09aa3cfb5a5919d3994d6c91c2d0000da43c3110",
+    "pages": 6,
+    "nativeDownloadVerified": true,
+    "bothConfirmed": true,
+    "audio": {
+      "sameRevision": true,
+      "sameHash": true,
+      "nativePlaybackProgress": true,
+      "anonymousDenied": true,
+      "temporaryFileCleared": true
+    }
+  },
+  "nativeSourceCommit": "7dcb8cc4a501e73b53572c7d7dc90a9d01b1e53c",
+  "testScriptSha256": "450340816691864efb93f9aeef593985fb6663b62f06b3759ac5893ceebe861a",
+  "packageSha256": "b902516522d1bd4b8781cd303a2ed3a21154cda74f8df61b504ee3af2606f1ff"
+}
