@@ -13,7 +13,12 @@ const session = {
     expiresAt: "2099-01-01T00:00:00Z",
   },
 };
-async function harness(name: string, projects: object[], signedIn = true) {
+async function harness(
+  name: string,
+  projects: object[],
+  signedIn = true,
+  deferLogin = false,
+) {
   const bundle = await build({
     entryPoints: [`miniprogram/pages/${name}/index.ts`],
     bundle: true,
@@ -27,6 +32,7 @@ async function harness(name: string, projects: object[], signedIn = true) {
   const routes: string[] = [],
     requests: string[] = [];
   let page: any;
+  let completeLogin: (() => void) | undefined;
   runInNewContext(bundle.outputFiles[0].text, {
     setTimeout,
     clearTimeout,
@@ -56,14 +62,27 @@ async function harness(name: string, projects: object[], signedIn = true) {
                 ? { projects }
                 : undefined;
         assert.ok(data, `unexpected request: ${route}`);
-        options.success({
-          statusCode: 200,
-          data: { data, meta: { requestId: projectId } },
-        });
+        const complete = () =>
+          options.success({
+            statusCode: 200,
+            data: { data, meta: { requestId: projectId } },
+          });
+        if (route === "/sessions/wechat" && deferLogin)
+          completeLogin = complete;
+        else complete();
       },
     },
   });
-  return { page, routes, requests, storage };
+  return {
+    page,
+    routes,
+    requests,
+    storage,
+    finishLogin() {
+      assert.ok(completeLogin);
+      completeLogin();
+    },
+  };
 }
 
 test("a signed-in returning user opens their bound storybook without visiting orders", async () => {
@@ -110,4 +129,19 @@ test("My is usable without a project: sign in, view orders and manage participat
   h.page.order();
   h.page.rights();
   assert.deepEqual(h.routes, ["/pages/order/index", "/pages/welcome/index"]);
+});
+
+test("My completes a pending native login after background and foreground", async () => {
+  const h = await harness("account", [], false, true);
+  h.page.onLoad({});
+  await h.page.onShow();
+  const login = h.page.login();
+  h.page.onHide();
+  await h.page.onShow();
+  h.finishLogin();
+  await login;
+  assert.equal(h.page.data.loggedIn, true);
+  assert.equal(h.page.data.busy, false);
+  h.page.order();
+  assert.deepEqual(h.routes, ["/pages/order/index"]);
 });

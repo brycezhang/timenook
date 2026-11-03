@@ -32,6 +32,7 @@ Page({
   },
   projectId: "",
   generation: 0,
+  loginPending: false,
   stopSessionWatch: undefined as (() => void) | undefined,
   expiry: undefined as ReturnType<typeof setTimeout> | undefined,
   onLoad(q) {
@@ -46,7 +47,11 @@ Page({
       this.stopSessionWatch?.();
       this.stopSessionWatch = undefined;
       if (this.expiry) clearTimeout(this.expiry);
-      this.setData({ overview: null, memberships: [], busy: false });
+      this.setData({
+        overview: null,
+        memberships: [],
+        busy: this.loginPending,
+      });
     }
   },
   onUnload() {
@@ -56,7 +61,7 @@ Page({
     await this.onShow();
   },
   async onShow() {
-    if (this.data.busy) return;
+    if (this.loginPending || this.data.busy) return;
     showProjectTab(
       this,
       "account",
@@ -160,22 +165,21 @@ Page({
   },
   async login() {
     if (this.data.busy) return;
-    const generation = this.generation;
+    this.loginPending = true;
     this.setData({ busy: true, status: "正在登录…" });
     try {
       await sessionClient.login();
-      if (generation !== this.generation) return;
-      this.setData({ busy: false });
-      await this.onShow();
     } catch (error) {
-      if (generation === this.generation)
-        this.setData({
-          loggedIn: false,
-          status: error instanceof Error ? error.message : "登录失败，请重试",
-        });
+      this.setData({
+        loggedIn: false,
+        status: error instanceof Error ? error.message : "登录失败，请重试",
+      });
+      return;
     } finally {
-      if (generation === this.generation) this.setData({ busy: false });
+      this.loginPending = false;
+      this.setData({ busy: false });
     }
+    await this.onShow();
   },
   async logout() {
     if (this.data.busy) return;
