@@ -246,6 +246,15 @@ test("release package excludes website and probe routes and ignores stored demo 
     );
   }
   const app = await harness("demo");
+  const homeMarkup = await readFile(
+    path.join(root, "pages/home/index.wxml"),
+    "utf8",
+  );
+  assert.match(homeMarkup, /class="hero-photo"/);
+  assert.match(homeMarkup, /class="gift-options"/);
+  assert.match(homeMarkup, /含1本实体书/);
+  assert.match(homeMarkup, /bindtap="account"/);
+  assert.doesNotMatch(homeMarkup, /bindtap="(?:orders|participation|logout)"/);
   const home = await app.open("pages/home/index", false);
   assert.equal(
     home.data.mode,

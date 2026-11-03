@@ -11,7 +11,7 @@
   </view>
   <button wx:if="{{!loggedIn}}" class="btn section" bindtap="loginLive" disabled="{{busy}}">微信登录后参与</button>
   <button wx:if="{{status && (!showManagement || !participation)}}" class="link" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button>
-  <button wx:for="{{memberships}}" wx:key="projectId" class="btn secondary section" data-id="{{item.projectId}}" bindtap="openParticipation">{{item.state === 'pending' ? '等待发起人核对' : '查看本人的用途选择'}} · {{item.projectId}}</button>
+  <button wx:for="{{memberships}}" wx:key="projectId" class="btn secondary section" data-id="{{item.projectId}}" bindtap="openParticipation">{{item.state === 'pending' ? '等待发起人核对的邀请' : '查看资料用途 · 第 '+(index+1)+' 本故事书'}}</button>
   <view wx:if="{{participation}}" class="section">
     <view wx:if="{{participation.role === 'narrator'}}" class="consent-start">
       <view class="subtitle">录音会保存并由 AI 整理成故事，与本项目发起人一起核对。</view>

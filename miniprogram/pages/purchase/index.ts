@@ -50,6 +50,11 @@ Page({
   },
   onLoad(q) {
     if (dataMode() === "live") {
+      try {
+        this.requestedRecipient = decodeURIComponent(q.recipient ?? "");
+      } catch {
+        this.requestedRecipient = "";
+      }
       this.setData({ mode: "live" });
       return;
     }
@@ -65,6 +70,7 @@ Page({
     });
   },
   catalogGeneration: 0,
+  requestedRecipient: "",
   orderOwnerContext: "",
   onHide() {
     ++this.catalogGeneration;
@@ -146,6 +152,14 @@ Page({
           ? "制作、回听与下载长期有效"
           : "套餐准备中，暂未开放购买",
       });
+      const recipient = recipients.types.find(
+        (item) => item.label === this.requestedRecipient,
+      );
+      if (recipient)
+        this.chooseType({
+          currentTarget: { dataset: { code: recipient.code } },
+          detail: { value: "" },
+        });
     } catch (error) {
       if (current())
         this.setData({

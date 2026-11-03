@@ -27,7 +27,7 @@ export function tabProjectId(explicit = "") {
 export function showProjectTab(
   page: { getTabBar?: () => { setData(data: object): void } },
   selected: ProjectTab,
-  projectTitle = "项目",
+  projectTitle = "故事书",
 ) {
   page.getTabBar?.()?.setData({ selected, projectTitle });
 }

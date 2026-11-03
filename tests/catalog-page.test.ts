@@ -120,6 +120,20 @@ function complete(requests: WechatMiniprogram.RequestOption[]) {
     );
 }
 
+test("a gift chosen on the homepage selects the matching current server relationship", async () => {
+  const { page, requests } = harness();
+  page.onLoad({ recipient: encodeURIComponent("恩师") });
+  const loading = page.onShow();
+  complete(requests);
+  await loading;
+  assert.equal(page.data.selectedLabel, "恩师");
+  assert.deepEqual(JSON.parse(JSON.stringify(page.data.selection)), {
+    recipientCode: "mentor",
+    recipientRevision: 2,
+    customLabel: null,
+  });
+});
+
 test("live purchase displays server relationships and the same package, supports a custom label without making a global type or project", async () => {
   const { page, requests, sideEffects } = harness();
   page.onLoad({});

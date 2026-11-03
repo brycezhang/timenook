@@ -29,7 +29,14 @@ const Redis = apiRequire("ioredis");
 const schema = `t10_browser_${randomUUID().replaceAll("-", "")}`;
 let privateDir;
 const apiCwd = resolve("apps/api");
-let api, vite, preview, databaseUrl, account, productSession, projectId;
+let api,
+  vite,
+  preview,
+  databaseUrl,
+  account,
+  productSession,
+  projectId,
+  orderId;
 const logs = [];
 function start(command, args, options) {
   const child = spawn(command, args, {
@@ -211,6 +218,7 @@ test.beforeAll(async () => {
       },
     })
   ).json().data;
+  orderId = order.id;
   await api.inject({
     method: "POST",
     url: `/v1/orders/${order.id}/payment`,
@@ -324,16 +332,28 @@ test("the admin has no service-term controls and the mini-program restores the s
     },
     { session: productSession },
   );
+  const restoredOrder = previewPage.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/orders/${orderId}`) &&
+      response.status() === 200,
+  );
   await previewPage.goto("http://127.0.0.1:5174/#/order");
+  expect((await (await restoredOrder).json()).data.project.id).toBe(projectId);
   await expect(
     previewPage.getByText("合成付款核验完成 · 未真实扣款", { exact: true }),
   ).toBeVisible();
   await expect(
-    previewPage.getByText("项目：" + projectId, { exact: true }),
+    previewPage.getByRole("button", { name: "打开这本故事书", exact: true }),
   ).toBeVisible();
+  const refreshedOrder = previewPage.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/orders/${orderId}`) &&
+      response.status() === 200,
+  );
   await previewPage.getByRole("button", { name: "重新查询订单" }).click();
+  expect((await (await refreshedOrder).json()).data.project.id).toBe(projectId);
   await expect(
-    previewPage.getByText("项目：" + projectId, { exact: true }),
+    previewPage.getByRole("button", { name: "打开这本故事书", exact: true }),
   ).toBeVisible();
   await previewPage.screenshot({ path: "/tmp/timenook-t10-order-mobile.png" });
   await previewPage.getByRole("button", { name: "查看套餐与赠礼称呼" }).click();

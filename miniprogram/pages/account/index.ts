@@ -21,6 +21,7 @@ Page({
     count: 0,
     projects: [] as Project[],
     live: false,
+    loggedIn: false,
     busy: false,
     status: "",
     overview: null as ProjectOverview | null,
@@ -31,6 +32,8 @@ Page({
   },
   projectId: "",
   generation: 0,
+  loginPending: false,
+  visible: false,
   stopSessionWatch: undefined as (() => void) | undefined,
   expiry: undefined as ReturnType<typeof setTimeout> | undefined,
   onLoad(q) {
@@ -40,12 +43,20 @@ Page({
     }
   },
   onHide() {
+    this.visible = false;
+    this.clearPrivateView();
+  },
+  clearPrivateView() {
     if (this.data.live) {
       ++this.generation;
       this.stopSessionWatch?.();
       this.stopSessionWatch = undefined;
       if (this.expiry) clearTimeout(this.expiry);
-      this.setData({ overview: null, memberships: [], busy: false });
+      this.setData({
+        overview: null,
+        memberships: [],
+        busy: this.loginPending,
+      });
     }
   },
   onUnload() {
@@ -55,6 +66,8 @@ Page({
     await this.onShow();
   },
   async onShow() {
+    this.visible = true;
+    if (this.loginPending || this.data.busy) return;
     showProjectTab(
       this,
       "account",
@@ -66,8 +79,9 @@ Page({
         context = sessionClient.context();
       this.stopSessionWatch?.();
       this.stopSessionWatch = sessionClient.onInvalidated(() => {
-        this.onHide();
-        this.setData({ status: "登录已失效，请重新登录" });
+        this.clearPrivateView();
+        this.projectId = "";
+        this.setData({ loggedIn: false, status: "登录已失效，请重新登录" });
       });
       this.setData({
         live: true,
@@ -75,7 +89,13 @@ Page({
         status: "",
         overview: null,
         memberships: [],
+        loggedIn: !!context,
       });
+      if (!context) {
+        this.projectId = "";
+        this.setData({ busy: false, status: "登录后，打开你的故事书与订单。" });
+        return;
+      }
       try {
         const result = await projectOverviewClient.memberships();
         if (
@@ -84,10 +104,13 @@ Page({
         )
           return;
         this.setData({ memberships: result.projects });
-        if (!result.projects.some((p) => p.projectId === this.projectId))
-          this.projectId = result.projects[0]?.projectId ?? "";
+        const available = result.projects.filter((p) => p.state !== "pending");
+        if (!available.some((p) => p.projectId === this.projectId))
+          this.projectId = available[0]?.projectId ?? "";
         if (!this.projectId) {
-          this.setData({ status: "当前账号尚无人生项目，请从邀请或订单进入" });
+          this.setData({
+            status: "还没有故事书，可以挑选一份礼物，或查看收到的邀请。",
+          });
           return;
         }
         const overview = await projectOverviewClient.read(this.projectId);
@@ -98,11 +121,12 @@ Page({
           return;
         projectOverviewClient.select(this.projectId);
         this.setData({ overview });
+        showProjectTab(this, "account", overview.bookTitle);
         if (overview.accessExpiresAt)
           this.expiry = setTimeout(
             () => {
               if (generation === this.generation) {
-                this.onHide();
+                this.clearPrivateView();
                 this.setData({ status: "资料访问已到期，请重新查询" });
               }
             },
@@ -145,11 +169,55 @@ Page({
   shop() {
     go("home", "browse=1");
   },
+  async login() {
+    if (this.data.busy) return;
+    this.loginPending = true;
+    this.setData({ busy: true, status: "正在登录…" });
+    try {
+      await sessionClient.login();
+    } catch (error) {
+      this.setData({
+        loggedIn: false,
+        status: error instanceof Error ? error.message : "登录失败，请重试",
+      });
+      return;
+    } finally {
+      this.loginPending = false;
+      this.setData({ busy: false });
+    }
+    if (this.visible) await this.onShow();
+  },
+  async logout() {
+    if (this.data.busy) return;
+    this.clearPrivateView();
+    this.projectId = "";
+    this.setData({ busy: true, loggedIn: false });
+    try {
+      await sessionClient.logout();
+      home("home");
+    } catch {
+      this.setData({
+        status: "本机已退出，服务端撤销未确认；原会话将在到期后失效。",
+      });
+    } finally {
+      this.setData({ busy: false });
+    }
+  },
+  rights() {
+    go("welcome", this.projectId ? `projectId=${this.projectId}&manage=1` : "");
+  },
   switchProject(e: E) {
     if (this.data.live) {
       const id = e.currentTarget.dataset.id;
       if (!this.data.memberships.some((m) => m.projectId === id)) return;
-      this.onHide();
+      if (
+        this.data.memberships.find((m) => m.projectId === id)?.state ===
+        "pending"
+      ) {
+        go("welcome", `projectId=${id}`);
+        return;
+      }
+      this.clearPrivateView();
       projectOverviewClient.select(id);
       switchProjectTab("project", id);
       return;
