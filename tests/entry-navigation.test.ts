@@ -145,3 +145,18 @@ test("My completes a pending native login after background and foreground", asyn
   h.page.order();
   assert.deepEqual(h.routes, ["/pages/order/index"]);
 });
+
+test("login completed while My is hidden waits for the real foreground before loading private projects", async () => {
+  const h = await harness("account", [], false, true);
+  h.page.onLoad({});
+  await h.page.onShow();
+  const login = h.page.login();
+  h.page.onHide();
+  await Promise.resolve();
+  h.finishLogin();
+  await login;
+  assert.deepEqual(h.requests, ["/sessions/wechat"]);
+  await h.page.onShow();
+  assert.equal(h.page.data.loggedIn, true);
+  assert.deepEqual(h.requests, ["/sessions/wechat", "/participations"]);
+});

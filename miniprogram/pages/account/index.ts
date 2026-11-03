@@ -33,6 +33,7 @@ Page({
   projectId: "",
   generation: 0,
   loginPending: false,
+  visible: false,
   stopSessionWatch: undefined as (() => void) | undefined,
   expiry: undefined as ReturnType<typeof setTimeout> | undefined,
   onLoad(q) {
@@ -42,6 +43,7 @@ Page({
     }
   },
   onHide() {
+    this.visible = false;
     if (this.data.live) {
       ++this.generation;
       this.stopSessionWatch?.();
@@ -61,6 +63,7 @@ Page({
     await this.onShow();
   },
   async onShow() {
+    this.visible = true;
     if (this.loginPending || this.data.busy) return;
     showProjectTab(
       this,
@@ -179,7 +182,7 @@ Page({
       this.loginPending = false;
       this.setData({ busy: false });
     }
-    await this.onShow();
+    if (this.visible) await this.onShow();
   },
   async logout() {
     if (this.data.busy) return;
