@@ -33,6 +33,7 @@ async function harness(
     requests: string[] = [];
   let page: any;
   let completeLogin: (() => void) | undefined;
+  let rejectMembership = false;
   runInNewContext(bundle.outputFiles[0].text, {
     setTimeout,
     clearTimeout,
@@ -53,6 +54,14 @@ async function harness(
       request(options: any) {
         const route = options.url.slice(base.length);
         requests.push(route);
+        if (route === "/participations" && rejectMembership) {
+          rejectMembership = false;
+          options.success({
+            statusCode: 401,
+            data: { error: { code: "UNAUTHENTICATED" } },
+          });
+          return;
+        }
         const data =
           route === "/users/me"
             ? session.user
@@ -78,6 +87,9 @@ async function harness(
     routes,
     requests,
     storage,
+    expireNextMembership() {
+      rejectMembership = true;
+    },
     finishLogin() {
       assert.ok(completeLogin);
       completeLogin();
@@ -159,4 +171,15 @@ test("login completed while My is hidden waits for the real foreground before lo
   await h.page.onShow();
   assert.equal(h.page.data.loggedIn, true);
   assert.deepEqual(h.requests, ["/sessions/wechat", "/participations"]);
+});
+
+test("My can log in again after a server 401 without leaving the visible page", async () => {
+  const h = await harness("account", []);
+  h.page.onLoad({});
+  h.expireNextMembership();
+  await h.page.onShow();
+  assert.equal(h.page.data.loggedIn, false);
+  await h.page.login();
+  assert.equal(h.page.data.loggedIn, true);
+  assert.equal(h.page.data.busy, false);
 });

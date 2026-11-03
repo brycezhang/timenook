@@ -44,6 +44,9 @@ Page({
   },
   onHide() {
     this.visible = false;
+    this.clearPrivateView();
+  },
+  clearPrivateView() {
     if (this.data.live) {
       ++this.generation;
       this.stopSessionWatch?.();
@@ -76,7 +79,7 @@ Page({
         context = sessionClient.context();
       this.stopSessionWatch?.();
       this.stopSessionWatch = sessionClient.onInvalidated(() => {
-        this.onHide();
+        this.clearPrivateView();
         this.projectId = "";
         this.setData({ loggedIn: false, status: "登录已失效，请重新登录" });
       });
@@ -123,7 +126,7 @@ Page({
           this.expiry = setTimeout(
             () => {
               if (generation === this.generation) {
-                this.onHide();
+                this.clearPrivateView();
                 this.setData({ status: "资料访问已到期，请重新查询" });
               }
             },
@@ -186,7 +189,7 @@ Page({
   },
   async logout() {
     if (this.data.busy) return;
-    this.onHide();
+    this.clearPrivateView();
     this.projectId = "";
     this.setData({ busy: true, loggedIn: false });
     try {
@@ -214,7 +217,7 @@ Page({
         go("welcome", `projectId=${id}`);
         return;
       }
-      this.onHide();
+      this.clearPrivateView();
       projectOverviewClient.select(id);
       switchProjectTab("project", id);
       return;
