@@ -498,8 +498,7 @@ test("mini-program invitation and separate choices feed the shared care form, wh
   await narrator.goto("http://127.0.0.1:5174/#/welcome");
   await narrator
     .getByRole("button", {
-      name: `查看本人的用途选择 · ${projectId}`,
-      exact: true,
+      name: /^查看资料用途/,
     })
     .click();
   await narrator

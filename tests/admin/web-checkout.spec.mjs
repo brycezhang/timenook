@@ -227,7 +227,7 @@ test("normal login, cancel or mock payment, project creation, invitation, consen
       .getByRole("button", { name: "重新查询参与状态", exact: true })
       .click();
     const membership = narrator.getByRole("button", {
-      name: /查看本人的用途选择/,
+      name: /查看资料用途/,
     });
     if (await membership.isVisible()) await membership.click();
     const started = narrator.waitForResponse(
