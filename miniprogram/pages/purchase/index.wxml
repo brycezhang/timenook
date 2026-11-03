@@ -5,8 +5,8 @@
     <view wx:if="{{loading}}" class="section note">正在加载套餐与赠礼称呼…</view>
     <view wx:if="{{catalogError}}" class="soft section note"><view>{{catalogError}}</view><button class="link" bindtap="onShow">重新加载</button></view>
     <block wx:if="{{!loading && !catalogError}}">
-      <view class="recipients live-recipients section"><button wx:for="{{recipientTypes}}" wx:key="code" class="recipient {{selection && selection.recipientCode === item.code ? 'selected' : ''}}" data-code="{{item.code}}" bindtap="chooseType">送给{{item.label}}</button></view>
-      <input data-field="custom-label" class="custom-label" maxlength="40" value="{{customLabelValue}}" placeholder="也可以自定义称呼，最多40字" bindinput="customLabel" />
+      <view wx:if="{{recipientTypes.length}}" class="recipients live-recipients section"><button wx:for="{{recipientTypes}}" wx:key="code" class="recipient {{selection && selection.recipientCode === item.code ? 'selected' : ''}}" data-code="{{item.code}}" bindtap="chooseType">送给{{item.label}}</button></view>
+      <input data-field="custom-label" class="custom-label recipient-input" maxlength="40" value="{{customLabelValue}}" placeholder="也可以自定义称呼，最多40字" placeholder-class="recipient-placeholder" bindinput="customLabel" />
       <view wx:if="{{selectedLabel}}" class="section section-title">这份礼物，送给{{selectedLabel}}</view>
       <view class="paper section"><view class="section-title">{{packageTitle || '一个项目 · 一本实体书'}}</view><view class="note">一位成年讲述者本人参与，一位发起人。赠礼称呼不改变价格或双方权限。</view><view class="divider"/><view class="note">{{availability}}</view><view wx:if="{{!packagePrice}}" class="small muted">套餐准备完成后，这里将展示服务内容、配送和退款说明。</view></view>
       <view wx:if="{{packageTerms.length}}" class="section"><view class="section-title">套餐与服务说明</view><view wx:for="{{packageTerms}}" wx:key="label" class="catalog-term"><view class="term-label">{{item.label}}</view><view class="note">{{item.text}}</view></view></view>

@@ -29,6 +29,7 @@ interface CatalogPage {
     isE2e: boolean;
     shippingRegions: { code: string; label: string }[];
     selectedLabel: string;
+    customLabelValue: string;
     selection: unknown;
   };
   setData(patch: Partial<CatalogPage["data"]>): void;
@@ -132,6 +133,31 @@ test("a gift chosen on the homepage selects the matching current server relation
     recipientRevision: 2,
     customLabel: null,
   });
+});
+
+test("homepage gifts remain selected as custom labels when the server directory has no matching relationship", async () => {
+  for (const types of [[], directory.types]) {
+    for (const label of ["妈妈", "爸爸"]) {
+      const { page, requests, sideEffects } = harness();
+      page.onLoad({ recipient: encodeURIComponent(label) });
+      const loading = page.onShow();
+      respond(requests[0], { ...directory, types });
+      respond(requests[1], offer);
+      await loading;
+      assert.equal(page.data.selectedLabel, label);
+      assert.equal(page.data.customLabelValue, label);
+      assert.equal(
+        JSON.stringify(page.data.selection),
+        JSON.stringify({
+          recipientCode: null,
+          recipientRevision: null,
+          customLabel: label,
+        }),
+      );
+      assert.equal(page.data.recipientTypes.length, types.length);
+      assert.deepEqual(sideEffects, []);
+    }
+  }
 });
 
 test("live purchase displays server relationships and the same package, supports a custom label without making a global type or project", async () => {

@@ -160,6 +160,11 @@ Page({
           currentTarget: { dataset: { code: recipient.code } },
           detail: { value: "" },
         });
+      else if (this.requestedRecipient)
+        this.customLabel({
+          currentTarget: { dataset: {} },
+          detail: { value: this.requestedRecipient },
+        });
     } catch (error) {
       if (current())
         this.setData({
