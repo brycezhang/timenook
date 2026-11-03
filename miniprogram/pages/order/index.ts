@@ -1,4 +1,5 @@
 import { dataMode } from "../../services/mode";
+import { switchProjectTab } from "../../services/navigation";
 import { sessionClient } from "../../services/session";
 import { paymentClient, paymentStatus } from "../../services/payments";
 import type { PaymentOrderView } from "../../../packages/contracts/src";
@@ -9,6 +10,9 @@ type E = {
   detail: { value: string };
 };
 Page({
+  account() {
+    switchProjectTab("account", this.data.activeOrder?.project?.id ?? "");
+  },
   data: {
     p: null as Project | null,
     bookImage: "",

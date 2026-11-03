@@ -1,6 +1,6 @@
 .home-hero {
   position: relative;
-  height: 855rpx;
+  height: 650rpx;
   overflow: hidden;
 }
 .hero-photo {
@@ -141,7 +141,21 @@
   font-size: 25rpx;
 }
 .home-entry-actions {
-  margin-bottom: var(--action-section-gap);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 20rpx;
+  margin-bottom: 12rpx;
+}
+.home-account {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  min-height: var(--touch-target);
+  color: var(--brown-dark);
+  background: transparent;
+  font-size: 28rpx;
 }
 .home-entry-actions > .home-return {
   margin: 0;
