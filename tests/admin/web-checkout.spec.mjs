@@ -326,7 +326,7 @@ test("normal login, cancel or mock payment, project creation, invitation, consen
       await page.screenshot({ path: `${shots}/account-${width}.png` });
     }
     await page
-      .getByRole("button", { name: "资料用途与帮助", exact: true })
+      .getByRole("button", { name: "帮助与服务", exact: true })
       .click();
     await expect(page.getByText("项目服务工单", { exact: true })).toBeVisible();
     await expect(
