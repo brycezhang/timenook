@@ -1,0 +1,51 @@
+{
+  "passed": true,
+  "mode": "live",
+  "urlCheck": true,
+  "library": {
+    "sourceRequested": "3.17.5",
+    "testRequested": "3.17.5",
+    "resolved": "3.17.5"
+  },
+  "steps": [
+    {
+      "name": "startup",
+      "passed": true
+    },
+    {
+      "name": "real WeChat login on new personal tab",
+      "passed": true
+    },
+    {
+      "name": "current account can read memberships and projects",
+      "passed": true
+    },
+    {
+      "name": "homepage reflects actual project membership",
+      "passed": true
+    },
+    {
+      "name": "logout revokes the current native session",
+      "passed": true
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "revoke smoke session",
+      "passed": true
+    },
+    {
+      "name": "disconnect",
+      "passed": true
+    },
+    {
+      "name": "close-project",
+      "passed": true
+    }
+  ],
+  "activeStage": "cleanup:close-project",
+  "devtools": {
+    "version": "2.02.2609240",
+    "SDKVersion": "3.17.5"
+  }
+}

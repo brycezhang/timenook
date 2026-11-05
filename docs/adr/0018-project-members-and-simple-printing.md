@@ -1,12 +1,12 @@
 ---
 status: accepted
 date: 2026-11-05
-implementation: local-validation
+implementation: deployed-development
 ---
 
 # 项目成员统一功能与简化制作流程
 
-本决定来自用户对设计审阅的六项明确调整，是当前产品规则。原生小程序、API、数据库成员关系和条款已按本决定重构；本机定向验证通过，未部署。完整旧流程测试仍需按新规则更新，见 [实现记录](../delivery/2026-11-05/final-design-implementation.md)。
+本决定来自用户对设计审阅的六项明确调整，是当前产品规则。原生小程序、API、数据库成员关系和条款已按本决定重构；本机定向验证通过，后端与成员迁移已部署，小程序 0.3.0 已上传、未提审。官方开发者工具真实登录及项目读取通过；完整旧流程测试仍需按新规则更新，见 [实现记录](../delivery/2026-11-05/final-design-implementation.md) 与 [部署记录](../delivery/2026-11-05/deployment.md)。
 
 ## 决定
 
