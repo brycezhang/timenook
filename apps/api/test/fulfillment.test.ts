@@ -3,8 +3,7 @@ import { before, after, test } from "node:test";
 import {
   startBookFixture,
   stopBookFixture,
-  bound,
-  choose,
+  joinedProject,
   request,
   data,
   login,
@@ -12,8 +11,8 @@ import {
 before(startBookFixture);
 after(stopBookFixture);
 test("fulfillment progress is private and does not expose manuscript or address", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const url = `/v1/projects/${p.projectId}/fulfillment`;
   assert.equal((await request("GET", url)).statusCode, 401);
   assert.equal(
@@ -86,7 +85,7 @@ test("concurrent creation fixes one production attempt, handoff id and case owne
   assert.equal(progress.current.handoffId, a.handoffId);
   assert.equal(
     (await admin("GET", `${base}/attempts/${a.id}/materials`, h)).statusCode,
-    403,
+    200,
   );
   assert.equal(
     (
@@ -121,74 +120,9 @@ async function attemptFixture() {
     attemptBase: `${base}/attempts/${view.current.id}`,
   };
 }
-function grantBody(
-  p: Awaited<ReturnType<typeof attemptFixture>>,
-  minutes = 10,
-) {
-  return {
-    ...p.binding,
-    attemptId: p.attempt.id,
-    expiresAt: new Date(Date.now() + minutes * 60000).toISOString(),
-    noticeVersion: "synthetic-d08-v1",
-    evidenceRef: `synthetic:交接读取-${randomUUID()}`,
-  };
-}
-test("only current narrator can grant the case owner a bounded exact-version PDF and address read", async (t) => {
-  const p = await attemptFixture(),
-    url = `/v1/projects/${p.projectId}/fulfillment/grants`,
-    body = grantBody(p);
-  assert.equal(
-    (await request("POST", url, p.buyer.token, body)).statusCode,
-    403,
-  );
-  assert.equal(
-    (await request("POST", url, p.narrator.token, grantBody(p, 31))).statusCode,
-    400,
-  );
-  const granted = data(await request("POST", url, p.narrator.token, body));
-  assert.equal(granted.current.grantExpiresAt, body.expiresAt);
-  const materials = data(
-    await admin("GET", p.attemptBase + "/materials", p.headers),
-    200,
-  );
-  assert.deepEqual(materials.address, {
-    recipientName: "合成收件人",
-    phone: "13800000000",
-    regionCode: "CN-110000",
-    detail: "合成地址一号",
-  });
-  assert.equal(materials.pdf.sha256, p.binding.pdfHash);
-  assert.equal(materials.stories, undefined);
-  const pdf = await admin("GET", p.attemptBase + "/pdf", p.headers);
-  assert.equal(pdf.statusCode, 200);
-  assert.equal(pdf.rawPayload.subarray(0, 5).toString(), "%PDF-");
-  const other = await operator();
-  assert.equal(
-    (await admin("GET", p.attemptBase + "/materials", other)).statusCode,
-    403,
-  );
-  t.mock.timers.enable({ apis: ["Date"], now: Date.parse(body.expiresAt) });
-  assert.equal(
-    (await admin("GET", p.attemptBase + "/pdf", p.headers)).statusCode,
-    403,
-  );
-  t.mock.timers.reset();
-  data((await choose(p, p.narrator.token, "sharing", false)).response);
-  assert.equal(
-    (await admin("GET", p.attemptBase + "/materials", p.headers)).statusCode,
-    403,
-  );
-});
+
 test("unknown handoff stays reserved and forbids another handoff; only verified supplier acceptance consumes the entitlement", async () => {
   const p = await attemptFixture();
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/fulfillment/grants`,
-      p.narrator.token,
-      grantBody(p),
-    ),
-  );
   const key = randomUUID();
   const handoff = data(
     await admin("POST", p.attemptBase + "/handoff", p.headers, {}, key),
@@ -271,14 +205,6 @@ test("cancellation before handoff is final, but accepted production waits for ve
     attempt: second,
     attemptBase: `${p.base}/attempts/${second.id}`,
   };
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/fulfillment/grants`,
-      p.narrator.token,
-      grantBody(next),
-    ),
-  );
   data(await admin("POST", next.attemptBase + "/handoff", p.headers, {}));
   data(
     await admin("POST", next.attemptBase + "/receipt", p.headers, {
@@ -314,14 +240,6 @@ test("cancellation before handoff is final, but accepted production waits for ve
 });
 test("physical delivery records one delivery fact and repeated logistics preserve lifetime service", async (t) => {
   const p = await attemptFixture();
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/fulfillment/grants`,
-      p.narrator.token,
-      grantBody(p),
-    ),
-  );
   const pending = data(
     await admin("POST", p.attemptBase + "/handoff", p.headers, {}),
   );
@@ -442,14 +360,6 @@ test("physical delivery records one delivery fact and repeated logistics preserv
 import { restartBookApplication } from "./book-fixture";
 test("unknown printer result survives process restart and remains fenced to the same handoff", async () => {
   const p = await attemptFixture();
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/fulfillment/grants`,
-      p.narrator.token,
-      grantBody(p),
-    ),
-  );
   data(await admin("POST", p.attemptBase + "/handoff", p.headers, {}));
   data(
     await admin("POST", p.attemptBase + "/receipt", p.headers, {
@@ -488,14 +398,6 @@ test("unknown printer result survives process restart and remains fenced to the 
 });
 test("a manuscript change after the timed grant blocks both production downloads and handoff without hiding historical progress", async () => {
   const p = await attemptFixture();
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/fulfillment/grants`,
-      p.narrator.token,
-      grantBody(p),
-    ),
-  );
   data(
     await request(
       "POST",
@@ -547,55 +449,7 @@ test("handoff approval cannot choose a printing provider outside the purchased D
     409,
   );
 });
-test("assisted operational access requires fresh book-purpose evidence", async () => {
-  const p = await attemptFixture(),
-    status = data(
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/participation`,
-        p.buyer.token,
-      ),
-      200,
-    ),
-    url = `/v1/projects/${p.projectId}/fulfillment/grants`;
-  const session = async (purpose: string) =>
-    data(
-      await request(
-        "POST",
-        `/v1/projects/${p.projectId}/assisted-sessions`,
-        p.buyer.token,
-        {
-          purpose,
-          granted: true,
-          expectedBindingVersion: status.bindingVersion,
-          expectedAccessEpoch: status.accessEpoch,
-          noticeVersion: "synthetic-d08-v1",
-          evidenceRef: `synthetic:${randomUUID()}`,
-        },
-      ),
-    );
-  const wrong = await session("story_confirmation");
-  assert.equal(
-    (
-      await request("POST", url, p.buyer.token, {
-        ...grantBody(p),
-        assistedSessionId: wrong.id,
-      })
-    ).statusCode,
-    403,
-  );
-  const correct = await session("book_confirmation");
-  data(
-    await request("POST", url, p.buyer.token, {
-      ...grantBody(p),
-      assistedSessionId: correct.id,
-    }),
-  );
-  assert.equal(
-    (await admin("GET", p.attemptBase + "/materials", p.headers)).statusCode,
-    200,
-  );
-});
+
 test("operational commands retain authenticated permission CSRF and payload idempotency checks", async () => {
   const p = await attemptFixture(),
     wrong = await paymentAdmin(config, app, ["care:write"]);
@@ -644,14 +498,6 @@ test("operational commands retain authenticated permission CSRF and payload idem
 
 test("verified cancellation rejection resumes the existing physical stage before and after shipment, then delivery records one lifetime-service fact", async () => {
   const p = await attemptFixture();
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/fulfillment/grants`,
-      p.narrator.token,
-      grantBody(p),
-    ),
-  );
   data(await admin("POST", p.attemptBase + "/handoff", p.headers, {}));
   data(
     await admin("POST", p.attemptBase + "/receipt", p.headers, {
@@ -750,14 +596,6 @@ test("verified cancellation rejection resumes the existing physical stage before
 
 test("a rejected cancellation with no accepted-production fact preserves the unknown handoff and reservation", async () => {
   const p = await attemptFixture();
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/fulfillment/grants`,
-      p.narrator.token,
-      grantBody(p),
-    ),
-  );
   data(await admin("POST", p.attemptBase + "/handoff", p.headers, {}));
   data(
     await admin("POST", p.attemptBase + "/cancel", p.headers, {
@@ -789,7 +627,55 @@ test("a rejected cancellation with no accepted-production fact preserves the unk
   );
 });
 
-test("a cancelled attempt permits corrected address reconfirmation on the same first-copy order, then relocks the next reservation", async () => {
+import { ProductionTasks } from "../src/tasks/tasks";
+
+test("production search covers linked identifiers with stable filtered pagination and separates pending exceptions", async () => {
+  const a = await readyReservedFirstCopy(),
+    b = await readyReservedFirstCopy(),
+    h = await operator();
+  const list = async (q: string) =>
+    data(await admin("GET", `/v1/admin/fulfillment?${q}`, h), 200);
+  const first = await list("page=1&pageSize=1&state=pdf_ready");
+  const next = await list("page=2&pageSize=1&state=pdf_ready");
+  assert.ok(first.total >= 2);
+  assert.equal(first.items.length, 1);
+  assert.notEqual(first.items[0].id, next.items[0].id);
+  assert.equal((await list(`q=${a.order.id}`)).items[0].id, a.order.id);
+  assert.equal(
+    (await list(`q=${a.projectId}&pending=true&exception=false`)).total,
+    1,
+  );
+  assert.equal(
+    (await list(`q=${a.orderId}`)).items[0].paymentOrderId,
+    a.orderId,
+  );
+  assert.equal((await list(`q=${b.projectId}&exception=true`)).total, 0);
+  assert.equal(
+    (await admin("GET", "/v1/admin/fulfillment?pageSize=101", h)).statusCode,
+    400,
+  );
+  assert.equal(
+    (await admin("GET", "/v1/admin/fulfillment?state=arbitrary", h)).statusCode,
+    400,
+  );
+});
+
+test("a paid content-only package does not acquire physical rights from a ready candidate PDF or payment", async () => {
+  const p = await readyFirstCopyBook({}, false);
+  const value = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/first-copy`,
+      p.buyer.token,
+    ),
+    200,
+  );
+  assert.equal(value.payment.paidAmountFen, 99900);
+  assert.ok(value.blockers.includes("PHYSICAL_PRODUCTION_UNAVAILABLE"));
+  assert.equal(value.canSubmit, false);
+});
+
+test("a cancelled attempt permits a corrected address and direct resubmission on the same first-copy order, then relocks the next reservation", async () => {
   const p = await attemptFixture();
   data(
     await admin("POST", p.attemptBase + "/cancel", p.headers, {
@@ -818,22 +704,9 @@ test("a cancelled attempt permits corrected address reconfirmation on the same f
       detail: "合成更正后的新地址",
     }),
   );
-  assert.equal(corrected.confirmations.narrator, true);
-  assert.equal(corrected.confirmations.initiator, false);
+
   const binding = { ...p.binding, addressHash: corrected.address.hash };
-  assert.equal(
-    (await request("POST", firstCopy + "/submit", p.buyer.token, binding))
-      .statusCode,
-    409,
-  );
-  data(
-    await request("POST", firstCopy + "/confirmations", p.buyer.token, {
-      role: "initiator",
-      ...binding,
-      noticeVersion: "synthetic-d08-v1",
-      evidenceRef: `synthetic:更正地址确认-${randomUUID()}`,
-    }),
-  );
+
   const key = randomUUID();
   const submitted = data(
     await request("POST", firstCopy + "/submit", p.buyer.token, binding, key),
@@ -887,9 +760,7 @@ test("a cancelled attempt permits corrected address reconfirmation on the same f
     false,
   );
 });
-
-import { ProductionTasks } from "../src/tasks/tasks";
-test("a corrected manuscript after definitive cancellation requires both new confirmations and preserves the previous attempt PDF", async () => {
+test("a corrected manuscript after definitive cancellation can be directly resubmitted while preserving the previous attempt PDF", async () => {
   const p = await attemptFixture();
   data(
     await admin("POST", p.attemptBase + "/cancel", p.headers, {
@@ -915,10 +786,7 @@ test("a corrected manuscript after definitive cancellation requires both new con
   await app.get(ProductionTasks).run(queued.task.id);
   const current = data(await request("GET", firstCopy, p.buyer.token), 200);
   assert.equal(current.book.state, "ready");
-  assert.deepEqual(current.confirmations, {
-    narrator: false,
-    initiator: false,
-  });
+
   const binding = {
     bookVersionId: current.book.id,
     snapshotHash: current.book.snapshotHash,
@@ -927,37 +795,12 @@ test("a corrected manuscript after definitive cancellation requires both new con
   };
   assert.notEqual(binding.bookVersionId, p.binding.bookVersionId);
   assert.notEqual(binding.pdfHash, p.binding.pdfHash);
-  assert.equal(
-    (await request("POST", firstCopy + "/submit", p.buyer.token, binding))
-      .statusCode,
-    409,
-  );
+
   const notice = {
     noticeVersion: "synthetic-d08-v1",
     evidenceRef: `synthetic:本人确认新书稿-${randomUUID()}`,
   };
-  data(
-    await request("POST", firstCopy + "/confirmations", p.narrator.token, {
-      role: "narrator",
-      bookVersionId: binding.bookVersionId,
-      snapshotHash: binding.snapshotHash,
-      pdfHash: binding.pdfHash,
-      ...notice,
-    }),
-  );
-  assert.equal(
-    (await request("POST", firstCopy + "/submit", p.buyer.token, binding))
-      .statusCode,
-    409,
-  );
-  data(
-    await request("POST", firstCopy + "/confirmations", p.buyer.token, {
-      role: "initiator",
-      ...binding,
-      ...notice,
-      evidenceRef: `synthetic:发起人确认新书稿-${randomUUID()}`,
-    }),
-  );
+
   const reserved = data(
     await request("POST", firstCopy + "/submit", p.buyer.token, binding),
   );
@@ -980,50 +823,4 @@ test("a corrected manuscript after definitive cancellation requires both new con
     (await admin("GET", p.attemptBase + "/pdf", p.headers)).statusCode,
     403,
   );
-});
-
-test("production search covers linked identifiers with stable filtered pagination and separates pending exceptions", async () => {
-  const a = await readyReservedFirstCopy(),
-    b = await readyReservedFirstCopy(),
-    h = await operator();
-  const list = async (q: string) =>
-    data(await admin("GET", `/v1/admin/fulfillment?${q}`, h), 200);
-  const first = await list("page=1&pageSize=1&state=pdf_ready");
-  const next = await list("page=2&pageSize=1&state=pdf_ready");
-  assert.ok(first.total >= 2);
-  assert.equal(first.items.length, 1);
-  assert.notEqual(first.items[0].id, next.items[0].id);
-  assert.equal((await list(`q=${a.order.id}`)).items[0].id, a.order.id);
-  assert.equal(
-    (await list(`q=${a.projectId}&pending=true&exception=false`)).total,
-    1,
-  );
-  assert.equal(
-    (await list(`q=${a.orderId}`)).items[0].paymentOrderId,
-    a.orderId,
-  );
-  assert.equal((await list(`q=${b.projectId}&exception=true`)).total, 0);
-  assert.equal(
-    (await admin("GET", "/v1/admin/fulfillment?pageSize=101", h)).statusCode,
-    400,
-  );
-  assert.equal(
-    (await admin("GET", "/v1/admin/fulfillment?state=arbitrary", h)).statusCode,
-    400,
-  );
-});
-
-test("a paid content-only package does not acquire physical rights from a ready candidate PDF or payment", async () => {
-  const p = await readyFirstCopyBook({}, false);
-  const value = data(
-    await request(
-      "GET",
-      `/v1/projects/${p.projectId}/first-copy`,
-      p.buyer.token,
-    ),
-    200,
-  );
-  assert.equal(value.payment.paidAmountFen, 99900);
-  assert.ok(value.blockers.includes("PHYSICAL_PRODUCTION_UNAVAILABLE"));
-  assert.equal(value.canSubmit, false);
 });

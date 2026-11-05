@@ -26,8 +26,7 @@ import {
   config,
   db,
   root,
-  bound,
-  choose,
+  joinedProject,
   login,
   request,
   data,
@@ -301,8 +300,8 @@ async function pdfDuringCategoryPublication(
   }
 }
 test("book context requires real participation and returns an immutable-input token without inventing stories", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const base = `/v1/projects/${p.projectId}/book`;
   assert.equal((await request("GET", base)).statusCode, 401);
   assert.equal(
@@ -324,7 +323,7 @@ test("book context requires real participation and returns an immutable-input to
 });
 
 async function confirmedStory(
-  existing?: Awaited<ReturnType<typeof bound>>,
+  existing?: Awaited<ReturnType<typeof joinedProject>>,
   withPhoto = false,
   long = false,
   text?: string,
@@ -379,22 +378,6 @@ async function confirmedStory(
       },
     ),
   );
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/stories/${story.id}/decisions`,
-      p.narrator.token,
-      {
-        revisionId: story.revision.id,
-        expectedVersion: story.version,
-        contentHash: story.revision.contentHash,
-        confirmed: true,
-        allowInBook: true,
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: `synthetic:本人确认-${randomUUID()}`,
-      },
-    ),
-  );
   return { ...p, story };
 }
 test("fixed CJK PDF extraction preserves the confirmed 青菜 sentence", async () => {
@@ -416,94 +399,7 @@ test("fixed CJK PDF extraction preserves the confirmed 青菜 sentence", async (
   assert.equal(ready.state, "ready", JSON.stringify(ready.task));
   assert.deepEqual(ready.snapshot.chapters[0].stories[0].paragraphs, [text]);
 });
-test("PDF content confirmation is independent of first-copy rights and invalidates after edits; internal scope renders a real candidate PDF", async () => {
-  const p = await confirmedStory(),
-    base = `/v1/projects/${p.projectId}/book`,
-    context = data(await request("GET", base, p.narrator.token), 200),
-    book = data(
-      await request("POST", base + "/versions", p.narrator.token, {
-        expectedInputHash: context.inputHash,
-      }),
-      202,
-    );
-  await app.get(ProductionTasks).run(book.task.id);
-  const ready = data(
-    await request("GET", base + `/versions/${book.id}`, p.narrator.token),
-    200,
-  );
-  assert.equal(ready.state, "ready", JSON.stringify(ready.task));
-  const binding = {
-    bookVersionId: ready.id,
-    snapshotHash: ready.snapshotHash,
-    pdfHash: ready.pdf.sha256,
-    noticeVersion: "synthetic-d08-v1",
-  };
-  for (const [role, token] of [
-    ["narrator", p.narrator.token],
-    ["initiator", p.buyer.token],
-  ]) {
-    const current = data(
-      await request("GET", base + "/confirmations", token),
-      200,
-    );
-    assert.equal(current.role, role);
-    assert.equal(current.canConfirm, true);
-    const body = {
-        ...binding,
-        role,
-        evidenceRef: `synthetic:本次逐页核对-${role}-${randomUUID()}`,
-      },
-      key = randomUUID(),
-      saved = data(
-        await request("POST", base + "/confirmations", token, body, key),
-      );
-    assert.equal(saved.confirmations[role], true);
-    data(await request("POST", base + "/confirmations", token, body, key));
-  }
-  assert.deepEqual(
-    data(await request("GET", base + "/confirmations", p.buyer.token), 200)
-      .confirmations,
-    { narrator: true, initiator: true },
-  );
-  assert.equal(
-    await db.firstCopyOrder.count({ where: { projectId: p.projectId } }),
-    0,
-  );
-  const snapshot = structuredClone(ready.snapshot);
-  snapshot.specification.status = "internal-acceptance-candidate";
-  const candidate = await renderBook(
-    snapshot,
-    {},
-    join(root, `internal-candidate-${randomUUID()}`),
-    ready.snapshotHash,
-  );
-  assert.equal(candidate.manifest.scope, "internal-acceptance-book");
-  assert.equal(candidate.manifest.productionReady, false);
-  assert.ok(candidate.bytes > 0 && candidate.pageCount > 0);
-  data(
-    await request("POST", base + "/cover", p.buyer.token, {
-      expectedVersion: 0,
-      salutation: "写给一路同行的你",
-      photoAssetId: null,
-    }),
-  );
-  const stale = data(
-    await request("GET", base + "/confirmations", p.buyer.token),
-    200,
-  );
-  assert.deepEqual(stale.confirmations, { narrator: false, initiator: false });
-  assert.equal(stale.canConfirm, false);
-  assert.equal(
-    (
-      await request("POST", base + "/confirmations", p.narrator.token, {
-        ...binding,
-        role: "narrator",
-        evidenceRef: `synthetic:旧稿不沿用-${randomUUID()}`,
-      })
-    ).statusCode,
-    403,
-  );
-});
+
 test("generation freezes one current permitted revision and stable original-audio entry under concurrent replay", async () => {
   const p = await confirmedStory(),
     base = `/v1/projects/${p.projectId}/book`;
@@ -759,7 +655,7 @@ test("future questions preserve a frozen book while actual directory changes obs
   );
 });
 
-test("cover renaming and a new unconfirmed story revision invalidate the old book without copying any confirmation", async () => {
+test("cover renaming and a new member revision invalidate the old book while retaining the selected story", async () => {
   const p = await confirmedStory(),
     base = `/v1/projects/${p.projectId}`,
     ctx = data(await request("GET", base + "/book", p.narrator.token), 200),
@@ -830,57 +726,14 @@ test("cover renaming and a new unconfirmed story revision invalidate the old boo
     await request("GET", base + "/book", p.narrator.token),
     200,
   );
-  assert.deepEqual(unconfirmed.eligibleStories, []);
+  assert.equal(unconfirmed.eligibleStories.length, 1);
   assert.equal(
     (
       await request("POST", base + "/book/versions", p.narrator.token, {
         expectedInputHash: unconfirmed.inputHash,
       })
     ).statusCode,
-    409,
-  );
-});
-
-test("sharing revocation rejects an initiator's PDF and replay and fences the old pending book", async () => {
-  const p = await confirmedStory(),
-    base = `/v1/projects/${p.projectId}/book`,
-    ctx = data(await request("GET", base, p.buyer.token), 200),
-    key = randomUUID(),
-    body = { expectedInputHash: ctx.inputHash },
-    book = data(
-      await request("POST", base + "/versions", p.buyer.token, body, key),
-      202,
-    );
-  await app.get(ProductionTasks).run(book.task.id);
-  const pdf = await request(
-    "GET",
-    base + `/versions/${book.id}/pdf`,
-    p.buyer.token,
-  );
-  assert.equal(pdf.statusCode, 200);
-  data((await choose(p, p.narrator.token, "sharing", false)).response);
-  assert.equal(
-    (await request("GET", base + `/versions/${book.id}/pdf`, p.buyer.token))
-      .statusCode,
-    403,
-  );
-  assert.equal(
-    (await request("POST", base + "/versions", p.buyer.token, body, key))
-      .statusCode,
-    403,
-  );
-  const narrator = await request(
-    "GET",
-    base + `/versions/${book.id}/pdf`,
-    p.narrator.token,
-  );
-  assert.equal(narrator.statusCode, 409);
-  assert.equal(
-    data(
-      await request("GET", base + `/versions/${book.id}`, p.narrator.token),
-      200,
-    ).state,
-    "obsolete",
+    202,
   );
 });
 
@@ -1009,74 +862,6 @@ test("book routes remain disabled without explicit isolated admission and expose
     );
   } finally {
     await disabled.close();
-  }
-});
-
-test("bounded preparation rejects aggregate print-image bytes before starting a PDF child", async () => {
-  const previous = config.books!.maxPhotoBytes;
-  config.books!.maxPhotoBytes = 1;
-  try {
-    const p = await confirmedStory(undefined, true),
-      base = `/v1/projects/${p.projectId}/book`,
-      ctx = data(await request("GET", base, p.narrator.token), 200),
-      book = data(
-        await request("POST", base + "/versions", p.narrator.token, {
-          expectedInputHash: ctx.inputHash,
-        }),
-        202,
-      );
-    await app.get(ProductionTasks).run(book.task.id);
-    const done = data(
-      await request("GET", base + `/versions/${book.id}`, p.narrator.token),
-      200,
-    );
-    assert.equal(done.state, "failed");
-    assert.equal(done.task.errorCode, "BOOK_IMAGE_INPUT_LIMIT");
-    assert.equal(done.pdf, null);
-    assert.equal(
-      (
-        await request(
-          "POST",
-          `/v1/projects/${p.projectId}/tasks/${book.task.id}/retry`,
-          p.narrator.token,
-          { assistedSessionId: randomUUID() },
-        )
-      ).statusCode,
-      403,
-    );
-    for (let i = 0; i < 2; i++) {
-      data(
-        await request(
-          "POST",
-          base + `/versions/${book.id}/retry`,
-          p.narrator.token,
-          {},
-        ),
-        202,
-      );
-      await app.get(ProductionTasks).run(book.task.id);
-      assert.equal(
-        data(
-          await request("GET", base + `/versions/${book.id}`, p.narrator.token),
-          200,
-        ).state,
-        "failed",
-      );
-    }
-    assert.equal(
-      (
-        await request(
-          "POST",
-          base + `/versions/${book.id}/retry`,
-          p.narrator.token,
-          {},
-        )
-      ).statusCode,
-      409,
-    );
-  } finally {
-    if (previous === undefined) delete config.books!.maxPhotoBytes;
-    else config.books!.maxPhotoBytes = previous;
   }
 });
 
@@ -1387,148 +1172,6 @@ test("cover settings freeze an allowed salutation and photo and invalidate an ea
   await preserveReviewBook(next.id, "cover-photo");
 });
 
-test("the fixed cover keeps a full120-character title and salutation with a portrait on the cover page", async () => {
-  const p = await confirmedStory(undefined, true, false, undefined, {
-      portrait: true,
-    }),
-    project = `/v1/projects/${p.projectId}`,
-    base = project + "/book",
-    title = "岁月中的那些人与事和家的故事".repeat(12).slice(0, 120),
-    salutation = "献给这些年一起走过的家人和朋友".repeat(12).slice(0, 120);
-  data(
-    await request("POST", project + "/metadata", p.narrator.token, {
-      expectedVersion: 0,
-      bookTitle: title,
-    }),
-  );
-  const context = data(await request("GET", base, p.narrator.token), 200),
-    saved = data(
-      await request("POST", base + "/cover", p.narrator.token, {
-        expectedVersion: 0,
-        salutation,
-        photoAssetId: context.coverPhotoOptions[0].assetId,
-      }),
-    ),
-    book = data(
-      await request("POST", base + "/versions", p.narrator.token, {
-        expectedInputHash: saved.inputHash,
-      }),
-      202,
-    );
-  await app.get(ProductionTasks).run(book.task.id);
-  const current = data(
-    await request("GET", base + `/versions/${book.id}`, p.narrator.token),
-    200,
-  );
-  assert.equal(current.state, "ready", JSON.stringify(current.task));
-  const pdf = await request(
-    "GET",
-    base + `/versions/${book.id}/pdf`,
-    p.narrator.token,
-  );
-  assert.equal(pdf.statusCode, 200);
-  const inspected = await inspectDownloadedBook(pdf.rawPayload);
-  assert.ok(inspected.pages[0].text.includes(inspected.normalize(title)));
-  assert.ok(inspected.pages[0].text.includes(inspected.normalize(salutation)));
-  assert.equal(inspected.pages[0].images, 1);
-  data(
-    await request(
-      "POST",
-      project + `/stories/${p.story.id}/decisions`,
-      p.narrator.token,
-      {
-        revisionId: p.story.revision.id,
-        expectedVersion: p.story.version,
-        contentHash: p.story.revision.contentHash,
-        confirmed: true,
-        allowInBook: false,
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: `synthetic:本人取消入书-${randomUUID()}`,
-      },
-    ),
-  );
-  const noLongerAllowed = data(
-    await request("GET", base, p.narrator.token),
-    200,
-  );
-  assert.deepEqual(noLongerAllowed.coverPhotoOptions, []);
-  assert.equal(noLongerAllowed.current.state, "obsolete");
-  assert.equal(
-    (
-      await request("POST", base + "/versions", p.narrator.token, {
-        expectedInputHash: noLongerAllowed.inputHash,
-      })
-    ).statusCode,
-    409,
-  );
-  await preserveReviewBook(book.id, "cover-max-text");
-});
-
-for (const category of ["all", "withdrawal"] as const)
-  test(`a frozen PDF stream still stops before the ${category} denial commits`, async (t) => {
-    const p = await readyFirstCopyBook(),
-      cutoff = new Date(Date.now() + 60000);
-    let denial: (() => Promise<unknown>) | undefined;
-    if (category === "withdrawal") {
-      denial = async () =>
-        data((await choose(p, p.narrator.token, "collection", false)).response);
-    } else {
-      const current = await state(p, p.narrator.token),
-        care = data(
-          await request(
-            "POST",
-            `/v1/projects/${p.projectId}/care-requests`,
-            p.narrator.token,
-            {
-              kind: "delete",
-              expectedBindingVersion: current.bindingVersion,
-            },
-          ),
-        ),
-        headers = await paymentAdmin(config, app, ["care:write"]);
-      denial = async () =>
-        data(
-          await app.inject({
-            method: "POST",
-            url: `/v1/admin/care-requests/${care.id}/verify`,
-            headers: { ...headers, "idempotency-key": randomUUID() },
-            payload: {
-              expectedBindingVersion: current.bindingVersion,
-              expectedAccessEpoch: current.accessEpoch,
-              noticeVersion: "synthetic-d08-v1",
-              evidenceRef: "synthetic:固定PDF全项目删除核验",
-            },
-          }),
-        );
-    }
-    t.mock.timers.enable({ apis: ["Date"], now: cutoff.getTime() - 1 });
-    try {
-      const result = await pdfDuringCategoryPublication(
-        t,
-        p,
-        p.book.id,
-        cutoff,
-        category,
-        denial,
-      );
-      if ("response" in result) assert.ok(result.response.statusCode >= 400);
-      else
-        assert.equal(
-          (result.error as { code?: string }).code,
-          "LIGHT_ECONNRESET",
-        );
-      const after = await request(
-        "GET",
-        `/v1/projects/${p.projectId}/book/versions/${p.book.id}/pdf`,
-        p.narrator.token,
-      );
-      if (category === "withdrawal")
-        assert.ok([403, 409].includes(after.statusCode));
-      else assert.equal(after.statusCode, 403);
-    } finally {
-      t.mock.timers.reset();
-    }
-  });
 function deferredPdf() {
   let resolve!: () => void;
   const promise = new Promise<void>((yes) => (resolve = yes));

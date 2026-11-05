@@ -4,8 +4,7 @@ import { randomUUID } from "node:crypto";
 import {
   startBookFixture,
   stopBookFixture,
-  bound,
-  choose,
+  joinedProject,
   request,
   data,
   app,
@@ -17,111 +16,14 @@ import Redis from "ioredis";
 import { Deletions } from "../src/care/deletions";
 before(startBookFixture);
 after(stopBookFixture);
-test("verified deletion immediately denies all private use and exposes separate cleanup layers to current participants", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
-  const statusUrl = `/v1/projects/${p.projectId}/deletion-status`;
-  assert.equal(
-    data(await request("GET", statusUrl, p.narrator.token), 200)
-      .onlineAccessStopped,
-    false,
-  );
-  const current = data(
-    await request(
-      "GET",
-      `/v1/projects/${p.projectId}/participation`,
-      p.narrator.token,
-    ),
-    200,
-  );
-  const opened = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/care-requests`,
-      p.narrator.token,
-      { kind: "delete", expectedBindingVersion: current.bindingVersion },
-    ),
-  );
-  const headers = await paymentAdmin(config, app, ["care:write", "audit:read"]);
-  const verified = data(
-    await app.inject({
-      method: "POST",
-      url: `/v1/admin/care-requests/${opened.id}/verify`,
-      headers: { ...headers, "idempotency-key": randomUUID() },
-      payload: {
-        expectedBindingVersion: current.bindingVersion,
-        expectedAccessEpoch: current.accessEpoch,
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: "synthetic:删除核验",
-      },
-    }),
-  );
-  assert.equal(verified.currentAccessRevoked, true);
-  const status = data(await request("GET", statusUrl, p.narrator.token), 200);
-  assert.equal(status.permanentProjectDeletion, true);
-  assert.equal(status.onlineAccessStopped, true);
-  assert.ok(
-    status.changes[0].items.some(
-      (x: any) => x.layer === "backup" && x.state === "awaiting_evidence",
-    ),
-  );
-  assert.ok(
-    status.changes[0].items.some(
-      (x: any) => x.layer === "supplier" && x.state === "awaiting_evidence",
-    ),
-  );
-  assert.equal(
-    (await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token))
-      .statusCode,
-    403,
-  );
-  assert.equal(
-    (
-      await request(
-        "POST",
-        `/v1/projects/${p.projectId}/consents`,
-        p.narrator.token,
-        {
-          purpose: "collection",
-          granted: true,
-          expectedBindingVersion: current.bindingVersion,
-          expectedAccessEpoch: status.accessEpoch,
-          noticeVersion: "synthetic-d08-v1",
-          evidenceRef: "synthetic:不得复活",
-        },
-      )
-    ).statusCode,
-    403,
-  );
-  const plan = await db.$queryRawUnsafe<any[]>(
-    "SELECT content FROM plan_revisions WHERE project_id=$1::uuid",
-    p.projectId,
-  );
-  assert.ok(plan.length > 0);
-  assert.ok(plan.every((x) => x.content === null));
-  const unrelated = await bound();
-  data(
-    (await choose(unrelated, unrelated.narrator.token, "collection", true))
-      .response,
-  );
-  assert.equal(
-    (
-      await request(
-        "GET",
-        `/v1/projects/${unrelated.projectId}/plan`,
-        unrelated.narrator.token,
-      )
-    ).statusCode,
-    200,
-  );
-});
+
 import { readyReservedFirstCopy } from "./first-copy-fixture";
 import { ERASURE_REGISTRY } from "../src/care/erasure-registry";
 import { readFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import { supplierRefunds } from "./payment-fixture";
 import { interview, storyPhoto } from "./book-fixture";
-async function eraseProject(p: Awaited<ReturnType<typeof bound>>) {
+async function eraseProject(p: Awaited<ReturnType<typeof joinedProject>>) {
   const current = data(
     await request(
       "GET",
@@ -212,7 +114,7 @@ test("all historical payloads and owned files disappear while minimum version an
   assert.ok(targetCaps.some((key) => key.includes(":photo:upload:")));
   const lateCapability = await redis.get(targetCaps[0]);
   assert.ok(lateCapability);
-  const control = await bound(),
+  const control = await joinedProject(),
     controlInterview = await interview(control, false);
   await sealedClip(control, controlInterview.id);
   const controlCaps = await capabilities(control.projectId);
@@ -261,7 +163,7 @@ test("all historical payloads and owned files disappear while minimum version an
   assert.equal(shell.materialsUnavailable, true);
 });
 test("deletion preserves a later synthetic refund request, reservation, reconciliation and minimum money facts without new private evidence", async () => {
-  const p = await bound();
+  const p = await joinedProject();
   await interview(p, false);
   await eraseProject(p);
   const body = {
@@ -322,7 +224,7 @@ import {
 import { PrivacyJournal } from "../src/privacy-journal/privacy-journal";
 test("random sealing ownership is durable before I/O and a provider write completed after deletion is swept by its exact captured target", async () => {
   const control = await readyStory(),
-    p = await bound(),
+    p = await joinedProject(),
     i = await interview(p, false);
   let enter!: () => void, release!: () => void;
   const entered = new Promise<void>((r) => (enter = r)),
@@ -391,9 +293,9 @@ test("random sealing ownership is durable before I/O and a provider write comple
   );
 });
 test("a committed tombstone also denies payload-only updates before a failed erase is retried, and matching another project row is rejected", async () => {
-  const p = await bound(),
-    control = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject(),
+    control = await joinedProject();
+
   await db.paymentSubmission.upsert({
     where: { orderId: p.orderId },
     create: { orderId: p.orderId, parameters: { privateCapability: "old" } },

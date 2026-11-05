@@ -68,6 +68,7 @@ function harness() {
       page.setData = (patch: object) => Object.assign(page.data, patch);
     },
     wx: {
+      env: { USER_DATA_PATH: "/user-data" },
       getStorageSync: (key: string) => structuredClone(storage.get(key)),
       setStorageSync: (key: string, value: unknown) => storage.set(key, value),
       removeStorageSync: (key: string) => storage.delete(key),
@@ -167,7 +168,7 @@ test("pending merchant orders can reopen native payment and paid orders open the
   assert.equal(page.data.actualPrice, "0.01");
   assert.equal(page.data.activeOrder.project.id, paidOrder.project.id);
   page.project();
-  assert.equal(routes[0], "/pages/project/index");
+  assert.equal(routes[0], "/pages/home/index");
   assert.equal(
     storage.get(
       `timenook.live-project.v1:${login.user.id}:${login.session.id}`,

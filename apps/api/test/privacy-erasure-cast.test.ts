@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { Deletions } from "../src/care/deletions";
 import {
   app,
-  bound,
+  joinedProject,
   data,
   db,
   readyStory,
@@ -26,7 +26,7 @@ before(async () => {
   await startBookFixture();
   const p = await readyStory();
   projectId = p.projectId;
-  otherProjectId = (await bound()).projectId;
+  otherProjectId = (await joinedProject()).projectId;
   const revision = await db.storyRevision.findUniqueOrThrow({
     where: { id: p.story.revision.id },
   });

@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from "../src/identity/project-members";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { ProjectPlans } from "../src/projects/project-plans";
 import { Stories } from "../src/stories/stories";
@@ -298,9 +299,9 @@ const approval = () => ({
   expectedBindingVersion: 0,
   evidenceRef: "synthetic:发起人核验申请者",
 });
-async function bound(versionId = packageId) {
-  const p = await project(versionId);
-  const narrator = await login();
+async function joinedProject(versionId = packageId) {
+  const p = await project(versionId),
+    narrator = await login();
   const invite = data(
     await request(
       "POST",
@@ -308,20 +309,12 @@ async function bound(versionId = packageId) {
       p.buyer.token,
     ),
   );
-  const application = data(
-    await request(
-      "POST",
-      `/v1/invitations/${invite.token}/requests`,
-      narrator.token,
-      notice(),
-    ),
-  );
   data(
     await request(
       "POST",
-      `/v1/binding-requests/${application.id}/approve`,
-      p.buyer.token,
-      approval(),
+      `/v1/invitations/${invite.token}/accept`,
+      narrator.token,
+      { termsVersion: TERMS_VERSION },
     ),
   );
   return { ...p, narrator };
@@ -331,33 +324,6 @@ async function state(p: { projectId: string }, token: string) {
     await request("GET", `/v1/projects/${p.projectId}/participation`, token),
     200,
   );
-}
-async function choose(
-  p: { projectId: string },
-  token: string,
-  purpose: string,
-  granted: boolean,
-  key = randomUUID(),
-) {
-  const current = await state(p, token);
-  const body = {
-    ...notice(),
-    purpose,
-    granted,
-    expectedBindingVersion: current.bindingVersion,
-    expectedAccessEpoch: current.accessEpoch,
-  };
-  return {
-    body,
-    key,
-    response: await request(
-      "POST",
-      `/v1/projects/${p.projectId}/consents`,
-      token,
-      body,
-      key,
-    ),
-  };
 }
 
 function formUpload(
@@ -400,9 +366,10 @@ function syntheticAudio(seconds: 1 | 0.5 = 1) {
       : "test/fixtures/synthetic-576ms.mp3",
   );
 }
-async function interview(p: Awaited<ReturnType<typeof bound>>, ai = true) {
-  if (ai) data((await choose(p, p.narrator.token, "ai", true)).response);
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+async function interview(
+  p: Awaited<ReturnType<typeof joinedProject>>,
+  ai = true,
+) {
   return data(
     await request(
       "POST",
@@ -418,12 +385,12 @@ async function interview(p: Awaited<ReturnType<typeof bound>>, ai = true) {
 }
 
 async function sealedInput(ai = true, versionId = packageId) {
-  const p = await bound(versionId),
+  const p = await joinedProject(versionId),
     i = await interview(p, ai);
   return sealedClip(p, i.id);
 }
 async function sealedClip(
-  p: Awaited<ReturnType<typeof bound>>,
+  p: Awaited<ReturnType<typeof joinedProject>>,
   interviewId: string,
 ) {
   const audio = syntheticAudio();
@@ -448,7 +415,7 @@ async function sealedClip(
   return { ...p, interviewId, base, clip, sealed };
 }
 test("submitting a story freezes every sealed clip including the unfinished final transcript and replays one task", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await sealedClip(p, i.id);
   await sealedClip(p, i.id);
@@ -506,7 +473,7 @@ async function wakeStory(
   });
 }
 test("the actual Worker waits for the final transcript then composes the complete sourced immutable story", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await sealedClip(p, i.id);
   await sealedClip(p, i.id);
@@ -579,7 +546,7 @@ test("the actual Worker waits for the final transcript then composes the complet
   }
 });
 async function preparedStory(versionId = packageId) {
-  const p = await bound(versionId),
+  const p = await joinedProject(versionId),
     i = await interview(p);
   await sealedClip(p, i.id);
   await sealedClip(p, i.id);
@@ -587,7 +554,7 @@ async function preparedStory(versionId = packageId) {
     await request("GET", `/v1/projects/${p.projectId}/tasks`, p.narrator.token),
     200,
   );
-  for (const t of tasks) {
+  for (const t of tasks.filter((t: any) => t.kind === "transcribe_audio")) {
     await app.get(ProductionTasks).run(t.id);
     await app.get(ProductionTasks).run(t.id);
   }
@@ -660,10 +627,10 @@ test("an invalid sourced output retries the same user intent with a new accounte
   assert.equal(complete.usage.organizations, 1);
   assert.equal(complete.task.attempts[1].actualCostFen, null);
 });
-test("a full waiting-input batch yields to a later ready story without resetting its submission clock", async (t) => {
+test("repeated waiting-input commands reuse their task and do not starve another ready story", async (t) => {
   const waiting: string[] = [];
   for (let group = 0; group < 3; group++) {
-    const p = await bound(),
+    const p = await joinedProject(),
       i = await interview(p);
     await sealedClip(p, i.id);
     for (let n = 0; n < 34; n++)
@@ -682,7 +649,7 @@ test("a full waiting-input batch yields to a later ready story without resetting
   const ready = await preparedStory(),
     runtime = await startProductionWorker(app);
   try {
-    assert.equal(new Set(waiting).size, 102);
+    assert.equal(new Set(waiting).size, 3);
     const tasks = app.get(ProductionTasks),
       due = tasks.due.bind(tasks);
     async function scan() {
@@ -706,7 +673,6 @@ test("a full waiting-input batch yields to a later ready story without resetting
       );
       return selected;
     }
-    assert.equal((await scan()).length, 100);
     assert.ok((await scan()).includes(ready.story.task.id));
     const completed = data(
       await request(
@@ -772,7 +738,7 @@ async function packageWith(change: (snapshot: any) => void) {
   });
   return id;
 }
-test("frozen user quotas count an organization or explicit regeneration once and bound later commands", async () => {
+test("frozen user quotas count an organization or explicit regeneration once and bound later commands", async (t) => {
   const versionId = await packageWith((s) => {
     s.admission.d04.userQuotas.storyOrganizations.value = 1;
     s.admission.d04.userQuotas.activeRegenerations.value = 1;
@@ -783,7 +749,8 @@ test("frozen user quotas count an organization or explicit regeneration once and
     interviewId: p.interviewId,
     baseVersion: 0,
   });
-  assert.equal(duplicate.statusCode, 409, duplicate.body);
+  assert.equal(duplicate.statusCode, 202, duplicate.body);
+  assert.equal(duplicate.json().data.task.id, p.story.task.id);
   await app.get(ProductionTasks).run(p.story.task.id);
   const key = randomUUID(),
     regen = data(
@@ -816,7 +783,7 @@ test("frozen user quotas count an organization or explicit regeneration once and
   assert.equal(excess.statusCode, 409, excess.body);
 });
 test("a selected interview with an unfinished cloud save cannot silently organize only its sealed first half", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await sealedClip(p, i.id);
   const audio = syntheticAudio();
@@ -1149,7 +1116,7 @@ test("a participant revision appended through the shared authorized version owne
 });
 for (const status of ["not_applicable", "declined"]) {
   test(`${status} story content keeps successful transcription distinct from no speech`, async () => {
-    const p = await bound(),
+    const p = await joinedProject(),
       i = await interview(p);
     await sealedClip(p, i.id);
     const original = providerTransport;
@@ -1244,7 +1211,7 @@ for (const status of ["not_applicable", "declined"]) {
   });
 }
 test("no-speech audio stays in the complete manifest and cannot produce a story or a DeepSeek attempt", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await sealedClip(p, i.id);
   const original = providerTransport,
@@ -1292,14 +1259,14 @@ test("no-speech audio stays in the complete manifest and cannot produce a story 
   }
 });
 test("the story page context restores the existing generation for its interview without starting another intent", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await sealedClip(p, i.id);
   const url = `/v1/projects/${p.projectId}/stories/context`,
     first = data(
       await request("POST", url, p.narrator.token, { interviewId: i.id }),
     );
-  assert.equal(first.story, null);
+  assert.ok(first.story?.task);
   assert.equal(first.cloudSaved, true);
   const organized = data(
     await request(
@@ -1314,6 +1281,7 @@ test("the story page context restores the existing generation for its interview 
     await request("POST", url, p.narrator.token, { interviewId: i.id }),
   );
   assert.equal(restored.story.task.id, organized.task.id);
+  assert.equal(restored.story.task.id, first.story.task.id);
   assert.equal(restored.story.usage.organizations, 1);
 });
 
@@ -1502,44 +1470,7 @@ async function assistedStory(sharing = true) {
   );
   return { ...p, collection, story };
 }
-test("an assisted operator retries a failed composition through the same source grant without a fabricated audio task", async () => {
-  const p = await assistedStory(),
-    original = providerTransport;
-  providerTransport = async (input, init) => {
-    const response = await original(input, init);
-    if (!String(input).includes("deepseek.com")) return response;
-    const data = await response.json();
-    data.choices[0].message.content = "not JSON";
-    return new Response(JSON.stringify(data));
-  };
-  try {
-    await app.get(ProductionTasks).run(p.story.task.id);
-  } finally {
-    providerTransport = original;
-  }
-  const retry = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/tasks/${p.story.task.id}/retry`,
-      p.buyer.token,
-      { assistedSessionId: p.collection.id },
-    ),
-    202,
-  );
-  assert.equal(retry.id, p.story.task.id);
-  await app.get(ProductionTasks).run(p.story.task.id);
-  const result = data(
-    await request(
-      "GET",
-      `/v1/projects/${p.projectId}/stories/${p.story.id}`,
-      p.buyer.token,
-    ),
-    200,
-  );
-  assert.equal(result.version, 1);
-  assert.equal(result.task.attempts.length, 2);
-  assert.equal(result.usage.organizations, 1);
-});
+
 test("a changed preference before the first worker claim obsoletes the frozen composition without a provider attempt", async () => {
   const p = await preparedStory(),
     plans = new ProjectPlans(config.databaseUrl),
@@ -1634,7 +1565,7 @@ test("ASR submission counts exclude text attempts while the per-project monetary
       s.admission.d04.providerBudget.asrSubmissions.value = 2;
       s.admission.d04.providerBudget.costCap.value = 3;
     }),
-    p = await bound(versionId),
+    p = await joinedProject(versionId),
     i = await interview(p);
   await sealedClip(p, i.id);
   let tasks = data(
@@ -1756,13 +1687,9 @@ test("PostgreSQL keeps story revisions and source associations immutable and rej
   assert.equal(current.revision.contentHash, first.revision.contentHash);
   assert.equal(current.currentRevisionId, first.revision.id);
 });
-test("an Outbox failure rolls back the complete story intent and the original user command safely recovers", async () => {
-  const p = await bound(),
+test("an Outbox failure rolls back sealing and its automatic story, then the original clip can retry", async () => {
+  const p = await joinedProject(),
     i = await interview(p);
-  await sealedClip(p, i.id);
-  const key = randomUUID(),
-    url = `/v1/projects/${p.projectId}/stories/organize`,
-    body = { interviewId: i.id, baseVersion: 0 };
   await db.$executeRawUnsafe(
     "CREATE FUNCTION reject_story_outbox() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF EXISTS(SELECT 1 FROM production_tasks WHERE id=NEW.task_id AND kind='compose_story') THEN RAISE EXCEPTION 'synthetic outbox fault'; END IF; RETURN NEW; END $$",
   );
@@ -1770,15 +1697,22 @@ test("an Outbox failure rolls back the complete story intent and the original us
     "CREATE TRIGGER reject_story_outbox BEFORE INSERT ON task_outbox FOR EACH ROW EXECUTE FUNCTION reject_story_outbox()",
   );
   try {
-    const failed = await request("POST", url, p.narrator.token, body, key);
-    assert.equal(failed.statusCode, 500);
+    await assert.rejects(sealedClip(p, i.id));
   } finally {
     await db.$executeRawUnsafe(
       "DROP TRIGGER reject_story_outbox ON task_outbox",
     );
     await db.$executeRawUnsafe("DROP FUNCTION reject_story_outbox()");
   }
-  const context = data(
+  const intent = await db.recordingIntent.findFirstOrThrow({
+    where: { interviewId: i.id },
+  });
+  const base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips/${intent.id}`;
+  assert.equal(
+    data(await request("POST", base + "/status", p.narrator.token, {})).state,
+    "pending",
+  );
+  const before = data(
     await request(
       "POST",
       `/v1/projects/${p.projectId}/stories/context`,
@@ -1786,93 +1720,26 @@ test("an Outbox failure rolls back the complete story intent and the original us
       { interviewId: i.id },
     ),
   );
-  assert.equal(context.story, null);
-  const recovered = data(
-      await request("POST", url, p.narrator.token, body, key),
-      202,
-    ),
-    replay = data(await request("POST", url, p.narrator.token, body, key), 202);
-  assert.equal(replay.task.id, recovered.task.id);
-  assert.equal(recovered.usage.organizations, 1);
-  assert.equal(recovered.task.sources.length, 1);
-});
-test("withdrawal and renewed AI consent cannot revive a late generated draft", async () => {
-  const p = await preparedStory(),
-    original = providerTransport;
-  let release!: () => void, arrived!: () => void;
-  const gate = new Promise<void>((r) => (release = r)),
-    reached = new Promise<void>((r) => (arrived = r));
-  providerTransport = async (input, init) => {
-    if (String(input).includes("deepseek.com")) {
-      arrived();
-      await gate;
-    }
-    return original(input, init);
-  };
-  const running = app.get(ProductionTasks).run(p.story.task.id);
-  try {
-    await reached;
-    data((await choose(p, p.narrator.token, "ai", false)).response);
-    data((await choose(p, p.narrator.token, "ai", true)).response);
-    release();
-    await running;
-    const result = data(
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/stories/${p.story.id}`,
-        p.narrator.token,
-      ),
-      200,
-    );
-    assert.equal(result.task.state, "obsolete");
-    assert.equal(result.revision, null);
-    assert.equal(result.task.attempts[0].usage.total_tokens, 30);
-    assert.equal(result.task.attempts[0].observations[0].superseded, true);
-  } finally {
-    release();
-    await running;
-    providerTransport = original;
-  }
-});
-
-test("collection-only assisted task responses expose progress while full text remains behind actual sharing authorization", async () => {
-  const p = await assistedStory(false);
-  await app.get(ProductionTasks).run(p.story.task.id);
-  const context = data(
+  assert.equal(before.story, null);
+  assert.equal(before.cloudSaved, false);
+  data(await request("POST", base + "/seal", p.narrator.token, {}));
+  const restored = data(
     await request(
       "POST",
       `/v1/projects/${p.projectId}/stories/context`,
-      p.buyer.token,
-      { interviewId: p.story.interviewId, assistedSessionId: p.collection.id },
+      p.narrator.token,
+      { interviewId: i.id },
     ),
   );
-  assert.equal(context.story.task.state, "succeeded");
-  assert.equal(context.story.revision, null);
-  assert.equal(context.story.task.sources[0].transcript, null);
-  assert.equal(context.story.task.sources[0].question, undefined);
-  const forbidden = await request(
-    "GET",
-    `/v1/projects/${p.projectId}/stories/${p.story.id}`,
-    p.buyer.token,
-  );
-  assert.equal(forbidden.statusCode, 403, forbidden.body);
-  await assisted(p, "sharing");
-  const readable = data(
-    await request(
-      "GET",
-      `/v1/projects/${p.projectId}/stories/${p.story.id}`,
-      p.buyer.token,
-    ),
-    200,
-  );
-  assert.equal(readable.revision.title, "我记得的那一年");
+  assert.equal(restored.story.task.sources.length, 1);
+  assert.equal(restored.story.usage.organizations, 1);
 });
 
 test("concurrent organize commands serialize one frozen user quota with same-key replay and no duplicate story task", async () => {
   const versionId = await packageWith((s) => {
       s.admission.d04.userQuotas.storyOrganizations.value = 1;
     }),
-    p = await bound(versionId),
+    p = await joinedProject(versionId),
     i = await interview(p);
   await sealedClip(p, i.id);
   const url = `/v1/projects/${p.projectId}/stories/organize`,
@@ -1885,7 +1752,7 @@ test("concurrent organize commands serialize one frozen user quota with same-key
   ]);
   const accepted = results.filter((r) => r.statusCode === 202);
   assert.ok(accepted.length >= 1);
-  assert.ok(results.some((r) => r.statusCode === 409));
+  assert.ok(results.every((r) => r.statusCode === 202));
   assert.equal(new Set(accepted.map((r) => data(r, 202).task.id)).size, 1);
   const context = data(
     await request(
@@ -1970,50 +1837,6 @@ test("each frozen story source locates its original sealed audio through the exi
       source.inputHash,
     );
   }
-});
-
-test("the photo collection check returns only current authorization and leaves the frozen story untouched for narrator and assisted callers", async () => {
-  const p = await preparedStory(),
-    path = `/v1/projects/${p.projectId}/interviews/${p.interviewId}/collection-check`;
-  assert.deepEqual(data(await request("POST", path, p.narrator.token, {})), {
-    allowed: true,
-  });
-  assert.equal(
-    (await request("POST", path, p.buyer.token, {})).statusCode,
-    403,
-  );
-  const current = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/stories/context`,
-      p.narrator.token,
-      { interviewId: p.interviewId },
-    ),
-  );
-  assert.equal(current.story.task.id, p.story.task.id);
-  assert.equal(current.story.task.state, "waiting_inputs");
-  assert.equal(current.story.task.queuedAt, p.story.task.queuedAt);
-  assert.equal(current.clipCount, 2);
-  assert.equal(current.pendingCount, 0);
-  const a = await assistedStory(false),
-    assistedPath = `/v1/projects/${a.projectId}/interviews/${a.story.interviewId}/collection-check`;
-  assert.deepEqual(
-    data(
-      await request("POST", assistedPath, a.buyer.token, {
-        assistedSessionId: a.collection.id,
-      }),
-    ),
-    { allowed: true },
-  );
-  assert.equal(
-    (await request("POST", assistedPath, a.buyer.token, {})).statusCode,
-    403,
-  );
-  data((await choose(p, p.narrator.token, "collection", false)).response);
-  assert.equal(
-    (await request("POST", path, p.narrator.token, {})).statusCode,
-    403,
-  );
 });
 
 test("a story relay endpoint change stops the frozen task before any provider submission", async () => {

@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from "../src/identity/project-members";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
@@ -196,9 +197,9 @@ const approval = () => ({
   expectedBindingVersion: 0,
   evidenceRef: "synthetic:发起人核验申请者",
 });
-async function bound(versionId = packageId) {
-  const p = await project(versionId);
-  const narrator = await login();
+async function joinedProject(versionId = packageId) {
+  const p = await project(versionId),
+    narrator = await login();
   const invite = data(
     await request(
       "POST",
@@ -206,20 +207,12 @@ async function bound(versionId = packageId) {
       p.buyer.token,
     ),
   );
-  const application = data(
-    await request(
-      "POST",
-      `/v1/invitations/${invite.token}/requests`,
-      narrator.token,
-      notice(),
-    ),
-  );
   data(
     await request(
       "POST",
-      `/v1/binding-requests/${application.id}/approve`,
-      p.buyer.token,
-      approval(),
+      `/v1/invitations/${invite.token}/accept`,
+      narrator.token,
+      { termsVersion: TERMS_VERSION },
     ),
   );
   return { ...p, narrator };
@@ -230,37 +223,10 @@ async function state(p: { projectId: string }, token: string) {
     200,
   );
 }
-async function choose(
-  p: { projectId: string },
-  token: string,
-  purpose: string,
-  granted: boolean,
-  key = randomUUID(),
-) {
-  const current = await state(p, token);
-  const body = {
-    ...notice(),
-    purpose,
-    granted,
-    expectedBindingVersion: current.bindingVersion,
-    expectedAccessEpoch: current.accessEpoch,
-  };
-  return {
-    body,
-    key,
-    response: await request(
-      "POST",
-      `/v1/projects/${p.projectId}/consents`,
-      token,
-      body,
-      key,
-    ),
-  };
-}
 
 test("a currently authorized narrator captures a stable actual plan question in an interview", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const plan = data(
     await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token),
     200,
@@ -283,7 +249,7 @@ test("a currently authorized narrator captures a stable actual plan question in 
   assert.equal(replay.id, created.id);
   assert.equal(
     (
-      await request("POST", url, p.buyer.token, {
+      await request("POST", url, (await login()).token, {
         ...command,
         clientInterviewId: randomUUID(),
       })
@@ -298,8 +264,8 @@ test("a currently authorized narrator captures a stable actual plan question in 
 });
 
 test("self-written and rewritten questions preserve their actual source without letting clients replace a plan question", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const url = `/v1/projects/${p.projectId}/interviews`;
   const command = {
     clientInterviewId: randomUUID(),
@@ -413,7 +379,7 @@ function syntheticAudio(seconds: 1 | 0.5 = 1) {
   );
 }
 test("displaying a rewritten question appends actual history within the same interview and preserves its starting question", async () => {
-  const p = await bound();
+  const p = await joinedProject();
   const started = await interview(p);
   const base = `/v1/projects/${p.projectId}/interviews/${started.id}`;
   const command = {
@@ -468,7 +434,7 @@ test("displaying a rewritten question appends actual history within the same int
   );
 });
 test("recording permission pins the displayed question while later sealing preserves each original answer source", async () => {
-  const p = await bound();
+  const p = await joinedProject();
   const started = await interview(p);
   const base = `/v1/projects/${p.projectId}/interviews/${started.id}`;
   const permission = data(
@@ -537,54 +503,9 @@ test("recording permission pins the displayed question while later sealing prese
     [permission.actualQuestionId, displayed.currentQuestion.id].sort(),
   );
 });
-test("actual-question display serializes the current version and requires live collection permission", async () => {
-  const p = await bound(),
-    started = await interview(p);
-  const base = `/v1/projects/${p.projectId}/interviews/${started.id}`;
-  const command = {
-    expectedVersion: 1,
-    expectedActualQuestionId: started.actualQuestion.id,
-    expectedPlanRevision: 1,
-    selfWritten: { text: "这件事您还想补充什么？", intent: "本人补充" },
-  };
-  const responses = await Promise.all(
-    [1, 2].map(() =>
-      request("POST", `${base}/actual-question`, p.narrator.token, {
-        ...command,
-        clientQuestionId: randomUUID(),
-      }),
-    ),
-  );
-  assert.deepEqual(responses.map((r) => r.statusCode).sort(), [201, 409]);
-  const current = data(await request("GET", base, p.narrator.token), 200);
-  assert.equal(current.questionHistory.length, 2);
-  assert.equal(
-    (
-      await request("POST", `${base}/actual-question`, p.narrator.token, {
-        ...command,
-        clientQuestionId: randomUUID(),
-        expectedPlanRevision: 999,
-        expectedVersion: 2,
-        expectedActualQuestionId: current.currentQuestion.id,
-      })
-    ).statusCode,
-    409,
-  );
-  data((await choose(p, p.narrator.token, "collection", false)).response);
-  assert.equal(
-    (
-      await request("POST", `${base}/actual-question`, p.narrator.token, {
-        ...command,
-        clientQuestionId: randomUUID(),
-        expectedVersion: 2,
-        expectedActualQuestionId: current.currentQuestion.id,
-      })
-    ).statusCode,
-    403,
-  );
-});
+
 test("an original upload with an unknown response replays its old command when the restored manifest includes its question", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     started = await interview(p);
   const base = `/v1/projects/${p.projectId}/interviews/${started.id}/clips`;
   const bytes = syntheticAudio(),
@@ -609,8 +530,7 @@ test("an original upload with an unknown response replays its old command when t
   assert.equal(restored.id, original.id);
   assert.equal(restored.actualQuestionId, started.actualQuestion.id);
 });
-async function interview(p: Awaited<ReturnType<typeof bound>>) {
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+async function interview(p: Awaited<ReturnType<typeof joinedProject>>) {
   return data(
     await request(
       "POST",
@@ -625,7 +545,7 @@ async function interview(p: Awaited<ReturnType<typeof bound>>) {
   );
 }
 test("a stable upload intent seals a real verified MP3 once and restores asset, usage and durable input event together", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p),
     audio = syntheticAudio();
   const base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
@@ -680,7 +600,7 @@ test("a stable upload intent seals a real verified MP3 once and restores asset, 
 });
 
 test("HTTP keys reject different commands while a released reservation cannot double count or admit another interview's clip", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p),
     audio = syntheticAudio();
   const base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
@@ -772,7 +692,7 @@ test("HTTP keys reject different commands while a released reservation cannot do
 });
 
 test("recording remains available beyond 2099 and an expired upload grant can be renewed without losing a pending clip", async (t) => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p),
     audio = syntheticAudio(),
     base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
@@ -839,7 +759,7 @@ test("recording remains available beyond 2099 and an expired upload grant can be
 });
 
 test("copy followed by database failure remains pending and recovers the same file, quota and unique event", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p),
     audio = syntheticAudio(),
     base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
@@ -914,74 +834,9 @@ test("copy followed by database failure remains pending and recovers the same fi
   );
 });
 
-test("withdrawal during object copying fences the final transaction and retains the pending intent", async () => {
-  const p = await bound(),
-    i = await interview(p),
-    audio = syntheticAudio(),
-    base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
-  const intent = data(
-    await request("POST", base, p.narrator.token, {
-      clientClipId: randomUUID(),
-      bytes: audio.length,
-      sha256: createHash("sha256").update(audio).digest("hex"),
-    }),
-  );
-  const form = data(
-    await request("POST", `${base}/${intent.id}/upload`, p.narrator.token, {}),
-  );
-  assert.equal(
-    (await formUpload(app, form, audio, {}, p.narrator.token)).statusCode,
-    204,
-  );
-  class RevokingObjects extends LocalProbeObjects {
-    override async copy(source: string, target: string) {
-      await super.copy(source, target);
-      data((await choose(p, p.narrator.token, "collection", false)).response);
-    }
-  }
-  const isolated = await createApplication(config, {
-    wechatFetch,
-    paymentFetch,
-    recordingObjects: new RevokingObjects(root),
-  });
-  try {
-    assert.equal(
-      (
-        await request(
-          "POST",
-          `${base}/${intent.id}/seal`,
-          p.narrator.token,
-          {},
-          randomUUID(),
-          isolated,
-        )
-      ).statusCode,
-      403,
-    );
-  } finally {
-    await isolated.close();
-  }
-  assert.equal(
-    (await request("GET", `${base}/${intent.id}`, p.narrator.token)).statusCode,
-    403,
-  );
-  data((await choose(p, p.narrator.token, "collection", true)).response);
-  const restored = data(
-    await request("GET", `${base}/${intent.id}`, p.narrator.token),
-    200,
-  );
-  assert.equal(restored.state, "pending");
-  assert.equal(restored.asset, null);
-  assert.equal(
-    (await request("POST", `${base}/${intent.id}/seal`, p.narrator.token, {}))
-      .statusCode,
-    403,
-  );
-});
-
 test("recording question choices use the edited personal plan and exclude every unavailable or forbidden question", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const planUrl = `/v1/projects/${p.projectId}/plan`;
   const initial = data(await request("GET", planUrl, p.narrator.token), 200);
   const original = initial.chapters[0].questions[0];
@@ -1048,189 +903,8 @@ test("recording question choices use the edited personal plan and exclude every 
   assert.equal(started.actualQuestion.snapshot.text, "本人问题：another");
 });
 
-test("collection-only actual-question commands return the current recording context without private question history", async () => {
-  const p = await project(),
-    current = await state(p, p.buyer.token);
-  const session = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/assisted-sessions`,
-      p.buyer.token,
-      {
-        ...notice(),
-        purpose: "collection",
-        granted: true,
-        expectedBindingVersion: 0,
-        expectedAccessEpoch: current.accessEpoch,
-      },
-    ),
-  );
-  const collection = { assistedSessionId: session.id };
-  const startCommand = {
-    ...collection,
-    clientInterviewId: randomUUID(),
-    expectedPlanRevision: 1,
-    starterKind: "free-narration",
-  };
-  const base = `/v1/projects/${p.projectId}/interviews`;
-  const started = data(
-    await request("POST", base, p.buyer.token, startCommand),
-  );
-  assert.equal(started.questionHistory, undefined);
-  const displayed = data(
-    await request(
-      "POST",
-      `${base}/${started.id}/actual-question`,
-      p.buyer.token,
-      {
-        ...collection,
-        clientQuestionId: randomUUID(),
-        expectedVersion: 1,
-        expectedActualQuestionId: started.actualQuestion.id,
-        expectedPlanRevision: 1,
-        selfWritten: {
-          text: "您想补充哪个细节？",
-          intent: "本人选择的补充问题",
-        },
-      },
-    ),
-  );
-  assert.equal(displayed.currentQuestion.snapshot.text, "您想补充哪个细节？");
-  assert.equal(displayed.questionHistory, undefined);
-  const replay = data(await request("POST", base, p.buyer.token, startCommand));
-  assert.equal(replay.questionHistory, undefined);
-  assert.equal(replay.currentQuestion.id, displayed.currentQuestion.id);
-});
-
-test("collection-only assisted operators start and resume their own pending intent without gaining private history or original audio", async () => {
-  const p = await project(),
-    current = await state(p, p.buyer.token);
-  const session = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/assisted-sessions`,
-      p.buyer.token,
-      {
-        ...notice(),
-        purpose: "collection",
-        granted: true,
-        expectedBindingVersion: 0,
-        expectedAccessEpoch: current.accessEpoch,
-      },
-    ),
-  );
-  const collection = { assistedSessionId: session.id };
-  assert.equal(
-    (
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/interviews`,
-        p.buyer.token,
-      )
-    ).statusCode,
-    403,
-  );
-  const context = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/interviews/context`,
-      p.buyer.token,
-      collection,
-    ),
-  );
-  assert.equal(context.interviews.length, 0);
-  assert.equal(context.canRecord, true);
-  const i = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/interviews`,
-      p.buyer.token,
-      {
-        ...collection,
-        clientInterviewId: randomUUID(),
-        expectedPlanRevision: context.plan.revision,
-        starterKind: "free-narration",
-      },
-    ),
-  );
-  const base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`,
-    audio = syntheticAudio();
-  const pending = data(
-    await request("POST", base, p.buyer.token, {
-      ...collection,
-      clientClipId: randomUUID(),
-      bytes: audio.length,
-      sha256: createHash("sha256").update(audio).digest("hex"),
-    }),
-  );
-  assert.equal(
-    data(
-      await request(
-        "POST",
-        `/v1/projects/${p.projectId}/interviews/${i.id}/resume`,
-        p.buyer.token,
-        collection,
-      ),
-    ).clips[0].id,
-    pending.id,
-  );
-  assert.equal(
-    data(
-      await request(
-        "POST",
-        `${base}/${pending.id}/status`,
-        p.buyer.token,
-        collection,
-      ),
-    ).state,
-    "pending",
-  );
-  assert.equal(
-    (await request("GET", `${base}/${pending.id}`, p.buyer.token)).statusCode,
-    403,
-  );
-  const form = data(
-    await request(
-      "POST",
-      `${base}/${pending.id}/upload`,
-      p.buyer.token,
-      collection,
-    ),
-  );
-  assert.equal(
-    (await formUpload(app, form, audio, {}, p.buyer.token)).statusCode,
-    204,
-  );
-  const sealed = data(
-    await request(
-      "POST",
-      `${base}/${pending.id}/seal`,
-      p.buyer.token,
-      collection,
-    ),
-  );
-  assert.equal(sealed.state, "sealed");
-  assert.equal(
-    data(
-      await request(
-        "POST",
-        `${base}/${pending.id}/seal`,
-        p.buyer.token,
-        collection,
-      ),
-    ).sealedInput.id,
-    sealed.sealedInput.id,
-  );
-  assert.equal(
-    (await request("GET", `${base}/${pending.id}/content`, p.buyer.token))
-      .statusCode,
-    403,
-  );
-  assert.equal((await state(p, p.buyer.token)).canProcessAi, false);
-});
-
 test("a late seal cannot overwrite an already verified final object through a concurrently replaced staging file", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p),
     audio = syntheticAudio(),
     base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
@@ -1341,7 +1015,7 @@ test("a legitimate short clip can use the remaining frozen quota and concurrent 
       },
     },
   });
-  const p = await bound(versionId),
+  const p = await joinedProject(versionId),
     i = await interview(p),
     base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
   async function intent(seconds: 1 | 0.5) {
@@ -1424,83 +1098,8 @@ test("a legitimate short clip can use the remaining frozen quota and concurrent 
   );
 });
 
-test("private original audio rechecks sharing after I/O and applies bounded Range without requiring a new recording term", async () => {
-  const p = await bound(),
-    i = await interview(p),
-    audio = syntheticAudio(),
-    base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
-  const intent = data(
-    await request("POST", base, p.narrator.token, {
-      clientClipId: randomUUID(),
-      bytes: audio.length,
-      sha256: createHash("sha256").update(audio).digest("hex"),
-    }),
-  );
-  const form = data(
-    await request("POST", `${base}/${intent.id}/upload`, p.narrator.token, {}),
-  );
-  assert.equal(
-    (await formUpload(app, form, audio, {}, p.narrator.token)).statusCode,
-    204,
-  );
-  data(
-    await request("POST", `${base}/${intent.id}/seal`, p.narrator.token, {}),
-  );
-  data((await choose(p, p.narrator.token, "sharing", true)).response);
-  const content = await request(
-    "GET",
-    `${base}/${intent.id}/content`,
-    p.buyer.token,
-  );
-  assert.equal(content.statusCode, 200);
-  assert.equal(content.headers["cache-control"], "private, no-store");
-  assert.deepEqual(content.rawPayload, audio);
-  const range = await app.inject({
-    method: "GET",
-    url: `${base}/${intent.id}/content`,
-    headers: { authorization: `Bearer ${p.buyer.token}`, range: "bytes=0-9" },
-  });
-  assert.equal(range.statusCode, 206);
-  assert.deepEqual(range.rawPayload, audio.subarray(0, 10));
-  class RevokingRead extends LocalProbeObjects {
-    override async read(key: string) {
-      const bytes = await super.read(key);
-      if (key.startsWith("sealed/"))
-        data((await choose(p, p.narrator.token, "sharing", false)).response);
-      return bytes;
-    }
-  }
-  const isolated = await createApplication(config, {
-    wechatFetch,
-    paymentFetch,
-    recordingObjects: new RevokingRead(root),
-  });
-  try {
-    assert.equal(
-      (
-        await request(
-          "GET",
-          `${base}/${intent.id}/content`,
-          p.buyer.token,
-          undefined,
-          randomUUID(),
-          isolated,
-        )
-      ).statusCode,
-      403,
-    );
-  } finally {
-    await isolated.close();
-  }
-  assert.equal(
-    (await request("GET", `${base}/${intent.id}/content`, p.narrator.token))
-      .statusCode,
-    200,
-  );
-});
-
 test("product recording consumes the existing OSS form adapter and preserves its actual store identity without relabeling local assets", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p),
     audio = syntheticAudio(),
     base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
@@ -1673,9 +1272,9 @@ test("product recording consumes the existing OSS form adapter and preserves its
 });
 
 test("database composite constraints reject another project's subject and the wrong interview's actual question", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p),
-    q = await bound(),
+    q = await joinedProject(),
     other = await interview(q);
   const actor = {
     subjectId: p.subjectId,
@@ -1773,57 +1372,6 @@ test("synthetic recording assembly stays absent by default and refuses productio
     document.paths["/v1/projects/{id}/interviews/{interviewId}/recording-start"]
       .post,
   );
-});
-
-test("withdrawal and renewed collection cannot revive an interview from the previous access epoch", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
-  const base = `/v1/projects/${p.projectId}/interviews`,
-    command = {
-      clientInterviewId: randomUUID(),
-      expectedPlanRevision: 1,
-      starterKind: "free-narration",
-    };
-  const previous = data(await request("POST", base, p.narrator.token, command));
-  data((await choose(p, p.narrator.token, "collection", false)).response);
-  data((await choose(p, p.narrator.token, "collection", true)).response);
-  assert.equal(
-    (await request("POST", base, p.narrator.token, command)).statusCode,
-    403,
-  );
-  assert.equal(
-    (
-      await request("POST", `${base}/${previous.id}/clips`, p.narrator.token, {
-        clientClipId: randomUUID(),
-        bytes: 100,
-        sha256: "a".repeat(64),
-      })
-    ).statusCode,
-    403,
-  );
-  assert.equal(
-    (
-      await request(
-        "POST",
-        `${base}/${previous.id}/recording-start`,
-        p.narrator.token,
-        {},
-      )
-    ).statusCode,
-    403,
-  );
-  assert.equal(
-    (await request("GET", `${base}/${previous.id}`, p.narrator.token))
-      .statusCode,
-    200,
-  );
-  const fresh = data(
-    await request("POST", base, p.narrator.token, {
-      ...command,
-      clientInterviewId: randomUUID(),
-    }),
-  );
-  assert.notEqual(fresh.id, previous.id);
 });
 
 after(async () => {

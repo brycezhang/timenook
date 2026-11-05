@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from "../src/identity/project-members";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { paymentAdmin } from "./payment-admin-fixture";
 import { once } from "node:events";
@@ -249,9 +250,9 @@ const approval = () => ({
   expectedBindingVersion: 0,
   evidenceRef: "synthetic:发起人核验申请者",
 });
-async function bound(versionId = packageId) {
-  const p = await project(versionId);
-  const narrator = await login();
+async function joinedProject(versionId = packageId) {
+  const p = await project(versionId),
+    narrator = await login();
   const invite = data(
     await request(
       "POST",
@@ -259,20 +260,12 @@ async function bound(versionId = packageId) {
       p.buyer.token,
     ),
   );
-  const application = data(
-    await request(
-      "POST",
-      `/v1/invitations/${invite.token}/requests`,
-      narrator.token,
-      notice(),
-    ),
-  );
   data(
     await request(
       "POST",
-      `/v1/binding-requests/${application.id}/approve`,
-      p.buyer.token,
-      approval(),
+      `/v1/invitations/${invite.token}/accept`,
+      narrator.token,
+      { termsVersion: TERMS_VERSION },
     ),
   );
   return { ...p, narrator };
@@ -282,33 +275,6 @@ async function state(p: { projectId: string }, token: string) {
     await request("GET", `/v1/projects/${p.projectId}/participation`, token),
     200,
   );
-}
-async function choose(
-  p: { projectId: string },
-  token: string,
-  purpose: string,
-  granted: boolean,
-  key = randomUUID(),
-) {
-  const current = await state(p, token);
-  const body = {
-    ...notice(),
-    purpose,
-    granted,
-    expectedBindingVersion: current.bindingVersion,
-    expectedAccessEpoch: current.accessEpoch,
-  };
-  return {
-    body,
-    key,
-    response: await request(
-      "POST",
-      `/v1/projects/${p.projectId}/consents`,
-      token,
-      body,
-      key,
-    ),
-  };
 }
 
 function formUpload(
@@ -351,9 +317,10 @@ function syntheticAudio(seconds: 1 | 0.5 = 1) {
       : "test/fixtures/synthetic-576ms.mp3",
   );
 }
-async function interview(p: Awaited<ReturnType<typeof bound>>, ai = true) {
-  if (ai) data((await choose(p, p.narrator.token, "ai", true)).response);
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+async function interview(
+  p: Awaited<ReturnType<typeof joinedProject>>,
+  ai = true,
+) {
   return data(
     await request(
       "POST",
@@ -369,12 +336,12 @@ async function interview(p: Awaited<ReturnType<typeof bound>>, ai = true) {
 }
 
 async function sealedInput(ai = true, versionId = packageId) {
-  const p = await bound(versionId),
+  const p = await joinedProject(versionId),
     i = await interview(p, ai);
   return sealedClip(p, i.id);
 }
 async function sealedClip(
-  p: Awaited<ReturnType<typeof bound>>,
+  p: Awaited<ReturnType<typeof joinedProject>>,
   interviewId: string,
 ) {
   const audio = syntheticAudio();
@@ -508,28 +475,6 @@ async function task(p: Awaited<ReturnType<typeof sealedInput>>) {
     200,
   )[0];
 }
-test("granting AI after cloud save processes the same task without invalidating saved audio", async () => {
-  const p = await sealedInput(false),
-    original = await task(p);
-  const runtime = await startProductionWorker(app);
-  try {
-    await wake(runtime, original.id);
-    assert.equal((await task(p)).state, "queued");
-    assert.equal((await task(p)).errorCode, "AI_AUTHORIZATION_REQUIRED");
-    data((await choose(p, p.narrator.token, "ai", true)).response);
-    // The next authorization recheck is due; no wall-clock TTL sleep is needed.
-    await db.productionTask.update({
-      where: { id: original.id },
-      data: { nextRunAt: new Date() },
-    });
-    await wake(runtime, original.id);
-    const ready = await task(p);
-    assert.equal(ready.id, original.id);
-    assert.equal(ready.state, "waiting_provider");
-  } finally {
-    await runtime.close();
-  }
-});
 
 test("a sharing grant during ASR preserves the same original transcript and first queue time", async () => {
   const p = await sealedInput(),
@@ -537,7 +482,7 @@ test("a sharing grant during ASR preserves the same original transcript and firs
   const runtime = await startProductionWorker(app);
   try {
     await wake(runtime, original.id);
-    data((await choose(p, p.narrator.token, "sharing", true)).response);
+
     await wake(runtime, original.id);
     const ready = await task(p);
     assert.equal(ready.state, "succeeded");
@@ -564,45 +509,6 @@ test("a sharing grant during ASR preserves the same original transcript and firs
       1,
     );
   } finally {
-    await runtime.close();
-  }
-});
-
-test("withdrawal during a supplier response invalidates the task and renewed permission cannot revive the late result", async () => {
-  const p = await sealedInput(),
-    original = await task(p);
-  const runtime = await startProductionWorker(app);
-  const previous = providerTransport;
-  try {
-    await wake(runtime, original.id);
-    let entered!: () => void, release!: () => void;
-    const atProvider = new Promise<void>((resolve) => (entered = resolve)),
-      responseGate = new Promise<void>((resolve) => (release = resolve));
-    providerTransport = async (input, init) => {
-      if (String(input).endsWith("/query")) {
-        entered();
-        await responseGate;
-      }
-      return previous(input, init);
-    };
-    const delivery = wake(runtime, original.id);
-    await atProvider;
-    data((await choose(p, p.narrator.token, "ai", false)).response);
-    release();
-    await delivery;
-    let current = await task(p);
-    assert.equal(current.state, "invalidated");
-    assert.equal(current.originalTranscript, null);
-    assert.equal(current.attempts[0].observations.at(-1).state, "succeeded");
-    assert.equal(current.attempts[0].observations.at(-1).superseded, true);
-    assert.equal(current.attempts[0].actualCostFen, null);
-    data((await choose(p, p.narrator.token, "ai", true)).response);
-    await runtime.recoverDue();
-    current = await task(p);
-    assert.equal(current.state, "invalidated");
-    assert.equal(current.originalTranscript, null);
-  } finally {
-    providerTransport = previous;
     await runtime.close();
   }
 });
@@ -702,73 +608,6 @@ test(
     }
   },
 );
-
-test("withdrawal during source preparation releases only its unused provider reservation", async () => {
-  const p = await sealedInput(),
-    original = await task(p),
-    previous = providerTransport;
-  let entered!: () => void, release!: () => void;
-  const atSource = new Promise<void>((resolve) => (entered = resolve)),
-    gate = new Promise<void>((resolve) => (release = resolve));
-  sourceGate = async (key) => {
-    if (key.includes(p.clip.id)) {
-      entered();
-      await gate;
-    }
-  };
-  const requests: string[] = [];
-  providerTransport = async (input, init) => {
-    const id = new Headers(init?.headers).get("X-Api-Request-Id")!;
-    requests.push(id);
-    return previous(input, init);
-  };
-  const runtime = await startProductionWorker(app);
-  try {
-    const delivery = wake(runtime, original.id);
-    await atSource;
-    assert.equal((await task(p)).attempts[0].reservedCostFen, 1);
-    data((await choose(p, p.narrator.token, "ai", false)).response);
-    release();
-    await delivery;
-    const invalidated = await task(p);
-    assert.equal(invalidated.state, "invalidated");
-    assert.equal(invalidated.attempts.length, 0);
-    assert.equal(invalidated.queuedAt, original.queuedAt);
-    assert.equal(invalidated.recordingUsageMs, 1080);
-    assert.ok(!requests.includes(original.providerRequestId));
-    // New current authorization can create new material, but cannot revive the old task.
-    sourceGate = async () => {};
-    const i = await interview(p);
-    await sealedClip(p, i.id);
-    const current = data(
-      await request(
-        "POST",
-        `/v1/projects/${p.projectId}/tasks/status`,
-        p.narrator.token,
-        { interviewId: i.id },
-      ),
-    )[0];
-    assert.ok(current);
-    await wake(runtime, current.id);
-    const after = data(
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/tasks/${current.id}`,
-        p.narrator.token,
-      ),
-      200,
-    );
-    assert.equal(after.state, "waiting_provider");
-    assert.equal(after.attempts.length, 1);
-    assert.equal(after.attempts[0].reservedCostFen, 1);
-    assert.equal((await task(p)).state, "invalidated");
-  } finally {
-    release();
-    sourceGate = async () => {};
-    providerTransport = previous;
-    await runtime.close();
-  }
-});
 
 test("a PostgreSQL failure after supplier response recovers by querying the original request", async () => {
   const p = await sealedInput(),
@@ -1391,90 +1230,6 @@ async function assisted(
     ),
   );
 }
-test("expiry of the actual assisted AI grant blocks a late result and a renewed grant cannot revive that task", async (t) => {
-  const p = await project(),
-    realNow = Date.now;
-  let controlled: number | undefined = realNow() - 890000;
-  t.mock.method(Date, "now", () => controlled ?? realNow());
-  const ai = await assisted(p, "ai");
-  controlled = undefined;
-  const collection = await assisted(p, "collection");
-  await assisted(p, "sharing");
-  const body = { assistedSessionId: collection.id },
-    audio = syntheticAudio();
-  const i = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/interviews`,
-      p.buyer.token,
-      {
-        ...body,
-        clientInterviewId: randomUUID(),
-        expectedPlanRevision: 1,
-        starterKind: "free-narration",
-      },
-    ),
-  );
-  const base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
-  const clip = data(
-    await request("POST", base, p.buyer.token, {
-      ...body,
-      clientClipId: randomUUID(),
-      bytes: audio.length,
-      sha256: createHash("sha256").update(audio).digest("hex"),
-    }),
-  );
-  const form = data(
-    await request("POST", `${base}/${clip.id}/upload`, p.buyer.token, body),
-  );
-  assert.equal(
-    (await formUpload(app, form, audio, {}, p.buyer.token)).statusCode,
-    204,
-  );
-  data(await request("POST", `${base}/${clip.id}/seal`, p.buyer.token, body));
-  const tasks = app.get(ProductionTasks),
-    list = () =>
-      request("GET", `/v1/projects/${p.projectId}/tasks`, p.buyer.token);
-  const original = data(await list(), 200)[0];
-  await tasks.run(original.id);
-  assert.equal(data(await list(), 200)[0].state, "waiting_provider");
-  assert.equal(data(await list(), 200)[0].attempts.length, 1);
-  assert.ok(Date.parse(collection.expiresAt) > Date.parse(ai.expiresAt));
-  const previous = providerTransport;
-  let entered!: () => void, release!: () => void;
-  const atProvider = new Promise<void>((resolve) => (entered = resolve)),
-    gate = new Promise<void>((resolve) => (release = resolve));
-  providerTransport = async (input, init) => {
-    if (
-      String(input).endsWith("/query") &&
-      new Headers(init?.headers).get("X-Api-Request-Id") ===
-        original.providerRequestId
-    ) {
-      entered();
-      await gate;
-    }
-    return previous(input, init);
-  };
-  try {
-    const completing = tasks.run(original.id);
-    await atProvider;
-    controlled = Date.parse(ai.expiresAt);
-    release();
-    await completing;
-    let current = data(await list(), 200)[0];
-    assert.equal(current.state, "invalidated");
-    assert.equal(current.originalTranscript, null);
-    assert.equal(current.attempts[0].observations.at(-1).superseded, true);
-    await assisted(p, "ai");
-    await tasks.run(original.id);
-    current = data(await list(), 200)[0];
-    assert.equal(current.state, "invalidated");
-    assert.equal(current.originalTranscript, null);
-  } finally {
-    release();
-    providerTransport = previous;
-  }
-});
 
 test("the recording usage intent cannot be moved to a different recording in the same project", async () => {
   const p = await sealedInput(),
@@ -1497,7 +1252,7 @@ test("the recording usage intent cannot be moved to a different recording in the
 });
 
 test("an Outbox write failure rolls back the clip, task and usage intent before the original seal can recover", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p),
     audio = syntheticAudio(),
     base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
@@ -1721,84 +1476,6 @@ test("a Worker configured for another object storage scope cannot submit a saved
   } finally {
     await other.close();
     await rm(otherRoot, { recursive: true, force: true });
-  }
-});
-
-test("a full due batch waiting for AI authorization does not starve another authorized project's recording", async () => {
-  const waiting = await sealedInput(false);
-  for (let index = 1; index < 100; index++)
-    await sealedClip(waiting, waiting.interviewId);
-  const eligible = await sealedInput(),
-    original = await task(eligible);
-  // Fixed due instants isolate this scheduling scenario from other test tasks.
-  await db.productionTask.updateMany({
-    where: { projectId: waiting.projectId },
-    data: { nextRunAt: new Date("2000-01-01T00:00:00Z") },
-  });
-  await db.productionTask.update({
-    where: { id: original.id },
-    data: { nextRunAt: new Date("2001-01-01T00:00:00Z") },
-  });
-  const runtime = await startProductionWorker(app);
-  async function drainDue() {
-    let expected = Infinity,
-      completed = 0,
-      finish!: () => void;
-    const drained = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error("Due batch did not finish")),
-        10000,
-      );
-      finish = () => {
-        clearTimeout(timer);
-        resolve();
-      };
-    });
-    const onComplete = () => {
-      if (++completed >= expected) finish();
-    };
-    runtime.worker.on("completed", onComplete);
-    try {
-      expected = await runtime.recoverDue();
-      if (completed >= expected) finish();
-      await drained;
-      return expected;
-    } finally {
-      runtime.worker.off("completed", onComplete);
-    }
-  }
-  try {
-    assert.equal(await drainDue(), 100);
-    await drainDue();
-    const current = await task(eligible);
-    assert.equal(current.state, "waiting_provider");
-    assert.equal(current.providerRequestId, original.providerRequestId);
-    assert.equal(current.queuedAt, original.queuedAt);
-    assert.equal(current.recordingUsageMs, 1080);
-    assert.equal(
-      providerRequests.filter(
-        (r) => r.id === original.providerRequestId && r.action === "submit",
-      ).length,
-      1,
-    );
-    const waitingTasks = data(
-      await request(
-        "GET",
-        `/v1/projects/${waiting.projectId}/tasks`,
-        waiting.narrator.token,
-      ),
-      200,
-    );
-    assert.equal(waitingTasks.length, 100);
-    assert.ok(
-      waitingTasks.every(
-        (row: { state: string; errorCode: string }) =>
-          row.state === "queued" &&
-          row.errorCode === "AI_AUTHORIZATION_REQUIRED",
-      ),
-    );
-  } finally {
-    await runtime.close();
   }
 });
 

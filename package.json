@@ -38,12 +38,13 @@
     "build:web": "pnpm --filter @timenook/web build",
     "typecheck:web": "pnpm --filter @timenook/web typecheck",
     "test:web": "pnpm exec playwright test tests/admin/web-entry.spec.mjs tests/admin/web-session.spec.mjs tests/admin/web-product-session.spec.mjs tests/admin/web-checkout.spec.mjs -c playwright.admin.config.mjs",
-    "test:native-e2e": "node scripts/test-native-e2e.cjs",
-    "test:native-login": "node scripts/test-native-login.cjs",
+    "test:native-e2e": "node scripts/test-native-design.cjs",
+    "test:native-login": "pnpm build:miniprogram && node scripts/test-native-online.cjs",
     "test:native-automation": "node --test tests/native-automation.test.cjs",
     "build:miniprogram": "TIMENOOK_MINIPROGRAM_PROFILE=release node scripts/build.mjs",
     "build:miniprogram:development": "TIMENOOK_MINIPROGRAM_PROFILE=development node scripts/build.mjs",
-    "test:native-mvp": "node scripts/test-native-login.cjs --orders-required --mvp"
+    "test:native-mvp": "pnpm test:native-online",
+    "test:native-online": "pnpm build:miniprogram && node scripts/test-native-online.cjs --mvp"
   },
   "devDependencies": {
     "@napi-rs/canvas": "0.1.100",

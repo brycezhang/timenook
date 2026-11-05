@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from "../src/identity/project-members";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { paymentAdmin } from "./payment-admin-fixture";
 import { once } from "node:events";
@@ -290,9 +291,9 @@ const approval = () => ({
   expectedBindingVersion: 0,
   evidenceRef: "synthetic:发起人核验申请者",
 });
-async function bound(versionId = packageId) {
-  const p = await project(versionId);
-  const narrator = await login();
+async function joinedProject(versionId = packageId) {
+  const p = await project(versionId),
+    narrator = await login();
   const invite = data(
     await request(
       "POST",
@@ -300,20 +301,12 @@ async function bound(versionId = packageId) {
       p.buyer.token,
     ),
   );
-  const application = data(
-    await request(
-      "POST",
-      `/v1/invitations/${invite.token}/requests`,
-      narrator.token,
-      notice(),
-    ),
-  );
   data(
     await request(
       "POST",
-      `/v1/binding-requests/${application.id}/approve`,
-      p.buyer.token,
-      approval(),
+      `/v1/invitations/${invite.token}/accept`,
+      narrator.token,
+      { termsVersion: TERMS_VERSION },
     ),
   );
   return { ...p, narrator };
@@ -323,33 +316,6 @@ async function state(p: { projectId: string }, token: string) {
     await request("GET", `/v1/projects/${p.projectId}/participation`, token),
     200,
   );
-}
-async function choose(
-  p: { projectId: string },
-  token: string,
-  purpose: string,
-  granted: boolean,
-  key = randomUUID(),
-) {
-  const current = await state(p, token);
-  const body = {
-    ...notice(),
-    purpose,
-    granted,
-    expectedBindingVersion: current.bindingVersion,
-    expectedAccessEpoch: current.accessEpoch,
-  };
-  return {
-    body,
-    key,
-    response: await request(
-      "POST",
-      `/v1/projects/${p.projectId}/consents`,
-      token,
-      body,
-      key,
-    ),
-  };
 }
 
 function formUpload(
@@ -393,12 +359,10 @@ function syntheticAudio(seconds: 1 | 0.5 = 1) {
   );
 }
 async function interview(
-  p: Awaited<ReturnType<typeof bound>>,
+  p: Awaited<ReturnType<typeof joinedProject>>,
   ai = true,
   question?: { questionKey: string },
 ) {
-  if (ai) data((await choose(p, p.narrator.token, "ai", true)).response);
-  data((await choose(p, p.narrator.token, "collection", true)).response);
   return data(
     await request(
       "POST",
@@ -414,7 +378,7 @@ async function interview(
 }
 
 async function sealedClip(
-  p: Awaited<ReturnType<typeof bound>>,
+  p: Awaited<ReturnType<typeof joinedProject>>,
   interviewId: string,
 ) {
   const audio = syntheticAudio();
@@ -442,7 +406,7 @@ test(
   "one optional follow-up freezes the current interview sources and runs through the existing Worker once",
   { timeout: 30000 },
   async () => {
-    const p = await bound(),
+    const p = await joinedProject(),
       i = await interview(p);
     await sealedClip(p, i.id);
     await sealedClip(p, i.id);
@@ -505,7 +469,10 @@ test(
   },
 );
 
-async function readyInput(p: Awaited<ReturnType<typeof bound>>, i: any) {
+async function readyInput(
+  p: Awaited<ReturnType<typeof joinedProject>>,
+  i: any,
+) {
   await sealedClip(p, i.id);
   const tasks = data(
     await request("GET", `/v1/projects/${p.projectId}/tasks`, p.narrator.token),
@@ -517,8 +484,8 @@ async function readyInput(p: Awaited<ReturnType<typeof bound>>, i: any) {
   }
 }
 test("an explicitly skipped current question finishes before a model call or active quota charge", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const plan = data(
     await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token),
     200,
@@ -560,7 +527,7 @@ test("an explicitly skipped current question finishes before a model call or act
 });
 
 test("a structurally valid but leading question is rejected and a confirmed failure can retry the same intent once", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await readyInput(p, i);
   const url = `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`;
@@ -626,7 +593,7 @@ test("a structurally valid but leading question is rejected and a confirmed fail
 });
 
 test("unknown text submission is retained and cannot be polled, retried, or replaced by another request for the same input", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await readyInput(p, i);
   const url = `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`;
@@ -682,7 +649,7 @@ test("unknown text submission is retained and cannot be polled, retried, or repl
 });
 
 test("collection preflight preserves an in-flight suggestion but real recording-start immediately obsoletes a late result", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await readyInput(p, i);
   const base = `/v1/projects/${p.projectId}/interviews/${i.id}`,
@@ -752,7 +719,7 @@ test("collection preflight preserves an in-flight suggestion but real recording-
 });
 
 test("displaying and rewriting one generated follow-up preserves its source and records the answer against the actual displayed snapshot", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await readyInput(p, i);
   const base = `/v1/projects/${p.projectId}/interviews/${i.id}`,
@@ -863,7 +830,7 @@ test("displaying and rewriting one generated follow-up preserves its source and 
 });
 
 test("finishing is idempotent, makes a queued suggestion obsolete, and never blocks saved recordings or later supplement", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await readyInput(p, i);
   const base = `/v1/projects/${p.projectId}/interviews/${i.id}`,
@@ -917,7 +884,7 @@ test("finishing is idempotent, makes a queued suggestion obsolete, and never blo
 });
 
 test("an unanswered actual question cannot reuse only older-question recordings as if its answer were ready", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await readyInput(p, i);
   const base = `/v1/projects/${p.projectId}/interviews/${i.id}`;
@@ -945,7 +912,7 @@ test("an unanswered actual question cannot reuse only older-question recordings 
 });
 
 test("starting another question closes the prior interview suggestion and cannot revive it by returning later", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await readyInput(p, i);
   const url = `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`;
@@ -980,7 +947,7 @@ test("starting another question closes the prior interview suggestion and cannot
 });
 
 test("a displayed optional suggestion can be rewritten with its original generation and actual parent question preserved", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await readyInput(p, i);
   const base = `/v1/projects/${p.projectId}/interviews/${i.id}`,
@@ -1026,91 +993,10 @@ test("a displayed optional suggestion can be rewritten with its original generat
   );
 });
 
-test("preferences and AI withdrawal during transport suppress a late question while retaining its model usage", async () => {
-  for (const change of ["preferences", "withdraw-ai"] as const) {
-    const p = await bound(),
-      i = await interview(p);
-    await readyInput(p, i);
-    const url = `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`;
-    const task = data(
-      await request("POST", url, p.narrator.token, {
-        clientRequestId: randomUUID(),
-        actualQuestionId: i.actualQuestion.id,
-        expectedQuestionVersion: 1,
-      }),
-      202,
-    ).task;
-    const transport = providerTransport;
-    let release!: () => void, entered!: () => void;
-    const gate = new Promise<void>((r) => {
-        release = r;
-      }),
-      sent = new Promise<void>((r) => {
-        entered = r;
-      });
-    providerTransport = async (input, init) => {
-      entered();
-      await gate;
-      return transport(input, init);
-    };
-    const running = app.get(ProductionTasks).run(task.id);
-    try {
-      await sent;
-      if (change === "preferences")
-        data(
-          await request(
-            "POST",
-            `/v1/projects/${p.projectId}/plan/preferences`,
-            p.narrator.token,
-            { expectedVersion: 1, blockedTopics: ["work"], questionStates: [] },
-          ),
-        );
-      else data((await choose(p, p.narrator.token, "ai", false)).response);
-    } finally {
-      release();
-      await running;
-      providerTransport = transport;
-    }
-    const response = await request(
-      "POST",
-      `${url}/status`,
-      p.narrator.token,
-      {},
-    );
-    if (change === "withdraw-ai")
-      assert.equal(
-        response.statusCode,
-        403,
-        "epoch revocation must hide the old interview",
-      );
-    else {
-      const late = data(response);
-      assert.equal(late.task.state, "obsolete");
-      assert.equal(late.result, null);
-    }
-    const stored = await db.productionTask.findUniqueOrThrow({
-        where: { id: task.id },
-      }),
-      attempt = await db.taskAttempt.findFirstOrThrow({
-        where: { taskId: task.id },
-      });
-    assert.equal(stored.state, "obsolete");
-    assert.equal((attempt.usage as any).total_tokens, 30);
-    assert.equal(
-      (
-        await db.taskAttemptObservation.findFirstOrThrow({
-          where: { requestId: attempt.requestId },
-        })
-      ).superseded,
-      true,
-    );
-  }
-});
-
 test("not-applicable and blocked current plan topics finish before dispatch and do not consume a follow-up allowance", async () => {
   for (const rule of ["not-applicable", "blocked"] as const) {
-    const p = await bound();
-    data((await choose(p, p.narrator.token, "collection", true)).response);
+    const p = await joinedProject();
+
     const plan = data(
         await request(
           "GET",
@@ -1168,7 +1054,7 @@ test("unknown references, multiple questions, extra schema fields, and a repeate
     "extra-field",
     "repeated",
   ] as const) {
-    const p = await bound(),
+    const p = await joinedProject(),
       i = await interview(p);
     await readyInput(p, i);
     const url = `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`;
@@ -1241,7 +1127,7 @@ test("the sold follow-up allowance charges one intent, keeps replay and confirme
   const version = await packageWith((s) => {
     s.admission.d04.userQuotas.followUps.value = 1;
   });
-  const p = await bound(version),
+  const p = await joinedProject(version),
     i = await interview(p);
   await readyInput(p, i);
   const url = `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`,
@@ -1344,7 +1230,7 @@ test("the text submission budget includes both green Story compositions and opti
   };
   try {
     for (const firstKind of ["compose_story", "ask_followup"] as const) {
-      const p = await bound(),
+      const p = await joinedProject(),
         i = await interview(p);
       await readyInput(p, i);
       const followup = async () =>
@@ -1404,7 +1290,7 @@ test("the text submission budget includes both green Story compositions and opti
 });
 
 test("an explicit refusal in the saved answer takes precedence before generation even when it is not the entire transcript", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p),
     transport = providerTransport;
   providerTransport = async (input, init) => {
@@ -1444,7 +1330,7 @@ test("an explicit refusal in the saved answer takes precedence before generation
 });
 
 test("a committed follow-up input and quota intent are immutable in PostgreSQL", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await readyInput(p, i);
   const url = `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`;
@@ -1479,7 +1365,7 @@ test("a committed follow-up input and quota intent are immutable in PostgreSQL",
 });
 
 test("a valid model finish has no question snapshot to display and keeps the original recording available", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await readyInput(p, i);
   const url = `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`,
@@ -1570,7 +1456,7 @@ test("a memory cue can introduce one neutral gap while two distinct questions sh
     ["那一年您还记得做过什么吗？", "succeeded"],
     ["那一年住在哪里，和谁一起生活？", "failed"],
   ] as const) {
-    const p = await bound(),
+    const p = await joinedProject(),
       i = await interview(p);
     await readyInput(p, i);
     const url = `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`,
@@ -1608,8 +1494,8 @@ test("a memory cue can introduce one neutral gap while two distinct questions sh
 });
 
 test("a rule-finished intent replays its frozen decision after preferences change without becoming a new model submission", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const plan = data(
       await request(
         "GET",
@@ -1674,7 +1560,7 @@ for (const [stop, reason] of [
   ["这一段讲完了，结束吧。", "USER_FINISHED"],
 ] as const)
   test(`an earlier same-question ${reason} is not hidden by a later water break and stays an uncharged terminal intent`, async () => {
-    const p = await bound(),
+    const p = await joinedProject(),
       i = await interview(p),
       transport = providerTransport;
     const answers = [stop, "我先喝一口水。"];
@@ -1748,7 +1634,7 @@ for (const [stop, reason] of [
   });
 
 test("a follow-up relay endpoint change stops the frozen task before any provider submission", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await readyInput(p, i);
   const path = `/v1/projects/${p.projectId}/interviews/${i.id}/follow-up`;

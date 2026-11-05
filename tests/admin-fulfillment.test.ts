@@ -123,7 +123,7 @@ test("operational creation binds the selected reservation and keeps one uncertai
   h.unmount();
 });
 
-test("limited production materials clear at exact expiry and an unmounted response cannot restore addresses", async () => {
+test("assigned production materials stay available without a user grant and an unmounted response cannot restore addresses", async () => {
   const h = await harness(),
     view: any = initial();
   view.current = {
@@ -149,10 +149,10 @@ test("limited production materials clear at exact expiry and an unmounted respon
   h.calls[0].resolve(materials);
   await loading;
   assert.equal(h.page.materials.value.address.recipientName, "合成收件人");
-  h.clock.now += 500;
-  h.timers[h.timers.length - 1].run();
-  assert.equal(h.page.materials.value, null);
-  h.clock.now -= 500;
+  assert.ok(
+    h.page.materials.value,
+    "materials are governed by current assignment, not an expired user grant",
+  );
   const next = h.page.loadMaterials();
   h.unmount();
   h.calls[1].resolve(materials);

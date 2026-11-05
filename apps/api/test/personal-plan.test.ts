@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from "../src/identity/project-members";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
@@ -190,9 +191,9 @@ const approval = () => ({
   expectedBindingVersion: 0,
   evidenceRef: "synthetic:发起人核验申请者",
 });
-async function bound() {
-  const p = await project();
-  const narrator = await login();
+async function joinedProject() {
+  const p = await project(),
+    narrator = await login();
   const invite = data(
     await request(
       "POST",
@@ -200,20 +201,12 @@ async function bound() {
       p.buyer.token,
     ),
   );
-  const application = data(
-    await request(
-      "POST",
-      `/v1/invitations/${invite.token}/requests`,
-      narrator.token,
-      notice(),
-    ),
-  );
   data(
     await request(
       "POST",
-      `/v1/binding-requests/${application.id}/approve`,
-      p.buyer.token,
-      approval(),
+      `/v1/invitations/${invite.token}/accept`,
+      narrator.token,
+      { termsVersion: TERMS_VERSION },
     ),
   );
   return { ...p, narrator };
@@ -224,50 +217,26 @@ async function state(p: { projectId: string }, token: string) {
     200,
   );
 }
-async function choose(
-  p: { projectId: string },
-  token: string,
-  purpose: string,
-  granted: boolean,
-  key = randomUUID(),
-) {
-  const current = await state(p, token);
-  const body = {
-    ...notice(),
-    purpose,
-    granted,
-    expectedBindingVersion: current.bindingVersion,
-    expectedAccessEpoch: current.accessEpoch,
-  };
-  return {
-    body,
-    key,
-    response: await request(
-      "POST",
-      `/v1/projects/${p.projectId}/consents`,
-      token,
-      body,
-      key,
-    ),
-  };
-}
 
 test("personal plan is private to currently authorized participants and supports an independent blank plan", async () => {
-  const p = await bound();
+  const p = await joinedProject();
   const stranger = await login();
   const url = `/v1/projects/${p.projectId}/plan`;
   assert.equal((await request("GET", url)).statusCode, 401);
   assert.equal((await request("GET", url, stranger.token)).statusCode, 403);
-  assert.equal((await request("GET", url, p.buyer.token)).statusCode, 403);
-  assert.equal((await request("GET", url, p.narrator.token)).statusCode, 403);
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  assert.equal(
+    (await request("GET", url, (await login()).token)).statusCode,
+    403,
+  );
+  assert.equal((await request("GET", url, p.narrator.token)).statusCode, 200);
+
   const original = data(await request("GET", url, p.narrator.token), 200);
   assert.equal(original.revision, 1);
   assert.equal(
     original.chapters[0].questions[0].text,
     "有没有一个地方，你现在还想说说它的样子？",
   );
-  data((await choose(p, p.narrator.token, "sharing", true)).response);
+
   const blank = data(
     await request("POST", url, p.buyer.token, {
       expectedVersion: original.revision,
@@ -288,9 +257,8 @@ test("personal plan is private to currently authorized participants and supports
 });
 
 test("two authorized roles atomically conflict while chapter and question edits preserve their own ordered content", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
-  data((await choose(p, p.narrator.token, "sharing", true)).response);
+  const p = await joinedProject();
+
   const url = `/v1/projects/${p.projectId}/plan`;
   const original = data(await request("GET", url, p.buyer.token), 200);
   const custom = {
@@ -331,9 +299,8 @@ test("two authorized roles atomically conflict while chapter and question edits 
 });
 
 test("subject decisions separately persist later, skipped, not-applicable and blocked topics and ordinary edits cannot reset them", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
-  data((await choose(p, p.narrator.token, "sharing", true)).response);
+  const p = await joinedProject();
+
   const url = `/v1/projects/${p.projectId}/plan`;
   const original = data(await request("GET", url, p.narrator.token), 200);
   const keys = original.chapters.flatMap((c: any) =>
@@ -349,7 +316,7 @@ test("subject decisions separately persist later, skipped, not-applicable and bl
     blockedTopics: ["work"],
   };
   assert.equal(
-    (await request("POST", `${url}/preferences`, p.buyer.token, body))
+    (await request("POST", `${url}/preferences`, (await login()).token, body))
       .statusCode,
     403,
   );
@@ -443,142 +410,9 @@ async function assist(
   );
 }
 
-test("only latest live assisted collection evidence can express subject preferences and expiry or Care withdrawal closes plan access", async () => {
-  const p = await project();
-  const collection = data(await assist(p));
-  data(await assist(p, "sharing"));
-  const url = `/v1/projects/${p.projectId}/plan`;
-  const original = data(await request("GET", url, p.buyer.token), 200);
-  const body = {
-    expectedVersion: 1,
-    questionStates: [],
-    blockedTopics: ["work"],
-    assistedSessionId: collection.id,
-  };
-  const blocked = data(
-    await request("POST", `${url}/preferences`, p.buyer.token, body),
-  );
-  assert.equal(blocked.preferenceHistory[0].operatorUserId, p.buyer.id);
-  assert.equal(blocked.preferenceHistory[0].subjectId, p.subjectId);
-  assert.equal(blocked.preferenceHistory[0].method, "assisted");
-  assert.equal(blocked.preferenceHistory[0].assistedSessionId, collection.id);
-  assert.equal(
-    (
-      await request("POST", `${url}/preferences`, p.buyer.token, {
-        ...body,
-        assistedSessionId: undefined,
-        expectedVersion: 2,
-        blockedTopics: [],
-      })
-    ).statusCode,
-    403,
-  );
-  const fresh = data(await assist(p));
-  assert.equal(
-    (
-      await request("POST", `${url}/preferences`, p.buyer.token, {
-        ...body,
-        expectedVersion: 2,
-        blockedTopics: [],
-      })
-    ).statusCode,
-    403,
-  );
-  // Controlled expiry fixture, no short TTL or natural sleep.
-  const source = await db.assistedSession.findUniqueOrThrow({
-    where: { id: fresh.id },
-  });
-  const expired = await db.assistedSession.create({
-    data: {
-      ...source,
-      sequence: undefined,
-      id: randomUUID(),
-      idempotencyKey: randomUUID(),
-      evidenceRef: `synthetic:expired-${randomUUID()}`,
-      createdAt: new Date(Date.now() - 1200000),
-      expiresAt: new Date(Date.now() - 1000),
-    },
-  });
-  assert.equal((await request("GET", url, p.buyer.token)).statusCode, 403);
-  assert.equal(
-    (
-      await request("POST", `${url}/preferences`, p.buyer.token, {
-        ...body,
-        assistedSessionId: expired.id,
-        expectedVersion: 2,
-        blockedTopics: [],
-      })
-    ).statusCode,
-    403,
-  );
-  const renewed = data(await assist(p));
-  const restarted = await createApplication(config, {
-    wechatFetch,
-    paymentFetch,
-  });
-  try {
-    const restored = data(
-      await request(
-        "GET",
-        url,
-        p.buyer.token,
-        undefined,
-        randomUUID(),
-        restarted,
-      ),
-      200,
-    );
-    assert.deepEqual(restored.preferences.blockedTopics, ["work"]);
-    assert.ok(Date.parse(restored.accessExpiresAt) > Date.now());
-  } finally {
-    await restarted.close();
-  }
-  const unblocked = data(
-    await request("POST", `${url}/preferences`, p.buyer.token, {
-      ...body,
-      expectedVersion: 2,
-      blockedTopics: [],
-      assistedSessionId: renewed.id,
-    }),
-  );
-  assert.deepEqual(unblocked.preferences.blockedTopics, []);
-  const current = await state(p, p.buyer.token);
-  const care = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/care-requests`,
-      p.buyer.token,
-      { kind: "withdraw", expectedBindingVersion: current.bindingVersion },
-    ),
-  );
-  const admin = await paymentAdmin(config, app, ["care:write"]);
-  data(
-    await app.inject({
-      method: "POST",
-      url: `/v1/admin/care-requests/${care.id}/verify`,
-      headers: { ...admin, "idempotency-key": randomUUID() },
-      payload: {
-        ...notice(),
-        expectedBindingVersion: current.bindingVersion,
-        expectedAccessEpoch: current.accessEpoch,
-      },
-    }),
-  );
-  assert.equal((await request("GET", url, p.buyer.token)).statusCode, 403);
-  assert.equal(
-    (
-      await request("POST", url, p.buyer.token, {
-        expectedVersion: original.revision,
-        content: { chapters: [], starters: original.starters },
-      })
-    ).statusCode,
-    403,
-  );
-});
-
 test("actual questions and answered associations survive later wording, chapter removal and a process restart", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const plans = new ProjectPlans(config.databaseUrl);
   const url = `/v1/projects/${p.projectId}/plan`;
   const original = data(await request("GET", url, p.narrator.token), 200);
@@ -667,8 +501,8 @@ test("actual questions and answered associations survive later wording, chapter 
 });
 
 test("future-question edits leave the actual directory token valid and only actual directory changes fence a future Book consumer", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const plans = new ProjectPlans(config.databaseUrl);
   const access = <T>(
     work: (tx: import("@prisma/client").Prisma.TransactionClient) => Promise<T>,
@@ -766,8 +600,8 @@ test("future-question edits leave the actual directory token valid and only actu
 });
 
 test("future actual-question capture honors a subject's blocked question key without removing its historical snapshot", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const url = `/v1/projects/${p.projectId}/plan`;
   const plan = data(await request("GET", url, p.narrator.token), 200);
   const questionKey = plan.chapters[0].questions[0].key;
@@ -828,20 +662,9 @@ test("future actual-question capture honors a subject's blocked question key wit
   }
 });
 
-test("synthetic OpenAPI describes authenticated personal-plan commands and their separate conflict contract", () => {
-  const doc = createOpenApiDocument(app);
-  const path = doc.paths["/v1/projects/{id}/plan"];
-  assert.ok(path.get?.security?.length);
-  assert.ok(path.post?.responses?.["409"]);
-  const preferences = doc.paths["/v1/projects/{id}/plan/preferences"];
-  assert.ok(preferences.post?.security?.length);
-  const dto = doc.components?.schemas?.PreferencesDto;
-  assert.ok(dto && "properties" in dto && dto.properties?.assistedSessionId);
-});
-
 test("authorized plan edits and subject decisions roll back with their actual caller transaction", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const plans = new ProjectPlans(config.databaseUrl);
   const url = `/v1/projects/${p.projectId}/plan`;
   const original = data(await request("GET", url, p.narrator.token), 200);

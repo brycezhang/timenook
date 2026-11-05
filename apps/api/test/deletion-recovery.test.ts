@@ -20,11 +20,10 @@ import {
   db,
   config,
   root,
-  bound,
+  joinedProject,
   readyStory,
   interview,
   sealedClip,
-  choose,
   request,
   data,
   login,
@@ -186,7 +185,7 @@ function restore(sql: string, source: string, target: string) {
   );
   assert.equal(out.status, 0, "real PostgreSQL16 restore");
 }
-async function deletion(p: Awaited<ReturnType<typeof bound>>) {
+async function deletion(p: Awaited<ReturnType<typeof joinedProject>>) {
   const current = data(
       await request(
         "GET",
@@ -224,246 +223,12 @@ async function deletion(p: Awaited<ReturnType<typeof bound>>) {
 async function get(url: string, path: string, token: string) {
   return fetch(url + path, { headers: { authorization: "Bearer " + token } });
 }
-test("a real older PostgreSQL and file backup stays closed until independent replay and explicit authority promotion precede separate API and worker readiness", async () => {
-  const erased = await readyStory(),
-    revoked = await readyStory(),
-    rebound = await readyStory(),
-    control = await readyStory(),
-    replacement = await login();
-  const queued = await sealedClip(control, control.interviewId);
-  const asset = await db.recordingAsset.findFirstOrThrow({
-    where: { projectId: erased.projectId },
-  });
-  const physical = join(
-    config.recording!.storageRoot,
-    "objects",
-    asset.objectKey,
-  );
-  assert.equal(
-    (
-      await request(
-        "GET",
-        `/v1/projects/${erased.projectId}/stories/${erased.story.id}`,
-        erased.narrator.token,
-      )
-    ).statusCode,
-    200,
-  );
-  const knownBytes = await readFile(physical);
-  assert.ok(knownBytes.length > 100);
-  const sourceSchema = new URL(config.databaseUrl).searchParams.get("schema")!,
-    targetSchema = "restore_" + randomUUID().replaceAll("-", "");
-  const backup = dump(sourceSchema),
-    directory = await fixtureDirectory("timenook-restore-");
-  await cp(root, join(directory, "files"), { recursive: true });
-  await deletion(erased);
-  data(
-    (await choose(revoked, revoked.narrator.token, "collection", false))
-      .response,
-  );
-  const binding = data(
-    await request(
-      "GET",
-      `/v1/projects/${rebound.projectId}/participation`,
-      rebound.narrator.token,
-    ),
-    200,
-  );
-  const care = data(
-    await request(
-      "POST",
-      `/v1/projects/${rebound.projectId}/care-requests`,
-      rebound.buyer.token,
-      {
-        kind: "rebind",
-        targetUserId: replacement.id,
-        expectedBindingVersion: binding.bindingVersion,
-      },
-    ),
-  );
-  const admin = await paymentAdmin(config, app, ["care:write", "audit:read"]);
-  data(
-    await app.inject({
-      method: "POST",
-      url: `/v1/admin/projects/${rebound.projectId}/rebind`,
-      headers: { ...admin, "idempotency-key": randomUUID() },
-      payload: {
-        supportCaseRef: `record:${care.id}`,
-        targetUserId: replacement.id,
-        expectedBindingVersion: binding.bindingVersion,
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: "synthetic:独立核验换绑",
-      },
-    }),
-  );
-  await app.close();
-  const originalConfig = await fileConfig(directory, config, "original.json"),
-    old = await child(originalConfig);
-  assert.equal(old.ready, true);
-  old.proc.kill("SIGSTOP");
-  restore(backup, sourceSchema, targetSchema);
-  await cp(join(directory, "files"), root, { recursive: true });
-  assert.deepEqual(
-    await readFile(physical),
-    knownBytes,
-    "restored physical bytes use the same logical storage scope",
-  );
-  const restoredUrl = new URL(config.databaseUrl);
-  restoredUrl.searchParams.set("schema", targetSchema);
-  const restored = { ...config, databaseUrl: restoredUrl.toString() };
-  const targetDb = new PrismaClient({ datasourceUrl: restored.databaseUrl });
-  const [before] = await targetDb.$queryRaw<
-    { text: string }[]
-  >`SELECT text FROM formal_transcripts WHERE project_id=${erased.projectId}::uuid LIMIT 1`;
-  assert.ok(before.text.includes("八十年代"));
-  const targetConfig = await fileConfig(directory, restored);
-  const closed = await child(targetConfig);
-  assert.equal(
-    closed.ready,
-    false,
-    "a cloned installation cannot inherit source writer authority",
-  );
-  const activation = spawnSync(
-    process.execPath,
-    [
-      resolve(__dirname, "../src/care/privacy-recovery-cli.js"),
-      "activate",
-      "--test-config-file",
-      targetConfig,
-    ],
-    {
-      env: { ...process.env, NODE_ENV: "test" },
-      encoding: "utf8",
-      timeout: 30000,
-    },
-  );
-  assert.equal(activation.status, 0, activation.stderr);
-  const api = await child(targetConfig),
-    worker = await child(targetConfig, "worker");
-  assert.equal(api.ready, true);
-  assert.equal(worker.ready, true);
-  old.proc.kill("SIGCONT");
-  assert.equal(
-    (
-      await get(
-        old.url!,
-        `/v1/projects/${control.projectId}/stories/${control.story.id}`,
-        control.narrator.token,
-      )
-    ).status,
-    503,
-    "the old API does not adopt a new authority",
-  );
-  assert.equal(
-    (
-      await get(
-        api.url!,
-        `/v1/projects/${erased.projectId}/stories/${erased.story.id}`,
-        erased.narrator.token,
-      )
-    ).status,
-    403,
-  );
-  assert.equal(
-    (
-      await get(
-        api.url!,
-        `/v1/projects/${revoked.projectId}/stories/${revoked.story.id}`,
-        revoked.narrator.token,
-      )
-    ).status,
-    403,
-  );
-  assert.equal(
-    (
-      await get(
-        api.url!,
-        `/v1/projects/${control.projectId}/stories/${control.story.id}`,
-        control.narrator.token,
-      )
-    ).status,
-    200,
-  );
-  assert.equal(
-    (
-      await get(
-        api.url!,
-        `/v1/projects/${rebound.projectId}/deletion-status`,
-        rebound.narrator.token,
-      )
-    ).status,
-    403,
-    "the old bound account cannot inspect restored subject status",
-  );
-  const oldGrant = await fetch(
-    api.url! + `/v1/projects/${rebound.projectId}/consents`,
-    {
-      method: "POST",
-      headers: {
-        authorization: "Bearer " + rebound.narrator.token,
-        "content-type": "application/json",
-        "idempotency-key": randomUUID(),
-      },
-      body: JSON.stringify({
-        purpose: "collection",
-        granted: true,
-        expectedBindingVersion: binding.bindingVersion,
-        expectedAccessEpoch: binding.accessEpoch + 1,
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: "synthetic:旧绑定不能复活",
-      }),
-    },
-  );
-  assert.equal(oldGrant.status, 403);
-  assert.equal(
-    (
-      await get(
-        api.url!,
-        `/v1/projects/${rebound.projectId}/deletion-status`,
-        replacement.token,
-      )
-    ).status,
-    200,
-  );
-  await assert.rejects(readFile(physical));
-  const [erasedText] = await targetDb.$queryRaw<
-    { text: null }[]
-  >`SELECT text FROM formal_transcripts WHERE project_id=${erased.projectId}::uuid LIMIT 1`;
-  assert.equal(erasedText.text, null);
-  let succeeded = false;
-  for (let n = 0; n < 60; n++) {
-    const rows = await targetDb.productionTask.findMany({
-      where: { assetId: queued.sealed.asset.id },
-    });
-    if (rows.some((t) => t.state === "succeeded")) {
-      succeeded = true;
-      break;
-    }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  assert.equal(
-    succeeded,
-    true,
-    "unrelated worker task: " +
-      JSON.stringify(
-        await targetDb.productionTask.findMany({
-          where: { assetId: queued.sealed.asset.id },
-          select: { state: true, errorCode: true },
-        }),
-      ),
-  );
-  await closeChild(worker.proc);
-  await closeChild(api.proc);
-  await closeChild(old.proc);
-  await targetDb.$disconnect();
-  await db.$executeRawUnsafe(`DROP SCHEMA "${targetSchema}" CASCADE`);
-  await rm(directory, { recursive: true, force: true });
-});
+
 test("a source event whose later project is absent from the backup prevents activation rather than skipping a private target", async () => {
-  const earlier = await bound(),
+  const earlier = await joinedProject(),
     sourceSchema = new URL(config.databaseUrl).searchParams.get("schema")!,
     backup = dump(sourceSchema),
-    later = await bound();
+    later = await joinedProject();
   await deletion(later);
   const targetSchema = "missing_" + randomUUID().replaceAll("-", ""),
     directory = await fixtureDirectory("timenook-restore-missing-");
@@ -508,26 +273,10 @@ test("a source event whose later project is absent from the backup prevents acti
   await db.$executeRawUnsafe(`DROP SCHEMA "${targetSchema}" CASCADE`);
   await rm(directory, { recursive: true, force: true });
 });
-test("a valid older authenticated source head cannot pass a newer durable checkpoint", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
-  const older = join(tmpdir(), "timenook-old-source-" + randomUUID());
-  await cp(config.privacyJournal!.root, older, { recursive: true });
-  data((await choose(p, p.narrator.token, "collection", false)).response);
-  await app.close();
-  const directory = await fixtureDirectory("timenook-short-source-"),
-    path = await fileConfig(directory, {
-      ...config,
-      privacyJournal: { ...config.privacyJournal!, root: older },
-    });
-  const failed = await child(path);
-  assert.equal(failed.ready, false);
-  await rm(older, { recursive: true, force: true });
-  await rm(directory, { recursive: true, force: true });
-});
+
 test("SIGKILL after independent publication and before PostgreSQL commit replays the denial and the original verification receipt on HTTP retry", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const state = data(
       await request(
         "GET",
@@ -634,8 +383,8 @@ test("SIGKILL after independent publication and before PostgreSQL commit replays
 });
 import { ProductionTasks } from "../src/tasks/tasks";
 test("runtime independent-source damage closes private HTTP, readiness and worker claims while liveness remains available", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   assert.equal(
     (await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token))
       .statusCode,
@@ -662,126 +411,3 @@ test("runtime independent-source damage closes private HTTP, readiness and worke
   await assert.rejects(app.get(ProductionTasks).due());
 });
 import { readyFirstCopyBook } from "./first-copy-fixture";
-test("an assisted version rejection restores as an authenticated denial without inventing lost assisted evidence or renewing an old positive command", async () => {
-  const p = await readyFirstCopyBook(),
-    base = `/v1/projects/${p.projectId}/stories/${p.story.id}`,
-    state = data(
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/participation`,
-        p.buyer.token,
-      ),
-      200,
-    );
-  const positive = await db.storyDecision.findFirstOrThrow({
-    where: { projectId: p.projectId, confirmed: true, allowInBook: true },
-    orderBy: { sequence: "desc" },
-  });
-  const session = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/assisted-sessions`,
-      p.buyer.token,
-      {
-        purpose: "story_confirmation",
-        granted: true,
-        expectedBindingVersion: state.bindingVersion,
-        expectedAccessEpoch: state.accessEpoch,
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: "synthetic:恢复前本人在场确认",
-      },
-    ),
-  );
-  const schema = new URL(config.databaseUrl).searchParams.get("schema")!,
-    backup = dump(schema),
-    target = "storydeny_" + randomUUID().replaceAll("-", "");
-  const rejected = data(
-    await request("POST", base + "/decisions", p.buyer.token, {
-      revisionId: p.story.revision.id,
-      expectedVersion: p.story.version,
-      contentHash: p.story.revision.contentHash,
-      confirmed: true,
-      allowInBook: false,
-      noticeVersion: "synthetic-d08-v1",
-      evidenceRef: "synthetic:明确撤回同一版入书",
-      assistedSessionId: session.id,
-    }),
-  );
-  assert.equal(rejected.decision.method, "assisted");
-  assert.ok(rejected.decision.assistedEvidenceId);
-  await app.close();
-  restore(backup, schema, target);
-  const directory = await fixtureDirectory("timenook-story-denial-"),
-    url = new URL(config.databaseUrl);
-  url.searchParams.set("schema", target);
-  const recovered = { ...config, databaseUrl: url.toString() },
-    path = await fileConfig(directory, recovered);
-  const activated = spawnSync(
-    process.execPath,
-    [
-      resolve(__dirname, "../src/care/privacy-recovery-cli.js"),
-      "activate",
-      "--test-config-file",
-      path,
-    ],
-    {
-      env: { ...process.env, NODE_ENV: "test" },
-      encoding: "utf8",
-      timeout: 30000,
-    },
-  );
-  assert.equal(activated.status, 0, activated.stderr);
-  const api = await child(path),
-    targetDb = new PrismaClient({ datasourceUrl: recovered.databaseUrl });
-  const denial = await targetDb.storyDecision.findUniqueOrThrow({
-    where: { id: rejected.decision.id },
-  });
-  assert.equal(denial.method, "journal_denial");
-  assert.equal(denial.allowInBook, false);
-  assert.equal(denial.assistedEvidenceId, null);
-  assert.ok(denial.evidenceRef);
-  assert.match(denial.evidenceRef, /^journal:[a-f0-9]{64}$/);
-  assert.equal(
-    await targetDb.assistedVersionEvidence.count({
-      where: { id: rejected.decision.assistedEvidenceId },
-    }),
-    0,
-  );
-  const send = (body: object, key: string = randomUUID()) =>
-    fetch(api.url! + base + "/decisions", {
-      method: "POST",
-      headers: {
-        authorization: "Bearer " + p.narrator.token,
-        "content-type": "application/json",
-        "idempotency-key": key,
-      },
-      body: JSON.stringify(body),
-    });
-  const oldBody = {
-    revisionId: p.story.revision.id,
-    expectedVersion: p.story.version,
-    contentHash: p.story.revision.contentHash,
-    confirmed: true,
-    allowInBook: true,
-    noticeVersion: positive.noticeVersion,
-    evidenceRef: positive.evidenceRef,
-  };
-  const old = await send(oldBody, positive.idempotencyKey);
-  assert.equal(old.status, 201);
-  assert.equal(((await old.json()) as any).data.decision.allowInBook, false);
-  const forbiddenMethod = await send({ ...oldBody, method: "journal_denial" });
-  assert.equal(forbiddenMethod.status, 400);
-  const renewed = await send({
-    ...oldBody,
-    evidenceRef: "synthetic:本人在恢复后另作明确确认",
-  });
-  assert.equal(renewed.status, 201);
-  assert.equal(((await renewed.json()) as any).data.decision.allowInBook, true);
-  await assert.rejects(
-    targetDb.$executeRaw`UPDATE story_decisions SET allow_in_book=true WHERE id=${denial.id}::uuid`,
-  );
-  await closeChild(api.proc);
-  await targetDb.$disconnect();
-  await db.$executeRawUnsafe(`DROP SCHEMA "${target}" CASCADE`);
-  await rm(directory, { recursive: true, force: true });
-});

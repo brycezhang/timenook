@@ -1,3 +1,4 @@
+import { requireProjectMemberIn } from "../identity/project-members";
 import {
   Body,
   Controller,
@@ -325,8 +326,7 @@ export class Deletions implements OnModuleDestroy {
     const holds = await this.rights.recoveryHoldsIn(this.rights.db, projectId);
     if (holds.some((h) => h.reason === "BINDING_HISTORY_REVIEW_REQUIRED"))
       throw new ForbiddenException();
-    if (user.id !== order.buyerId && user.id !== subject.boundUserId)
-      throw new ForbiddenException();
+    await requireProjectMemberIn(this.rights.db, projectId, user.id);
   }
   async userStatus(projectId: string, authorization?: string) {
     await this.participant(projectId, authorization);

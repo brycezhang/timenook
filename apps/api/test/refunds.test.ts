@@ -9,7 +9,7 @@ import {
   db,
   config,
   project,
-  bound,
+  joinedProject,
   login,
   data,
   request,
@@ -281,7 +281,7 @@ test("approval freezes production, reserves fixed D07 money under the order lock
     ).statusCode,
     409,
   );
-  const started = await bound(),
+  const started = await joinedProject(),
     requestId = data(await open(started));
   assert.equal(
     (await adminRequest("POST", `/${requestId.id}/approve`, body)).statusCode,
@@ -476,20 +476,6 @@ test("a refund freezes a reserved production attempt and requires a verified ori
       dueAt: new Date(Date.now() + 86400000).toISOString(),
     }),
   ).current;
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/fulfillment/grants`,
-      p.narrator.token,
-      {
-        ...p.binding,
-        attemptId: attempt.id,
-        expiresAt: new Date(Date.now() + 600000).toISOString(),
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: "synthetic:handoff-grant",
-      },
-    ),
-  );
   data(await cmd(`/attempts/${attempt.id}/handoff`));
   const r = data(
     await open(p, {
@@ -596,20 +582,6 @@ test("known cancellation retains the production acceptance fact for the purchase
       dueAt: new Date(Date.now() + 86400000).toISOString(),
     }),
   ).current;
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/fulfillment/grants`,
-      p.narrator.token,
-      {
-        ...p.binding,
-        attemptId: attempt.id,
-        expiresAt: new Date(Date.now() + 600000).toISOString(),
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: "synthetic:grant",
-      },
-    ),
-  );
   data(await cmd(`/attempts/${attempt.id}/handoff`));
   data(
     await cmd(`/attempts/${attempt.id}/receipt`, {
@@ -763,20 +735,6 @@ test("approval blocks an otherwise authorized original handoff before any provid
       dueAt: new Date(Date.now() + 86400000).toISOString(),
     }),
   ).current;
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/fulfillment/grants`,
-      p.narrator.token,
-      {
-        ...p.binding,
-        attemptId: attempt.id,
-        expiresAt: new Date(Date.now() + 600000).toISOString(),
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: "synthetic:grant-before-refund",
-      },
-    ),
-  );
   const allowed = await app.inject({
     method: "GET",
     url: base + `/attempts/${attempt.id}/materials`,

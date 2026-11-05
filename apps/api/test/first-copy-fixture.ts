@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { db, readyStory, bound, data, request, app } from "./book-fixture";
+import {
+  db,
+  readyStory,
+  joinedProject,
+  data,
+  request,
+  app,
+} from "./book-fixture";
 import { ProductionTasks } from "../src/tasks/tasks";
 export async function readyFirstCopyBook(
   specification: {
@@ -37,7 +44,7 @@ export async function readyFirstCopyBook(
       },
     },
   });
-  const p = await readyStory(await bound(packageId));
+  const p = await readyStory(await joinedProject(packageId));
   const story = data(
     await request(
       "POST",
@@ -54,22 +61,6 @@ export async function readyFirstCopyBook(
           reason: "本人核对",
         })),
         notes: [],
-      },
-    ),
-  );
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/stories/${story.id}/decisions`,
-      p.narrator.token,
-      {
-        revisionId: story.revision.id,
-        expectedVersion: story.version,
-        contentHash: story.revision.contentHash,
-        confirmed: true,
-        allowInBook: true,
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: `synthetic:首本故事-${randomUUID()}`,
       },
     ),
   );
@@ -109,22 +100,6 @@ export async function readyReservedFirstCopy() {
     pdfHash: p.book.pdf.sha256,
     addressHash: address.address.hash,
   };
-  for (const role of ["narrator", "initiator"]) {
-    data(
-      await request(
-        "POST",
-        p.base + "/confirmations",
-        role === "narrator" ? p.narrator.token : p.buyer.token,
-        {
-          role,
-          ...binding,
-          ...(role === "narrator" ? { addressHash: undefined } : {}),
-          noticeVersion: "synthetic-d08-v1",
-          evidenceRef: `synthetic:${randomUUID()}`,
-        },
-      ),
-    );
-  }
   const originalSubmitKey = randomUUID();
   const reserved = data(
     await request(

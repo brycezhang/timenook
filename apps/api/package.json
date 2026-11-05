@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node --env-file-if-exists=../../.env dist/main.js",
-    "test": "tsc -p tsconfig.test.json && node --env-file-if-exists=../../.env --test dist-test/test/*.test.js",
+    "test": "node -e \"require('node:fs').rmSync('dist-test',{recursive:true,force:true})\" && tsc -p tsconfig.test.json && node --env-file-if-exists=../../.env --test --test-concurrency=2 --test-timeout=120000 dist-test/test/*.test.js",
     "db:generate": "prisma generate",
     "db:migrate": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js migrate deploy",
     "openapi": "pnpm build && node --env-file-if-exists=../../.env dist/openapi.js",

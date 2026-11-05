@@ -46,6 +46,7 @@ async function harness(mode = "demo") {
       page.setData = (patch: object) => Object.assign(page.data, patch);
     },
     wx: {
+      env: { USER_DATA_PATH: "/user-data" },
       getStorageSync: (key: string) => structuredClone(storage.get(key)),
       setStorageSync: (key: string, value: unknown) =>
         storage.set(key, structuredClone(value)),
@@ -122,6 +123,7 @@ async function harness(mode = "demo") {
     navigation() {
       return navigation;
     },
+    module: (name: string) => load(path.join(root, name)),
     async open(name: string, initialize = true) {
       page = undefined;
       // Page entrypoints execute on each load; service modules remain shared.
@@ -149,7 +151,7 @@ test("native tab handlers use cached tab navigation and the package supplies its
   assert.equal(config.tabBar.custom, true);
   assert.deepEqual(
     config.tabBar.list.map((item: { pagePath: string }) => item.pagePath),
-    ["pages/project/index", "pages/book/index", "pages/account/index"],
+    ["pages/home/index", "pages/account/index"],
   );
   for (const { pagePath } of config.tabBar.list) {
     const pageConfig = JSON.parse(
@@ -166,9 +168,9 @@ test("native tab handlers use cached tab navigation and the package supplies its
       (await readFile(path.join(root, `custom-tab-bar/index.${ext}`))).length,
     );
   const app = await harness();
-  for (const source of ["project", "book", "account"]) {
+  for (const source of ["home", "account"]) {
     const page = await app.open(`pages/${source}/index`);
-    for (const target of ["project", "book", "account"]) {
+    for (const target of source === "home" ? ["account"] : ["home"]) {
       page[target]();
       assert.equal(app.navigation(), "switchTab");
       assert.equal(app.route(), `/pages/${target}/index`);
@@ -176,37 +178,26 @@ test("native tab handlers use cached tab navigation and the package supplies its
   }
 });
 
-for (const recipient of ["妈妈", "爸爸"]) {
-  test(`built native purchase keeps the encoded ${recipient} selection and loads the invitation`, async () => {
-    const app = await harness();
-    const home = await app.open("pages/home/index");
-    home.choose({ currentTarget: { dataset: { recipient } } });
-    const [route, query] = app.route().slice(1).split("?");
-    const purchase = await app.open(route);
-    // WeChat passes the encoded query to onLoad; the browser bridge's
-    // URLSearchParams would decode this and hide a native-only regression.
-    purchase.onLoad(
-      Object.fromEntries(query.split("&").map((pair) => pair.split("="))),
-    );
-    assert.equal(purchase.data.recipient, recipient);
-    purchase.agree();
-    purchase.pay();
-    assert.equal(app.route(), "/pages/invite/index");
-    const invite = await app.open(app.route().slice(1));
-    await invite.onShow();
-    assert.equal(invite.data.mode, "demo");
-    assert.equal(invite.data.p.recipient, recipient);
-    assert.equal(
-      invite.data.bookImage,
-      recipient === "爸爸" ? "/assets/father-book.jpg" : "/assets/book.jpg",
-    );
-    invite.preview();
-    assert.equal(app.route(), "/pages/welcome/index");
-    const welcome = await app.open(app.route().slice(1));
-    await welcome.onShow();
-    assert.equal(welcome.data.p.id, invite.data.p.id);
+test("built new-book preserves an encoded user title and salutation", async () => {
+  const app = await harness("live");
+  const p = await app.open("pages/new-book/index");
+  p.input({
+    currentTarget: { dataset: { field: "name" } },
+    detail: { value: "妈妈的一生 & 回忆" },
   });
-}
+  p.input({
+    currentTarget: { dataset: { field: "salutation" } },
+    detail: { value: "妈妈" },
+  });
+  p.next();
+  const [route, query] = app.route().slice(1).split("?");
+  const purchase = await app.open(route, false);
+  purchase.onLoad(
+    Object.fromEntries(query.split("&").map((pair) => pair.split("="))),
+  );
+  assert.equal(purchase.data.bookTitle, "妈妈的一生 & 回忆");
+  assert.equal(purchase.requestedRecipient, "妈妈");
+});
 
 test("release package excludes website and probe routes and ignores stored demo mode", async () => {
   const release = spawnSync(
@@ -250,16 +241,17 @@ test("release package excludes website and probe routes and ignores stored demo 
     path.join(root, "pages/home/index.wxml"),
     "utf8",
   );
-  assert.match(homeMarkup, /class="hero-photo"/);
-  assert.match(homeMarkup, /class="gift-options"/);
+  assert.match(homeMarkup, /class="landing-hero"/);
+  assert.match(homeMarkup, /class="benefits"/);
   assert.match(homeMarkup, /含1本实体书/);
   assert.match(homeMarkup, /bindtap="account"/);
   assert.doesNotMatch(homeMarkup, /bindtap="(?:orders|participation|logout)"/);
   const home = await app.open("pages/home/index", false);
+  const mode = await app.module("services/mode.js");
   assert.equal(
-    home.data.mode,
+    mode.dataMode(),
     "live",
-    "cached demo mode cannot change the release package",
+    "cached demo cannot change release mode",
   );
   assert.equal(home.accountLink, undefined);
   home.onLoad({});

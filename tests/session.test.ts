@@ -57,6 +57,7 @@ beforeEach(() => {
   failSessionRemoval = false;
   reply = (request) => success(request, 201, envelope(identity));
   (globalThis as { wx?: unknown }).wx = {
+    env: { USER_DATA_PATH: "/user-data" },
     getStorageSync: (key: string) => structuredClone(storage.get(key)),
     setStorageSync: (key: string, value: unknown) => {
       storage.set(key, structuredClone(value));
@@ -616,4 +617,19 @@ test("bodyless logout revokes the session through a real HTTP JSON parser", asyn
   } finally {
     await server.close();
   }
+});
+
+test("private downloads use an owned writable file and normalize the native filePath result", async () => {
+  const c = new SessionClient(api);
+  await c.login();
+  const pending = c.downloadBook(identity.user.id, identity.session.id);
+  const request = downloads[0];
+  assert.ok(request.filePath?.startsWith("/user-data/timenook-private-"));
+  request.success?.({
+    statusCode: 200,
+    filePath: request.filePath,
+    tempFilePath: "",
+    errMsg: "downloadFile:ok",
+  } as WechatMiniprogram.DownloadFileSuccessCallbackResult);
+  assert.equal((await pending).tempFilePath, request.filePath);
 });

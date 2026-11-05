@@ -51,6 +51,7 @@ function harness(mode = "live") {
       page.setData = (patch) => Object.assign(page.data, patch);
     },
     wx: {
+      env: { USER_DATA_PATH: "/user-data" },
       getStorageSync: (key: string) => structuredClone(storage.get(key)),
       setStorageSync: (key: string, value: unknown) => {
         sideEffects.push(key);
@@ -262,7 +263,14 @@ test("an older refresh cannot overwrite the newest catalog, including an empty c
   await old;
   assert.equal(page.data.recipientTypes.length, 0);
   assert.equal(page.data.packagePrice, "");
-  assert.equal(page.data.selection, null);
+  assert.equal(
+    JSON.stringify(page.data.selection),
+    JSON.stringify({
+      recipientCode: null,
+      recipientRevision: null,
+      customLabel: "我",
+    }),
+  );
   page.customLabel({ detail: { value: "朋友" } });
   assert.equal(page.data.selectedLabel, "朋友");
   page.customLabel({ detail: { value: " " } });

@@ -1,3 +1,4 @@
+import { requireProjectMemberIn } from "../identity/project-members";
 import {
   Body,
   Controller,
@@ -234,8 +235,7 @@ export class CompleteExports implements OnModuleDestroy {
     return this.database.$transaction(async (tx) => {
       const user = await this.identity.current(authorization, tx),
         p = await this.projectIn(tx, id);
-      if (user.id !== p.subject.boundUserId && user.id !== p.initiatorUserId)
-        throw new ForbiddenException();
+      await requireProjectMemberIn(tx, id, user.id);
       return work(tx, p, user.id);
     });
   }
@@ -282,7 +282,7 @@ export class CompleteExports implements OnModuleDestroy {
     key: string,
   ) {
     return this.user(id, authorization, async (tx, p, userId) => {
-      if (p.subject.boundUserId !== userId) throw new ForbiddenException();
+      await requireProjectMemberIn(tx, id, userId);
       this.validateEvidence(p, body);
       const prior = await tx.careRequest.findUnique({
         where: {
@@ -354,9 +354,7 @@ export class CompleteExports implements OnModuleDestroy {
       });
       return {
         projectId: id,
-        canRequest:
-          p.subject.boundUserId === userId &&
-          terms.exportRequests!.state !== "deleted",
+        canRequest: terms.exportRequests!.state !== "deleted",
         amountDueFen: 0,
         requestWindow: terms.exportRequests,
         ...participationNotice(p.snapshot, !!this.config.acceptance),

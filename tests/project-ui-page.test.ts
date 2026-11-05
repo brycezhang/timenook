@@ -43,6 +43,7 @@ test("project keeps pending stories and recording recovery visible while complet
       page.setData = (patch: object) => Object.assign(page.data, patch);
     },
     wx: {
+      env: { USER_DATA_PATH: "/user-data" },
       getStorageSync: (key: string) => structuredClone(storage.get(key)),
       setStorageSync: (key: string, value: unknown) =>
         storage.set(key, structuredClone(value)),
@@ -51,12 +52,10 @@ test("project keeps pending stories and recording recovery visible while complet
     },
   });
   const respond = (data: unknown) =>
-    requests
-      .shift()
-      .success({
-        statusCode: 200,
-        data: { data, meta: { requestId: "synthetic" } },
-      });
+    requests.shift().success({
+      statusCode: 200,
+      data: { data, meta: { requestId: "synthetic" } },
+    });
   page.onLoad({ projectId });
   const showing = page.onShow();
   respond({

@@ -42,6 +42,7 @@ async function harness(
       page.setData = (patch: object) => Object.assign(page.data, patch);
     },
     wx: {
+      env: { USER_DATA_PATH: "/user-data" },
       getStorageSync: (key: string) => structuredClone(storage.get(key)),
       setStorageSync: (key: string, value: unknown) =>
         storage.set(key, structuredClone(value)),
@@ -69,7 +70,21 @@ async function harness(
               ? session
               : route === "/participations"
                 ? { projects }
-                : undefined;
+                : route.endsWith("/overview")
+                  ? {
+                      projectId: route.split("/")[2],
+                      bookTitle: "当前的书",
+                      metadataVersion: 1,
+                      canDecide: true,
+                      canRecord: true,
+                      canInvite: true,
+                      stories: [],
+                      interviews: [],
+                      tasks: [],
+                      summary: {},
+                      nextStep: "record",
+                    }
+                  : undefined;
         assert.ok(data, `unexpected request: ${route}`);
         const complete = () =>
           options.success({
@@ -97,89 +112,51 @@ async function harness(
   };
 }
 
-test("a signed-in returning user opens their bound storybook without visiting orders", async () => {
-  const h = await harness("home", [{ projectId, state: "bound" }]);
-  h.page.onLoad({});
+test("home renders the selected project in place and never opens an order", async () => {
+  const second = "44444444-4444-4444-8444-444444444444";
+  const h = await harness("home", [{ projectId }, { projectId: second }]);
+  h.storage.set(
+    `timenook.live-project.v1:${session.user.id}:${session.session.id}`,
+    second,
+  );
   await h.page.onShow();
-  assert.deepEqual(h.routes, ["/pages/project/index"]);
+  assert.equal(h.page.data.overview.projectId, second);
+  assert.equal(h.page.data.count, 2);
+  assert.deepEqual(h.routes, []);
   assert.ok(!h.requests.includes("/orders"));
+  h.page.switchProject();
+  assert.deepEqual(h.routes, ["/pages/projects/index?switch=1"]);
 });
-
-test("explicit gift browsing and pending invitations never auto-open a project", async () => {
-  const browsing = await harness("home", [{ projectId, state: "bound" }]);
-  browsing.page.onLoad({ browse: "1" });
-  await browsing.page.onShow();
-  assert.deepEqual(browsing.routes, []);
-  const pending = await harness("home", [{ projectId, state: "pending" }]);
-  pending.page.onLoad({});
-  await pending.page.onShow();
-  assert.deepEqual(pending.routes, []);
-});
-
-test("an initiator returns to the selected storybook instead of a different membership", async () => {
-  const secondId = "44444444-4444-4444-8444-444444444444";
-  const h = await harness("home", [
-    { projectId, state: "bound" },
-    { projectId: secondId, state: "initiator" },
-  ]);
-  const context = `${session.user.id}:${session.session.id}`;
-  h.storage.set(`timenook.live-project.v1:${context}`, secondId);
-  h.page.onLoad({});
+test("home without memberships shows the purchase entry", async () => {
+  const h = await harness("home", []);
   await h.page.onShow();
-  assert.deepEqual(h.routes, ["/pages/project/index"]);
-  assert.equal(h.storage.get(`timenook.live-project.v1:${context}`), secondId);
+  assert.equal(h.page.data.overview, null);
+  h.page.purchase();
+  assert.deepEqual(h.routes, ["/pages/new-book/index"]);
 });
-
-test("My is usable without a project: sign in, view orders and manage participation", async () => {
+test("My provides project, new purchase and terms entries without loading private projects", async () => {
   const h = await harness("account", [], false);
-  h.page.onLoad({});
-  await h.page.onShow();
-  assert.equal(h.page.data.loggedIn, false);
-  assert.deepEqual(h.requests, []);
-  await h.page.login();
-  assert.equal(h.page.data.loggedIn, true);
-  h.page.order();
-  h.page.rights();
-  assert.deepEqual(h.routes, ["/pages/order/index", "/pages/welcome/index"]);
-});
-
-test("My completes a pending native login after background and foreground", async () => {
-  const h = await harness("account", [], false, true);
-  h.page.onLoad({});
-  await h.page.onShow();
-  const login = h.page.login();
-  h.page.onHide();
-  await h.page.onShow();
-  h.finishLogin();
-  await login;
-  assert.equal(h.page.data.loggedIn, true);
-  assert.equal(h.page.data.busy, false);
-  h.page.order();
-  assert.deepEqual(h.routes, ["/pages/order/index"]);
-});
-
-test("login completed while My is hidden waits for the real foreground before loading private projects", async () => {
-  const h = await harness("account", [], false, true);
-  h.page.onLoad({});
-  await h.page.onShow();
-  const login = h.page.login();
-  h.page.onHide();
-  await Promise.resolve();
-  h.finishLogin();
-  await login;
-  assert.deepEqual(h.requests, ["/sessions/wechat"]);
-  await h.page.onShow();
-  assert.equal(h.page.data.loggedIn, true);
-  assert.deepEqual(h.requests, ["/sessions/wechat", "/participations"]);
-});
-
-test("My can log in again after a server 401 without leaving the visible page", async () => {
-  const h = await harness("account", []);
-  h.page.onLoad({});
-  h.expireNextMembership();
   await h.page.onShow();
   assert.equal(h.page.data.loggedIn, false);
   await h.page.login();
+  assert.equal(h.page.data.loggedIn, true);
+  h.page.projects();
+  h.page.purchase();
+  h.page.terms();
+  assert.deepEqual(h.routes, [
+    "/pages/projects/index",
+    "/pages/new-book/index",
+    "/pages/terms/index",
+  ]);
+  assert.ok(!h.requests.includes("/participations"));
+});
+test("native login completes through background and foreground without a second click", async () => {
+  const h = await harness("account", [], false, true);
+  const pending = h.page.login();
+  h.page.onHide();
+  await h.page.onShow();
+  h.finishLogin();
+  await pending;
   assert.equal(h.page.data.loggedIn, true);
   assert.equal(h.page.data.busy, false);
 });

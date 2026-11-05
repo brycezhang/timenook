@@ -6,7 +6,7 @@ import { build } from "esbuild";
 // Execute the actual page and its real session/request modules. Only the native
 // WeChat registration, storage, login and network boundaries are substituted.
 const bundled = await build({
-  entryPoints: ["miniprogram/pages/home/index.ts"],
+  entryPoints: ["miniprogram/pages/account/index.ts"],
   bundle: true,
   write: false,
   format: "cjs",
@@ -19,7 +19,7 @@ const bundled = await build({
 });
 
 interface HomePage {
-  data: { busy: boolean; userId: string; status: string; mode: string };
+  data: { busy: boolean; loggedIn: boolean; status: string; mode: string };
   setData(patch: Partial<HomePage["data"]>): void;
   onShow(): Promise<void>;
   login(): Promise<void>;
@@ -37,6 +37,7 @@ function pageHarness() {
       page.setData = (patch) => Object.assign(page.data, patch);
     },
     wx: {
+      env: { USER_DATA_PATH: "/user-data" },
       getStorageSync: (key: string) => structuredClone(storage.get(key)),
       setStorageSync: (key: string, value: unknown) =>
         storage.set(key, structuredClone(value)),
@@ -101,17 +102,17 @@ test("returning to the page during login shows the completed account and enables
   await login;
   assert.deepEqual(
     {
-      userId: page.data.userId,
+      loggedIn: page.data.loggedIn,
       status: page.data.status,
       busy: page.data.busy,
     },
-    { userId: user.id, status: "已连接服务端账号", busy: false },
+    { loggedIn: true, status: "", busy: false },
   );
 
   const reentry = page.onShow();
   respond(await nextRequest(), 200, user);
   await reentry;
-  assert.equal(page.data.userId, user.id);
+  assert.equal(page.data.loggedIn, true);
   assert.equal(page.data.busy, false);
 });
 
@@ -123,14 +124,14 @@ test("returning during logout preserves the pending exit and finishes with usabl
   const logout = page.logout();
   const revocation = await nextRequest();
   await page.onShow();
-  assert.equal(page.data.status, "正在退出");
-  assert.equal(page.data.userId, "");
+  assert.equal(page.data.busy, true);
+  assert.equal(page.data.loggedIn, false);
   respond(revocation, 204);
   await logout;
-  assert.equal(page.data.status, "已退出登录");
+  assert.equal(page.data.status, "");
   assert.equal(page.data.busy, false);
   await page.onShow();
-  assert.equal(page.data.userId, "");
+  assert.equal(page.data.loggedIn, false);
   assert.equal(page.data.busy, false);
 });
 
@@ -144,12 +145,12 @@ test("a login failure after foregrounding leaves retry available and the retry c
   } as WechatMiniprogram.RequestFailCallbackErr);
   await failed;
   assert.equal(page.data.busy, false);
-  assert.equal(page.data.userId, "");
+  assert.equal(page.data.loggedIn, false);
   assert.equal(page.data.status, "服务暂不可用，请稍后重试");
   const retry = page.login();
   respond(await nextRequest(), 201, loginResponse);
   await retry;
-  assert.equal(page.data.userId, user.id);
+  assert.equal(page.data.loggedIn, true);
   assert.equal(page.data.busy, false);
 });
 
@@ -166,14 +167,11 @@ test("a logout failure after foregrounding reports unconfirmed revocation withou
   } as WechatMiniprogram.RequestFailCallbackErr);
   await logout;
   assert.equal(page.data.busy, false);
-  assert.equal(page.data.userId, "");
-  assert.equal(
-    page.data.status,
-    "本机已退出，服务端撤销未确认；原会话将在到期后失效。",
-  );
+  assert.equal(page.data.loggedIn, false);
+  assert.equal(page.data.status, "本机已退出，服务端退出结果待确认");
   await page.onShow();
   assert.equal(page.data.busy, false);
-  assert.equal(page.data.userId, "");
+  assert.equal(page.data.loggedIn, false);
 });
 
 test("an older foreground restore cannot overwrite a different account after logout and login", async () => {
@@ -195,7 +193,7 @@ test("an older foreground restore cannot overwrite a different account after log
   await nextLogin;
   respond(oldIdentity, 200, user);
   await restore;
-  assert.equal(page.data.userId, nextUser.id);
-  assert.equal(page.data.status, "已连接服务端账号");
+  assert.equal(page.data.loggedIn, true);
+  assert.equal(page.data.status, "");
   assert.equal(page.data.busy, false);
 });

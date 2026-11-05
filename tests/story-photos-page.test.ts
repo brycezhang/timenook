@@ -26,7 +26,9 @@ const compiled = await build({
   platform: "neutral",
   define: { __TIMENOOK_API_BASE_URL__: JSON.stringify(base) },
 });
-function harness(options: { controlledTimers?: boolean } = {}) {
+function harness(
+  options: { controlledTimers?: boolean; autoUpload?: boolean } = {},
+) {
   const timers: { callback: () => Promise<void> | void; cleared: boolean }[] =
     [];
   let now = Date.now();
@@ -74,10 +76,12 @@ function harness(options: { controlledTimers?: boolean } = {}) {
       v.setData = (patch: object) => Object.assign(v.data, patch);
       pages.push(page);
       // These stage fixtures isolate file recovery and explicit private-preview races.
-      if (page.queueUploads) page.queueUploads = () => Promise.resolve();
+      if (page.queueUploads && !options.autoUpload)
+        page.queueUploads = () => Promise.resolve();
       if (page.renderPhotos) page.renderPhotos = () => Promise.resolve();
     },
     wx: {
+      env: { USER_DATA_PATH: "/user-data" },
       getStorageSync: (k: string) => structuredClone(storage.get(k)),
       setStorageSync: (k: string, v: unknown) => {
         if (failPreviewCleanup && k.includes("photo-previews")) {
@@ -146,7 +150,7 @@ function harness(options: { controlledTimers?: boolean } = {}) {
         },
       }),
       navigateTo: (o: any) => navigations.push(o.url),
-      navigateBack: () => {},
+      navigateBack: () => navigations.push("back"),
       showToast: () => {},
       downloadFile: (o: any) => downloads.push(o),
     },
@@ -1262,4 +1266,81 @@ test("assisted shared photos refresh sealed references for captions and private 
   } finally {
     h.page.onHide();
   }
+});
+
+test("leaving immediately after choosing photos waits for automatic upload", async () => {
+  const h = harness({ controlledTimers: true, autoUpload: true });
+  await ready(h);
+  await choose(h);
+  const adding = h.page.choose();
+  await tick();
+  const check = h.requests.findIndex((r: any) =>
+    r.url.endsWith("/collection-check"),
+  );
+  assert.ok(check >= 0);
+  respond(h.requests.splice(check, 1)[0], { allowed: true }, 201);
+  await adding;
+  assert.equal(h.page.data.photos.length, 4);
+  const leaving = h.page.back();
+  await tick();
+  assert.deepEqual(
+    h.navigations,
+    [],
+    "back must not leave while uploads are in progress",
+  );
+  // Complete both selected originals through their actual upload HTTP flow.
+  for (const [i, local] of h.page.data.photos.entries()) {
+    respond(
+      h.requests.shift(),
+      remote(
+        local,
+        [
+          "55555555-5555-4555-8555-555555555555",
+          "66666666-6666-4666-8666-666666666666",
+          "77777777-7777-4777-8777-777777777777",
+          "88888888-8888-4888-8888-888888888888",
+        ][i],
+      ),
+      201,
+    );
+    await tick();
+    respond(
+      h.requests.shift(),
+      {
+        url: "/v1/photos/objects",
+        storage: "local-simulator",
+        expiresAt: "2099-01-01T00:00:00Z",
+        fields: {
+          key: "photos/staging/input.bin",
+          policy: "synthetic",
+          "x-photo-capability": "synthetic",
+        },
+      },
+      201,
+    );
+    await tick();
+    respond(
+      h.requests.shift(),
+      remote(
+        local,
+        [
+          "55555555-5555-4555-8555-555555555555",
+          "66666666-6666-4666-8666-666666666666",
+          "77777777-7777-4777-8777-777777777777",
+          "88888888-8888-4888-8888-888888888888",
+        ][i],
+        "sealed",
+      ),
+      201,
+    );
+    await tick();
+    respond(h.requests.shift(), {
+      photos: [],
+      snapshot: { id: "materials", revision: i + 1, entries: [] },
+    });
+    await tick();
+  }
+  await leaving;
+  assert.deepEqual(h.navigations, ["back"]);
+  h.page.onUnload();
 });

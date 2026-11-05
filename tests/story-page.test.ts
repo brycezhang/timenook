@@ -61,6 +61,7 @@ function harness(
       page.setData = (patch: object) => Object.assign(page.data, patch);
     },
     wx: {
+      env: { USER_DATA_PATH: "/user-data" },
       getStorageSync: (key: string) => {
         assert.notEqual(
           key,

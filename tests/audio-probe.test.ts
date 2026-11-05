@@ -32,6 +32,7 @@ const manager = {
 };
 Object.assign(globalThis, {
   wx: {
+    env: { USER_DATA_PATH: "/user-data" },
     getRecorderManager: () => manager,
     getStorageSync: (key: string) => structuredClone(stored.get(key)),
     setStorageSync: (key: string, value: any) => {

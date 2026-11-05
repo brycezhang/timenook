@@ -308,7 +308,7 @@ export class PhotoFiles {
   }
 }
 
-const previewCacheKey = `timenook.photo-previews.v1:${API_BASE_URL}`;
+const previewCacheKey = `timenook.photo-previews.v2:${API_BASE_URL}`;
 const unregisteredPreviews = new Set<string>();
 function previewPaths(): string[] {
   const value: unknown = wx.getStorageSync(previewCacheKey);
@@ -321,25 +321,42 @@ function previewPaths(): string[] {
     ]),
   ];
 }
-export async function clearPhotoPreviews(only?: string[]) {
-  const paths = only ?? previewPaths(),
-    removed = new Set<string>();
-  for (const path of paths)
-    try {
-      await new Promise<void>((resolve, reject) =>
-        wx
-          .getFileSystemManager()
-          .unlink({ filePath: path, success: () => resolve(), fail: reject }),
+let previewCleanup = Promise.resolve();
+let previewsPrepared = false;
+export function clearPhotoPreviews(only?: string[]) {
+  const paths = only ?? previewPaths();
+  const job = previewCleanup
+    .catch(() => {})
+    .then(async () => {
+      const removed = new Set<string>();
+      for (const path of paths) {
+        try {
+          await new Promise<void>((resolve, reject) =>
+            wx.getFileSystemManager().unlink({
+              filePath: path,
+              success: () => resolve(),
+              fail: (error) =>
+                /no such file|not exist|ENOENT/i.test(error.errMsg)
+                  ? resolve()
+                  : reject(error),
+            }),
+          );
+          removed.add(path);
+          unregisteredPreviews.delete(path);
+        } catch {}
+      }
+      wx.setStorageSync(
+        previewCacheKey,
+        previewPaths().filter((path) => !removed.has(path)),
       );
-      removed.add(path);
-      unregisteredPreviews.delete(path);
-    } catch {}
-  wx.setStorageSync(
-    previewCacheKey,
-    previewPaths().filter((path) => !removed.has(path)),
-  );
-  if (paths.some((path) => !removed.has(path)))
-    throw Error("临时预览尚未清理，请重试");
+      if (paths.some((path) => !removed.has(path)))
+        throw Error("临时预览尚未清理，请重试");
+    });
+  previewCleanup = job;
+  void job.catch(() => {
+    previewsPrepared = false;
+  });
+  return job;
 }
 export async function privatePhotoPreview(
   projectId: string,
@@ -348,7 +365,16 @@ export async function privatePhotoPreview(
   asset: { id: string; bytes: number; sha256: string },
   current: () => boolean,
 ) {
-  await clearPhotoPreviews();
+  if (!previewsPrepared) {
+    previewsPrepared = true;
+    try {
+      await clearPhotoPreviews();
+    } catch (error) {
+      previewsPrepared = false;
+      throw error;
+    }
+  }
+  await previewCleanup;
   if (!current()) throw Error("预览已取消");
   const context = sessionClient.context();
   const result = await sessionClient.downloadPhoto(

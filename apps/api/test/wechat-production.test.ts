@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from "../src/identity/project-members";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import {
@@ -258,11 +259,8 @@ test("ordinary merchant and controlled acceptance retain internal projects and n
       headers: { cookie },
     });
     assert.equal(participation.statusCode, 200, participation.body);
-    assert.equal(
-      participation.json().data.noticeVersion,
-      "internal-participation-v1",
-    );
-    assert.equal(participation.json().data.canCollect, false);
+    assert.equal(participation.json().data.noticeVersion, TERMS_VERSION);
+    assert.equal(participation.json().data.canCollect, true);
     for (const kind of ["payments", "refunds"]) {
       const response: { statusCode: number } = await app.inject({
         method: "POST",

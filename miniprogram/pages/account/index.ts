@@ -26,6 +26,7 @@ Page({
   },
   async login() {
     if (this.data.busy) return;
+    ++this.generation;
     this.loginPending = true;
     this.setData({ busy: true, status: "" });
     try {
@@ -42,12 +43,13 @@ Page({
   },
   async logout() {
     if (this.data.busy) return;
+    ++this.generation;
     this.setData({ busy: true });
     try {
       await sessionClient.logout();
     } catch (e) {
       this.setData({
-        status: e instanceof Error ? e.message : "退出结果待查询",
+        status: "本机已退出，服务端退出结果待确认",
       });
     } finally {
       this.setData({ busy: false, loggedIn: false });

@@ -84,6 +84,7 @@ function harness(authenticated = true) {
       page.setData = (patch: any) => Object.assign(page.data, patch);
     },
     wx: {
+      env: { USER_DATA_PATH: "/user-data" },
       getStorageSync(key: string) {
         assert.notEqual(key, "timenook.frontend.v1");
         return structuredClone(storage.get(key));

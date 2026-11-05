@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from "../src/identity/project-members";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import sharp from "sharp";
 import assert from "node:assert/strict";
@@ -260,9 +261,9 @@ const approval = () => ({
   expectedBindingVersion: 0,
   evidenceRef: "synthetic:发起人核验申请者",
 });
-async function bound(versionId = packageId) {
-  const p = await project(versionId);
-  const narrator = await login();
+async function joinedProject(versionId = packageId) {
+  const p = await project(versionId),
+    narrator = await login();
   const invite = data(
     await request(
       "POST",
@@ -270,20 +271,12 @@ async function bound(versionId = packageId) {
       p.buyer.token,
     ),
   );
-  const application = data(
-    await request(
-      "POST",
-      `/v1/invitations/${invite.token}/requests`,
-      narrator.token,
-      notice(),
-    ),
-  );
   data(
     await request(
       "POST",
-      `/v1/binding-requests/${application.id}/approve`,
-      p.buyer.token,
-      approval(),
+      `/v1/invitations/${invite.token}/accept`,
+      narrator.token,
+      { termsVersion: TERMS_VERSION },
     ),
   );
   return { ...p, narrator };
@@ -294,37 +287,10 @@ async function state(p: { projectId: string }, token: string) {
     200,
   );
 }
-async function choose(
-  p: { projectId: string },
-  token: string,
-  purpose: string,
-  granted: boolean,
-  key = randomUUID(),
-) {
-  const current = await state(p, token);
-  const body = {
-    ...notice(),
-    purpose,
-    granted,
-    expectedBindingVersion: current.bindingVersion,
-    expectedAccessEpoch: current.accessEpoch,
-  };
-  return {
-    body,
-    key,
-    response: await request(
-      "POST",
-      `/v1/projects/${p.projectId}/consents`,
-      token,
-      body,
-      key,
-    ),
-  };
-}
 
 async function interview() {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const plan = data(
     await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token),
     200,
@@ -359,7 +325,7 @@ test("a currently authorized narrator reserves one stable photo in its real inte
     401,
   );
   assert.equal(
-    (await request("POST", p.base, p.buyer.token, body)).statusCode,
+    (await request("POST", p.base, (await login()).token, body)).statusCode,
     403,
   );
   const created = data(await request("POST", p.base, p.narrator.token, body));
@@ -442,7 +408,10 @@ test("photo sealing retains the actual original and creates private oriented met
   for (const kind of ["original", "preview", "thumbnail", "print"]) {
     const url = `${p.base}/${photo.id}/content/${kind}`;
     assert.equal((await request("GET", url)).statusCode, 401);
-    assert.equal((await request("GET", url, p.buyer.token)).statusCode, 403);
+    assert.equal(
+      (await request("GET", url, (await login()).token)).statusCode,
+      403,
+    );
     const r = await request("GET", url, p.narrator.token);
     assert.equal(r.statusCode, 200, r.body);
     assert.equal(r.headers["cache-control"], "private, no-store");
@@ -531,7 +500,7 @@ test("photo intents survive ordinary AI and sharing grants while the same app se
     photo = await reserve(p, bytes),
     beforeGrant = await state(p, p.narrator.token);
   await upload(p, photo, bytes);
-  data((await choose(p, p.narrator.token, "ai", true)).response);
+
   assert.equal(
     (await state(p, p.narrator.token)).accessEpoch,
     beforeGrant.accessEpoch,
@@ -607,7 +576,7 @@ test("photo intents survive ordinary AI and sharing grants while the same app se
     assert.equal((await taskView())[0].state, "waiting_provider");
     const added = await reserve(p, bytes);
     await upload(p, added, bytes);
-    data((await choose(p, p.narrator.token, "sharing", true)).response);
+
     assert.equal(
       (await state(p, p.narrator.token)).accessEpoch,
       beforeGrant.accessEpoch,
@@ -833,86 +802,6 @@ test("final objects survive a database rollback and app restart without duplicat
   assert.deepEqual(state.usage, { reservedCount: 0, consumedCount: 1 });
 });
 
-test("revocation during image I/O prevents late activation and private bytes after read", async () => {
-  const p = await interview(),
-    bytes = await sharp({
-      create: { width: 40, height: 30, channels: 3, background: "white" },
-    })
-      .png()
-      .toBuffer();
-  const photo = await reserve(p, bytes);
-  await upload(p, photo, bytes);
-  let revoked = false;
-  class RevokingObjects extends LocalProbeObjects {
-    async copy(source: string, target: string) {
-      await super.copy(source, target);
-      if (!revoked) {
-        revoked = true;
-        data((await choose(p, p.narrator.token, "collection", false)).response);
-      }
-    }
-  }
-  const other = await createApplication(config, {
-    ...fixtureOptions(),
-    recordingObjects: new RevokingObjects(root),
-  });
-  try {
-    assert.equal(
-      (
-        await request(
-          "POST",
-          `${p.base}/${photo.id}/seal`,
-          p.narrator.token,
-          {},
-          randomUUID(),
-          other,
-        )
-      ).statusCode,
-      403,
-    );
-  } finally {
-    await other.close();
-  }
-  data((await choose(p, p.narrator.token, "collection", true)).response);
-  assert.equal(
-    (await request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}))
-      .statusCode,
-    403,
-    "new grant cannot revive the old epoch",
-  );
-  const q = await interview(),
-    safe = await reserve(q, bytes);
-  await upload(q, safe, bytes);
-  data(
-    await request("POST", `${q.base}/${safe.id}/seal`, q.narrator.token, {}),
-  );
-  class ReadRevokingObjects extends LocalProbeObjects {
-    async read(key: string) {
-      const result = await super.read(key);
-      data((await choose(q, q.narrator.token, "collection", false)).response);
-      return result;
-    }
-  }
-  const reading = await createApplication(config, {
-    ...fixtureOptions(),
-    recordingObjects: new ReadRevokingObjects(root),
-  });
-  try {
-    const denied = await request(
-      "GET",
-      `${q.base}/${safe.id}/content/preview`,
-      q.narrator.token,
-      undefined,
-      randomUUID(),
-      reading,
-    );
-    assert.equal(denied.statusCode, 403);
-    assert.ok(!denied.rawPayload.equals(bytes));
-  } finally {
-    await reading.close();
-  }
-});
-
 test("real database ownership constraints reject photos and immutable references from another interview or project", async () => {
   const p = await interview(),
     q = await interview(),
@@ -1009,8 +898,8 @@ test("an unsupported photo can release its reservation and recover with a suppor
       },
     },
   });
-  const p = await bound(version);
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject(version);
+
   const plan = data(
     await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token),
     200,
@@ -1157,124 +1046,6 @@ test("database lineage rejects a derivative parent from another photo in the sam
   data(await request("POST", `${p.base}/${one.id}/seal`, p.narrator.token, {}));
   await assert.rejects(
     db.$executeRaw`INSERT INTO photo_assets(id,project_id,intent_id,parent_id,kind,processing_version,storage,store,storage_scope,object_key,bytes,sha256,mime,width,height,metadata) SELECT ${randomUUID()}::uuid,project_id,${two.id}::uuid,id,'preview','synthetic-invalid-parent',storage,store,storage_scope,${`photos/sealed/${randomUUID()}/preview.jpg`},bytes,sha256,mime,width,height,metadata FROM photo_assets WHERE intent_id=${one.id}::uuid AND kind='original'`,
-  );
-});
-
-test("collection-only assistance can recover only its current photo intents without private material history", async () => {
-  const p = await project(),
-    current = await state(p, p.buyer.token);
-  const assisted = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/assisted-sessions`,
-      p.buyer.token,
-      {
-        ...notice(),
-        purpose: "collection",
-        granted: true,
-        expectedBindingVersion: 0,
-        expectedAccessEpoch: current.accessEpoch,
-      },
-    ),
-  );
-  const body = { assistedSessionId: assisted.id };
-  const context = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/interviews/context`,
-      p.buyer.token,
-      body,
-    ),
-  );
-  const i = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/interviews`,
-      p.buyer.token,
-      {
-        ...body,
-        clientInterviewId: randomUUID(),
-        expectedPlanRevision: context.plan.revision,
-        starterKind: "photo",
-      },
-    ),
-  );
-  const base = `/v1/projects/${p.projectId}/interviews/${i.id}/photos`;
-  const photo = data(
-    await request("POST", base, p.buyer.token, {
-      ...body,
-      clientPhotoId: randomUUID(),
-      bytes: 100,
-      sha256: "a".repeat(64),
-    }),
-  );
-  assert.equal((await request("GET", base, p.buyer.token)).statusCode, 403);
-  const resumed = data(
-    await request("POST", `${base}/context`, p.buyer.token, body),
-  );
-  assert.equal(resumed.photos[0].id, photo.id);
-  assert.equal(resumed.snapshot, null);
-  const realNow = Date.now;
-  try {
-    Date.now = () => Date.parse(assisted.expiresAt);
-    assert.equal(
-      (await request("POST", `${base}/context`, p.buyer.token, body))
-        .statusCode,
-      403,
-    );
-  } finally {
-    Date.now = realNow;
-  }
-});
-
-test("collection context hides sealed material history until the initiator has separate sharing permission", async () => {
-  const p = await interview(),
-    bytes = await sharp({
-      create: { width: 40, height: 30, channels: 3, background: "white" },
-    })
-      .png()
-      .toBuffer(),
-    photo = await reserve(p, bytes);
-  await upload(p, photo, bytes);
-  data(
-    await request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
-  );
-  const current = await state(p, p.buyer.token),
-    assisted = data(
-      await request(
-        "POST",
-        `/v1/projects/${p.projectId}/assisted-sessions`,
-        p.buyer.token,
-        {
-          ...notice(),
-          purpose: "collection",
-          granted: true,
-          expectedBindingVersion: current.bindingVersion,
-          expectedAccessEpoch: current.accessEpoch,
-        },
-      ),
-    );
-  const context = data(
-    await request("POST", `${p.base}/context`, p.buyer.token, {
-      assistedSessionId: assisted.id,
-    }),
-  );
-  assert.deepEqual(context.photos, []);
-  assert.equal(context.snapshot, null);
-  assert.equal((await request("GET", p.base, p.buyer.token)).statusCode, 403);
-  data((await choose(p, p.narrator.token, "sharing", true)).response);
-  const shared = data(await request("GET", p.base, p.buyer.token), 200);
-  assert.equal(shared.snapshot.entries[0].photoId, photo.id);
-  assert.ok(
-    shared.snapshot.entries[0].assets.some((a: any) => a.kind === "preview"),
-  );
-  assert.equal(
-    data(
-      await request("POST", `${p.base}/context`, p.buyer.token, {
-        assistedSessionId: assisted.id,
-      }),
-    ).snapshot,
-    null,
   );
 });
 

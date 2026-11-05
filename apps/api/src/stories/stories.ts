@@ -198,6 +198,26 @@ export class Stories {
       "existing",
     );
   }
+  private async quotaUsedIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    quotaKind: string,
+  ) {
+    const rows = await tx.storyGeneration.findMany({
+      where: { projectId, quotaKind },
+      select: { taskId: true },
+    });
+    const obsolete = await tx.productionTask.findMany({
+      where: { id: { in: rows.map((r) => r.taskId) }, state: "obsolete" },
+      select: { id: true },
+    });
+    const attempted = await tx.taskAttempt.findMany({
+      where: { taskId: { in: obsolete.map((r) => r.id) } },
+      select: { taskId: true },
+    });
+    const charged = new Set(attempted.map((r) => r.taskId));
+    return rows.length - obsolete.filter((r) => !charged.has(r.id)).length;
+  }
   async organizeIn(
     tx: Prisma.TransactionClient,
     projectId: string,
@@ -268,6 +288,43 @@ export class Stories {
     });
     if ((story?.version ?? 0) !== body.baseVersion)
       throw new ConflictException();
+    if (automatic && story) {
+      const generations = await tx.storyGeneration.findMany({
+        where: { storyId: story.id, baseVersion: body.baseVersion },
+        select: { taskId: true },
+      });
+      const commands = await tx.storyCommand.findMany({
+        where: {
+          projectId,
+          taskId: { in: generations.map((g) => g.taskId) },
+          key: { startsWith: "auto-recording:" },
+        },
+        select: { taskId: true },
+      });
+      const attempted = new Set(
+        (
+          await tx.taskAttempt.findMany({
+            where: { taskId: { in: commands.map((c) => c.taskId) } },
+            select: { taskId: true },
+          })
+        ).map((a) => a.taskId),
+      );
+      await tx.productionTask.updateMany({
+        where: {
+          id: {
+            in: commands
+              .map((c) => c.taskId)
+              .filter((id) => !attempted.has(id)),
+          },
+          state: { in: ["waiting_inputs", "queued"] },
+        },
+        data: {
+          state: "obsolete",
+          errorCode: "INPUT_CHANGED",
+          fence: { increment: 1 },
+        },
+      });
+    }
     const { snapshot } = await readProjectAdmissionIn(tx, projectId),
       admission = snapshot.admission as Prisma.JsonObject,
       d04 = admission.d04 as Prisma.JsonObject,
@@ -286,10 +343,7 @@ export class Stories {
     )
       throw new ServiceUnavailableException();
     const quotaExceeded =
-      (await tx.storyGeneration.count({ where: { projectId, quotaKind } })) >=
-      Number(quota.value);
-    if (quotaExceeded && !automatic)
-      throw new ConflictException("Story quota exhausted");
+      (await this.quotaUsedIn(tx, projectId, quotaKind)) >= Number(quota.value);
     story ??= await tx.story.create({
       data: { id: randomUUID(), projectId, interviewId: interview.id },
     });
@@ -345,7 +399,7 @@ export class Stories {
     // A new HTTP key is not proof that an unresolved provider request failed.
     const matching = await tx.productionTask.findMany({
       where: { projectId, kind: "compose_story", inputHash },
-      select: { id: true, state: true },
+      select: { id: true, state: true, configurationHash: true },
     });
     if (
       matching.some((t) => t.state === "submitting") ||
@@ -357,6 +411,25 @@ export class Stories {
       }))
     )
       throw new ConflictException("Original provider outcome is unknown");
+    const pending = matching.find(
+      (t) =>
+        ["waiting_inputs", "queued"].includes(t.state) &&
+        t.configurationHash === hash(JSON.stringify(this.configuration())),
+    );
+    if (pending) {
+      await tx.storyCommand.create({
+        data: {
+          projectId,
+          actorId: actor.operatorUserId,
+          key,
+          requestHash,
+          taskId: pending.id,
+        },
+      });
+      return this.view(tx, projectId, story.id, pending.id, false);
+    }
+    if (quotaExceeded && !automatic)
+      throw new ConflictException("Story quota exhausted");
     await tx.productionTask.create({
       data: {
         id,
@@ -1306,12 +1379,8 @@ export class Stories {
               )
           : null,
       usage: {
-        organizations: await tx.storyGeneration.count({
-          where: { projectId, quotaKind: "organization" },
-        }),
-        regenerations: await tx.storyGeneration.count({
-          where: { projectId, quotaKind: "regeneration" },
-        }),
+        organizations: await this.quotaUsedIn(tx, projectId, "organization"),
+        regenerations: await this.quotaUsedIn(tx, projectId, "regeneration"),
       },
       revision:
         privateContent && story.currentRevisionId

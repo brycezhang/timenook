@@ -23,7 +23,7 @@ GitHub：[#20](https://github.com/brycezhang/timenook/issues/20) · 状态以 Gi
 
 - 覆盖模块：Story 确认、LifeProject 主页。
 - 主入口：校对/确认/项目查询 HTTP + 页面完整路径。通用约定见[父规格测试决策](../spec.md#测试决策)。
-- 现有范例：[project-plans.test.ts](../../../../apps/api/test/project-plans.test.ts)、[identity.test.ts](../../../../apps/api/test/identity.test.ts)、[navigation.test.ts](../../../../tests/navigation.test.ts)；仅作测试方式参考。
+- 现有范例：[project-plans.test.ts](../../../../apps/api/test/project-plans.test.ts)、[identity.test.ts](../../../../apps/api/test/identity.test.ts)、[当前导航测试](../../../../tests/entry-navigation.test.ts)；仅作测试方式参考。
 
 ## 阻塞依赖
 

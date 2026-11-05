@@ -35,6 +35,7 @@ Page({
     busy: false,
   },
   picking: false,
+  uploadQueue: null as Promise<void> | null,
   storyId: "",
   projectId: "",
   interviewId: "",
@@ -243,14 +244,34 @@ Page({
       if (this.current(g, context)) this.setData({ busy: false });
     }
   },
-  async queueUploads() {
-    for (const photo of this.owner
-      ?.snapshot()
-      .filter((p) => p.state === "local") || [])
-      await this.upload({
-        currentTarget: { dataset: { id: photo.clientPhotoId } },
-        detail: { value: "" },
-      });
+  async queueUploads(): Promise<void> {
+    const generation = this.generation,
+      context = sessionClient.context();
+    if (this.uploadQueue) {
+      await this.uploadQueue;
+      if (this.current(generation, context)) return this.queueUploads();
+      return;
+    }
+    const job = (async () => {
+      const attempted = new Set<string>();
+      while (this.current(generation, context)) {
+        const photo = this.owner
+          ?.snapshot()
+          .find((p) => p.state === "local" && !attempted.has(p.clientPhotoId));
+        if (!photo) return;
+        attempted.add(photo.clientPhotoId);
+        await this.upload({
+          currentTarget: { dataset: { id: photo.clientPhotoId } },
+          detail: { value: "" },
+        });
+      }
+    })();
+    this.uploadQueue = job;
+    try {
+      await job;
+    } finally {
+      if (this.uploadQueue === job) this.uploadQueue = null;
+    }
   },
   async retrySave(e: Event) {
     await this.owner?.retrySave(e.currentTarget.dataset.id);
@@ -526,6 +547,10 @@ Page({
     }
   },
   async back() {
+    const generation = this.generation,
+      context = sessionClient.context();
+    await this.queueUploads();
+    if (!this.current(generation, context)) return;
     if (this.data.hasDraft)
       await this.saveCaption({
         currentTarget: { dataset: {} },

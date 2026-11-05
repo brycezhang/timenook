@@ -54,6 +54,7 @@ function harness() {
     module,
     exports: module.exports,
     wx: {
+      env: { USER_DATA_PATH: "/user-data" },
       getStorageSync: (key: string) => structuredClone(storage.get(key)),
       setStorageSync: (key: string, value: unknown) => storage.set(key, value),
       removeStorageSync: (key: string) => storage.delete(key),
@@ -177,11 +178,9 @@ test("server-priced one-fen orders keep the 999 list amount and reject inconsist
 test("an unknown close result queries the original order and keeps a late paid project", async () => {
   const { client, requests } = harness();
   const closing = client.close(id);
-  requests
-    .shift()!
-    .fail?.({
-      errMsg: "request:fail timeout",
-    } as WechatMiniprogram.RequestFailCallbackErr);
+  requests.shift()!.fail?.({
+    errMsg: "request:fail timeout",
+  } as WechatMiniprogram.RequestFailCallbackErr);
   await tick();
   assert.equal(requests[0]?.url, base + "/orders/" + id);
   respond(requests.shift()!, { ...order, state: "closed" });

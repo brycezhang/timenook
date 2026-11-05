@@ -37,20 +37,6 @@ export async function deliveredQualityOrder() {
   );
   const attempt = view.current,
     attemptBase = `${base}/attempts/${attempt.id}`;
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/fulfillment/grants`,
-      p.narrator.token,
-      {
-        ...p.binding,
-        attemptId: attempt.id,
-        expiresAt: new Date(Date.now() + 600000).toISOString(),
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: `synthetic:${randomUUID()}`,
-      },
-    ),
-  );
   data(await adminRequest("POST", attemptBase + "/handoff", headers, {}));
   data(
     await adminRequest("POST", attemptBase + "/receipt", headers, {

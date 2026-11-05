@@ -261,44 +261,9 @@ export async function pausedZip(url: string, headers: Record<string, string>) {
   };
 }
 
-export async function assistedExportChoice(
-  p: { projectId: string; buyer: { token: string } },
-  purpose: string,
-  granted: boolean,
-) {
-  const current = await state(p, p.buyer.token),
-    sessions = data(
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/assisted-sessions`,
-        p.buyer.token,
-      ),
-      200,
-    ).sessions,
-    latest = sessions.find(
-      (row: { purpose: string }) => row.purpose === purpose,
-    );
-  return request(
-    "POST",
-    `/v1/projects/${p.projectId}/assisted-sessions`,
-    p.buyer.token,
-    {
-      purpose,
-      granted,
-      noticeVersion: "synthetic-d08-v1",
-      evidenceRef: `synthetic:export-stream-scope-${randomUUID()}`,
-      expectedBindingVersion: current.bindingVersion,
-      expectedAccessEpoch: current.accessEpoch,
-      ...(latest ? { expectedSessionId: latest.id } : {}),
-    },
-  );
-}
-
 async function acceptedAlternativeExport() {
-  const p = await project(),
-    collection = data(await assistedExportChoice(p, "collection", true));
-  data(await assistedExportChoice(p, "ai", true));
-  await largeExportSources(p.projectId, p.buyer.token, collection.id);
+  const p = await project();
+  await largeExportSources(p.projectId, p.buyer.token);
   return acceptAlternativeCase(p);
 }
 

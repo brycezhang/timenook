@@ -3,8 +3,7 @@ import assert from "node:assert/strict";
 import {
   startBookFixture,
   stopBookFixture,
-  bound,
-  choose,
+  joinedProject,
   request,
   data,
   login,
@@ -42,10 +41,9 @@ before(startBookFixture);
 
 after(stopBookFixture);
 
-test("complete export requests are subject choices, private and idempotent", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
-  data((await choose(p, p.narrator.token, "sharing", true)).response);
+test("project members request a private, idempotent export for an explicit recipient", async () => {
+  const p = await joinedProject();
+
   const url = `/v1/projects/${p.projectId}/exports`;
   assert.equal((await request("GET", url)).statusCode, 401);
   assert.equal(
@@ -54,7 +52,7 @@ test("complete export requests are subject choices, private and idempotent", asy
   );
   assert.equal(
     (
-      await request("POST", url, p.buyer.token, {
+      await request("POST", url, (await login()).token, {
         recipient: "self",
         noticeVersion: "synthetic-d08-v1",
         evidenceRef: "synthetic:明确申请完整资料",
@@ -175,7 +173,7 @@ test("verified complete export produces independently readable full ZIP with exa
       await request(
         "GET",
         `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
-        p.buyer.token,
+        (await login()).token,
       )
     ).statusCode,
     403,
@@ -184,56 +182,6 @@ test("verified complete export produces independently readable full ZIP with exa
     data(await adminRequest("POST", p.exportBase + "/pack", p.admin, {}))
       .expiresAt,
     packed.expiresAt,
-  );
-});
-
-test("export completion rejects withdrawal during storage read and retry cannot activate stale content", async () => {
-  const p = await acceptedBook();
-  let release!: () => void, entered!: () => void;
-  const gate = new Promise<void>((r) => {
-      release = r;
-    }),
-    started = new Promise<void>((r) => {
-      entered = r;
-    });
-  interceptBookObjectRead(async () => {
-    entered();
-    await gate;
-  });
-  const packing = adminRequest("POST", p.exportBase + "/pack", p.admin, {});
-  await started;
-  try {
-    data((await choose(p, p.narrator.token, "sharing", false)).response);
-  } finally {
-    release();
-    interceptBookObjectRead();
-  }
-  assert.equal((await packing).statusCode, 403);
-  const status = data(
-    await request(
-      "GET",
-      `/v1/projects/${p.projectId}/exports`,
-      p.narrator.token,
-    ),
-    200,
-  );
-  assert.equal(status.requests[0].canDownload, false);
-  assert.equal(status.requests[0].state, "revoked");
-  assert.notEqual(status.requests[0].missingReason, "EXPORT_SOURCE_DELETED");
-  assert.equal(
-    (
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
-        p.narrator.token,
-      )
-    ).statusCode,
-    403,
-  );
-  assert.equal(
-    (await adminRequest("POST", p.exportBase + "/pack", p.admin, {}))
-      .statusCode,
-    403,
   );
 });
 
@@ -318,49 +266,12 @@ test("only an explicitly authorized initiator receives the package and download 
   );
 });
 
-test("download rechecks the exported confirmed version rather than only its package hash", async () => {
-  const p = await acceptedBook();
-  data(await adminRequest("POST", p.exportBase + "/pack", p.admin, {}));
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/stories/${p.story.id}/decisions`,
-      p.narrator.token,
-      {
-        revisionId: p.story.revision.id,
-        expectedVersion: p.story.version,
-        contentHash: p.story.revision.contentHash,
-        confirmed: false,
-        allowInBook: false,
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: `synthetic:撤回本版故事-${randomUUID()}`,
-      },
-    ),
-  );
-  assert.equal(
-    (
-      await request(
-        "GET",
-        `/v1/projects/${p.projectId}/exports/${p.exp.id}/download`,
-        p.narrator.token,
-      )
-    ).statusCode,
-    403,
-  );
-});
-
 test("without-WeChat export uses a separately verified subject recipient and leaves a delivery receipt", async () => {
   const p = await project(),
     admin = await paymentAdmin(config, app, ["care:write"]),
     generic = `/v1/admin/projects/${p.projectId}/care-requests`;
   const noCollection = await state(p, p.buyer.token);
-  assert.equal(noCollection.canRead, false);
-  assert.equal(
-    noCollection.choices.find(
-      (c: { purpose: string }) => c.purpose === "collection",
-    )?.granted,
-    null,
-  );
+  assert.equal(noCollection.canRead, true);
   const care = data(
     await adminRequest("POST", generic, admin, {
       kind: "export",
@@ -416,7 +327,7 @@ test("without-WeChat export uses a separately verified subject recipient and lea
       await request(
         "GET",
         `/v1/projects/${p.projectId}/exports/${care.id}/download`,
-        p.buyer.token,
+        (await login()).token,
       )
     ).statusCode,
     403,
@@ -528,7 +439,7 @@ test("missing sources block packing while restart and orphan cleanup beyond 2099
 });
 
 test("incomplete original transcript is reported in the shared case instead of offering a partial archive", async () => {
-  const p = await bound(),
+  const p = await joinedProject(),
     i = await interview(p);
   await sealedClip(p, i.id);
   const exp = data(

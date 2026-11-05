@@ -257,6 +257,7 @@ export class SessionClient {
       (resolve, reject) =>
         wx.downloadFile({
           url: this.apiBaseUrl + path,
+          filePath: `${wx.env.USER_DATA_PATH}/timenook-private-${Date.now()}-${Math.random().toString(36).slice(2)}${path.endsWith("/pdf") ? ".pdf" : path.includes("/photos/") ? ".bin" : path.includes("/exports/") ? ".zip" : ".mp3"}`,
           header: { authorization: `Bearer ${stored.session.token}` },
           timeout: 15000,
           success: (result) => {
@@ -268,7 +269,10 @@ export class SessionClient {
             )
               this.invalidate(stored);
             // The media owner still needs this path to remove denied or stale bytes.
-            resolve(result);
+            resolve({
+              ...result,
+              tempFilePath: result.filePath || result.tempFilePath,
+            });
           },
           fail: () => reject(new ApiFailure("NETWORK_ERROR")),
         }),

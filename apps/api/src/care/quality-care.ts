@@ -1,3 +1,4 @@
+import { isProjectMemberIn } from "../identity/project-members";
 import {
   participationNotice,
   E2E_NOTICE_VERSION,
@@ -179,7 +180,7 @@ export class QualityCare implements OnModuleDestroy {
     return this.db.$transaction(async (tx) => {
       const user = await this.identity.current(authorization, tx),
         ctx = await this.locked(tx, orderId);
-      if (user.id !== ctx.order.buyerId && user.id !== ctx.subject.boundUserId)
+      if (!(await isProjectMemberIn(tx, ctx.project.id, user.id)))
         throw new NotFoundException();
       return work(tx, ctx, user.id);
     });
@@ -552,23 +553,7 @@ export class QualityCare implements OnModuleDestroy {
             original.bookId,
             original.pdfHash,
           );
-        if (subject.boundUserId !== userId) {
-          if (!body.assistedSessionId) throw new ForbiddenException();
-          await this.participation.recordAssistedVersionEvidence(tx, {
-            projectId: project.id,
-            sessionId: body.assistedSessionId,
-            operatorUserId: userId,
-            content: {
-              kind: "book",
-              versionId: original.bookId,
-              hash: original.snapshotHash,
-            },
-            action: "quality_care_access",
-            noticeVersion: body.noticeVersion,
-            evidenceRef: `${notice.evidencePrefix}quality-${row.id}-${hash(key).slice(0, 16)}`,
-            idempotencyKey: key,
-          });
-        }
+        if (body.assistedSessionId) throw new BadRequestException();
         if (!(await this.command(tx, row, userId, "access", key, body)))
           return this.viewIn(tx, row);
         if (row.version !== body.expectedVersion) throw new ConflictException();
@@ -581,8 +566,7 @@ export class QualityCare implements OnModuleDestroy {
             requestId: row.id,
             ownerAdminId: row.ownerAdminId,
             actorId: userId,
-            assistedSessionId:
-              subject.boundUserId === userId ? null : body.assistedSessionId,
+            assistedSessionId: null,
             subjectId: subject.id,
             bindingVersion: subject.bindingVersion,
             accessEpoch: project.accessEpoch,

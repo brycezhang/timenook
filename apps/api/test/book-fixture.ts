@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from "../src/identity/project-members";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { installPrivacyFailureDiagnostic } from "./privacy-failure-diagnostic";
 import sharp from "sharp";
@@ -403,7 +404,7 @@ const approval = () => ({
   expectedBindingVersion: 0,
   evidenceRef: "synthetic:发起人核验申请者",
 });
-export async function bound(versionId = packageId) {
+export async function joinedProject(versionId = packageId) {
   const p = await project(versionId);
   const narrator = await login();
   const invite = data(
@@ -413,20 +414,12 @@ export async function bound(versionId = packageId) {
       p.buyer.token,
     ),
   );
-  const application = data(
-    await request(
-      "POST",
-      `/v1/invitations/${invite.token}/requests`,
-      narrator.token,
-      notice(),
-    ),
-  );
   data(
     await request(
       "POST",
-      `/v1/binding-requests/${application.id}/approve`,
-      p.buyer.token,
-      approval(),
+      `/v1/invitations/${invite.token}/accept`,
+      narrator.token,
+      { termsVersion: TERMS_VERSION },
     ),
   );
   return { ...p, narrator };
@@ -436,33 +429,6 @@ export async function state(p: { projectId: string }, token: string) {
     await request("GET", `/v1/projects/${p.projectId}/participation`, token),
     200,
   );
-}
-export async function choose(
-  p: { projectId: string },
-  token: string,
-  purpose: string,
-  granted: boolean,
-  key = randomUUID(),
-) {
-  const current = await state(p, token);
-  const body = {
-    ...notice(),
-    purpose,
-    granted,
-    expectedBindingVersion: current.bindingVersion,
-    expectedAccessEpoch: current.accessEpoch,
-  };
-  return {
-    body,
-    key,
-    response: await request(
-      "POST",
-      `/v1/projects/${p.projectId}/consents`,
-      token,
-      body,
-      key,
-    ),
-  };
 }
 
 export function formUpload(
@@ -506,11 +472,9 @@ export function syntheticAudio(seconds: 1 | 0.5 = 1) {
   );
 }
 export async function interview(
-  p: Awaited<ReturnType<typeof bound>>,
+  p: Awaited<ReturnType<typeof joinedProject>>,
   ai = true,
 ) {
-  if (ai) data((await choose(p, p.narrator.token, "ai", true)).response);
-  data((await choose(p, p.narrator.token, "collection", true)).response);
   return data(
     await request(
       "POST",
@@ -526,7 +490,7 @@ export async function interview(
 }
 
 export async function sealedClip(
-  p: Awaited<ReturnType<typeof bound>>,
+  p: Awaited<ReturnType<typeof joinedProject>>,
   interviewId: string,
 ) {
   const audio = syntheticAudio();
@@ -551,8 +515,10 @@ export async function sealedClip(
   return { ...p, interviewId, base, clip, sealed };
 }
 
-export async function readyStory(existing?: Awaited<ReturnType<typeof bound>>) {
-  const p = existing ?? (await bound()),
+export async function readyStory(
+  existing?: Awaited<ReturnType<typeof joinedProject>>,
+) {
+  const p = existing ?? (await joinedProject()),
     i = await interview(p);
   await sealedClip(p, i.id);
   await sealedClip(p, i.id);
@@ -564,26 +530,50 @@ export async function readyStory(existing?: Awaited<ReturnType<typeof bound>>) {
     await app.get(ProductionTasks).run(task.id);
     await app.get(ProductionTasks).run(task.id);
   }
-  const story = data(
+  const stub = data(
     await request(
       "POST",
-      `/v1/projects/${p.projectId}/stories/organize`,
+      `/v1/projects/${p.projectId}/stories/context`,
       p.narrator.token,
-      { interviewId: i.id, baseVersion: 0 },
+      { interviewId: i.id },
     ),
-    202,
-  );
-  for (let n = 0; n < 4; n++) await app.get(ProductionTasks).run(story.task.id);
-  const current = data(
+  ).story;
+  let current = data(
     await request(
       "GET",
-      `/v1/projects/${p.projectId}/stories/${story.id}`,
+      `/v1/projects/${p.projectId}/stories/${stub.id}`,
       p.narrator.token,
     ),
     200,
   );
-  assert.equal(current.version, 1);
-  data((await choose(p, p.narrator.token, "sharing", true)).response);
+  for (let pass = 0; !current?.revision && pass < 7; pass++) {
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const pending = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/tasks`,
+        p.narrator.token,
+      ),
+      200,
+    );
+    for (const task of pending) await app.get(ProductionTasks).run(task.id);
+    current = data(
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/stories/${stub.id}`,
+        p.narrator.token,
+      ),
+      200,
+    );
+  }
+  assert.ok(
+    current?.revision,
+    JSON.stringify(
+      (
+        await db.productionTask.findMany({ where: { projectId: p.projectId } })
+      ).map((t) => ({ kind: t.kind, state: t.state, error: t.errorCode })),
+    ),
+  );
   return { ...p, interviewId: i.id, story: current };
 }
 

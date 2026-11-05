@@ -329,62 +329,7 @@ async function paidE2eProject() {
   assert.equal(results[1].json().data.project.id, activated.project.id);
   return { buyer, headers, order: activated, project: activated.project };
 }
-test("verified one-fen payment activates one paid project with current E2E consent and no internal admission", async () => {
-  const p = await paidE2eProject();
-  const state = await app.inject({
-    method: "GET",
-    url: `/v1/projects/${p.project.id}/participation`,
-    headers: p.headers,
-  });
-  assert.equal(state.statusCode, 200, state.body);
-  const view = state.json().data;
-  assert.equal(view.source, "paid");
-  assert.equal(view.noticeVersion, "paid-e2e-participation-v1");
-  assert.equal(view.policyStatus, "paid-e2e");
-  assert.ok(view.noticeText.includes("0.01"));
-  // Structural ownership invariant, alongside the public paid-source assertion.
-  assert.equal(
-    await db.internalProjectAdmission.count({
-      where: { projectId: p.project.id },
-    }),
-    0,
-  );
-  for (const purpose of ["collection", "ai", "sharing"]) {
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/projects/${p.project.id}/assisted-sessions`,
-      headers: { ...p.headers, "idempotency-key": randomUUID() },
-      payload: {
-        purpose,
-        granted: true,
-        expectedBindingVersion: view.bindingVersion,
-        expectedAccessEpoch: view.accessEpoch,
-        noticeVersion: view.noticeVersion,
-        evidenceRef: `internal:e2e-${purpose}-${randomUUID()}`,
-      },
-    });
-    assert.equal(response.statusCode, 201, response.body);
-  }
-  const after = (
-    await app.inject({
-      method: "GET",
-      url: `/v1/projects/${p.project.id}/participation`,
-      headers: p.headers,
-    })
-  ).json().data;
-  assert.equal(after.canCollect, false); // The assisting operator does not become the narrator.
-  assert.ok(
-    after.choices.every((choice: { granted: boolean }) => choice.granted),
-  );
-  assert.equal(after.canRead, true);
-  const overview = await app.inject({
-    method: "GET",
-    url: `/v1/projects/${p.project.id}/overview`,
-    headers: p.headers,
-  });
-  assert.equal(overview.statusCode, 200, overview.body);
-  assert.equal(overview.json().data.noticeVersion, view.noticeVersion);
-});
+
 test("E2E refund reserves and returns only the one fen received", async () => {
   const p = await paidE2eProject();
   const created = await app.inject({

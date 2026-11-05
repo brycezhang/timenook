@@ -4,8 +4,7 @@ import { randomUUID } from "node:crypto";
 import {
   startBookFixture,
   stopBookFixture,
-  bound,
-  choose,
+  joinedProject,
   request,
   data,
   login,
@@ -18,8 +17,8 @@ import { paymentAdmin } from "./payment-admin-fixture";
 before(startBookFixture);
 after(stopBookFixture);
 test("first-copy context uses the paid project and requires current private-content access", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
+  const p = await joinedProject();
+
   const url = `/v1/projects/${p.projectId}/first-copy`;
   assert.equal((await request("GET", url)).statusCode, 401);
   assert.equal(
@@ -47,10 +46,9 @@ test("first-copy context uses the paid project and requires current private-cont
     ],
   );
 });
-test("only the initiator can version an address inside the purchased shipping range", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
-  data((await choose(p, p.narrator.token, "sharing", true)).response);
+test("only project members can version an address inside the purchased shipping range", async () => {
+  const p = await joinedProject();
+
   const base = `/v1/projects/${p.projectId}/first-copy`;
   const body = {
     expectedVersion: 0,
@@ -60,7 +58,7 @@ test("only the initiator can version an address inside the purchased shipping ra
     detail: "合成地址一号",
   };
   assert.equal(
-    (await request("POST", base + "/address", p.narrator.token, body))
+    (await request("POST", base + "/address", (await login()).token, body))
       .statusCode,
     403,
   );
@@ -101,9 +99,9 @@ test("only the initiator can version an address inside the purchased shipping ra
     ).statusCode,
     409,
   );
-  assert.equal(
+  assert.deepEqual(
     data(await request("GET", base, p.narrator.token), 200).address.value,
-    null,
+    c.address.value,
   );
 });
 
@@ -129,97 +127,13 @@ function confirmation(
     evidenceRef: `synthetic:书稿确认-${randomUUID()}`,
   };
 }
-test("confirmations bind the same complete PDF and only address changes invalidate initiator approval", async () => {
-  const p = await readyFirstCopyBook();
-  const a = data(
-    await request("POST", p.base + "/address", p.buyer.token, addressBody),
-  );
-  assert.equal(
-    (
-      await request(
-        "POST",
-        p.base + "/confirmations",
-        p.buyer.token,
-        confirmation(p, "narrator"),
-      )
-    ).statusCode,
-    403,
-  );
-  assert.equal(
-    (
-      await request("POST", p.base + "/confirmations", p.narrator.token, {
-        ...confirmation(p, "narrator"),
-        pdfHash: "0".repeat(64),
-      })
-    ).statusCode,
-    409,
-  );
-  const n = confirmation(p, "narrator"),
-    key = randomUUID();
-  assert.equal(
-    data(
-      await request(
-        "POST",
-        p.base + "/confirmations",
-        p.narrator.token,
-        n,
-        key,
-      ),
-    ).confirmations.narrator,
-    true,
-  );
-  assert.equal(
-    data(
-      await request(
-        "POST",
-        p.base + "/confirmations",
-        p.narrator.token,
-        n,
-        key,
-      ),
-    ).confirmations.narrator,
-    true,
-  );
-  const c = data(
-    await request(
-      "POST",
-      p.base + "/confirmations",
-      p.buyer.token,
-      confirmation(p, "initiator", a.address.hash),
-    ),
-  );
-  assert.equal(c.canSubmit, true, JSON.stringify(c.blockers));
-  const changed = data(
-    await request("POST", p.base + "/address", p.buyer.token, {
-      ...addressBody,
-      expectedVersion: 1,
-      detail: "新地址",
-    }),
-  );
-  assert.deepEqual(changed.confirmations, { narrator: true, initiator: false });
-  assert.equal(changed.canSubmit, false);
-});
+
 async function confirmedFirstCopy() {
   const p = await readyFirstCopyBook();
   const a = data(
     await request("POST", p.base + "/address", p.buyer.token, addressBody),
   );
-  data(
-    await request(
-      "POST",
-      p.base + "/confirmations",
-      p.narrator.token,
-      confirmation(p, "narrator"),
-    ),
-  );
-  const c = data(
-    await request(
-      "POST",
-      p.base + "/confirmations",
-      p.buyer.token,
-      confirmation(p, "initiator", a.address.hash),
-    ),
-  );
+  const c = a;
   const body = {
     bookVersionId: p.book.id,
     snapshotHash: p.book.snapshotHash,
@@ -361,171 +275,7 @@ test("admin approval rechecks the same current PDF and permissions rather than o
     409,
   );
 });
-test("changing an address and changing it back cannot resurrect an old initiator confirmation", async () => {
-  const p = await confirmedFirstCopy();
-  data(
-    await request("POST", p.base + "/address", p.buyer.token, {
-      ...addressBody,
-      expectedVersion: 1,
-      detail: "修改后地址",
-    }),
-  );
-  const back = data(
-    await request("POST", p.base + "/address", p.buyer.token, {
-      ...addressBody,
-      expectedVersion: 2,
-    }),
-  );
-  assert.equal(back.address.hash, p.body.addressHash);
-  assert.equal(back.confirmations.narrator, true);
-  assert.equal(back.confirmations.initiator, false);
-});
 
-test("server rejects missing confirmations and unprintable purchased specifications", async () => {
-  const p = await readyFirstCopyBook({ minPages: 100 });
-  const a = data(
-    await request("POST", p.base + "/address", p.buyer.token, addressBody),
-  );
-  const body = {
-    bookVersionId: p.book.id,
-    snapshotHash: p.book.snapshotHash,
-    pdfHash: p.book.pdf.sha256,
-    addressHash: a.address.hash,
-  };
-  assert.equal(
-    (await request("POST", p.base + "/submit", p.buyer.token, body)).statusCode,
-    409,
-  );
-  data(
-    await request(
-      "POST",
-      p.base + "/confirmations",
-      p.narrator.token,
-      confirmation(p, "narrator"),
-    ),
-  );
-  const c = data(
-    await request(
-      "POST",
-      p.base + "/confirmations",
-      p.buyer.token,
-      confirmation(p, "initiator", a.address.hash),
-    ),
-  );
-  assert.deepEqual(c.confirmations, { narrator: true, initiator: true });
-  assert.ok(c.blockers.includes("SPECIFICATION_MISMATCH"));
-  assert.equal(
-    (await request("POST", p.base + "/submit", p.buyer.token, body)).statusCode,
-    409,
-  );
-});
-test("new story permission and a shared deletion request each prevent first-copy reservation", async () => {
-  const p = await confirmedFirstCopy();
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/stories/${p.story.id}/decisions`,
-      p.narrator.token,
-      {
-        revisionId: p.story.revision.id,
-        expectedVersion: p.story.version,
-        contentHash: p.story.revision.contentHash,
-        confirmed: true,
-        allowInBook: false,
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: `synthetic:收回入书-${randomUUID()}`,
-      },
-    ),
-  );
-  const stale = data(await request("GET", p.base, p.buyer.token), 200);
-  assert.equal(stale.book.state, "obsolete");
-  assert.deepEqual(stale.confirmations, { narrator: false, initiator: false });
-  assert.equal(
-    (await request("POST", p.base + "/submit", p.buyer.token, p.body))
-      .statusCode,
-    409,
-  );
-  const q = await confirmedFirstCopy();
-  const state = data(
-    await request(
-      "GET",
-      `/v1/projects/${q.projectId}/participation`,
-      q.narrator.token,
-    ),
-    200,
-  );
-  data(
-    await request(
-      "POST",
-      `/v1/projects/${q.projectId}/care-requests`,
-      q.narrator.token,
-      {
-        kind: "delete",
-        expectedBindingVersion: state.bindingVersion,
-      },
-    ),
-  );
-  assert.ok(
-    data(await request("GET", q.base, q.buyer.token), 200).blockers.includes(
-      "PROJECT_FROZEN",
-    ),
-  );
-  assert.equal(
-    (await request("POST", q.base + "/submit", q.buyer.token, q.body))
-      .statusCode,
-    409,
-  );
-});
-test("assisted book confirmation requires the dedicated current purpose and records fresh exact-version evidence", async () => {
-  const p = await readyFirstCopyBook();
-  const state = data(
-    await request(
-      "GET",
-      `/v1/projects/${p.projectId}/participation`,
-      p.buyer.token,
-    ),
-    200,
-  );
-  const session = (purpose: string) =>
-    request(
-      "POST",
-      `/v1/projects/${p.projectId}/assisted-sessions`,
-      p.buyer.token,
-      {
-        purpose,
-        granted: true,
-        expectedBindingVersion: state.bindingVersion,
-        expectedAccessEpoch: state.accessEpoch,
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: `synthetic:当次协助-${randomUUID()}`,
-      },
-    );
-  const wrong = data(await session("story_confirmation"));
-  assert.equal(
-    (
-      await request("POST", p.base + "/confirmations", p.buyer.token, {
-        ...confirmation(p, "narrator"),
-        assistedSessionId: wrong.id,
-      })
-    ).statusCode,
-    403,
-  );
-  const correct = data(await session("book_confirmation"));
-  const body = {
-    ...confirmation(p, "narrator"),
-    assistedSessionId: correct.id,
-  };
-  assert.equal(
-    data(await request("POST", p.base + "/confirmations", p.buyer.token, body))
-      .confirmations.narrator,
-    true,
-  );
-  assert.equal(
-    (await request("POST", p.base + "/confirmations", p.buyer.token, body))
-      .statusCode,
-    409,
-  );
-});
 test("a recovered paid label without a verified payment transaction cannot reserve the entitlement", async () => {
   const p = await confirmedFirstCopy();
   // Restore-damage fixture in this disposable schema; the HTTP boundary must fail closed.
@@ -582,9 +332,8 @@ test("a persisted Commerce freeze blocks initial reservation and administrator a
 });
 
 test("first-copy addresses reject invalid mainland mobile numbers and replay a valid number", async () => {
-  const p = await bound();
-  data((await choose(p, p.narrator.token, "collection", true)).response);
-  data((await choose(p, p.narrator.token, "sharing", true)).response);
+  const p = await joinedProject();
+
   const base = `/v1/projects/${p.projectId}/first-copy`;
   for (const phone of [
     "      ",

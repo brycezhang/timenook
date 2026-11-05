@@ -354,6 +354,8 @@ export class Participation
       const p = await this.project(tx, found.projectId, true);
       const invite = await this.invitation(tx, token);
       await acceptTermsIn(tx, user.id, "invitation");
+      const subject = await this.subject(tx, p.id);
+      await this.terms.ensureSubjectParticipation(tx, p.id, subject.id);
       await tx.projectMember.upsert({
         where: { projectId_userId: { projectId: p.id, userId: user.id } },
         create: {
@@ -980,7 +982,7 @@ export class Participation
     this.policy();
     const p = await this.project(tx, projectId, true),
       subject = await this.subject(tx, projectId);
-    if (subject.boundUserId !== operatorUserId) throw new ForbiddenException();
+    await requireProjectMemberIn(tx, projectId, operatorUserId);
     return this.createCare(
       tx,
       p,
