@@ -50,3 +50,7 @@ nginx -t && systemctl reload nginx
 ## 保留的商业验收边界
 
 当前可公开查看产品介绍和示例，下单按钮仍明确提示尚未开放。正式小程序进入、电脑扫码、真实套餐与购买验收仍在父规格 [#69](https://github.com/brycezhang/timenook/issues/69)；本次部署不将这些条件标为完成。
+
+## 2026-10-30 微信业务域名校验文件
+
+按用户提供的校验文件，在 `sgl.wootoon.cn` 配置 `/45BEPzs7Y8.txt`，文件独立存放于服务器 `/data/server/timenook-website/verification/`，通过该域名 Nginx 精确 location 提供，不依赖官网 current release。配置修改前备份为 `/etc/nginx/conf.d/timenook-website.conf.before-wechat-45BEPzs7Y8.bak`；`nginx -t` 通过并 reload。公网文件返回 200、`text/plain`，内容 SHA-256 与用户提供的本地文件一致；官网首页与 TimeNook API readiness 均返回 200，Nginx 和 API 进程 active。此记录不表示微信后台已提交或业务域名审核通过。后续替换 Nginx 配置时需保留此 location，直至不再需要校验文件。

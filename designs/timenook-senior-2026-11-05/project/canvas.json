@@ -1,0 +1,794 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "BookAddress.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "printflow",
+      "radius": 22,
+      "title": "29 收货地址",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "BookCancelled.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "service",
+      "radius": 22,
+      "title": "39 制作取消 · 可修订",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "BookChanged.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "recover",
+      "radius": 22,
+      "title": "36 书稿已修改",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "BookChapterEdit.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "bookedit",
+      "radius": 22,
+      "title": "27 章节正文 · 直接编辑",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "BookCover.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "bookedit",
+      "radius": 22,
+      "title": "25 调整书封",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "BookCoverSelect.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "bookedit",
+      "radius": 22,
+      "title": "25a 选择封面照片",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "BookDelivered.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "service",
+      "radius": 22,
+      "title": "38 书籍已交付",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "BookDirectory.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "bookedit",
+      "radius": 22,
+      "title": "26 章节目录",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "BookEmpty.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "followup",
+      "radius": 22,
+      "title": "41 新项目 · 还没有书稿",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "BookGenerateFailed.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "service",
+      "radius": 22,
+      "title": "37 生成失败 · 可重试",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "BookOverview.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "bookpreview",
+      "radius": 22,
+      "title": "22 我的书",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "BookPrintConfirm.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "printflow",
+      "radius": 22,
+      "title": "30 提交印刷与寄送",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "BookProduction.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "printflow",
+      "radius": 22,
+      "title": "31 制作进度",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "BookReader.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "bookpreview",
+      "radius": 22,
+      "title": "23 完整书稿预览",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "BookShipped.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "printflow",
+      "radius": 22,
+      "title": "32 已发货 · 物流信息",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "ChapterStories.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "bookedit",
+      "radius": 22,
+      "title": "28 调整本章故事",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "Checkout.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "projects",
+      "radius": 22,
+      "title": "08 确认购买",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "HomeBookReady.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "bookpreview",
+      "radius": 22,
+      "title": "21 首页 · 书稿已就绪",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "HomePaid.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "main",
+      "radius": 22,
+      "title": "02 首页 · 当前项目",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "InviteExpired.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "members",
+      "radius": 22,
+      "title": "12 邀请已失效",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "InviteJoin.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "members",
+      "radius": 22,
+      "title": "11 接受邀请",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "InviteShare.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "members",
+      "radius": 22,
+      "title": "10 分享项目邀请",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Login.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "members",
+      "radius": 22,
+      "title": "09 微信登录",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "main",
+      "radius": 22,
+      "title": "01 首页 · 未购买",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "MyGuest.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "main",
+      "radius": 22,
+      "title": "03 我的 · 未登录",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "MyPaid.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "main",
+      "radius": 22,
+      "title": "04 我的 · 已登录",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "MyProjects.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "projects",
+      "radius": 22,
+      "title": "05 项目 · 购买与参与",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "NewBook.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "projects",
+      "radius": 22,
+      "title": "07 新购 · 书名与称呼",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "OriginalAudio.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "bookpreview",
+      "radius": 22,
+      "title": "24 书中原声",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "PaymentPending.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "recover",
+      "radius": 22,
+      "title": "34 项目 · 待付款",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "PaymentUnknown.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "recover",
+      "radius": 22,
+      "title": "35 项目 · 付款待核实",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "PhotoSelect.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "materials",
+      "radius": 22,
+      "title": "19 选择故事照片",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Photos.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "materials",
+      "radius": 22,
+      "title": "18 故事照片",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "PrintUnknown.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "followup",
+      "radius": 22,
+      "title": "44 印刷 · 提交待核实",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "ReaderFailed.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "followup",
+      "radius": 22,
+      "title": "46 预览 · 打开失败",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "Record.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "story",
+      "radius": 22,
+      "title": "13 一次讲一段",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "RecordBlocked.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "followup",
+      "radius": 22,
+      "title": "45 录音 · 麦克风未开启",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "Stories.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "story",
+      "radius": 22,
+      "title": "15 已记录的故事",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Story.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "story",
+      "radius": 22,
+      "title": "16 故事详情",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "StoryEdit.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "materials",
+      "radius": 22,
+      "title": "17 修改故事正文",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "StoryFailed.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "followup",
+      "radius": 22,
+      "title": "43 故事 · 整理未成功",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "StoryProcessing.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "followup",
+      "radius": 22,
+      "title": "42 故事 · 正在整理",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "SwitchProject.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "projects",
+      "radius": 22,
+      "title": "06 切换当前项目",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Terms.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "service",
+      "radius": 22,
+      "title": "40 使用条款",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "Topics.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "materials",
+      "radius": 22,
+      "title": "20 换个话题",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "Upload.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "story",
+      "radius": 22,
+      "title": "14 录音上传成功",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "UploadFailed.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "recover",
+      "radius": 22,
+      "title": "33 录音上传失败",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-05T02:21:16.045740+00:00",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "page": "main",
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "main-title",
+    "main-rules",
+    "projects-title",
+    "projects-rules",
+    "members-title",
+    "members-rules",
+    "story-title",
+    "story-rules",
+    "materials-title",
+    "materials-rules",
+    "bookpreview-title",
+    "bookpreview-rules",
+    "bookedit-title",
+    "bookedit-rules",
+    "printflow-title",
+    "printflow-rules",
+    "recover-title",
+    "recover-rules",
+    "service-title",
+    "service-rules",
+    "followup-title",
+    "followup-rules"
+  ],
+  "notes": {
+    "bookedit-rules": {
+      "fill": "gray",
+      "page": "bookedit",
+      "text": "调整书封显示当前照片；缺少照片可直接进入故事配图，保存后返回选择封面。\n目录点标题编辑，右侧独立拖动区排序，无进入箭头。\n本章故事的选择、跨章移动、排序与正文作为同一份修改，返回正文后一次保存；放弃不生效。\n无改动时不重复生成；内容变化后生成新版书稿。",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "bookedit-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "bookedit",
+      "text": "点开就能改，顺序直接调。",
+      "w": 240,
+      "x": 0,
+      "y": -270
+    },
+    "bookpreview-rules": {
+      "fill": "gray",
+      "page": "bookpreview",
+      "text": "预览可从我的书、印刷页和制作进度打开，返回原入口。\n完整书稿的原声页按故事逐条回听，绑定这版书稿对应的故事版本。\n生成完成后可直接预览；已提交书稿保留，只显示查看及制作进度。\n页数和音频均为原型样例，不是生产 PDF 或实际播放。",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "bookpreview-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "bookpreview",
+      "text": "想看看这本书，就打开它。",
+      "w": 240,
+      "x": 0,
+      "y": -270
+    },
+    "followup-rules": {
+      "fill": "gray",
+      "page": "followup",
+      "text": "完整交互核对补充 · 2026-11-05\n空书稿可直接去记录；整理中可先离开或回听；失败可重试，无人声时重新讲述。\n麦克风未开启可去微信设置；书稿打不开可直接重试；表单失败保留输入。\n印刷结果未知只查询原提交，不重复制作。\n本组是状态展示，不是必须依次经过的步骤。设置、生成与重试为原型模拟，未调用真实系统。",
+      "w": 390,
+      "x": 2820,
+      "y": 0
+    },
+    "followup-title": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "followup",
+      "text": "每一种状态，都有下一步。",
+      "w": 240,
+      "x": 0,
+      "y": -270
+    },
+    "main-rules": {
+      "fill": "gray",
+      "page": "main",
+      "text": "新版规则 · 2026-11-05\n仅保留「岁月成书 / 我的」两个 Tab。\n无项目展示购买首页；有项目直接展示当前项目，无论购买或受邀。\n我的仅保留项目、新购、使用条款和退出登录。\n固定购买卡与原有大图继续使用。",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "main-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "main",
+      "text": "两个入口，随时回来。",
+      "w": 240,
+      "x": 0,
+      "y": -270
+    },
+    "materials-rules": {
+      "fill": "gray",
+      "page": "materials",
+      "text": "故事正文直接修改，保留原声；照片可添加、说明、拖动排序和移除。\n拖动只在右侧把手起手，其他区域正常滚动；单张照片隐藏拖动把手。\n「换个话题」进入轻量选择，可进入独立题目管理页。\n照片使用已有设计素材演示，无真实文件上传；真机长文、键盘及手指拖动仍待实现验证。",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "materials-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "materials",
+      "text": "文字能修改，照片有位置。",
+      "w": 240,
+      "x": 0,
+      "y": -270
+    },
+    "members-rules": {
+      "fill": "gray",
+      "page": "members",
+      "text": "邀请简化为微信分享 → 接受邀请 → 进入项目。\n登录或接受邀请时展示条款链接与同意说明；无勾选、无审核绑定、无同机协助流程。\n成员可记录、编辑、预览及提交印刷，不区分讲述者权限。\n分享和登录仅为原型模拟，不发送消息或调用微信。",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "members-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "members",
+      "text": "收到邀请，加入就能一起做。",
+      "w": 240,
+      "x": 0,
+      "y": -270
+    },
+    "printflow-rules": {
+      "fill": "gray",
+      "page": "printflow",
+      "text": "项目成员均可直接印刷：当前就绪书稿 → 地址 → 提交。\n不再要求本人确认、双方确认、勾选或手写核对说明。\n首本已含，本次 ¥0；提交锁定书稿与地址，未知结果只能查询，避免重复制作。\n本轮只改设计，现有后端角色和授权规则尚待重构。",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "printflow-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "printflow",
+      "text": "准备好了，就把它印成书。",
+      "w": 240,
+      "x": 0,
+      "y": -270
+    },
+    "projects-rules": {
+      "fill": "gray",
+      "page": "projects",
+      "text": "项目统一呈现购买与受邀加入的内容。\n新购合并为书名与称呼 → 登录（如需）→ 配送范围与付款。\n待付款与待核实作为项目购买状态，不另设订单菜单。\n项目状态、故事和书稿分别保存；新项目不继承旧内容。",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "projects-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "projects",
+      "text": "买一本，或一起完成一本。",
+      "w": 240,
+      "x": 0,
+      "y": -270
+    },
+    "recover-rules": {
+      "fill": "gray",
+      "page": "recover",
+      "text": "异常复用同一页面的状态，不增加正常步骤。\n付款待核实回查原购买；取消后可发起新的项目，书名不串用。\n录音上传失败在故事列表仍可重新进入并重试。\n未保存提示的返回键回编辑；录音继续按钮直接恢复录制。\n真实结果由服务端决定，原型不扣款或制作。",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "recover-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "recover",
+      "text": "遇到中断，也知道下一步。",
+      "w": 240,
+      "x": 0,
+      "y": -270
+    },
+    "service-rules": {
+      "fill": "gray",
+      "page": "service",
+      "text": "制作进度区分已提交、制作中、已印好、已发货、已交付、已确认取消、待核实。\n取消后可更正书稿或地址，再次提交。\n退款、质量售后、资料与服务只在使用条款中说明，不再单设菜单。\n条款为设计摘要，正式全文及业务接口尚未修改。",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "service-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "service",
+      "text": "流程到此，回忆留下。",
+      "w": 240,
+      "x": 0,
+      "y": -270
+    },
+    "story-rules": {
+      "fill": "gray",
+      "page": "story",
+      "text": "结束录音后自动上传。只显示上传中、成功或失败重试，不呈现本机/封存/转写技术阶段。\n故事在后台整理，用户可先离开；新故事整理好后自动编入默认章节，可再调整或不入书。\n录音与回听均为场景模拟，未调用麦克风和实际播放。",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "story-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "story",
+      "text": "说完就上传，故事慢慢成形。",
+      "w": 240,
+      "x": 0,
+      "y": -270
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "HomePaid.dc.html",
+    "MyGuest.dc.html",
+    "MyPaid.dc.html",
+    "MyProjects.dc.html",
+    "SwitchProject.dc.html",
+    "NewBook.dc.html",
+    "Checkout.dc.html",
+    "Login.dc.html",
+    "InviteShare.dc.html",
+    "InviteJoin.dc.html",
+    "InviteExpired.dc.html",
+    "Record.dc.html",
+    "Upload.dc.html",
+    "Stories.dc.html",
+    "Story.dc.html",
+    "StoryEdit.dc.html",
+    "Photos.dc.html",
+    "PhotoSelect.dc.html",
+    "Topics.dc.html",
+    "HomeBookReady.dc.html",
+    "BookOverview.dc.html",
+    "BookReader.dc.html",
+    "OriginalAudio.dc.html",
+    "BookCover.dc.html",
+    "BookCoverSelect.dc.html",
+    "BookDirectory.dc.html",
+    "BookChapterEdit.dc.html",
+    "ChapterStories.dc.html",
+    "BookAddress.dc.html",
+    "BookPrintConfirm.dc.html",
+    "BookProduction.dc.html",
+    "BookShipped.dc.html",
+    "UploadFailed.dc.html",
+    "PaymentPending.dc.html",
+    "PaymentUnknown.dc.html",
+    "BookChanged.dc.html",
+    "BookGenerateFailed.dc.html",
+    "BookDelivered.dc.html",
+    "BookCancelled.dc.html",
+    "Terms.dc.html",
+    "BookEmpty.dc.html",
+    "StoryProcessing.dc.html",
+    "StoryFailed.dc.html",
+    "PrintUnknown.dc.html",
+    "RecordBlocked.dc.html",
+    "ReaderFailed.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "main",
+      "name": "01 · 首页与我的"
+    },
+    {
+      "id": "projects",
+      "name": "02 · 项目与购买"
+    },
+    {
+      "id": "members",
+      "name": "03 · 登录与邀请"
+    },
+    {
+      "id": "story",
+      "name": "04 · 录音与故事"
+    },
+    {
+      "id": "materials",
+      "name": "05 · 文字与照片"
+    },
+    {
+      "id": "bookpreview",
+      "name": "06 · 书籍预览"
+    },
+    {
+      "id": "bookedit",
+      "name": "07 · 书封与章节"
+    },
+    {
+      "id": "printflow",
+      "name": "08 · 印刷与寄送"
+    },
+    {
+      "id": "recover",
+      "name": "09 · 必要恢复状态"
+    },
+    {
+      "id": "service",
+      "name": "10 · 交付与条款"
+    },
+    {
+      "id": "followup",
+      "name": "11 · 补充状态"
+    }
+  ],
+  "title": "时光故事 · 岁月成书｜最终设计 · 简化流程"
+}

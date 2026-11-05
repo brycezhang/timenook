@@ -1,5 +1,9 @@
 # T23 · 审核生产、人工交接与物流追踪
 
+## 2026-11-02 当前范围
+
+生产单页面、完成印制事实及物流/微信字段解耦统一由 #153 补齐；本票保留线下交接、实际印制/物流及适用平台回执等真实验收，不重复新建后台任务。
+
 2026-10-29 当前目标按 [ADR 0017](../../../adr/0017-lifetime-service-and-retention.md) 更新；长期规则及工程调整见 [#105](https://github.com/brycezhang/timenook/issues/105)；正式环境、设备及供应商验收仍按原责任票留证。
 
 GitHub：[#24](https://github.com/brycezhang/timenook/issues/24) · 状态以 GitHub 为准。

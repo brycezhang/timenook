@@ -20,7 +20,7 @@ TimeNook以`wutong-admin`的TypeScript / NestJS、Fastify和Vben为工程基线�
 
 以上版本是参考项目的声明/本地开发配置，不代表本项目已安装、压测或生产部署。Prisma二进制目标、OpenSSL和Chromium/字体必须按TimeNook目标Linux验证，不能直接复制参考项目的运行产物。
 
-2026-10-29 只读复核：wutong 使用应用层 `AuthPageLayout` / `BasicLayout`、路由权限与通用页面，当前关闭多标签页；TimeNook 原实现只保留底层布局等依赖闭包，以按钮变量切页。整体补齐方案与长期服务调整见[重构规格草案](../delivery/2026-10-29/admin-vben-refactor-spec.md)，尚不代表新后台已实现。
+2026-10-29 只读复核：wutong 使用应用层 `AuthPageLayout` / `BasicLayout`、路由权限与通用页面，当前关闭多标签页；TimeNook 原实现只保留底层布局等依赖闭包，以按钮变量切页。2026-11-02 用户已确认按订单、用户、生产单三个入口精简；完整 Vben 组织与长期服务调整见[正式规格](../delivery/2026-10-29/admin-vben-refactor-spec.md)，尚不代表新后台已实现。
 
 ## 2. 基础设施与外部服务
 

@@ -4,7 +4,7 @@
 
 基于已定稿开发方案，已创建 **[1 个规格父 issue](https://github.com/brycezhang/timenook/issues/1) + 30 个子 tickets**，用 GitHub 原生 blocked-by 关系表示依赖，并按 ready-for-agent / ready-for-human 区分实现和外部决策。每票均可从本页打开完整验收条件。
 
-推进方式：主 Agent 按 ready frontier 派发实施 subagent；工程依赖已满足且彼此独立的票，可用独立 worktree/分支并行实施。每票分别完成 TDD、相关检查、独立 Standards / Spec 双轴审查与最终提交的 PR CI；合并串行，每次合并后 main CI 全绿，才进行下一票合并并放行依赖者；独立票实施、PR CI 与审查仍可并行。现有 45 条依赖与真实完成口径不变。外部验收缺失时保留票据未完成；按上游已交付工程产物判断可推进的本地范围，真实验收与上线分别检查。T01 已由 PR #32 合并。部署目标按 [ADR 0009](../../adr/0009-shared-ecs-api-path.md) 和 [ADR 0015](../../adr/0015-dedicated-domain-ingress.md)：与 legal-agent 共用 ECS，TimeNook 使用独立 API 域名和 `/api/v1` 基址。
+推进方式：主 Agent 按 ready frontier 派发实施 subagent；工程依赖已满足且彼此独立的票，可用独立 worktree/分支并行实施。每票分别完成 TDD、相关检查、独立 Standards / Spec 双轴审查与最终提交的 PR CI；合并串行，每次合并后 main CI 全绿，才进行下一票合并并放行依赖者；独立票实施、PR CI 与审查仍可并行。原依赖作为既有业务证据保留；T07/T08 旧票的替代关系见下文，不能把 not_planned 当成工程通过。外部验收缺失时保留票据未完成；按上游已交付工程产物判断可推进的本地范围，真实验收与上线分别检查。T01 已由 PR #32 合并。部署目标按 [ADR 0009](../../adr/0009-shared-ecs-api-path.md) 和 [ADR 0015](../../adr/0015-dedicated-domain-ingress.md)：与 legal-agent 共用 ECS，TimeNook 使用独立 API 域名和 `/api/v1` 基址。
 
 ## 阶段
 
@@ -45,11 +45,11 @@
 
 7. **[T07 建立独立运营登录与受限管理入口](tickets/07-admin-access.md)**
    - 阻塞：T01。
-   - 交付：运营使用 Vben 管理端登录，看到权限内的运行信息，并留下操作审计。
+   - 交付：旧票 #8 已被 #81 及后台 #151 替代，不再独立实施运行信息页面。
 
 8. **[T08 发布动态赠礼关系与不可变套餐](tickets/08-catalog-package.md)**
    - 阻塞：T04、T05、T07。
-   - 交付：运营发布关系目录和套餐后，小程序展示相同的价格、称呼及服务条款；配置不完整时明确不可购买。
+   - 交付：旧票 #9 的动态商品配置后台已取消；固定套餐复用 #142，长期服务由 #105 交付。
 
 9. **[T09 后端内置单套默认大纲并复制为个人计划](tickets/09-builtin-template.md)**
    - 阻塞：T01。
@@ -119,7 +119,7 @@
    - 阻塞：T21。
    - 交付：用户申请后，客服核验范围并生成完整 ZIP，交付给获授权的申请人。
 
-26. **[T26 执行资料删除及备份恢复防复活](tickets/26-deletion-ledger.md)**
+26. **[T26 执行主动资料删除与迟到结果防复活](tickets/26-deletion-ledger.md)**
    - 阻塞：T24、T25。
    - 交付：资料删除请求按范围清理活动内容、历史对象、导出与供应商副本，并如实展示尚待到期或确认的部分。
 
@@ -131,7 +131,7 @@
    - 阻塞：T27。
    - 交付：用户提交质量问题后，客服可核对确定 PDF、印刷及物流证据，处理赔付或原单重印。
 
-29. **[T29 在共用 ECS 发布独立服务并完成恢复演练](tickets/29-release-recovery.md)**
+29. **[T29 在共用 ECS 发布独立服务并验证当前运行配置](tickets/29-release-recovery.md)**
    - 阻塞：T17、T26、T28。
    - 交付：在共用 ECS 上隔离部署 TimeNook，使用独立域名 `https://timenookapi.threeminreading.com/api/v1`，验证同机 legal-agent 服务及故障恢复。
 
@@ -233,8 +233,8 @@ D01 由 T04 冻结；D02/D03 的长期服务规则已按 [ADR 0017](../../adr/00
 - [T23 · #24 · 审核生产、人工交接与物流追踪](https://github.com/brycezhang/timenook/issues/24)
 - [T24 · #25 · 贯通撤回、活动流终止与生产暂停](https://github.com/brycezhang/timenook/issues/25)
 - [T25 · #26 · 受理并交付可独立读取的完整资料导出](https://github.com/brycezhang/timenook/issues/26)
-- [T26 · #27 · 执行资料删除及备份恢复防复活](https://github.com/brycezhang/timenook/issues/27)
+- [T26 · #27 · 执行主动资料删除与迟到结果防复活](https://github.com/brycezhang/timenook/issues/27)
 - [T27 · #28 · 实现退款申请、金额预留与结果对账](https://github.com/brycezhang/timenook/issues/28)
 - [T28 · #29 · 闭环质量售后与原单重印](https://github.com/brycezhang/timenook/issues/29)
-- [T29 · #30 · 在共用 ECS 发布独立服务并完成恢复演练](https://github.com/brycezhang/timenook/issues/30)
+- [T29 · #30 · 在共用 ECS 发布独立服务并验证当前运行配置](https://github.com/brycezhang/timenook/issues/30)
 - [T30 · #31 · 完成内部实物闭环与付费试点验收](https://github.com/brycezhang/timenook/issues/31)

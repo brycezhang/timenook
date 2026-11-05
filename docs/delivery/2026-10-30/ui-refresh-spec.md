@@ -1,5 +1,7 @@
 # 双端 UI 实施与发布
 
+2026-11-05：以下为历史实施范围。旧原型已移除，后续小程序重构以[当前设计](../../../designs/timenook-senior-2026-11-05/project/README.md)和 [ADR 0018](../../adr/0018-project-members-and-simple-printing.md) 为准；当时实现及验收结论不变。
+
 2026-10-30 用户已批准最新可点击原型并授权实现网页版、小程序版及线上部署。主规格为 [UI 提案](../../frontend/ui-review-2026-10-30.md)，视觉与布局以 `designs/timenook-ui-2026-10-30/index.html` / `app.js` / `style.css` 为准，后两轮反馈覆盖首版交互。实现基线为 `404a137`（#116）；已有录音、OSS、任务、版本和权限契约直接复用。
 
 ## 用户可见结果

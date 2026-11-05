@@ -64,6 +64,21 @@ D02 制作权益与 D03 回听/导出/下载及必要资料长期有效已按 AD
 
 部署顺序：先推进 T29 的工程装配、目标环境发布及恢复验收，再由 T30 衔接真实内部项目、双端、实物及付费试点验收。获授权的受控公网联调可先于两票完整关闭；正式部署验收归 T29，开放付费试点须满足 T30 门槛。配置决定本身不代表 T29/T30 或上游真实验收已完成。
 
+### 2026-10-30 小程序 AppID 绑定
+
+- 用户提供 TimeNook 独立小程序 AppID `wxa54f81265fba2439`，根目录 `project.config.json` 已由 `touristappid` 替换为该值，仍以 `dist/miniprogram/` 为小程序根目录。
+- 本地验证：以公开 API 基址 `https://timenookapi.threeminreading.com/api/v1` 重新构建，生成 25 个原生页面；`pnpm check:native` 的官方 WXML/WXSS 编译器均通过 25 页。该结果只证明本地构建与编译通过。
+- 本机受限配置中未找到该小程序 AppSecret。API 配置校验要求 AppID/Secret 成对提供，故本次只绑定客户端工程，未向活动服务端单独写入 AppID，也未启用支付模式。Secret 后续经 Git 忽略的受限文件或密钥系统交接，不发到聊天或放入前端。
+- 开发/体验权限、合法 request/upload/download 域名、隐私/录音配置、AppID 与普通商户的实际关联，以及真实登录、支付和双端验收仍待完成；工程中的 AppID 值不能证明这些平台条件已满足。
+
+### 2026-11-01 微信登录与商户关联验证
+
+- 独立 AppSecret 已经 Git 忽略的 `.env.wechat-local`（600）安全交接，AppID/Secret 已成对更新至服务器受限环境，重启 API 并验证健康。
+- 官方开发者工具的真实单账号登录、身份查询、参与查询、会话恢复、退出撤销与同账号重登通过；不代替双账号、双端真机及真实录音验收。
+- 用户确认已关联商户。已用真实 TimeNook 登录身份和该普通商户完成 1 分诊断预下单（200）、未支付查单（NOTPAY）、关闭（204）和关闭后查单（CLOSED），响应均验签通过，未付款或发权益。
+- 上述配置阶段的 API 使用内部验收装配，当时支付配置互斥、订单路由及支付/退款通知关闭。同日后续 [PR #131 与部署](../2026-11-01/payment-runtime.md) 已接通普通商户订单和通知；此处保留配置阶段的观察，后续资金结果见[受控验收记录](../2026-11-02/fixed-package-runtime.md)。
+- 运行环境、精确版本、验证结果及证据位置见[本轮记录](../2026-11-01/wechat-login.md)。
+
 ## 已有资源与正式部署差距
 
 按照 [ADR 0009](../../adr/0009-shared-ecs-api-path.md)、[0012](../../adr/0012-cloud-integration-database.md)、[0013](../../adr/0013-dedicated-oss-bucket.md) 和 [0015](../../adr/0015-dedicated-domain-ingress.md) 使用现有资源：deed 共用 ECS，TimeNook 使用独立 API 域名、服务、业务库 `timenook` 和 Redis 前缀；上海独立私有 Bucket `timenook`，AccessKey 沿用 deed；豆包已有配置，DeepSeek 经 Packy 中转并沿用已定 key。
