@@ -1,0 +1,32 @@
+[
+  {
+    "path": "/api/health/live",
+    "status": 200,
+    "passed": true
+  },
+  {
+    "path": "/api/health/ready",
+    "status": 200,
+    "passed": true
+  },
+  {
+    "path": "/admin/",
+    "status": 200,
+    "passed": true
+  },
+  {
+    "path": "/api/v1/participations",
+    "status": 401,
+    "passed": true
+  },
+  {
+    "path": "/api/v1/orders",
+    "status": 401,
+    "passed": true
+  },
+  {
+    "path": "/.env",
+    "status": 404,
+    "passed": true
+  }
+]

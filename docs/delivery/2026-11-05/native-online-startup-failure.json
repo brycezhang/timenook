@@ -1,0 +1,78 @@
+{
+  "passed": false,
+  "mode": "live",
+  "urlCheck": true,
+  "library": {
+    "sourceRequested": "3.17.5",
+    "testRequested": "3.17.5",
+    "resolved": "3.17.5"
+  },
+  "steps": [
+    {
+      "name": "release-build-and-production-api",
+      "passed": true
+    },
+    {
+      "name": "synthetic-hardware-preparation",
+      "passed": true
+    },
+    {
+      "name": "startup",
+      "passed": false,
+      "stage": "page:home:render",
+      "error": "Error"
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "synthetic-https-input:mp3",
+      "passed": true
+    },
+    {
+      "name": "synthetic-https-input:png",
+      "passed": true
+    },
+    {
+      "name": "native-session",
+      "passed": false,
+      "stage": "app:evaluate",
+      "error": "Error"
+    },
+    {
+      "name": "disconnect",
+      "passed": true
+    },
+    {
+      "name": "close-project",
+      "passed": true
+    }
+  ],
+  "photoInput": {
+    "synthetic": true,
+    "width": 800,
+    "height": 600,
+    "sha256": "12afab4da80ec4105b90d473f3666e1216cfcef2e3d9694e57b8695e3cd0496b"
+  },
+  "suite": "release-mvp",
+  "input": {
+    "synthetic": true,
+    "hardware": "substituted",
+    "bytes": 277605,
+    "durationMs": 46144,
+    "sha256": "10fc3172f556d9a6f14d469b83f837ea039f81272ddcc136f9a0652cbd30a6ed"
+  },
+  "activeStage": "cleanup:close-project",
+  "devtools": {
+    "version": "2.02.2609240",
+    "SDKVersion": "3.17.5"
+  },
+  "failure": {
+    "step": "startup",
+    "stage": "page:home:render",
+    "error": "Error",
+    "observation": {
+      "route": null,
+      "rendered": false
+    }
+  }
+}

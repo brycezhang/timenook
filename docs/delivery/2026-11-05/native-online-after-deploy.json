@@ -1,0 +1,149 @@
+{
+  "passed": true,
+  "mode": "live",
+  "urlCheck": true,
+  "library": {
+    "sourceRequested": "3.17.5",
+    "testRequested": "3.17.5",
+    "resolved": "3.17.5"
+  },
+  "steps": [
+    {
+      "name": "release-build-and-production-api",
+      "passed": true
+    },
+    {
+      "name": "synthetic-hardware-preparation",
+      "passed": true
+    },
+    {
+      "name": "startup",
+      "passed": true
+    },
+    {
+      "name": "native-domain-enforcement",
+      "passed": true
+    },
+    {
+      "name": "real-wechat-login-and-project-entry",
+      "passed": true
+    },
+    {
+      "name": "isolated-internal-project-and-native-invitation",
+      "passed": true
+    },
+    {
+      "name": "pause-resume-and-automatic-upload",
+      "passed": true
+    },
+    {
+      "name": "optional-real-followup",
+      "passed": true
+    },
+    {
+      "name": "real-asr-and-automatic-story",
+      "passed": true
+    },
+    {
+      "name": "direct-chapter-editor-and-story-selection",
+      "passed": true
+    },
+    {
+      "name": "photo-auto-upload-and-real-cover-selection",
+      "passed": true
+    },
+    {
+      "name": "generate-real-pdf-and-verify-download",
+      "passed": true
+    },
+    {
+      "name": "frozen-book-audio-and-native-playback",
+      "passed": true
+    },
+    {
+      "name": "internal-project-cannot-enter-physical-production",
+      "passed": true
+    },
+    {
+      "name": "logout-revokes-current-session",
+      "passed": true
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "synthetic-https-input:mp3",
+      "passed": true
+    },
+    {
+      "name": "synthetic-https-input:png",
+      "passed": true
+    },
+    {
+      "name": "internal-account-session",
+      "passed": true
+    },
+    {
+      "name": "native-session",
+      "passed": true
+    },
+    {
+      "name": "disconnect",
+      "passed": true
+    },
+    {
+      "name": "close-project",
+      "passed": true
+    }
+  ],
+  "photoInput": {
+    "synthetic": true,
+    "width": 800,
+    "height": 600,
+    "sha256": "12afab4da80ec4105b90d473f3666e1216cfcef2e3d9694e57b8695e3cd0496b"
+  },
+  "suite": "release-mvp",
+  "input": {
+    "synthetic": true,
+    "hardware": "substituted",
+    "bytes": 277605,
+    "durationMs": 46144,
+    "sha256": "10fc3172f556d9a6f14d469b83f837ea039f81272ddcc136f9a0652cbd30a6ed"
+  },
+  "activeStage": "cleanup:close-project",
+  "devtools": {
+    "version": "2.02.2609240",
+    "SDKVersion": "3.17.5"
+  },
+  "project": {
+    "source": "internal-acceptance",
+    "payment": false,
+    "physicalProduction": false
+  },
+  "followup": {
+    "action": "ask"
+  },
+  "providers": {
+    "asr": true,
+    "story": true,
+    "syntheticInput": true
+  },
+  "coverDiagnostic": {
+    "rows": 1,
+    "loaded": 1,
+    "status": ""
+  },
+  "pdfObservation": {
+    "file": false,
+    "status": "已打开第1版完整 PDF"
+  },
+  "pdf": {
+    "verifiedNativeDownload": true,
+    "pages": 6
+  },
+  "audio": {
+    "sameFrozenHash": true,
+    "nativeProgress": true,
+    "anonymousDenied": true,
+    "temporaryFileReleased": true
+  }
+}
