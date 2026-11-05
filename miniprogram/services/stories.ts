@@ -29,6 +29,23 @@ function story(value: StoryView, projectId: string) {
   return value;
 }
 export const storyClient = {
+  async inclusion(
+    projectId: string,
+    id: string,
+    expectedVersion: number,
+    included: boolean,
+  ) {
+    return story(
+      await sessionClient.request<StoryView>(
+        `/projects/${projectId}/stories/${id}/inclusion`,
+        {
+          data: { expectedVersion, included },
+          key: paymentKey(),
+        },
+      ),
+      projectId,
+    );
+  },
   requestCorrection(
     projectId: string,
     id: string,

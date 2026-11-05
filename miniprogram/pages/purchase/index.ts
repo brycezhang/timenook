@@ -21,6 +21,9 @@ type E = {
 Page({
   data: {
     mode: dataMode(),
+    bookTitle: "",
+    loggedIn: false,
+    loginBusy: false,
     localVerification: PAYMENT_VERIFICATION_BUILD,
     packageVersionId: "",
     shippingRegionCode: "",
@@ -49,9 +52,19 @@ Page({
     bookImage: "/assets/book.jpg",
   },
   onLoad(q) {
+    const decode = (v: string) => {
+      try {
+        return decodeURIComponent(v);
+      } catch {
+        return v;
+      }
+    };
+    this.setData({ bookTitle: decode(q.bookTitle ?? "人生故事书") });
+    this.requestedRecipient = decode(q.salutation ?? "") || "我";
     if (dataMode() === "live") {
       try {
-        this.requestedRecipient = decodeURIComponent(q.recipient ?? "");
+        this.requestedRecipient =
+          decode(q.salutation ?? q.recipient ?? "") || "我";
       } catch {
         this.requestedRecipient = "";
       }
@@ -73,12 +86,14 @@ Page({
   requestedRecipient: "",
   orderOwnerContext: "",
   onHide() {
+    if (this.data.verificationBusy || this.data.loginBusy) return;
     ++this.catalogGeneration;
   },
   onUnload() {
     ++this.catalogGeneration;
   },
   async onShow() {
+    if (this.data.loginBusy || this.data.verificationBusy) return;
     const generation = ++this.catalogGeneration;
     const mode = dataMode();
     const context = sessionClient.context();
@@ -92,9 +107,10 @@ Page({
     this.orderOwnerContext = context;
     this.setData({
       mode,
-      agreed: false,
-      shippingRegionCode: "",
-      shippingRegionLabel: "",
+      agreed: true,
+      loggedIn: !!context,
+      shippingRegionCode: this.data.shippingRegionCode,
+      shippingRegionLabel: this.data.shippingRegionLabel,
       packageVersionId: "",
       availability: "套餐准备中，暂未开放购买",
       loading: false,
@@ -250,7 +266,7 @@ Page({
     this.setData({ agreed: !this.data.agreed });
   },
   privacy() {
-    go("service", "kind=terms");
+    go("terms");
   },
   chooseShippingRegion(e: E) {
     const region = this.data.shippingRegions[Number(e.detail.value)];
@@ -287,12 +303,27 @@ Page({
     if (PAYMENT_VERIFICATION_BUILD) return this.checkout(true);
   },
   // @development-only:end
+  async login() {
+    if (this.data.loginBusy) return;
+    this.setData({ loginBusy: true, verificationError: "" });
+    try {
+      await sessionClient.login();
+      this.setData({ loggedIn: true });
+    } catch (e) {
+      this.setData({
+        verificationError: e instanceof Error ? e.message : "登录未完成",
+      });
+    } finally {
+      this.setData({ loginBusy: false });
+    }
+    if (this.data.loggedIn) await this.onShow();
+  },
   async checkout(localOnly = false) {
     if (dataMode() !== "live" || this.data.verificationBusy) return;
     const context = sessionClient.context();
     const generation = this.catalogGeneration;
     if (!context) {
-      this.setData({ verificationError: "请先在首页完成微信登录" });
+      this.setData({ verificationError: "请先微信登录" });
       return;
     }
     const current = () =>
@@ -308,17 +339,22 @@ Page({
       const recovering = !!intent;
       if (!intent) {
         if (!localOnly && (!this.data.purchasable || !this.data.agreed))
-          throw new Error("请先确认当前套餐与服务说明");
+          throw new Error("套餐暂未开放购买");
         if (
           !this.data.packageVersionId ||
           !this.data.selection ||
           !this.data.shippingRegionCode
         )
-          throw new Error("请先选择赠礼称呼和配送区域");
+          throw new Error("请选择配送地区");
         intent = {
           key: paymentKey(),
           command: {
             packageVersionId: this.data.packageVersionId,
+            bookTitle: this.data.bookTitle,
+            subjectName:
+              this.data.selectedLabel === "我"
+                ? undefined
+                : this.data.selectedLabel,
             recipient: {
               ...(this.data.selection.recipientCode
                 ? { typeCode: this.data.selection.recipientCode }

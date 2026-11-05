@@ -23,6 +23,7 @@ const compiled = await build({
 });
 function harness(
   options: {
+    autoUpload?: boolean;
     deferSaves?: boolean;
     deferStops?: boolean;
     clock?: { now: number };
@@ -75,6 +76,8 @@ function harness(
       : clearInterval,
     Page: (value: any) => {
       page = value;
+      // Stage fixtures exercise recovery before upload; the automatic path is tested separately below.
+      if (!options.autoUpload) page.queueAutoUpload = () => {};
       page.setData = (patch: object) => Object.assign(page.data, patch);
     },
     wx: {
@@ -473,31 +476,27 @@ test("local review plays the actual saved file after a permission check and re-r
   assert.equal(h.page.data.localClips[0].path, clip.path);
 });
 
-test("recording advances from preparation to local review and only explicit submit uploads", async (t) => {
-  const h = harness();
+test("stopping automatically starts upload only after the local file and manifest are saved", async (t) => {
+  const h = harness({ autoUpload: true });
   t.after(() => h.page.onUnload());
   await ready(h);
-  assert.equal(h.page.data.flowStep, "prepare");
   await start(h);
-  assert.equal(h.page.data.flowStep, "record");
   await h.page.record();
   await tick();
-  assert.equal(h.page.data.flowStep, "review");
-  assert.equal(h.page.data.status, "已保存在这台设备，还未上传");
-  assert.equal(h.uploads.length, 0);
-  assert.equal(h.requests.length, 0, "local review must not submit a clip");
-  h.page.prepareCurrent();
-  assert.equal(h.page.data.flowStep, "prepare");
+  assert.equal(h.files.size, 1);
+  assert.equal(h.page.data.state, "uploading");
   assert.equal(
-    h.starts,
-    1,
-    "returning to preparation does not restart the microphone",
+    h.requests[0].url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/clips`,
   );
   assert.equal(
-    h.requests.length,
-    0,
-    "step navigation does not create another interview",
+    h.requests[0].data.clientClipId,
+    h.page.data.localClips[0].clientClipId,
   );
+  respond(h.requests.shift(), undefined, 503);
+  await tick();
+  assert.equal(h.page.data.processingTitle, "上传未成功");
+  assert.equal(h.files.size, 1);
 });
 
 test("one recording pauses without counting idle time and resumes only after rechecking the same question", async (t) => {
@@ -1827,7 +1826,7 @@ test("the story entry preserves the selected assisted interview and blocks recor
   h.page.openStory();
   assert.equal(
     h.navigation[0].url,
-    `/pages/story/index?projectId=${projectId}&interviewId=${interviewId}&organize=1&assistedSessionId=${assistedSessionId}`,
+    `/pages/story/index?projectId=${projectId}&interviewId=${interviewId}&assistedSessionId=${assistedSessionId}`,
   );
   await start(h);
   h.page.openStory();
@@ -2413,12 +2412,12 @@ test("saved audio waits for actual transcription success before offering story o
   };
   respond(h.requests.shift(), [task], 201);
   await tick();
-  assert.equal(h.page.data.processingTitle, "原声已保存，等待转写");
+  assert.equal(h.page.data.processingTitle, "录音上传成功");
   assert.equal(h.page.data.processingReady, false);
   const refreshing = h.page.refreshTasks();
   respond(h.requests.shift(), [{ ...task, state: "succeeded" }], 201);
   await refreshing;
-  assert.equal(h.page.data.processingTitle, "文字已转写");
+  assert.equal(h.page.data.processingTitle, "录音上传成功");
   assert.equal(h.page.data.processingReady, true);
 });
 
@@ -2457,11 +2456,11 @@ test("an unknown seal keeps the local original and recovers the same clip into t
     201,
   );
   await tick();
-  assert.equal(h.page.data.processingTitle, "正在确认保存");
+  assert.equal(h.page.data.processingTitle, "正在上传录音");
   assert.equal(h.page.data.processingReady, false);
   h.requests.shift().fail({ errMsg: "request:fail timeout" });
   await upload;
-  assert.equal(h.page.data.processingTitle, "保存结果待确认");
+  assert.equal(h.page.data.processingTitle, "上传未成功");
   assert.equal(h.files.size, 1);
   const recovery = h.page.retryProcessing();
   const status = h.requests.shift();
@@ -2567,7 +2566,8 @@ test("actual transcription results choose their own recovery action and never ma
       201,
     );
     await query;
-    assert.equal(h.page.data.processingTitle, title);
+    assert.equal(h.page.data.processingTitle, "录音上传成功");
+    assert.equal(h.page.data.uploadSucceeded, true);
     assert.equal(h.page.data.processingAction, action);
     assert.equal(h.page.data.processingReady, false);
   }
@@ -2660,7 +2660,7 @@ test("a second local take blocks organization until it is submitted and its actu
   assert.equal(h.page.data.localClips[0].sealed, undefined);
   assert.equal(h.page.data.processingReady, false);
   assert.equal(h.page.data.processingAction, "review");
-  assert.equal(h.page.data.processingTitle, "这段讲述还在本机");
+  assert.equal(h.page.data.processingTitle, "准备上传录音");
 
   h.page.reviewCurrent();
   const local = h.page.data.reviewClip;
@@ -2707,7 +2707,7 @@ test("a second local take blocks organization until it is submitted and its actu
   );
   await refreshing;
   assert.equal(h.page.data.processingReady, true);
-  assert.equal(h.page.data.processingTitle, "文字已转写");
+  assert.equal(h.page.data.processingTitle, "录音上传成功");
   const remoteRefresh = h.page.refreshTasks();
   respond(
     h.requests.shift(),

@@ -1,6 +1,8 @@
 export const CONSENT_PURPOSES = ["collection", "ai", "sharing"] as const;
 export type ConsentPurpose = (typeof CONSENT_PURPOSES)[number];
 export interface InvitationView {
+  projectId?: string;
+  bookTitle?: string;
   inviter: string;
   process: string[];
   purposes: ConsentPurpose[];
@@ -16,7 +18,8 @@ export interface ParticipationState {
   projectId: string;
   bookTitle?: string;
   subjectId: string;
-  role: "narrator" | "initiator";
+  role: "member" | "narrator" | "initiator";
+  canInvite?: boolean;
   bindingVersion: number;
   accessEpoch: number;
   noticeVersion: string;

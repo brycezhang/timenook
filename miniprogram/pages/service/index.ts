@@ -151,7 +151,7 @@ Page({
       success: () =>
         wx.shareFileMessage({
           filePath: path,
-          fileName: "时光里-我的故事.json",
+          fileName: "时光故事-我的故事.json",
           fail: () =>
             notify(
               "导出文件已生成",

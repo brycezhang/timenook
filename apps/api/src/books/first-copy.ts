@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from "../identity/project-members";
 import {
   Body,
   Controller,
@@ -240,25 +241,6 @@ export class FirstCopies implements OnModuleDestroy {
     const role = order.buyerId === actor.userId ? "initiator" : "narrator";
     const book = context.current;
     const confirmations = { narrator: false, initiator: false };
-    for (const who of ["narrator", "initiator"] as const) {
-      const row = await tx.bookConfirmation.findFirst({
-        where: { projectId, role: who },
-        orderBy: { sequence: "desc" },
-      });
-      confirmations[who] = !!(
-        row &&
-        book?.state === "ready" &&
-        row.bookId === book.id &&
-        row.snapshotHash === book.snapshotHash &&
-        row.pdfHash === book.pdf?.sha256 &&
-        row.subjectId === subject.id &&
-        row.bindingVersion === subject.bindingVersion &&
-        row.accessEpoch === project.accessEpoch &&
-        (who === "narrator" ||
-          (row.addressHash === address?.hash &&
-            row.addressVersion === address?.version))
-      );
-    }
     const snapshot = order.packageSnapshot as unknown as SalesSnapshot;
     const regionCodes = (
       snapshot.admission?.d05?.includedRegionCodes ?? []
@@ -289,10 +271,6 @@ export class FirstCopies implements OnModuleDestroy {
       !regionCodes.includes(currentAddress.regionCode)
     )
       blockers.push("ADDRESS_REQUIRED");
-    if (!confirmations.narrator)
-      blockers.push("NARRATOR_CONFIRMATION_REQUIRED");
-    if (!confirmations.initiator)
-      blockers.push("INITIATOR_CONFIRMATION_REQUIRED");
     if (
       !payment ||
       payment.amount !== 99900 ||
@@ -353,7 +331,7 @@ export class FirstCopies implements OnModuleDestroy {
         version: address?.version ?? 0,
         hash: address?.hash ?? null,
         value:
-          activeData && role === "initiator" && address
+          activeData && address
             ? (address.value as unknown as FirstCopyAddress)
             : null,
       },
@@ -387,7 +365,7 @@ export class FirstCopies implements OnModuleDestroy {
         expiresAt: terms.creation?.expiresAt ?? null,
       },
       blockers,
-      canSubmit: role === "initiator" && blockers.length === 0,
+      canSubmit: blockers.length === 0,
       canReviseProduction,
       qualityRevisionRequestId,
       production: production ? this.orderView(production) : null,
@@ -437,7 +415,6 @@ export class FirstCopies implements OnModuleDestroy {
       async (tx, actor) => {
         await this.participation.requireMaterialIn(tx, projectId, "activeData");
         const current = await this.contextIn(tx, projectId, actor);
-        if (current.role !== "initiator") throw new ForbiddenException();
         if (current.production && !current.canReviseProduction)
           throw new ConflictException();
         if (
@@ -622,7 +599,6 @@ export class FirstCopies implements OnModuleDestroy {
       undefined,
       async (tx, actor) => {
         const current = await this.contextIn(tx, projectId, actor);
-        if (current.role !== "initiator") throw new ForbiddenException();
         const fresh = await this.command(
           tx,
           projectId,
@@ -649,9 +625,7 @@ export class FirstCopies implements OnModuleDestroy {
         }
         this.assertBook(current, body);
         if (current.address.hash !== body.addressHash || !current.canSubmit)
-          throw new ConflictException(
-            "Both confirmations and current entitlement required",
-          );
+          throw new ConflictException("当前书稿、地址和首本权益须有效");
         const project = await tx.project.findUniqueOrThrow({
             where: { id: projectId },
           }),
@@ -661,12 +635,6 @@ export class FirstCopies implements OnModuleDestroy {
           address = await tx.firstCopyAddress.findUniqueOrThrow({
             where: { projectId },
           });
-        const confirmations = await tx.bookConfirmation.findMany({
-          where: { projectId },
-          orderBy: { sequence: "desc" },
-        });
-        const narrator = confirmations.find((c) => c.role === "narrator")!,
-          initiator = confirmations.find((c) => c.role === "initiator")!;
         const reserved = await tx.firstCopyEntitlement.updateMany({
           where: {
             id: entitlement.id,
@@ -683,8 +651,10 @@ export class FirstCopies implements OnModuleDestroy {
           pdfHash: body.pdfHash,
           addressHash: body.addressHash,
           address: json(address.value),
-          narratorConfirmationId: narrator.id,
-          initiatorConfirmationId: initiator.id,
+          narratorConfirmationId: null,
+          initiatorConfirmationId: null,
+          submittedBy: actor.userId,
+          termsVersion: TERMS_VERSION,
         };
         const row = current.production
           ? await tx.firstCopyOrder.update({
@@ -784,28 +754,8 @@ export class FirstCopies implements OnModuleDestroy {
       current.address.hash !== order.addressHash
     )
       throw new ConflictException(
-        "Reservation requires current confirmations and entitlement",
+        "Reservation requires the current file, address and entitlement",
       );
-    const confirmations = await tx.bookConfirmation.findMany({
-      where: {
-        projectId,
-        id: {
-          in: [order.narratorConfirmationId, order.initiatorConfirmationId],
-        },
-      },
-    });
-    if (
-      confirmations.length !== 2 ||
-      confirmations.some(
-        (c) =>
-          c.bookId !== order.bookId ||
-          c.snapshotHash !== order.snapshotHash ||
-          c.pdfHash !== order.pdfHash ||
-          c.bindingVersion !== subject.bindingVersion ||
-          c.accessEpoch !== project.accessEpoch,
-      )
-    )
-      throw new ConflictException();
     if (order.state !== "approved") {
       await tx.firstCopyOrder.update({
         where: { id: orderId },
@@ -1006,34 +956,7 @@ export class FirstCopies implements OnModuleDestroy {
       )
     )
       throw new ConflictException(
-        "New reviewed PDF and current confirmations required",
-      );
-    const reviewedAt = quality.reviewedAt;
-    const confirmations = await Promise.all(
-      (["narrator", "initiator"] as const).map((role) =>
-        tx.bookConfirmation.findFirst({
-          where: { projectId: project.id, role },
-          orderBy: { sequence: "desc" },
-        }),
-      ),
-    );
-    if (
-      confirmations.some(
-        (c) =>
-          !c ||
-          c.createdAt < reviewedAt ||
-          c.bookId !== book.id ||
-          c.snapshotHash !== book.snapshotHash ||
-          c.pdfHash !== book.pdf!.sha256 ||
-          c.subjectId !== subject.id ||
-          c.bindingVersion !== subject.bindingVersion ||
-          c.accessEpoch !== project.accessEpoch,
-      ) ||
-      confirmations[1]?.addressHash !== address.hash ||
-      confirmations[1]?.addressVersion !== address.version
-    )
-      throw new ConflictException(
-        "Both fresh exact-version confirmations required",
+        "New reviewed PDF and current address required",
       );
     return {
       reservationRevision: order.reservationRevision,
@@ -1042,8 +965,8 @@ export class FirstCopies implements OnModuleDestroy {
       pdfHash: book.pdf!.sha256,
       addressHash: address.hash,
       address: address.value,
-      narratorConfirmationId: confirmations[0]!.id,
-      initiatorConfirmationId: confirmations[1]!.id,
+      narratorConfirmationId: null,
+      initiatorConfirmationId: null,
     };
   }
   async onModuleDestroy() {
@@ -1076,25 +999,6 @@ export class FirstCopyController {
   ) {
     return {
       data: await this.copies.address(
-        id,
-        body,
-        req.headers.authorization,
-        idempotencyKey(req),
-      ),
-      meta: { requestId: req.id },
-    };
-  }
-
-  @Post("confirmations")
-  @Header("Cache-Control", "no-store")
-  @ApiHeader({ name: "Idempotency-Key", required: true })
-  async confirm(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: BookConfirmationDto,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.copies.confirm(
         id,
         body,
         req.headers.authorization,

@@ -5,9 +5,7 @@
     "pages/purchase/index",
     "pages/invite/index",
     "pages/welcome/index",
-    "pages/assisted/index",
     "pages/plan/index",
-    "pages/project/index",
     "pages/interview/index",
     "pages/photos/index",
     "pages/story/index",
@@ -17,15 +15,21 @@
     "pages/print/index",
     "pages/production/index",
     "pages/order/index",
-    "pages/refunds/index",
-    "pages/quality/index",
     "pages/account/index",
-    "pages/settings/index",
-    "pages/service/index",
     "pages/audio-probe/index",
     "pages/original-audio/index",
-    "pages/export/index",
-    "pages/deletion-status/index"
+    "pages/projects/index",
+    "pages/new-book/index",
+    "pages/terms/index",
+    "pages/stories/index",
+    "pages/directory/index",
+    "pages/chapter/index",
+    "pages/chapter-stories/index",
+    "pages/cover/index",
+    "pages/cover-photos/index",
+    "pages/address/index",
+    "pages/story-audio/index",
+    "pages/topic/index"
   ],
   "tabBar": {
     "custom": true,
@@ -33,14 +37,19 @@
     "selectedColor": "#566143",
     "backgroundColor": "#F8F4ED",
     "list": [
-      { "pagePath": "pages/project/index", "text": "项目" },
-      { "pagePath": "pages/book/index", "text": "成书" },
-      { "pagePath": "pages/account/index", "text": "我的" }
+      {
+        "pagePath": "pages/home/index",
+        "text": "岁月成书"
+      },
+      {
+        "pagePath": "pages/account/index",
+        "text": "我的"
+      }
     ]
   },
   "usingComponents": {},
   "window": {
-    "navigationBarTitleText": "时光里 · 岁月成书",
+    "navigationBarTitleText": "时光故事 · 岁月成书",
     "navigationBarBackgroundColor": "#F8F4ED",
     "navigationBarTextStyle": "black",
     "backgroundColor": "#F8F4ED"

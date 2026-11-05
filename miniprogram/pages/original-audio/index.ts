@@ -1,3 +1,4 @@
+import { go } from "../../services/store";
 import type { BookAudioEntryView } from "../../../packages/contracts/src";
 import {
   bookAudioClient,
@@ -27,6 +28,11 @@ Page({
     busy: false,
     loggedIn: false,
     status: "",
+    paused: false,
+    position: 0,
+    duration: 0,
+    positionLabel: "00:00",
+    durationLabel: "00:00",
     playingClipId: "",
   },
   entryId: "",
@@ -230,6 +236,18 @@ Page({
               : "已退出登录，临时原声已清理",
       });
   },
+  terms() {
+    go("terms");
+  },
+  toggle() {
+    if (!this.player) return;
+    if (this.data.paused) this.player.play();
+    else this.player.pause();
+    this.setData({ paused: !this.data.paused });
+  },
+  seek(e: WechatMiniprogram.SliderChange) {
+    if (this.player) this.player.seek(Number(e.detail.value));
+  },
   async play(e: PlayEvent) {
     if (this.data.busy || !this.data.entry) return;
     if (this.accessExpired()) {
@@ -304,6 +322,22 @@ Page({
           this.setData({ status: "原声播放失败，请重新下载" });
         }
       });
+      player.onTimeUpdate(() => {
+        if (this.player !== player) return;
+        const format = (s: number) =>
+          `${Math.floor(s / 60)
+            .toString()
+            .padStart(2, "0")}:${Math.floor(s % 60)
+            .toString()
+            .padStart(2, "0")}`;
+        this.setData({
+          position: player.currentTime,
+          duration: player.duration,
+          positionLabel: format(player.currentTime),
+          durationLabel: format(player.duration),
+        });
+      });
+      this.setData({ paused: false });
       player.src = path;
       this.setData({ playingClipId: clipId });
       player.play();

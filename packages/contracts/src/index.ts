@@ -93,7 +93,7 @@ export interface PlanPreferenceDecision {
   createdAt: string;
 }
 export interface PersonalPlan extends ProjectPlan {
-  subjectDecision: "self" | "assisted" | null;
+  subjectDecision: "member" | "self" | "assisted" | null;
   decisionSessionId: string | null;
   actualQuestions: ActualPlanQuestion[];
   questionStates: PlanQuestionState[];

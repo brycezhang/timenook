@@ -1,12 +1,12 @@
 ---
 status: accepted
 date: 2026-11-05
-implementation: pending
+implementation: local-validation
 ---
 
 # 项目成员统一功能与简化制作流程
 
-本决定来自用户对设计审阅的六项明确调整，是当前产品规则。设计稿与本文件已更新；原生小程序、API、数据库与正式条款尚未重构，不宣称新行为已上线。
+本决定来自用户对设计审阅的六项明确调整，是当前产品规则。原生小程序、API、数据库成员关系和条款已按本决定重构；本机定向验证通过，未部署。完整旧流程测试仍需按新规则更新，见 [实现记录](../delivery/2026-11-05/final-design-implementation.md)。
 
 ## 决定
 

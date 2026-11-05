@@ -1,284 +1,78 @@
-import { type Project } from "../../domain/model";
-import { go, required, save, toast } from "../../services/store";
-import { dataMode } from "../../services/mode";
-import { sessionClient, ApiFailure } from "../../services/session";
+import type { BookVersionView } from "../../../packages/contracts/src";
 import { bookClient } from "../../services/books";
-import {
-  clearPhotoPreviews,
-  privatePhotoPreview,
-} from "../../services/story-photos";
-import type {
-  BookVersionView,
-  BookConfirmationContext,
-} from "../../../packages/contracts/src";
-import { paymentKey } from "../../services/payments";
-type E = {
-  currentTarget: { dataset: Record<string, string> };
-  detail: { value: string };
-};
+import { sessionClient, ApiFailure } from "../../services/session";
+import { watchProjectAccess } from "../../services/project-access";
+import { go } from "../../services/store";
 Page({
-  data: {
-    live: false,
-    version: null as BookVersionView | null,
-    busy: false,
-    status: "",
-    coverImage: "",
-    coverStatus: "",
-    confirmations: null as BookConfirmationContext | null,
-    confirmChecked: false,
-    confirmationEvidence: "",
-    p: null as Project | null,
-    stories: [] as Project["stories"],
-    pending: 0,
-    content: false,
-    layout: false,
-  },
+  data: { version: null as BookVersionView | null, busy: false, status: "" },
   projectId: "",
   versionId: "",
-  assistedSessionId: "",
   generation: 0,
   file: "",
-  coverFile: "",
-  confirmationRequest: null as { input: string; key: string } | null,
-  expiry: undefined as ReturnType<typeof setTimeout> | undefined,
-  stopSessionWatch: undefined as (() => void) | undefined,
+  opening: false,
+  stopAccess: undefined as (() => void) | undefined,
+  stopSession: undefined as (() => void) | undefined,
   onLoad(q) {
-    this.onHide();
-    ++this.generation;
     this.projectId = q.projectId || "";
     this.versionId = q.versionId || "";
-    this.assistedSessionId = q.assistedSessionId || "";
-    if (dataMode() === "live") this.setData({ live: true });
+    this.stopSession = sessionClient.onInvalidated(() => this.clearAccess());
+  },
+  clearAccess() {
+    this.opening = false;
+    this.onHide();
+    this.setData({ status: "项目访问已变化，请重新打开" });
+  },
+  async onShow() {
+    if (this.opening) return;
+    this.stopAccess?.();
+    const owner = sessionClient.context();
+    this.stopAccess = watchProjectAccess(
+      this.projectId,
+      () => owner === sessionClient.context(),
+      () => this.clearAccess(),
+    );
+    await this.perform(async (n, owner) => {
+      const v = await bookClient.readVersion(this.projectId, this.versionId);
+      if (this.current(n, owner)) this.setData({ version: v });
+    });
   },
   removeFile(path: string) {
     if (path)
       wx.getFileSystemManager().unlink({ filePath: path, fail: () => {} });
   },
   onHide() {
-    if (!this.data.live) return;
+    if (this.opening) return;
+    this.stopAccess?.();
+    this.stopAccess = undefined;
     ++this.generation;
-    if (this.expiry) clearTimeout(this.expiry);
-    this.expiry = undefined;
-    this.stopSessionWatch?.();
-    this.stopSessionWatch = undefined;
     this.removeFile(this.file);
     this.file = "";
-    this.clearCover();
-    this.confirmationRequest = null;
-    this.setData({
-      version: null,
-      confirmations: null,
-      confirmChecked: false,
-      confirmationEvidence: "",
-      busy: false,
-      coverStatus: "",
-    });
+    this.setData({ version: null, busy: false });
   },
   onUnload() {
+    this.stopSession?.();
+    this.opening = false;
     this.onHide();
   },
-  accessExpired() {
-    const value = this.data.version?.accessExpiresAt;
-    return !!value && Date.parse(value) <= Date.now();
+  current(n: number, owner: string) {
+    return n === this.generation && owner === sessionClient.context();
   },
-  clearCover() {
-    const path = this.coverFile;
-    this.coverFile = "";
-    this.setData({ coverImage: "" });
-    if (path) void clearPhotoPreviews([path]).catch(() => {});
-  },
-  coverExpired() {
-    const access = this.data.version?.coverPhotoAccess;
-    return (
-      !access?.allowed ||
-      (!!access.expiresAt && Date.parse(access.expiresAt) <= Date.now())
-    );
-  },
-  async loadCover(generation: number, owner: string) {
-    if (!this.current(generation, owner)) return;
-    this.watch(owner);
-    this.clearCover();
-    this.setData({ coverStatus: "" });
-    const photo = this.data.version?.snapshot.cover.photo;
-    if (!photo) return;
-    if (this.coverExpired()) {
-      this.setData({
-        coverStatus: "封面照片预览已到期，请从完整 PDF 核对照片。",
-      });
-      return;
-    }
-    try {
-      const path = await privatePhotoPreview(
-        this.projectId,
-        photo.interviewId,
-        photo.id,
-        { id: photo.assetId, bytes: photo.bytes, sha256: photo.sha256 },
-        () => this.current(generation, owner) && !this.coverExpired(),
-      );
-      if (!this.current(generation, owner)) {
-        await clearPhotoPreviews([path]);
-        return;
-      }
-      this.coverFile = path;
-      this.setData({ coverImage: path });
-    } catch (error) {
-      if (!this.current(generation, owner)) return;
-      this.clearCover();
-      if (error instanceof ApiFailure && error.status === 401) throw error;
-      if (error instanceof ApiFailure && error.status === 403) {
-        let fresh: BookVersionView;
-        try {
-          fresh = await bookClient.readVersion(this.projectId, this.versionId);
-        } catch (failure) {
-          if (
-            failure instanceof ApiFailure &&
-            [401, 403].includes(failure.status)
-          )
-            throw failure;
-          throw new ApiFailure("AUTHORIZATION_RECHECK_FAILED", 403);
-        }
-        if (!this.current(generation, owner)) return;
-        this.setData({
-          version: fresh,
-          ...(fresh.state === "obsolete"
-            ? { status: "内容已变化，请返回重新生成书稿" }
-            : {}),
-        });
-      }
-      if (this.current(generation, owner))
-        this.setData({
-          coverStatus: this.coverExpired()
-            ? "封面照片预览已到期，请从完整 PDF 核对照片。"
-            : "封面照片暂时无法预览，请从完整 PDF 核对照片。",
-        });
-    }
-  },
-  current(generation: number, owner: string) {
-    return (
-      generation === this.generation &&
-      dataMode() === "live" &&
-      owner === sessionClient.context() &&
-      !this.accessExpired()
-    );
-  },
-  watch(owner: string) {
-    const generation = this.generation;
-    if (this.expiry) clearTimeout(this.expiry);
-    this.expiry = setTimeout(
-      async () => {
-        if (
-          dataMode() !== "live" ||
-          owner !== sessionClient.context() ||
-          (this.data.version?.accessExpiresAt &&
-            Date.parse(this.data.version.accessExpiresAt) <= Date.now())
-        ) {
-          this.onHide();
-          this.setData({ status: "授权已到期或账号已变化，请重新查询" });
-          return;
-        }
-        if (this.data.version?.snapshot.cover.photo && this.coverExpired()) {
-          this.clearCover();
-          this.setData({
-            coverStatus: "封面照片预览已到期，请从完整 PDF 核对照片。",
-          });
-        }
-        try {
-          const fresh = await bookClient.readVersion(
-            this.projectId,
-            this.versionId,
-          );
-          if (generation !== this.generation) return;
-          if (fresh.state !== "ready") {
-            this.setData({
-              version: fresh,
-              confirmations: null,
-              confirmChecked: false,
-              status: "书稿内容已变化，请返回成书总览，生成并核对新版本。",
-            });
-          } else if (this.data.confirmations) {
-            const confirmations = await bookClient.confirmations(
-              this.projectId,
-            );
-            if (!this.current(generation, owner)) return;
-            this.setData({
-              confirmations:
-                confirmations.bookVersionId === fresh.id ? confirmations : null,
-            });
-          }
-        } catch {
-          if (generation !== this.generation) return;
-          this.onHide();
-          this.setData({
-            status: "当前书稿授权已变化，私人预览与临时 PDF 已清理，请重新查询",
-          });
-          return;
-        }
-        this.watch(owner);
-      },
-      Math.max(
-        1,
-        Math.min(
-          1000,
-          ...[
-            this.data.version?.accessExpiresAt,
-            this.data.version?.coverPhotoAccess.expiresAt,
-          ]
-            .filter((value): value is string => !!value)
-            .map((value) => Date.parse(value) - Date.now())
-            .filter((value) => value > 0),
-        ),
-      ),
-    );
-  },
-  async perform(work: (generation: number, owner: string) => Promise<void>) {
+  async perform(work: (n: number, owner: string) => Promise<void>) {
     if (this.data.busy) return;
-    if (this.accessExpired()) {
-      this.onHide();
-      this.setData({ status: "资料访问已到期，请重新查询" });
-      return;
-    }
-    const generation = ++this.generation,
+    const n = this.generation,
       owner = sessionClient.context();
     this.setData({ busy: true, status: "" });
     try {
-      await work(generation, owner);
-      if (generation === this.generation && owner !== sessionClient.context()) {
-        this.onHide();
-        this.setData({ status: "账号已变化，请重新查询" });
-      }
-    } catch (error) {
-      if (generation !== this.generation) return;
-      if (
-        owner !== sessionClient.context() ||
-        (error instanceof ApiFailure && [401, 403].includes(error.status))
-      ) {
-        this.onHide();
+      await work(n, owner);
+    } catch (e) {
+      if (this.current(n, owner))
         this.setData({
-          status:
-            error instanceof ApiFailure &&
-            error.code === "AUTHORIZATION_RECHECK_FAILED"
-              ? "资料权限未能重新核对，请重新查询"
-              : "授权已失效或账号已变化，请重新查询",
+          status: e instanceof Error ? e.message : "读取失败，请重试",
         });
-      } else {
-        this.removeFile(this.file);
-        this.file = "";
-        this.setData({
-          version: null,
-          status:
-            error instanceof Error ? error.message : "书稿操作失败，请重新查询",
-        });
-      }
     } finally {
-      if (generation === this.generation && this.accessExpired()) {
-        this.onHide();
-        this.setData({ status: "资料访问已到期，请重新查询" });
-      }
-      if (generation === this.generation) this.setData({ busy: false });
+      this.opening = false;
+      if (this.current(n, owner)) this.setData({ busy: false });
     }
-  },
-  async refresh() {
-    return this.onShow();
   },
   async openPdf() {
     const version = this.data.version;
@@ -310,6 +104,7 @@ Page({
         if (info.digest !== pdf.sha256 || info.size !== pdf.bytes)
           throw new Error("书稿文件校验失败，请重新下载");
         this.file = path;
+        this.opening = true;
         await new Promise<void>((resolve, reject) =>
           wx.openDocument({
             filePath: path,
@@ -329,157 +124,14 @@ Page({
       }
     });
   },
-  book() {
-    go("book", `projectId=${this.projectId}`);
-  },
-  chooseContentConfirmation() {
-    if (!this.data.busy && this.data.confirmations?.canConfirm)
-      this.setData({ confirmChecked: !this.data.confirmChecked });
-  },
-  contentEvidence(e: E) {
-    if (!this.data.busy) this.setData({ confirmationEvidence: e.detail.value });
-  },
-  async confirmContent() {
-    const context = this.data.confirmations,
-      evidenceRef = this.data.confirmationEvidence.trim();
-    if (
-      !context?.canConfirm ||
-      this.data.version?.state !== "ready" ||
-      context.bookVersionId !== this.data.version.id ||
-      !this.data.confirmChecked ||
-      !context.bookVersionId ||
-      !context.snapshotHash ||
-      !context.pdfHash
-    )
-      return;
-    if (!/^[^\r\n]{3,160}$/.test(evidenceRef)) {
-      this.setData({ status: "请填写 3 至 160 字的本次核对说明（单行）。" });
-      return;
-    }
-    const input = {
-        role: context.role,
-        bookVersionId: context.bookVersionId,
-        snapshotHash: context.snapshotHash,
-        pdfHash: context.pdfHash,
-        noticeVersion: context.noticeVersion,
-        evidenceRef,
-      },
-      serialized = JSON.stringify(input);
-    if (this.confirmationRequest?.input !== serialized)
-      this.confirmationRequest = { input: serialized, key: paymentKey() };
-    const key = this.confirmationRequest.key;
-    return this.perform(async (generation: number, owner: string) => {
-      const value = await bookClient.confirmContent(this.projectId, input, key);
-      if (!this.current(generation, owner)) return;
-      this.confirmationRequest = null;
-      this.setData({
-        confirmations: value,
-        confirmChecked: false,
-        confirmationEvidence: "",
-        status: "已确认本版完整 PDF。改稿后需要重新核对确认。",
-      });
-    });
-  },
+
   print() {
-    if (!this.data.live) return go("print");
-    if (this.accessExpired()) {
-      this.onHide();
-      this.setData({ status: "资料访问已到期，请重新查询" });
-      return;
-    }
-    if (this.data.version?.state === "ready")
-      go(
-        "print",
-        `projectId=${this.projectId}&versionId=${this.data.version.id}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
-      );
+    go("print", `projectId=${this.projectId}`);
   },
-  async onShow() {
-    if (dataMode() === "live") {
-      this.clearCover();
-      this.setData({
-        live: true,
-        version: null,
-        confirmations: null,
-        confirmChecked: false,
-        confirmationEvidence: "",
-      });
-      this.stopSessionWatch?.();
-      this.stopSessionWatch = sessionClient.onInvalidated(() => {
-        this.onHide();
-        this.setData({ status: "登录已失效，请重新登录" });
-      });
-      return this.perform(async (generation: number, owner: string) => {
-        const value = await bookClient.readVersion(
-          this.projectId,
-          this.versionId,
-        );
-        if (!this.current(generation, owner)) return;
-        if (
-          value.accessExpiresAt &&
-          Date.parse(value.accessExpiresAt) <= Date.now()
-        )
-          throw new Error("资料访问已到期");
-        this.setData({
-          version: value,
-          status:
-            value.state === "obsolete"
-              ? "内容已变化，请返回重新生成书稿"
-              : value.state !== "ready"
-                ? "书稿尚未生成完成，请返回查看状态"
-                : "",
-        });
-        if (
-          value.state === "ready" &&
-          value.snapshot.specification.status ===
-            "internal-acceptance-candidate"
-        ) {
-          const confirmations = await bookClient.confirmations(this.projectId);
-          if (!this.current(generation, owner)) return;
-          this.setData({
-            confirmations:
-              confirmations.bookVersionId === value.id ? confirmations : null,
-            confirmChecked: false,
-            confirmationEvidence: "",
-          });
-        }
-        this.watch(owner);
-        await this.loadCover(generation, owner);
-      });
-    }
-    const p = required();
-    this.setData({
-      p,
-      stories: p.stories.filter((s) => s.included),
-      pending: p.stories.filter(
-        (s) => s.included && s.confirmedVersion !== s.version,
-      ).length,
-      content: p.contentApproved === p.revision,
-      layout: p.layoutApproved === p.revision,
-    });
+  edit() {
+    go("directory", `projectId=${this.projectId}`);
   },
-  content() {
-    this.setData({ content: !this.data.content });
-  },
-  layout() {
-    this.setData({ layout: !this.data.layout });
-  },
-  approve() {
-    if (this.data.live) return;
-    const p = required();
-    if (
-      !p.stories.some((s) => s.included) ||
-      p.stories.some((s) => s.included && s.confirmedVersion !== s.version)
-    ) {
-      toast("请先完成每篇故事的本人确认");
-      return;
-    }
-    if (!this.data.content || !this.data.layout) return;
-    p.contentApproved = p.revision;
-    p.layoutApproved = p.revision;
-    save(p);
-    go("print");
-  },
-  story(e: E) {
-    go("story", "id=" + e.currentTarget.dataset.id);
+  refresh() {
+    void this.onShow();
   },
 });

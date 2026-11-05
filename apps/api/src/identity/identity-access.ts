@@ -14,6 +14,7 @@ import Redis from "ioredis";
 import type { Account, LoginResult } from "@timenook/contracts";
 import { API_CONFIG, ApiConfig } from "../config";
 import { exchangeCode } from "./wechat";
+import { acceptTermsIn } from "./project-members";
 
 export const WECHAT_FETCH = Symbol("WECHAT_FETCH");
 const digest = (value: string) =>
@@ -152,6 +153,7 @@ export class IdentityAccess implements OnModuleDestroy {
           data: { appId, openId, userId: user.id },
         });
       }
+      await acceptTermsIn(transaction, stored.userId, "wechat_login");
       return transaction.session.create({
         data: {
           id: randomUUID(),

@@ -293,7 +293,7 @@ test("the live story Page restores its real HTTP task and shows the complete sou
   await showing;
   assert.equal(h.page.data.story.revision.paragraphs.length, 2);
   assert.equal(h.page.data.story.revision.reviewItems[0], "年份待本人核对");
-  assert.equal(h.page.data.stage, "故事已整理，待本人核对");
+  assert.equal(h.page.data.stage, "故事已整理");
   assert.equal(h.page.data.busy, false);
   h.page.onHide();
 });

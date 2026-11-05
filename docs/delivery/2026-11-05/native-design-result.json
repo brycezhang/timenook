@@ -1,0 +1,59 @@
+{
+  "passed": true,
+  "mode": "design",
+  "urlCheck": false,
+  "library": {
+    "sourceRequested": "3.17.5",
+    "testRequested": "3.17.5",
+    "resolved": "3.17.5"
+  },
+  "steps": [
+    {
+      "name": "startup",
+      "passed": true
+    },
+    {
+      "name": "unpaid homepage image and benefits fit above purchase dock",
+      "passed": true
+    },
+    {
+      "name": "paid home shows current project",
+      "passed": true
+    },
+    {
+      "name": "book directory opens directly editable chapter",
+      "passed": true
+    },
+    {
+      "name": "story selection separates selected and available",
+      "passed": true
+    },
+    {
+      "name": "cover and independent photo selection",
+      "passed": true
+    },
+    {
+      "name": "terms exposes native WeChat customer service",
+      "passed": true
+    },
+    {
+      "name": "personal page is second native tab",
+      "passed": true
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "disconnect",
+      "passed": true
+    },
+    {
+      "name": "close-project",
+      "passed": true
+    }
+  ],
+  "activeStage": "cleanup:close-project",
+  "devtools": {
+    "version": "2.02.2609240",
+    "SDKVersion": "3.17.5"
+  }
+}

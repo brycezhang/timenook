@@ -75,6 +75,7 @@ Page({
     reviewClip: null as (InterviewLocalClip & { durationLabel: string }) | null,
     processingTitle: "保存与文字处理",
     processingMessage: "",
+    uploadSucceeded: false,
     processingReady: false,
     processingError: false,
     processingRetryable: false,
@@ -438,6 +439,7 @@ Page({
               });
           }, 1000);
         if (snapshot.stage === "sealed") void this.refreshTasks();
+        if (snapshot.stage === "local") this.queueAutoUpload();
       }
     });
     await device.restore();
@@ -608,7 +610,10 @@ Page({
         this.updateProcessingView();
       }
     } finally {
-      if (this.current(generation, context)) this.setData({ busy: false });
+      if (this.current(generation, context)) {
+        this.setData({ busy: false });
+        this.queueAutoUpload();
+      }
     }
   },
   async selectQuestion(e?: E) {
@@ -728,7 +733,10 @@ Page({
         });
       }
     } finally {
-      if (this.current(generation, context)) this.setData({ busy: false });
+      if (this.current(generation, context)) {
+        this.setData({ busy: false });
+        this.queueAutoUpload();
+      }
     }
   },
   moreActions() {
@@ -808,15 +816,15 @@ Page({
       error = false;
     if (state === "uploading") {
       title = "正在上传录音";
-      message = "本机文件仍在。上传后还会确认保存结果，请保留本机文件。";
+      message = "正在上传，请稍候。";
       action = "";
     } else if (state === "sealing") {
-      title = "正在确认保存";
-      message = "录音已上传，保存结果尚未确认，请保留本机文件。";
+      title = "正在上传录音";
+      message = "正在确认上传结果，请稍候。";
       action = "";
     } else if (state === "seal-error" || state === "upload-error") {
-      title = state === "seal-error" ? "保存结果待确认" : "录音上传未完成";
-      message = "本机原文件仍保留。重新核对同一片段，无需重录。";
+      title = "上传未成功";
+      message = "声音仍然保留，点一下重试即可。";
       action = "upload";
       error = true;
     } else if (taskError) {
@@ -824,8 +832,8 @@ Page({
       message = taskError;
       error = true;
     } else if (unsubmitted) {
-      title = "这段讲述还在本机";
-      message = "还有片段未提交。回听后再决定上传，换设备暂时看不到。";
+      title = "准备上传录音";
+      message = "正在上传这段讲述。";
       action = "review";
     } else if (issue) {
       title =
@@ -861,8 +869,8 @@ Page({
       message = "原声已确认保存。可以先离开，回来后继续查询实际处理结果。";
       action = "";
     } else if (ready) {
-      title = "文字已转写";
-      message = "已提交片段的文字已就绪，可以一起整理成故事。原始录音仍保留。";
+      title = "录音上传成功";
+      message = "故事正在后台整理，可以继续讲述，也可以先离开。";
       action = "organize";
     } else if (sealedIds.size) {
       title = "原声已确认保存";
@@ -877,7 +885,13 @@ Page({
         : sealedIds.size
           ? "原声已确认保存；文字处理不覆盖原录音。"
           : "确认保存前，请保留本机原文件。";
+    if (sealedIds.size && !unsubmitted) {
+      title = "录音上传成功";
+      message = "故事正在后台整理，可以继续讲述，也可以先离开。";
+      error = false;
+    }
     this.setData({
+      uploadSucceeded: sealedIds.size > 0 && !unsubmitted,
       processingTitle: title,
       processingMessage: message,
       processingReady: action === "organize",
@@ -895,12 +909,7 @@ Page({
     });
   },
   processingHelp() {
-    if (this.data.processingAction === "consent")
-      go(
-        this.assistedSessionId ? "assisted" : "welcome",
-        `projectId=${this.projectId}`,
-      );
-    else go("service", `kind=support&projectId=${this.projectId}`);
+    go("terms");
   },
   async startSpeaking() {
     if (dataMode() !== "live") {
@@ -947,6 +956,19 @@ Page({
         reviewClip: { ...clip, durationLabel: recordingTime([clip]) },
         clipPicker: false,
       });
+  },
+  queueAutoUpload() {
+    const n = this.generation;
+    void Promise.resolve().then(() => {
+      if (
+        n === this.generation &&
+        this.data.state === "local" &&
+        !this.data.busy &&
+        this.data.reviewClip &&
+        !this.data.reviewClip.sealed
+      )
+        void this.submitReview();
+    });
   },
   async submitReview() {
     if (dataMode() !== "live") {
@@ -1038,7 +1060,10 @@ Page({
             error instanceof Error ? error.message : "未能恢复，本机文件仍保留",
         });
     } finally {
-      if (this.current(generation, context)) this.setData({ busy: false });
+      if (this.current(generation, context)) {
+        this.setData({ busy: false });
+        this.queueAutoUpload();
+      }
     }
   },
   customText(e: E) {
@@ -1142,7 +1167,10 @@ Page({
           status: error instanceof Error ? error.message : "暂时无法回听",
         });
     } finally {
-      if (this.current(generation, context)) this.setData({ busy: false });
+      if (this.current(generation, context)) {
+        this.setData({ busy: false });
+        this.queueAutoUpload();
+      }
     }
   },
   async rerecordLocal(e: E) {
@@ -1540,7 +1568,10 @@ Page({
         followupStatus: "本次追问暂不能重试；可以跳过或整理，原声仍保留。",
       });
     } finally {
-      if (this.current(generation, context)) this.setData({ busy: false });
+      if (this.current(generation, context)) {
+        this.setData({ busy: false });
+        this.queueAutoUpload();
+      }
     }
   },
   clearFollowup() {
@@ -1741,8 +1772,11 @@ Page({
     this.clearFollowup();
     go(
       "story",
-      `projectId=${this.projectId}&interviewId=${interview.id}&organize=1${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+      `projectId=${this.projectId}&interviewId=${interview.id}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
     );
+  },
+  manageTopics() {
+    go("plan", `projectId=${this.projectId}`);
   },
   async finish() {
     if (dataMode() === "live") {
@@ -1757,8 +1791,7 @@ Page({
         ].includes(this.data.state)
       )
         return;
-      if (this.data.interview && !(await this.skipFollowup())) return;
-      switchProjectTab("project", this.projectId);
+      switchProjectTab("home", this.projectId);
       return;
     }
     home();

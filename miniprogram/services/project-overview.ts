@@ -35,7 +35,12 @@ function validate(value: ProjectOverview, projectId: string) {
 export const projectOverviewClient = {
   async memberships() {
     return sessionClient.request<{
-      projects: { projectId: string; state: string }[];
+      projects: {
+        projectId: string;
+        state: string;
+        bookTitle: string;
+        origin: "purchased" | "invited";
+      }[];
     }>("/participations");
   },
   selected() {

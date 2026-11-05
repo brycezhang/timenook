@@ -1,0 +1,4 @@
+{
+  "navigationBarTitleText": "编辑章节",
+  "usingComponents": { "sort-list": "/components/sort-list/index" }
+}

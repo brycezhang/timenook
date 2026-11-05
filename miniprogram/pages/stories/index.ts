@@ -1,0 +1,65 @@
+import type { StoryView } from "../../../packages/contracts/src";
+import { projectOverviewClient } from "../../services/project-overview";
+import { sessionClient } from "../../services/session";
+import { go } from "../../services/store";
+Page({
+  data: {
+    rows: [] as { id: string; title: string; state: string }[],
+    busy: false,
+    status: "",
+  },
+  projectId: "",
+  generation: 0,
+  onLoad(q) {
+    this.projectId = q.projectId || "";
+  },
+  onShow() {
+    void this.refresh();
+  },
+  onHide() {
+    ++this.generation;
+    this.setData({ rows: [], busy: false });
+  },
+  async refresh() {
+    const n = ++this.generation,
+      owner = sessionClient.context();
+    this.setData({ busy: true, status: "" });
+    try {
+      const p = await projectOverviewClient.read(this.projectId);
+      if (n !== this.generation || owner !== sessionClient.context()) return;
+      const label = (s: StoryView) =>
+        s.revision
+          ? s.included === false
+            ? "暂不入书"
+            : "已入书"
+          : s.task?.state === "no_content"
+            ? "已有录音，待补充"
+            : s.task?.state === "failed"
+              ? "整理未完成"
+              : "正在整理";
+      this.setData({
+        rows: p.stories.map((s) => ({
+          id: s.id,
+          title: s.revision?.title || "新记录的故事",
+          state: label(s),
+        })),
+      });
+    } catch (e) {
+      if (n === this.generation)
+        this.setData({
+          status: e instanceof Error ? e.message : "未能读取故事",
+        });
+    } finally {
+      if (n === this.generation) this.setData({ busy: false });
+    }
+  },
+  open(e: WechatMiniprogram.TouchEvent) {
+    go(
+      "story",
+      `projectId=${this.projectId}&storyId=${e.currentTarget.dataset.id}`,
+    );
+  },
+  record() {
+    go("interview", `projectId=${this.projectId}`);
+  },
+});

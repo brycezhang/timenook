@@ -1,577 +1,143 @@
-import { participationClient } from "../../services/participation";
-import { type Project, readyToPrint, validAddress } from "../../domain/model";
-import { asset, go, required, save, toast } from "../../services/store";
-import { dataMode } from "../../services/mode";
-import { sessionClient, ApiFailure } from "../../services/session";
+import type {
+  FirstCopyContext,
+  FirstCopyBlocker,
+} from "../../../packages/contracts/src";
 import { firstCopyClient } from "../../services/first-copy";
+import { sessionClient } from "../../services/session";
 import { paymentKey } from "../../services/payments";
-import type { FirstCopyContext } from "../../../packages/contracts/src";
-type E = {
-  currentTarget: { dataset: Record<string, string> };
-  detail: { value: string };
+import { go } from "../../services/store";
+const labels: Record<FirstCopyBlocker, string> = {
+  PHYSICAL_PRODUCTION_UNAVAILABLE: "当前项目没有实体书制作权益",
+  PRODUCTION_PDF_UNAPPROVED: "书稿等待印前检查",
+  BOOK_NOT_READY: "请先生成完整书稿",
+  ADDRESS_REQUIRED: "请填写收货地址",
+  NARRATOR_CONFIRMATION_REQUIRED: "请重新查询印刷状态",
+  INITIATOR_CONFIRMATION_REQUIRED: "请重新查询印刷状态",
+  POLICY_PENDING: "套餐制作暂未开放",
+  SPECIFICATION_MISMATCH: "当前书稿规格需要调整，请联系客服",
+  ENTITLEMENT_UNAVAILABLE: "首本制作权益当前不可用",
+  PROJECT_FROZEN: "当前项目已停止制作",
+  ALREADY_SUBMITTED: "已提交印刷，可查看制作进度",
 };
 Page({
   data: {
-    live: false,
     context: null as FirstCopyContext | null,
-    canSubmit: false,
+    blockers: [] as string[],
     busy: false,
     status: "",
-    versionMismatch: false,
-    addressDirty: false,
-    regionCode: "",
-    regionIndex: -1,
-    regionLabels: [] as string[],
-    regionOptions: [] as { label: string; selected: boolean }[],
-    blockerLabels: [] as string[],
-    paidAmount: "",
-    canPrepareProduction: false,
-    narratorChecked: false,
-    initiatorChecked: false,
-    narratorEvidence: "",
-    initiatorEvidence: "",
-    canConfirmNarrator: false,
-    p: null as Project | null,
-    bookImage: "",
-    ready: false,
-    name: "",
-    phone: "",
-    detail: "",
-    error: "",
-    submitted: false,
+    unknown: false,
   },
-  remoteAccessEpoch: -1,
   projectId: "",
-  versionId: "",
-  assistedSessionId: "",
   generation: 0,
-  ownerContext: "",
   intent: null as { input: string; key: string } | null,
-  expiry: undefined as ReturnType<typeof setTimeout> | undefined,
-  stopSessionWatch: undefined as (() => void) | undefined,
+  stopSession: undefined as (() => void) | undefined,
   onLoad(q) {
+    this.stopSession = sessionClient.onInvalidated(() => {
+      ++this.generation;
+      this.setData({
+        context: null,
+        blockers: [],
+        busy: false,
+        status: "登录已失效，请重新登录",
+      });
+    });
     this.projectId = q.projectId || "";
-    this.versionId = q.versionId || "";
-    this.assistedSessionId = q.assistedSessionId || "";
-    this.ownerContext = sessionClient.context();
-    if (dataMode() === "live") this.setData({ live: true });
+  },
+  onShow() {
+    void this.refresh();
   },
   onHide() {
-    this.remoteAccessEpoch = -1;
-    if (!this.data.live) return;
     ++this.generation;
-    this.ownerContext = "";
-    if (this.expiry) clearTimeout(this.expiry);
-    this.expiry = undefined;
-    this.stopSessionWatch?.();
-    this.stopSessionWatch = undefined;
-    this.intent = null;
-    this.setData({
-      context: null,
-      canSubmit: false,
-      busy: false,
-      name: "",
-      phone: "",
-      detail: "",
-      regionCode: "",
-      regionIndex: -1,
-      regionLabels: [],
-      regionOptions: [],
-      blockerLabels: [],
-      addressDirty: false,
-      narratorChecked: false,
-      initiatorChecked: false,
-      narratorEvidence: "",
-      initiatorEvidence: "",
-      canConfirmNarrator: false,
-    });
+    this.setData({ context: null, busy: false });
   },
   onUnload() {
+    this.stopSession?.();
     this.onHide();
   },
-  accessExpired() {
-    const value = this.data.context?.accessExpiresAt;
-    return !!value && Date.parse(value) <= Date.now();
-  },
-  current(generation: number, owner: string) {
-    return (
-      generation === this.generation &&
-      dataMode() === "live" &&
-      owner === sessionClient.context() &&
-      !this.accessExpired()
-    );
-  },
-  accept(value: FirstCopyContext) {
-    if (
-      value.accessExpiresAt &&
-      Date.parse(value.accessExpiresAt) <= Date.now()
-    )
-      throw new Error("资料访问已到期，请重新查询");
-    const versionMismatch =
-      !!this.versionId && value.book?.id !== this.versionId;
-    const address = value.address.value;
-    const labels: Record<string, string> = {
-      BOOK_NOT_READY: "书稿尚未就绪或内容已变化",
-      ADDRESS_REQUIRED: "请保存配送地址",
-      NARRATOR_CONFIRMATION_REQUIRED: "等待讲述者确认本版内容",
-      INITIATOR_CONFIRMATION_REQUIRED: "等待发起人确认本版 PDF 与当前地址",
-      POLICY_PENDING: "销售规则仍待确认，暂不能提交制作",
-      PHYSICAL_PRODUCTION_UNAVAILABLE:
-        "本项目仅限受控内容验收，不含实物制作权益",
-      PRODUCTION_PDF_UNAPPROVED: "当前 PDF 为候选稿，尚未批准实物制作",
-      SPECIFICATION_MISMATCH: "书稿超出或不符合约定制作规格",
-      ENTITLEMENT_UNAVAILABLE: "首本制作权益当前不可用",
-      PROJECT_FROZEN: "项目当前已冻结，请联系服务人员",
-      ALREADY_SUBMITTED: "首本已提交，无需再次提交",
-    };
-    const canPrepareProduction = !value.blockers.some((code) =>
-      ["PHYSICAL_PRODUCTION_UNAVAILABLE", "PRODUCTION_PDF_UNAPPROVED"].includes(
-        code,
-      ),
-    );
-    this.setData({
-      context: value,
-      canPrepareProduction,
-      paidAmount: (value.payment.paidAmountFen / 100).toFixed(2),
-      versionMismatch,
-      canSubmit: value.canSubmit && !versionMismatch,
-      name: address?.recipientName || "",
-      phone: address?.phone || "",
-      detail: address?.detail || "",
-      regionCode: address?.regionCode || "",
-      regionIndex: value.shipping.regionCodes.indexOf(
-        address?.regionCode || "",
-      ),
-      regionLabels: value.shipping.regionCodes.map(
-        (code) => value.shipping.regionLabels?.[code] || code,
-      ),
-      regionOptions: value.shipping.regionCodes.map((code) => ({
-        label: value.shipping.regionLabels?.[code] || code,
-        selected: code === address?.regionCode,
-      })),
-      blockerLabels: value.blockers.map(
-        (code) => labels[code] || "当前条件未满足，请重新查询",
-      ),
-      addressDirty: false,
-      canConfirmNarrator:
-        (value.canConfirmNarrator || !!this.assistedSessionId) &&
-        canPrepareProduction &&
-        !versionMismatch,
-      narratorChecked: false,
-      initiatorChecked: false,
-      narratorEvidence: "",
-      initiatorEvidence: "",
-      status: versionMismatch
-        ? "书稿版本已变化，请返回成书总览，重新逐页核对完整 PDF。"
-        : "",
-    });
-  },
-  key(input: unknown) {
-    const serialized = JSON.stringify(input);
-    if (this.intent?.input !== serialized)
-      this.intent = { input: serialized, key: paymentKey() };
-    return this.intent.key;
-  },
-  watch(owner: string) {
-    const generation = this.generation;
-    if (this.expiry) clearTimeout(this.expiry);
-    this.expiry = setTimeout(
-      async () => {
-        if (
-          dataMode() !== "live" ||
-          owner !== sessionClient.context() ||
-          this.accessExpired()
-        ) {
-          this.onHide();
-          this.setData({ status: "授权已到期或账号已变化，请重新查询" });
-          return;
-        }
-        try {
-          const permission = await participationClient.state(this.projectId);
-          if (generation !== this.generation) return;
-          if (
-            !permission.canRead ||
-            (this.remoteAccessEpoch >= 0 &&
-              permission.accessEpoch !== this.remoteAccessEpoch)
-          )
-            throw Error("authorization changed");
-          this.remoteAccessEpoch = permission.accessEpoch;
-        } catch {
-          if (generation !== this.generation) return;
-          this.onHide();
-          this.setData({
-            status: "当前访问或用途授权已变化，私人内容已清理，请重新查询",
-          });
-          return;
-        }
-        this.watch(owner);
-      },
-      Math.max(
-        1,
-        Math.min(
-          1000,
-          this.data.context?.accessExpiresAt
-            ? Date.parse(this.data.context.accessExpiresAt) - Date.now()
-            : 1000,
-        ),
-      ),
-    );
-  },
-  async perform(work: (generation: number, owner: string) => Promise<void>) {
+  async refresh() {
     if (this.data.busy) return;
-    if (this.ownerContext && this.ownerContext !== sessionClient.context()) {
-      this.onHide();
-      this.setData({ status: "账号已变化，请重新查询" });
-      return;
-    }
-    if (this.accessExpired()) {
-      this.onHide();
-      this.setData({ status: "资料访问已到期，请重新查询" });
-      return;
-    }
-    const generation = ++this.generation,
+    const n = ++this.generation,
       owner = sessionClient.context();
     this.setData({ busy: true, status: "" });
     try {
-      await work(generation, owner);
-    } catch (error) {
-      if (generation !== this.generation) return;
-      if (
-        owner !== sessionClient.context() ||
-        (error instanceof ApiFailure && [401, 403].includes(error.status))
-      ) {
-        this.onHide();
-        this.setData({ status: "授权已失效或账号已变化，请重新查询" });
-      } else
+      const c = await firstCopyClient.read(this.projectId);
+      if (n !== this.generation || owner !== sessionClient.context()) return;
+      this.setData({
+        context: c,
+        blockers: c.blockers
+          .filter((b) => b !== "ALREADY_SUBMITTED")
+          .map((b) => labels[b]),
+        unknown: false,
+      });
+    } catch (e) {
+      if (n === this.generation)
         this.setData({
-          ...(error instanceof ApiFailure && error.status === 409
-            ? { canSubmit: false }
-            : {}),
-          status:
-            error instanceof ApiFailure && error.status === 409
-              ? "书稿、地址或确认已变化，请重新查询后核对。"
-              : "结果未确定，请重新查询或重试；重试沿用本次提交标识。",
+          status: e instanceof Error ? e.message : "查询未完成，请重试",
         });
     } finally {
-      if (generation === this.generation && this.accessExpired()) {
-        this.onHide();
-        this.setData({ status: "资料访问已到期，请重新查询" });
-      }
-      if (generation === this.generation && owner !== sessionClient.context()) {
-        this.onHide();
-        this.setData({ status: "账号已变化，请重新查询" });
-      }
-      if (generation === this.generation) this.setData({ busy: false });
+      if (n === this.generation) this.setData({ busy: false });
     }
   },
-  async refresh() {
-    return this.onShow();
+  address() {
+    go("address", `projectId=${this.projectId}`);
   },
-  async onShow() {
-    if (dataMode() === "live") {
-      if (this.ownerContext && this.ownerContext !== sessionClient.context())
-        this.onHide();
-      this.ownerContext = sessionClient.context();
-      this.setData({ live: true });
-      this.stopSessionWatch?.();
-      this.stopSessionWatch = sessionClient.onInvalidated(() => {
-        this.onHide();
-        this.setData({ status: "登录已失效，请重新登录" });
-      });
-      return this.perform(async (generation: number, owner: string) => {
-        const value = await firstCopyClient.read(this.projectId);
-        if (this.current(generation, owner)) {
-          this.accept(value);
-          this.watch(owner);
-        }
-      });
-    }
-    const p = required();
-    this.setData({
-      p,
-      bookImage: asset(p),
-      ready: readyToPrint(p),
-      ...p.address,
-      submitted: p.printRevision === p.revision,
-    });
-  },
-  input(e: E) {
-    if (this.data.live) {
-      if (
-        this.data.busy ||
-        this.data.context?.role !== "initiator" ||
-        !["name", "phone", "detail"].includes(e.currentTarget.dataset.field)
-      )
-        return;
-      this.setData({
-        [e.currentTarget.dataset.field]: e.detail.value,
-        addressDirty: true,
-        canSubmit: false,
-        initiatorChecked: false,
-        initiatorEvidence: "",
-      });
-      return;
-    }
-    this.setData({ [e.currentTarget.dataset.field]: e.detail.value });
-  },
-  chooseRegion(e: {
-    detail?: { value: string };
-    currentTarget?: { dataset: Record<string, string> };
-  }) {
-    if (this.data.busy || this.data.context?.role !== "initiator") return;
-    const regionIndex = Number(
-        e.detail?.value ?? e.currentTarget?.dataset.index,
-      ),
-      regionCode = this.data.context.shipping.regionCodes[regionIndex];
-    if (regionCode)
-      this.setData({
-        regionIndex,
-        regionCode,
-        regionOptions: this.data.regionOptions.map((option, index) => ({
-          ...option,
-          selected: index === regionIndex,
-        })),
-        addressDirty: true,
-        canSubmit: false,
-        initiatorChecked: false,
-        initiatorEvidence: "",
-      });
-  },
-  async saveAddress() {
-    const value = this.data.context;
-    if (
-      this.data.busy ||
-      !value ||
-      value.role !== "initiator" ||
-      !this.data.addressDirty ||
-      (value.production && !value.canReviseProduction)
-    )
-      return;
-    const address = {
-      recipientName: this.data.name.trim(),
-      phone: this.data.phone.trim(),
-      regionCode: this.data.regionCode,
-      detail: this.data.detail.trim(),
-    };
-    if (
-      !address.recipientName ||
-      !/^1\d{10}$/.test(address.phone) ||
-      !address.detail ||
-      !value.shipping.regionCodes.includes(address.regionCode)
-    ) {
-      this.setData({ status: "请填写收件人、11位手机号、配送地区和完整地址" });
-      return;
-    }
-    const key = this.key({
-      operation: "address",
-      expectedVersion: value.address.version,
-      ...address,
-    });
-    return this.perform(async (generation: number, owner: string) => {
-      const saved = await firstCopyClient.saveAddress(
-        this.projectId,
-        value.address.version,
-        address,
-        key,
-      );
-      if (this.current(generation, owner)) {
-        this.intent = null;
-        this.accept(saved);
-        this.setData({ status: "地址已保存，请重新确认当前 PDF 与地址。" });
-      }
-    });
-  },
-  chooseConfirmation(e: E) {
-    if (this.data.busy) return;
-    const role = e.currentTarget.dataset.role;
-    if (role === "narrator")
-      this.setData({ narratorChecked: !this.data.narratorChecked });
-    if (role === "initiator")
-      this.setData({ initiatorChecked: !this.data.initiatorChecked });
-  },
-  evidenceInput(e: E) {
-    if (this.data.busy) return;
-    const role = e.currentTarget.dataset.role;
-    if (role === "narrator") this.setData({ narratorEvidence: e.detail.value });
-    if (role === "initiator")
-      this.setData({ initiatorEvidence: e.detail.value });
-  },
-  async confirmNarrator() {
-    return this.confirm("narrator");
-  },
-  async confirmInitiator() {
-    return this.confirm("initiator");
-  },
-  async confirm(role: "narrator" | "initiator") {
-    const value = this.data.context,
-      book = value?.book;
-    if (
-      !value ||
-      !book?.pdf ||
-      book.state !== "ready" ||
-      this.data.versionMismatch ||
-      this.data.busy ||
-      (value.production && !value.canReviseProduction) ||
-      (role === "narrator"
-        ? !this.data.canConfirmNarrator
-        : value.role !== "initiator" ||
-          this.data.addressDirty ||
-          !value.address.hash)
-    )
-      return;
-    const checked =
-        role === "narrator"
-          ? this.data.narratorChecked
-          : this.data.initiatorChecked,
-      evidence = (
-        role === "narrator"
-          ? this.data.narratorEvidence
-          : this.data.initiatorEvidence
-      ).trim();
-    if (!checked || !/^[^\r\n]{3,160}$/.test(evidence)) {
-      this.setData({
-        status:
-          "请逐页核对完整 PDF，明确选择并填写 3 至 160 字的本次独立说明（单行）",
-      });
-      return;
-    }
-    const input = {
-        role,
-        bookVersionId: book.id,
-        snapshotHash: book.snapshotHash,
-        pdfHash: book.pdf.sha256,
-        ...(role === "initiator" ? { addressHash: value.address.hash! } : {}),
-        noticeVersion: value.noticeVersion,
-        evidenceRef: `${value.evidencePrefix}${evidence}`,
-        ...(role === "narrator" && this.assistedSessionId
-          ? { assistedSessionId: this.assistedSessionId }
-          : {}),
-      },
-      key = this.key({ operation: "confirmation", ...input });
-    return this.perform(async (generation: number, owner: string) => {
-      const saved = await firstCopyClient.confirm(this.projectId, input, key);
-      if (this.current(generation, owner)) {
-        this.intent = null;
-        this.accept(saved);
-        this.setData({
-          status:
-            role === "narrator"
-              ? "本人已确认本版内容。"
-              : "已确认本版完整 PDF 与当前地址。",
-        });
-      }
-    });
-  },
-  assist() {
-    const book = this.data.context?.book;
-    if (this.data.context?.role === "initiator" && book && !this.data.busy)
-      go(
-        "assisted",
-        `projectId=${this.projectId}&bookVersionId=${book.id}&purpose=book_confirmation`,
-      );
+  preview() {
+    const b = this.data.context?.book;
+    if (b) go("manuscript", `projectId=${this.projectId}&versionId=${b.id}`);
   },
   book() {
     go("book", `projectId=${this.projectId}`);
   },
-  review() {
-    if (this.data.live) {
-      if (this.accessExpired()) {
-        this.onHide();
-        return;
-      }
-      const book = this.data.context?.book;
-      if (book)
-        go(
-          "manuscript",
-          `projectId=${this.projectId}&versionId=${book.id}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
-        );
-      return;
-    }
-    go("manuscript");
+  production() {
+    go("production", `projectId=${this.projectId}`);
+  },
+  terms() {
+    go("terms");
   },
   async submit() {
-    if (this.data.live) {
-      const value = this.data.context,
-        book = value?.book;
-      if (
-        !value ||
-        !book?.pdf ||
-        book.state !== "ready" ||
-        !this.data.canSubmit ||
-        this.data.addressDirty ||
-        this.data.versionMismatch ||
-        !value.address.hash ||
-        (value.production && !value.canReviseProduction)
-      )
-        return;
-      const binding = {
-          bookVersionId: book.id,
-          snapshotHash: book.snapshotHash,
-          pdfHash: book.pdf.sha256,
-          addressHash: value.address.hash,
-        },
-        key = this.key({ operation: "submit", ...binding });
-      return this.perform(async (generation: number, owner: string) => {
-        const saved = await firstCopyClient.submit(
-          this.projectId,
-          binding,
-          key,
-        );
-        if (this.current(generation, owner)) {
-          this.intent = null;
-          this.accept(saved);
-          this.setData({
-            status: saved.production
-              ? "首本制作已预留，等待审核。本次无需支付。"
-              : "首本尚未预留，请核对当前书稿确认与权益状态。",
-          });
-        }
-      });
-    }
-    const p = required();
-    if (!readyToPrint(p)) {
-      toast("请先确认完整书稿");
-      return;
-    }
-    const address = {
-      name: this.data.name.trim(),
-      phone: this.data.phone.trim(),
-      detail: this.data.detail.trim(),
-    };
-    if (!validAddress(address)) {
-      this.setData({ error: "请填写收件人、11位手机号和完整收货地址" });
-      return;
-    }
-    p.address = address;
-    save(p);
-    wx.showModal({
-      title: "体验提交印刷",
-      content:
-        "当前为本机演示，不会发送地址或创建真实印刷订单。首本已含在套餐中，无需再次支付。",
-      confirmText: "确认体验",
-      success: (r) => {
-        if (r.confirm) {
-          const latest = required();
-          if (!readyToPrint(latest)) {
-            toast("书稿已变化，请重新确认");
-            return;
-          }
-          latest.printRevision = latest.revision;
-          save(latest);
-          go("order");
-        }
-      },
-    });
-  },
-  production() {
+    const c = this.data.context,
+      b = c?.book;
     if (
-      this.data.context?.production &&
-      !this.data.busy &&
-      !this.accessExpired()
+      this.data.busy ||
+      this.data.unknown ||
+      !c?.canSubmit ||
+      !b?.pdf ||
+      !c.address.hash
     )
-      go("production", `projectId=${this.projectId}`);
-  },
-  order() {
-    go("order");
+      return;
+    const binding = {
+      bookVersionId: b.id,
+      snapshotHash: b.snapshotHash,
+      pdfHash: b.pdf.sha256,
+      addressHash: c.address.hash,
+    };
+    const input = JSON.stringify(binding);
+    if (this.intent?.input !== input)
+      this.intent = { input, key: paymentKey() };
+    const n = this.generation,
+      owner = sessionClient.context();
+    this.setData({ busy: true, status: "" });
+    try {
+      const saved = await firstCopyClient.submit(
+        this.projectId,
+        binding,
+        this.intent.key,
+      );
+      if (n !== this.generation || owner !== sessionClient.context()) return;
+      this.setData({ context: saved });
+      if (saved.production) {
+        this.intent = null;
+        go("production", `projectId=${this.projectId}`);
+      } else
+        this.setData({ status: "提交结果待核实，请查询进度", unknown: true });
+    } catch {
+      if (n === this.generation)
+        this.setData({
+          status: "提交结果未确认，请先查询，避免重复提交",
+          unknown: true,
+        });
+    } finally {
+      if (n === this.generation) this.setData({ busy: false });
+    }
   },
 });

@@ -13,14 +13,15 @@ const root = process.argv.includes("--built")
   ? "dist/miniprogram"
   : "miniprogram";
 const pages = JSON.parse(fs.readFileSync(root + "/app.json", "utf8")).pages;
-const sources = [...pages, "custom-tab-bar/index"];
-for (const [tool, ext, extra] of [
-  ["wcc", ".wxml", []],
-  ["wcsc", ".wxss", ["app.wxss", "styles/tokens.wxss"]],
+const files = fs.readdirSync(root, { recursive: true });
+for (const [tool, ext] of [
+  ["wcc", ".wxml"],
+  ["wcsc", ".wxss"],
 ]) {
+  const sources = files.filter((file) => file.endsWith(ext));
   const result = spawnSync(
     compiler + "/" + tool,
-    ["-o", "/dev/null", ...sources.map((p) => p + ext), ...extra],
+    ["-o", "/dev/null", ...sources],
     { cwd: root, encoding: "utf8" },
   );
   if (result.status !== 0) {

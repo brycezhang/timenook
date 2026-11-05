@@ -1,7 +1,7 @@
 import { dataMode } from "./mode";
 import { projectOverviewClient } from "./project-overview";
 
-export const PROJECT_TABS = ["project", "book", "account"] as const;
+export const PROJECT_TABS = ["home", "account"] as const;
 export type ProjectTab = (typeof PROJECT_TABS)[number];
 export function isProjectTab(page: string): page is ProjectTab {
   return PROJECT_TABS.includes(page as ProjectTab);

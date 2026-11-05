@@ -65,14 +65,11 @@ const recordLabels: Record<string, string> = {
   delivery: "实际交付",
 };
 let materialsGeneration = 0;
-let materialsTimer: ReturnType<typeof setTimeout> | undefined;
 let materialsPollTimer: ReturnType<typeof setTimeout> | undefined;
 let pdfUrl = "";
 function clearMaterials() {
   ++materialsGeneration;
-  if (materialsTimer) clearTimeout(materialsTimer);
   if (materialsPollTimer) clearTimeout(materialsPollTimer);
-  materialsTimer = undefined;
   materialsPollTimer = undefined;
   if (pdfUrl) URL.revokeObjectURL(pdfUrl);
   pdfUrl = "";
@@ -82,54 +79,47 @@ function validMaterials(
   owner: number,
   view: FulfillmentView,
   materialOwner: number,
-  expires: number,
 ) {
   return (
     current(owner) &&
     selected.value === view &&
-    materialOwner === materialsGeneration &&
-    Number.isFinite(expires) &&
-    Date.now() < expires
+    materialOwner === materialsGeneration
   );
 }
 function watchMaterials(
   owner: number,
   view: FulfillmentView,
   materialOwner: number,
-  expires: number,
 ) {
-  materialsTimer = setTimeout(
-    async () => {
-      if (!validMaterials(owner, view, materialOwner, expires)) {
-        if (
-          current(owner) &&
-          selected.value === view &&
-          materialOwner === materialsGeneration
-        )
-          clearMaterials();
-        return;
+  materialsPollTimer = setTimeout(async () => {
+    if (!validMaterials(owner, view, materialOwner)) {
+      if (
+        current(owner) &&
+        selected.value === view &&
+        materialOwner === materialsGeneration
+      )
+        clearMaterials();
+      return;
+    }
+    try {
+      await fulfillmentApi.materials(
+        view.orderId!,
+        view.current!.id,
+        props.csrf,
+      );
+      if (validMaterials(owner, view, materialOwner))
+        watchMaterials(owner, view, materialOwner);
+    } catch {
+      if (
+        current(owner) &&
+        selected.value === view &&
+        materialOwner === materialsGeneration
+      ) {
+        clearMaterials();
+        error.value = "本次生产资料访问已变化，请重新核验。";
       }
-      try {
-        await fulfillmentApi.materials(
-          view.orderId!,
-          view.current!.id,
-          props.csrf,
-        );
-        if (validMaterials(owner, view, materialOwner, expires))
-          watchMaterials(owner, view, materialOwner, expires);
-      } catch {
-        if (
-          current(owner) &&
-          selected.value === view &&
-          materialOwner === materialsGeneration
-        ) {
-          clearMaterials();
-          error.value = "本次生产资料授权已变化，请重新核验。";
-        }
-      }
-    },
-    Math.max(1, Math.min(1000, expires - Date.now())),
-  );
+    }
+  }, 1000);
 }
 async function loadMaterials() {
   const view = selected.value,
@@ -137,40 +127,20 @@ async function loadMaterials() {
   if (!view?.orderId || !attempt || busy.value) return;
   await perform(async (owner) => {
     clearMaterials();
-    const materialOwner = materialsGeneration,
-      expires = Date.parse(attempt.grantExpiresAt || "");
-    if (!validMaterials(owner, view, materialOwner, expires)) {
-      error.value = "请先由讲述者完成当前有效的本次资料限时授权。";
-      return;
-    }
+    const materialOwner = materialsGeneration;
     const value = await fulfillmentApi.materials(
       view.orderId!,
       attempt.id,
       props.csrf,
     );
-    if (!validMaterials(owner, view, materialOwner, expires)) return;
-    const returnedExpiry = Date.parse(value.grantExpiresAt);
+    if (!validMaterials(owner, view, materialOwner)) return;
     if (
-      !Number.isFinite(returnedExpiry) ||
-      returnedExpiry <= Date.now() ||
-      returnedExpiry > expires ||
       value.handoffId !== attempt.handoffId ||
       value.pdf.sha256 !== attempt.pdfHash
     )
-      throw new Error("生产资料与本次授权不一致");
+      throw new Error("生产资料与本次交接不一致");
     materials.value = value;
-    watchMaterials(owner, view, materialOwner, returnedExpiry);
-    materialsTimer = setTimeout(
-      () => {
-        if (
-          current(owner) &&
-          selected.value === view &&
-          materialOwner === materialsGeneration
-        )
-          clearMaterials();
-      },
-      Math.min(2147483647, Math.max(0, returnedExpiry - Date.now())),
-    );
+    watchMaterials(owner, view, materialOwner);
   });
 }
 async function downloadPdf() {
@@ -179,11 +149,10 @@ async function downloadPdf() {
     value = materials.value;
   if (!view?.orderId || !attempt || !value || busy.value) return;
   await perform(async (owner) => {
-    const materialOwner = materialsGeneration,
-      expires = Date.parse(value.grantExpiresAt);
-    if (!validMaterials(owner, view, materialOwner, expires)) {
+    const materialOwner = materialsGeneration;
+    if (!validMaterials(owner, view, materialOwner)) {
       clearMaterials();
-      error.value = "本次资料授权已到期，请重新查询。";
+      error.value = "本次资料访问已变化，请重新查询。";
       return;
     }
     try {
@@ -192,13 +161,13 @@ async function downloadPdf() {
         attempt.id,
         props.csrf,
       );
-      if (!validMaterials(owner, view, materialOwner, expires)) return;
+      if (!validMaterials(owner, view, materialOwner)) return;
       const hash = Array.from(
         new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
       )
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
-      if (!validMaterials(owner, view, materialOwner, expires)) return;
+      if (!validMaterials(owner, view, materialOwner)) return;
       if (hash !== value.pdf.sha256 || bytes.byteLength !== value.pdf.bytes)
         throw new Error("生产PDF校验未通过");
       pdfUrl = URL.createObjectURL(
@@ -212,13 +181,10 @@ async function downloadPdf() {
       pdfUrl = "";
       notice.value =
         "本次确定 PDF 已下载，文件完整性已核验，请人工核对交接编号和书稿内容。下载副本不会远程回收。";
-    } finally {
-      if (
-        current(owner) &&
-        materialOwner === materialsGeneration &&
-        Date.now() >= expires
-      )
+    } catch (error) {
+      if (current(owner) && materialOwner === materialsGeneration)
         clearMaterials();
+      throw error;
     }
   });
 }
@@ -228,20 +194,18 @@ async function downloadAddress() {
     cached = materials.value;
   if (!view?.orderId || !attempt || !cached || busy.value) return;
   await perform(async (owner) => {
-    const materialOwner = materialsGeneration,
-      expires = Date.parse(cached.grantExpiresAt);
+    const materialOwner = materialsGeneration;
     const value = await fulfillmentApi.materials(
       view.orderId!,
       attempt.id,
       props.csrf,
     );
-    if (!validMaterials(owner, view, materialOwner, expires)) return;
+    if (!validMaterials(owner, view, materialOwner)) return;
     if (
       value.handoffId !== attempt.handoffId ||
-      value.pdf.sha256 !== attempt.pdfHash ||
-      Date.parse(value.grantExpiresAt) <= Date.now()
+      value.pdf.sha256 !== attempt.pdfHash
     )
-      throw new Error("本次资料授权已变化");
+      throw new Error("本次资料访问已变化");
     const address = value.address;
     const url = URL.createObjectURL(
       new Blob(
@@ -606,7 +570,7 @@ onUnmounted(() => {
           <Button
             :disabled="busy || selected.current.state !== 'approved'"
             @click="loadMaterials"
-            >查看限时生产资料</Button
+            >查看本次生产资料</Button
           ><Button :disabled="busy || !materials" @click="downloadPdf"
             >下载本次生产 PDF</Button
           ><Button :disabled="busy || !materials" @click="downloadAddress"
@@ -616,7 +580,7 @@ onUnmounted(() => {
         <div v-if="materials" class="production-materials">
           <p>本次生产 PDF：{{ materials.pdf.sha256 }}</p>
           <p>交接编号：{{ materials.handoffId }}</p>
-          <p>授权截止：{{ formatAdminTime(materials.grantExpiresAt) }}</p>
+          <p>仅供负责本次交接的运营人员办理印刷与寄送。</p>
           <p>
             收件人：{{ materials.address.recipientName }} ·
             {{ materials.address.phone }}

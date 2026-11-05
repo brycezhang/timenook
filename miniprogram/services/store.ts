@@ -86,7 +86,7 @@ export function go(page: string, query = "") {
   }
   wx.navigateTo({ url: `/pages/${page}/index${query ? "?" + query : ""}` });
 }
-export function home(page = "project") {
+export function home(page = "home") {
   if (dataMode() === "live") page = "home";
   if (isProjectTab(page)) {
     switchProjectTab(page);

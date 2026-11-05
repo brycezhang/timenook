@@ -1,3 +1,4 @@
+import { Stories } from "../stories/stories";
 import { recordingQuotaIn, recordingUsageIn } from "./recording-budget";
 import { PrivacyRights } from "../care/privacy-rights";
 import { ProjectStreams } from "./project-streams";
@@ -10,6 +11,7 @@ import {
   HttpCode,
   Inject,
   Injectable,
+  Optional,
   OnModuleDestroy,
   Param,
   ParseUUIDPipe,
@@ -71,6 +73,7 @@ export class Recordings implements OnModuleDestroy {
     private readonly participation: Participation,
     private readonly rights: PrivacyRights,
     @Inject(RECORDING_OBJECTS) private readonly objects: ProbeObjects,
+    @Optional() private readonly stories?: Stories,
   ) {
     this.redis = new Redis(config.redisUrl, { maxRetriesPerRequest: 0 });
     this.redis.on("error", () => {});
@@ -558,6 +561,23 @@ export class Recordings implements OnModuleDestroy {
             consumedMs: verified.durationMs,
           },
         });
+        if (
+          this.stories &&
+          this.config.generation &&
+          !(await tx.recordingIntent.count({
+            where: { projectId, interviewId, state: "pending" },
+          }))
+        ) {
+          const story = await tx.story.findUnique({ where: { interviewId } });
+          await this.stories.organizeIn(
+            tx,
+            projectId,
+            { interviewId, baseVersion: story?.version ?? 0 },
+            actor,
+            `auto-recording:${clip.id}`,
+            true,
+          );
+        }
         return this.view(tx, sealed);
       },
     );

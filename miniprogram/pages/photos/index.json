@@ -1,1 +1,4 @@
-{ "navigationBarTitleText": "照片与讲述" }
+{
+  "navigationBarTitleText": "照片与说明",
+  "usingComponents": { "sort-list": "/components/sort-list/index" }
+}

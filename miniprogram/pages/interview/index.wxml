@@ -14,6 +14,7 @@
     </view>
     <button class="list-row topic-choice" data-kind="photo" bindtap="selectQuestion" disabled="{{busy}}"><image class="icon" src="/assets/icons/image.svg"/><view class="grow">看着照片讲一讲<view class="note">从照片中说起，事后也能补图。</view></view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button>
     <button class="list-row topic-choice" bindtap="openQuestionPicker" disabled="{{busy}}"><image class="icon" src="/assets/icons/mic.svg"/><view class="grow">我有自己想说的<view class="note">自由讲述，或写下自己的问题。</view></view><image class="icon small" src="/assets/icons/chevron-right.svg"/></button>
+    <button class="focus-link" bindtap="manageTopics">查看和管理话题</button>
     <!-- @development:start --><view wx:if="{{mode !== 'live'}}" class="demo-note">本机演示，录音不会上传。</view><!-- @development:end -->
   </block>
   <block wx:elif="{{flowStep === 'prepare' || flowStep === 'record'}}">
@@ -36,51 +37,17 @@
       <block wx:else=""><image class="state-icon" src="/assets/icons/mic.svg"/><button class="btn" bindtap="retry" disabled="{{busy}}">重试录音或保存</button></block>
     </view>
     <view wx:if="{{error || (!busy && status && (!canRecord || state === 'device-error'))}}" class="focus-error" role="alert">{{error || status}}</view>
-    <view wx:else="" class="microphone-note">{{flowStep === 'record' ? '录好后先听一听，再决定是否提交。' : '首次使用时，请允许使用麦克风。'}}</view>
+    <view wx:else="" class="microphone-note">{{flowStep === 'record' ? '说完后自动上传，故事会慢慢整理好。' : '首次使用时，请允许使用麦克风。'}}</view>
     <view wx:if="{{flowStep !== 'record'}}" class="focus-bottom"><button class="focus-link" bindtap="chooseAnother" disabled="{{busy}}">{{mode !== 'live' || hasOtherQuestions ? '换个问题' : '其他讲述方式'}}</button></view>
   </block>
 
-  <block wx:elif="{{flowStep === 'review'}}">
-    <view class="focus-topic">先听一听，再决定留下</view><view class="title step-title">听一听，再留下这段讲述</view>
-    <view class="review-question">{{question}}</view>
-    <view class="review-player local-recording">
-      <view class="review-duration">{{reviewClip ? reviewClip.durationLabel : timer}}</view>
-      <button wx:if="{{mode === 'live' && reviewClip}}" class="play-recording" aria-label="{{playingId === reviewClip.clientClipId ? '停止回听' : '回听这段录音'}}" data-id="{{reviewClip.clientClipId}}" bindtap="playLocal" disabled="{{busy}}"><image class="icon" src="/assets/icons/{{playingId === reviewClip.clientClipId ? 'square' : 'play'}}.svg"/></button>
-      <view class="note">{{reviewClip && reviewClip.sealed ? (reviewClip.storage === 'oss' ? '这段声音已保存到云端' : '这段声音已确认保存') : reviewClip && reviewClip.serverId ? '已保存在这台设备，保存结果待确认' : '已保存在这台设备，还未上传'}}</view>
-    </view>
-    <view wx:if="{{status && state === 'device-error'}}" class="focus-error" role="alert">{{status}}</view>
-    <button wx:if="{{localClips.length > 1}}" class="focus-link" bindtap="showClips">其他片段 · 共 {{localClips.length}} 段</button>
-    <view class="focus-bottom">
-      <button class="btn" bindtap="submitReview" disabled="{{busy}}">{{reviewClip && reviewClip.sealed ? '继续整理故事' : '提交这段讲述'}}</button>
-      <button wx:if="{{mode === 'live' && reviewClip && !reviewClip.sealed}}" class="focus-link" data-id="{{reviewClip.clientClipId}}" bindtap="rerecordLocal" disabled="{{busy || !canRecord}}">重新录这一段</button>
-      <!-- @development:start --><view wx:if="{{mode !== 'live'}}" class="microphone-note">本机演示：示例文字不代表这次录音。</view><!-- @development:end -->
-    </view>
-  </block>
-
-  <block wx:elif="{{flowStep === 'processing'}}">
-    <view class="processing-content processing-step processing-status" role="status" aria-live="polite">
-      <view class="processing-emblem"><image class="icon" src="/assets/icons/{{processingError ? 'headphones' : processingReady ? 'check' : 'leaf'}}.svg"/></view>
-      <view class="title step-title">{{processingTitle}}</view><view class="processing-description" role="status">{{processingMessage}}</view>
-      <view wx:if="{{state === 'uploading' || state === 'sealing'}}" class="saving-indicator"/>
-      <view class="note save-state">{{processingStorage}}</view>
-
-    </view>
-    <view class="focus-bottom">
-      <button wx:if="{{processingReady}}" class="btn" bindtap="openStory" disabled="{{busy}}">整理成故事</button>
-      <button wx:elif="{{processingError && processingRetryable}}" class="btn" bindtap="retryProcessing" disabled="{{busy}}">重新尝试</button>
-      <button wx:elif="{{processingAction === 'review' && localClips.length}}" class="btn" bindtap="reviewCurrent" disabled="{{busy}}">回听与核对原声</button>
-      <button wx:elif="{{processingAction === 'review' && canRecord}}" class="btn" bindtap="prepareCurrent" disabled="{{busy}}">再录一段</button>
-      <button wx:elif="{{processingAction === 'review' || processingAction === 'consent' || processingAction === 'service'}}" class="btn" bindtap="processingHelp" disabled="{{busy}}">{{processingAction === 'consent' ? '查看本人资料用途' : '帮助与服务'}}</button>
-      <button wx:else="" class="btn secondary" bindtap="finish" disabled="{{busy}}">先回到项目</button>
-      <button wx:if="{{processingReady}}" class="focus-link" bindtap="moreQuestion" disabled="{{busy}}">再聊一个问题</button>
-      <button wx:if="{{!processingReady}}" class="focus-link" bindtap="refreshTasks" disabled="{{busy}}">重新查询转写状态</button>
-      <button wx:if="{{canRecord}}" class="focus-link" bindtap="prepareCurrent" disabled="{{busy}}">再说一小段</button>
-      <button wx:if="{{processingReady || processingError}}" class="focus-link muted" bindtap="finish" disabled="{{busy}}">今天先到这里</button>
-    </view>
+  <block wx:elif="{{flowStep === 'review' || flowStep === 'processing'}}">
+    <view class="processing-content" role="status"><view class="processing-emblem"><image class="icon" src="/assets/icons/{{uploadSucceeded ? 'check' : 'leaf'}}.svg"/></view><view class="title step-title">{{processingTitle}}</view><view class="processing-description">{{processingMessage}}</view></view>
+    <view class="focus-bottom"><button wx:if="{{uploadSucceeded}}" class="btn" bindtap="openStory" disabled="{{busy}}">看看这段故事</button><button wx:elif="{{processingError}}" class="btn" bindtap="retryProcessing" disabled="{{busy}}">重新上传</button><button wx:if="{{uploadSucceeded && processingReady}}" class="focus-link" bindtap="moreQuestion" disabled="{{busy}}">继续聊聊这个故事</button><button wx:if="{{uploadSucceeded && canRecord}}" class="focus-link" bindtap="prepareCurrent" disabled="{{busy}}">再说一小段</button><button wx:if="{{uploadSucceeded}}" class="focus-link" bindtap="finish" disabled="{{busy}}">回到项目</button></view>
   </block>
 
   <block wx:elif="{{flowStep === 'followup'}}">
-    <view class="optional-followup"><button class="focus-link back-to-processing" bindtap="showProcessing" disabled="{{busy}}">返回保存进度</button>
+    <view class="optional-followup"><button class="focus-link back-to-processing" bindtap="showProcessing" disabled="{{busy}}">返回上传结果</button>
       <view class="focus-topic">还想听你说说</view>
       <view wx:if="{{followup && followup.result && followup.result.action === 'ask'}}" class="interview-question serif">{{question}}</view>
       <view wx:else="" class="title step-title">{{busy || (followup && followup.task && (followup.task.state === 'queued' || followup.task.state === 'waiting_provider' || followup.task.state === 'submitting')) ? '正在准备一个小问题…' : '也可以先讲到这里'}}</view>
@@ -91,7 +58,7 @@
     <view class="focus-bottom">
       <button wx:if="{{followup && followup.result && followup.result.action === 'ask'}}" class="btn" bindtap="prepareCurrent" disabled="{{busy}}">回答这个问题</button>
       <button wx:elif="{{followup && followup.task && followup.task.state === 'failed'}}" class="btn" bindtap="retryFollowup" disabled="{{busy}}">重新准备问题</button>
-      <button class="{{followup && followup.result && followup.result.action === 'ask' ? 'focus-link' : 'btn'}}" bindtap="organizeAfterFollowup" disabled="{{busy}}">就讲到这里，整理故事</button>
+      <button class="{{followup && followup.result && followup.result.action === 'ask' ? 'focus-link' : 'btn'}}" bindtap="organizeAfterFollowup" disabled="{{busy}}">就讲到这里</button>
     </view>
   </block>
 </view>

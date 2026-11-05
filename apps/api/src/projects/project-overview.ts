@@ -48,6 +48,7 @@ export class ProjectOverview {
     tx: Prisma.TransactionClient,
     projectId: string,
     actor: {
+      userId: string;
       subjectId: string;
       subjectDecision: string | null;
       accessExpiresAt: string | null;
@@ -80,13 +81,9 @@ export class ProjectOverview {
         this.stories!.view(tx, projectId, s.id, undefined, canReadStories),
       ),
     );
-    const confirmed = stories.filter((s) => s.decision?.confirmed).length,
-      included = stories.filter(
-        (s) => s.decision?.confirmed && s.decision.allowInBook,
-      ).length,
-      pending = stories.filter(
-        (s) => s.revision && !s.decision?.confirmed,
-      ).length;
+    const confirmed = stories.filter((s) => s.revision).length,
+      included = stories.filter((s) => s.revision && s.included).length,
+      pending = stories.filter((s) => !s.revision).length;
     const failed = stories.some(
         (s) =>
           s.task &&
@@ -115,8 +112,10 @@ export class ProjectOverview {
       ),
       metadataVersion: p.metadataVersion,
       subjectId: actor.subjectId,
-      role: actor.subjectDecision === "self" ? "narrator" : "initiator",
-      canDecide: actor.subjectDecision === "self",
+      role: "member" as const,
+      canInvite: admission.initiatorUserId === actor.userId,
+      canRecord: (await this.interviews.listIn(tx, projectId)).canRecord,
+      canDecide: true,
       stories,
       tasks: await Promise.all(
         (
@@ -135,9 +134,9 @@ export class ProjectOverview {
           : needsMore
             ? "已识别到文字，暂未形成故事，可继续补充讲述"
             : pending
-              ? "请本人核对并确认故事，再单独决定是否入书"
+              ? "故事正在整理，可以稍后再看"
               : stories.length
-                ? "可继续讲述或查看已确认故事"
+                ? "继续讲述，或看看已经记录的故事"
                 : "从一段讲述开始",
       accessExpiresAt: actor.accessExpiresAt,
     };

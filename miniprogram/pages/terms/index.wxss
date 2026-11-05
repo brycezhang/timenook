@@ -1,0 +1,7 @@
+.terms {
+  font-size: 36rpx;
+  line-height: 1.9;
+}
+.terms .s-subtitle {
+  margin-bottom: 18rpx;
+}

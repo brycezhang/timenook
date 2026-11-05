@@ -20,7 +20,7 @@ function state(value: ParticipationState) {
   if (
     !value ||
     !uuid(value.projectId) ||
-    !["narrator", "initiator"].includes(value.role) ||
+    !["member", "narrator", "initiator"].includes(value.role) ||
     !Number.isSafeInteger(value.accessEpoch) ||
     !Number.isSafeInteger(value.bindingVersion) ||
     !Array.isArray(value.choices) ||
@@ -72,8 +72,7 @@ export const participationClient = {
       !result ||
       typeof result.inviter !== "string" ||
       !Array.isArray(result.process) ||
-      !Array.isArray(result.purposes) ||
-      result.purposes.length !== CONSENT_PURPOSES.length
+      !Array.isArray(result.purposes)
     )
       throw new Error("邀请无效或已到期");
     return result;
@@ -93,11 +92,8 @@ export const participationClient = {
       id: string;
       projectId: string;
       state: string;
-    }>(`/invitations/${value}/requests`, {
-      data: {
-        noticeVersion,
-        evidenceRef: evidence(noticeVersion, "本人阅读告知并申请参与"),
-      },
+    }>(`/invitations/${value}/accept`, {
+      data: { termsVersion: noticeVersion },
       key: paymentKey(),
     });
   },

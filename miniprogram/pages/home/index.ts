@@ -1,136 +1,82 @@
-import { demo, go, home, read } from "../../services/store";
-import { dataMode } from "../../services/mode";
+import { NATIVE_TABS } from "../../config";
 import { sessionClient } from "../../services/session";
 import { projectOverviewClient } from "../../services/project-overview";
-import { switchProjectTab } from "../../services/navigation";
-type E = {
-  currentTarget: { dataset: Record<string, string> };
-  detail: { value: string };
-};
+import { showProjectTab, switchProjectTab } from "../../services/navigation";
+import { go } from "../../services/store";
+import type { ProjectOverview } from "../../../packages/contracts/src";
 Page({
   data: {
-    hasProject: false,
-    mode: dataMode(),
-    userId: "",
-    status: "",
+    nativeTabs: NATIVE_TABS,
     busy: false,
+    status: "",
+    overview: null as ProjectOverview | null,
+    count: 0,
   },
-  identityVersion: 0,
-  autoEnter: false,
-  onHide() {
-    if (!this.data.busy) ++this.identityVersion;
-  },
-  onLoad(q) {
-    if (dataMode() === "live") {
-      this.autoEnter = q.browse !== "1";
-      return;
-    }
-    if (read()?.purchased && q.browse !== "1") home();
-  },
+  generation: 0,
+  onLoad() {},
   async onShow() {
-    // Native login can bring the page foreground before its request completes.
-    // The active identity action owns both its result and the busy indicator.
-    if (this.data.busy) return;
-    const version = ++this.identityVersion;
-    const mode = dataMode();
-    this.setData({ mode, userId: "", status: "" });
-    if (mode === "demo") {
-      this.setData({ hasProject: !!read() });
-      return;
-    }
+    showProjectTab(this, "home");
+    const generation = ++this.generation;
+    this.setData({ busy: true, status: "", overview: null });
     try {
-      const user = await sessionClient.restore();
-      if (version === this.identityVersion)
+      if (!(await sessionClient.restore())) return;
+      const owner = sessionClient.context();
+      const { projects } = await projectOverviewClient.memberships();
+      const selected =
+        projects.find(
+          (p) => p.projectId === projectOverviewClient.selected(),
+        ) ?? projects[0];
+      if (!selected || generation !== this.generation) return;
+      const overview = await projectOverviewClient.read(selected.projectId);
+      if (generation !== this.generation || owner !== sessionClient.context())
+        return;
+      projectOverviewClient.select(selected.projectId);
+      this.setData({ overview, count: projects.length });
+    } catch (e) {
+      if (generation === this.generation)
         this.setData({
-          userId: user?.id ?? "",
-          status: user ? "已连接服务端账号" : "请使用微信登录",
-        });
-      if (user && this.autoEnter && version === this.identityVersion) {
-        const { projects } = await projectOverviewClient.memberships();
-        if (version !== this.identityVersion) return;
-        const selected = projectOverviewClient.selected();
-        const available = projects.filter((item) => item.state !== "pending");
-        const project =
-          available.find((item) => item.projectId === selected) ?? available[0];
-        if (project) switchProjectTab("project", project.projectId);
-      }
-    } catch (error) {
-      if (version === this.identityVersion)
-        this.setData({
-          status: error instanceof Error ? error.message : "服务连接失败",
-        });
-    }
-  },
-  async login() {
-    const version = ++this.identityVersion;
-    this.setData({ mode: "live", userId: "", status: "正在登录", busy: true });
-    try {
-      const result = await sessionClient.login();
-      if (version === this.identityVersion)
-        this.setData({ userId: result.user.id, status: "已连接服务端账号" });
-    } catch (error) {
-      if (version === this.identityVersion)
-        this.setData({
-          status: error instanceof Error ? error.message : "登录失败",
+          status: e instanceof Error ? e.message : "项目未能读取，请重试",
         });
     } finally {
-      if (version === this.identityVersion) this.setData({ busy: false });
+      if (generation === this.generation) this.setData({ busy: false });
     }
   },
-  async logout() {
-    ++this.identityVersion;
-    this.setData({ userId: "", busy: true, status: "正在退出" });
-    try {
-      await sessionClient.logout();
-      this.setData({ status: "已退出登录" });
-    } catch {
-      this.setData({
-        status: "本机已退出，服务端撤销未确认；原会话将在到期后失效。",
-      });
-    } finally {
-      this.setData({ busy: false });
-    }
+  onHide() {
+    ++this.generation;
+    this.setData({ overview: null, busy: false });
   },
-  async useDemo() {
-    ++this.identityVersion;
-    try {
-      await sessionClient.enterDemo();
-    } catch {
-      wx.showToast({ title: "已切换演示，远端退出未确认", icon: "none" });
-    }
-    home("home");
+  onUnload() {
+    this.onHide();
   },
-  // @web-only:start
-  accountLink() {
-    go("account-link");
+  refresh() {
+    void this.onShow();
   },
-  // @web-only:end
-  orders() {
-    go("order");
+  purchase() {
+    go("new-book");
   },
-  participation() {
-    go("welcome");
+  switchProject() {
+    go("projects", "switch=1");
   },
-  catalog() {
-    go("purchase");
+  record() {
+    const p = this.data.overview;
+    if (p?.canRecord) go("interview", `projectId=${p.projectId}`);
   },
-  project() {
-    home();
+  stories() {
+    const p = this.data.overview;
+    if (p) go("stories", `projectId=${p.projectId}`);
+  },
+  book() {
+    const p = this.data.overview;
+    if (p) go("book", `projectId=${p.projectId}`);
+  },
+  invite() {
+    const p = this.data.overview;
+    if (p?.canInvite) go("invite", `projectId=${p.projectId}`);
+  },
+  terms() {
+    go("terms");
   },
   account() {
     switchProjectTab("account");
-  },
-  choose(e: E) {
-    go(
-      "purchase",
-      "recipient=" + encodeURIComponent(e.currentTarget.dataset.recipient),
-    );
-  },
-  experience() {
-    demo();
-    home();
-  },
-  privacy() {
-    go("service", "kind=privacy");
   },
 });

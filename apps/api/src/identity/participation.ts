@@ -1,4 +1,10 @@
 import {
+  acceptTermsIn,
+  isProjectMemberIn,
+  requireProjectMemberIn,
+  TERMS_VERSION,
+} from "./project-members";
+import {
   E2E_NOTICE_VERSION,
   participationNotice,
 } from "../catalog/e2e-package";
@@ -107,6 +113,11 @@ function careView(
     completedBy: row.completedBy,
     createdAt: row.createdAt.toISOString(),
   };
+}
+class AcceptInvitationDto {
+  @ApiProperty({ enum: [TERMS_VERSION] })
+  @IsIn([TERMS_VERSION])
+  termsVersion!: string;
 }
 class ParticipationNoticeDto {
   @ApiProperty({
@@ -286,8 +297,6 @@ export class Participation
     const invite = await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       if (p.initiatorUserId !== user.id) throw new ForbiddenException();
-      if ((await this.subject(tx, id)).boundUserId)
-        throw new ConflictException();
       await tx.invitation.updateMany({
         where: { projectId: id, consumedAt: null },
         data: { consumedAt: new Date() },
@@ -320,82 +329,63 @@ export class Participation
     const invite = await this.invitation(this.db, token);
     const p = await this.project(this.db, invite.projectId);
     return {
-      inviter: `发起人账号尾号 ${p.initiatorUserId.slice(-6)}`,
-      process: ["说一段", "保存后看看故事", "确认成书"],
-      purposes: [...CONSENT_PURPOSES],
+      projectId: p.id,
+      bookTitle: p.bookTitle ?? "人生故事书",
+      inviter: "家人邀请你一起完成这本书",
+      process: ["记录故事", "一起编辑", "成书与印刷"],
+      purposes: [],
       ...participationNotice(p.snapshot, !!this.config.acceptance),
+      noticeVersion: TERMS_VERSION,
       source: p.source,
-      choice:
-        "采集保存讲述与照片；AI处理素材；向本项目发起人共享。可分别拒绝或撤回；入书须另行确认。请向邀请人核对账号尾号，提示不能替代本人核验。",
+      choice: "接受邀请即同意使用条款，加入后可使用全部项目功能。",
     };
   }
   async apply(
     token: string,
-    body: ParticipationNoticeDto,
+    body: AcceptInvitationDto,
     authorization?: string,
   ) {
-    const user = await this.identity.current(authorization);
     this.policy();
+    if (body.termsVersion !== TERMS_VERSION)
+      throw new BadRequestException("请阅读当前使用条款");
     return this.db.$transaction(async (tx) => {
+      const user = await this.identity.current(authorization, tx);
       const found = await this.invitation(tx, token);
       const p = await this.project(tx, found.projectId, true);
       const invite = await this.invitation(tx, token);
-      this.validateNotice(body, p.snapshot);
-      const evidenceRef = await this.evidenceIn(
-        tx,
-        authorization,
-        body.evidenceRef,
-      );
-      if (user.id === p.initiatorUserId) throw new ForbiddenException();
-      const application = await tx.bindingRequest.upsert({
-        where: {
-          invitationId_applicantUserId: {
-            invitationId: invite.id,
-            applicantUserId: user.id,
-          },
-        },
+      await acceptTermsIn(tx, user.id, "invitation");
+      await tx.projectMember.upsert({
+        where: { projectId_userId: { projectId: p.id, userId: user.id } },
         create: {
-          id: randomUUID(),
+          projectId: p.id,
+          userId: user.id,
           invitationId: invite.id,
-          applicantUserId: user.id,
-          ...body,
-          evidenceRef,
+          termsVersion: TERMS_VERSION,
         },
         update: {},
-        select: { id: true, state: true },
       });
-      return { ...application, projectId: p.id };
+      return { projectId: p.id, state: "active" };
     });
   }
   async memberships(authorization?: string) {
     const user = await this.identity.current(authorization);
-    const created = await this.db.project.findMany({
-      where: { createdBy: user.id },
-      select: { id: true },
-    });
-    const bound = await this.db.projectSubject.findMany({
-      where: { boundUserId: user.id },
-      select: { projectId: true },
-    });
-    const pending = await this.db.bindingRequest.findMany({
-      where: { applicantUserId: user.id, state: "pending" },
-    });
-    const invitations = await this.db.invitation.findMany({
+    const projects = await this.db.project.findMany({
       where: {
-        id: { in: pending.map((p) => p.invitationId) },
-        consumedAt: null,
-        expiresAt: { gt: new Date() },
+        OR: [
+          { createdBy: user.id },
+          { members: { some: { userId: user.id } } },
+        ],
       },
-      select: { projectId: true },
+      orderBy: { id: "asc" },
+      select: { id: true, bookTitle: true, createdBy: true },
     });
     return {
-      projects: [
-        ...created.map((p) => ({ projectId: p.id, state: "initiator" })),
-        ...bound.map((p) => ({ ...p, state: "bound" })),
-        ...invitations
-          .filter((p) => !bound.some((b) => b.projectId === p.projectId))
-          .map((p) => ({ ...p, state: "pending" })),
-      ],
+      projects: projects.map((p) => ({
+        projectId: p.id,
+        bookTitle: p.bookTitle ?? "人生故事书",
+        state: "active",
+        origin: p.createdBy === user.id ? "purchased" : "invited",
+      })),
     };
   }
   async requests(id: string, authorization?: string) {
@@ -535,8 +525,7 @@ export class Participation
     return this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       const subject = await this.subject(tx, id);
-      if (p.initiatorUserId !== user.id && subject.boundUserId !== user.id)
-        throw new ForbiddenException();
+      await requireProjectMemberIn(tx, id, user.id);
       return this.status(tx, p, subject, user.id);
     });
   }
@@ -703,53 +692,36 @@ export class Participation
     subject: Awaited<ReturnType<Participation["subject"]>>,
     userId: string,
   ): Promise<ParticipationState> {
-    const narrator = subject.boundUserId === userId;
-    const { records, granted, enabled, effective } =
-      await this.currentPurposesIn(tx, p, subject);
+    const member = await isProjectMemberIn(tx, p.id, userId);
     const deleted = await this.rights.deletedIn(tx, p.id);
-    const collection = !deleted && enabled && effective.collection === true;
     const terms = await this.terms.read(p.id, tx);
+    const canRead = member && !deleted;
     return {
       projectId: p.id,
-      bookTitle:
-        !deleted &&
-        (narrator || !subject.boundUserId || effective.sharing === true)
-          ? (p.bookTitle ?? undefined)
-          : undefined,
+      bookTitle: canRead ? (p.bookTitle ?? "人生故事书") : undefined,
       subjectId: subject.id,
       bindingVersion: subject.bindingVersion,
       accessEpoch: p.accessEpoch,
-      role: narrator ? "narrator" : "initiator",
+      role: "member",
+      canInvite: p.initiatorUserId === userId,
       ...participationNotice(p.snapshot, !!this.config.acceptance),
+      noticeVersion: TERMS_VERSION,
       source: p.source,
       choices: CONSENT_PURPOSES.map((purpose) => ({
         purpose,
-        granted:
-          effective[purpose] === false ? false : (granted[purpose] ?? null),
+        granted: canRead,
       })),
-      consent: narrator
-        ? records.map(({ operatorAdminId, ...record }) => ({
-            ...record,
-            ...(operatorAdminId ? { operatorAdminId } : {}),
-            evidenceRef:
-              terms.retention?.activeData?.state === "deleted"
-                ? null
-                : record.evidenceRef,
-            purpose: record.purpose as ConsentPurpose,
-            createdAt: record.createdAt.toISOString(),
-          }))
-        : [],
+      consent: [],
       careAvailable: true,
       canCollect:
-        narrator &&
-        collection &&
+        canRead &&
         terms.canRecord &&
         terms.retention?.activeData?.state !== "deleted",
-      canProcessAi: narrator && collection && effective.ai === true,
-      canRead:
-        collection &&
-        (narrator ||
-          (p.initiatorUserId === userId && effective.sharing === true)),
+      canProcessAi:
+        canRead &&
+        terms.canRecord &&
+        terms.retention?.transcripts?.state !== "deleted",
+      canRead,
     };
   }
   async consent(
@@ -861,8 +833,7 @@ export class Participation
     return this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       const subject = await this.subject(tx, id);
-      if (p.initiatorUserId !== user.id && subject.boundUserId !== user.id)
-        throw new ForbiddenException();
+      await requireProjectMemberIn(tx, id, user.id);
       if (body) {
         this.policy();
         return this.createCare(
@@ -1387,8 +1358,7 @@ export class Participation
     return this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       const subject = await this.subject(tx, id);
-      if (user.id !== p.initiatorUserId && user.id !== subject.boundUserId)
-        throw new ForbiddenException();
+      await requireProjectMemberIn(tx, id, user.id);
       const state = await this.status(tx, p, subject, user.id);
       if (!state.canRead) throw new ForbiddenException();
       const active = await this.materialAvailableIn(tx, id, "activeData");
@@ -1400,6 +1370,11 @@ export class Participation
         subjectName: active ? subject.name : null,
       };
     });
+  }
+  async requireCreationIn(tx: Prisma.TransactionClient, projectId: string) {
+    await this.requireMaterialIn(tx, projectId, "activeData");
+    if (!(await this.terms.read(projectId, tx)).canRecord)
+      throw new ForbiddenException("当前项目已停止制作服务，已有资料仍可查看");
   }
   async activeDataDeletedIn(tx: Prisma.TransactionClient, projectId: string) {
     if (await this.rights.deletedIn(tx, projectId, "activeData")) return true;
@@ -1440,7 +1415,7 @@ export class Participation
         method: "self_wechat" | "self_web" | "assisted" | "participant";
         assistedSessionId?: string;
         accessExpiresAt: string | null;
-        subjectDecision: "self" | "assisted" | null;
+        subjectDecision: "member" | "self" | "assisted" | null;
         decisionSessionId: string | null;
       },
     ) => Promise<T>,
@@ -1450,60 +1425,23 @@ export class Participation
       const user = await this.identity.current(authorization, tx);
       const p = await this.project(tx, projectId, true);
       const subject = await this.subject(tx, projectId);
-      if (user.id !== p.initiatorUserId && user.id !== subject.boundUserId)
-        throw new ForbiddenException();
+      await requireProjectMemberIn(tx, projectId, user.id);
       const state = await this.status(tx, p, subject, user.id);
       if (!state.canRead) throw new ForbiddenException();
-      let method: "self_wechat" | "self_web" | "assisted" | "participant" =
-        "participant";
-      if (subjectDecision) {
-        if (subject.boundUserId === user.id)
-          method = await readSelfMethodIn(tx, authorization);
-        else {
-          if (!subjectDecision.assistedSessionId)
-            throw new ForbiddenException();
-          await this.authorizeAssisted(tx, {
-            projectId,
-            sessionId: subjectDecision.assistedSessionId,
-            operatorUserId: user.id,
-            purpose: "collection",
-          });
-          method = "assisted";
-        }
-      }
-      const sessions = await Promise.all(
-        ["collection", "sharing"].map((purpose) =>
-          this.latestAssisted(tx, projectId, purpose as AssistedPurpose),
-        ),
-      );
-      const expiries = sessions
-        .filter((row) => this.activeAssisted(row, p, subject))
-        .map((row) => row!.expiresAt.getTime());
-      const collectionSession = sessions[0];
+      const method = await readSelfMethodIn(tx, authorization);
       return work(tx, {
         userId: user.id,
         bindingVersion: subject.bindingVersion,
         accessEpoch: p.accessEpoch,
         subjectId: subject.id,
         method,
-        subjectDecision:
-          subject.boundUserId === user.id
-            ? "self"
-            : this.activeAssisted(collectionSession, p, subject)
-              ? "assisted"
-              : null,
-        decisionSessionId: this.activeAssisted(collectionSession, p, subject)
-          ? collectionSession.id
-          : null,
-        ...(method === "assisted"
-          ? { assistedSessionId: subjectDecision!.assistedSessionId }
-          : {}),
-        accessExpiresAt: expiries.length
-          ? new Date(Math.min(...expiries)).toISOString()
-          : null,
+        subjectDecision: "member",
+        decisionSessionId: null,
+        accessExpiresAt: null,
       });
     });
   }
+
   // Collection does not require sharing or AI. The real session is locked
   // before the project/subject; callers commit protected facts in this tx.
   async withCollectionAccess<T>(
@@ -1531,31 +1469,16 @@ export class Participation
       if (mode === "record")
         await this.requireMaterialIn(tx, projectId, "activeData");
       const subject = await this.subject(tx, projectId);
-      let method: "self_wechat" | "self_web" | "assisted";
-      if (subject.boundUserId === user.id) {
-        const state = await this.status(tx, p, subject, user.id);
-        if (!(mode === "record" ? state.canCollect : state.canRead))
-          throw new ForbiddenException();
-        method = await readSelfMethodIn(tx, authorization);
-      } else {
-        if (!assistedSessionId || user.id !== p.initiatorUserId)
-          throw new ForbiddenException();
-        await this.authorizeAssisted(tx, {
-          projectId,
-          sessionId: assistedSessionId,
-          operatorUserId: user.id,
-          purpose: "collection",
-          requireRecording: mode === "record",
-        });
-        method = "assisted";
-      }
+      await requireProjectMemberIn(tx, projectId, user.id);
+      const state = await this.status(tx, p, subject, user.id);
+      if (!(mode === "record" ? state.canCollect : state.canRead))
+        throw new ForbiddenException("当前项目暂不能新增记录");
       return work(tx, {
         subjectId: subject.id,
         operatorUserId: user.id,
         bindingVersion: subject.bindingVersion,
         accessEpoch: p.accessEpoch,
-        method,
-        ...(method === "assisted" ? { assistedSessionId } : {}),
+        method: await readSelfMethodIn(tx, authorization),
       });
     });
   }
@@ -1617,51 +1540,12 @@ export class Participation
       terms.retention?.transcripts?.state === "deleted"
     )
       return null;
-    let grant: Prisma.JsonObject;
-    if (subject.boundUserId) {
-      if (
-        !(await this.status(tx, p, subject, subject.boundUserId)).canProcessAi
-      )
-        return null;
-      const decision = await tx.consentRecord.findFirst({
-        where: {
-          projectId: p.id,
-          bindingVersion: subject.bindingVersion,
-          purpose: "collection",
-        },
-        orderBy: { sequence: "desc" },
-      });
-      grant = {
-        method: decision?.method === "self_web" ? "self_web" : "self_wechat",
-      };
-    } else {
-      const collection = await this.latestAssisted(tx, p.id, "collection");
-      const ai = await this.latestAssisted(tx, p.id, "ai");
-      if (
-        !this.activeAssisted(collection, p, subject) ||
-        !this.activeAssisted(ai, p, subject) ||
-        (input.sourceAssistedSessionId &&
-          collection.id !== input.sourceAssistedSessionId)
-      )
-        return null;
-      await this.authorizeAssisted(tx, {
-        projectId: p.id,
-        sessionId: collection.id,
-        operatorUserId: collection.operatorUserId,
-        purpose: "collection",
-      });
-      await this.authorizeAssisted(tx, {
-        projectId: p.id,
-        sessionId: ai.id,
-        operatorUserId: ai.operatorUserId,
-        purpose: "ai",
-      });
-      grant = {
-        method: "assisted",
-        collectionSessionId: collection.id,
-        aiSessionId: ai.id,
-      };
-    }
+    if (!terms.canRecord) return null;
+    const grant: Prisma.JsonObject = {
+      method: "project_terms",
+      version: TERMS_VERSION,
+    };
+
     if (
       input.processingGrant &&
       !isDeepStrictEqual(input.processingGrant, grant)
@@ -1698,31 +1582,7 @@ export class Participation
       project.accessEpoch !== input.accessEpoch
     )
       return false;
-    const { enabled, effective } = await this.currentPurposesIn(
-      tx,
-      project,
-      subject,
-    );
-    if (!enabled || effective.collection !== true) return false;
-    if (subject.boundUserId === input.operatorUserId) return true;
-    if (
-      project.initiatorUserId !== input.operatorUserId ||
-      !input.assistedSessionId
-    )
-      return false;
-    try {
-      await this.authorizeAssisted(tx, {
-        projectId: project.id,
-        sessionId: input.assistedSessionId,
-        operatorUserId: input.operatorUserId,
-        purpose: "book_confirmation",
-        requireRecording: false,
-      });
-      return true;
-    } catch (error) {
-      if (error instanceof ForbiddenException) return false;
-      throw error;
-    }
+    return isProjectMemberIn(tx, input.projectId, input.operatorUserId);
   }
   /** Book rendering is local material processing, not a new AI submission. */
   async bookGrantIn(
@@ -1754,16 +1614,9 @@ export class Participation
       !(await this.status(tx, project, subject, input.operatorId)).canRead
     )
       return null;
-    const sessions = await Promise.all(
-      ["collection", "sharing"].map((purpose) =>
-        this.latestAssisted(tx, project.id, purpose as AssistedPurpose),
-      ),
-    );
     const grant: Prisma.JsonObject = {
       operatorId: input.operatorId,
-      sessions: sessions
-        .filter((row) => this.activeAssisted(row, project, subject))
-        .map((row) => row!.id),
+      termsVersion: TERMS_VERSION,
     };
     return input.processingGrant &&
       !isDeepStrictEqual(grant, input.processingGrant)
@@ -2383,8 +2236,7 @@ export class Participation
     await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, projectId, true),
         subject = await this.subject(tx, projectId);
-      if (user.id !== p.initiatorUserId && user.id !== subject.boundUserId)
-        throw new ForbiddenException();
+      await requireProjectMemberIn(tx, projectId, user.id);
     });
     await this.reconcileRevocations(projectId);
     return this.db.$transaction((tx) => this.withdrawalStatusIn(tx, projectId));
@@ -2425,35 +2277,7 @@ export class ParticipationController {
       meta: { requestId: req.id },
     };
   }
-  @Post("projects/:id/assisted-sessions")
-  @Header("Cache-Control", "no-store")
-  @ApiHeader({ name: "Idempotency-Key", required: true })
-  async assisted(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: AssistedSessionDto,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.participation.assisted(
-        id,
-        req.headers.authorization,
-        body,
-        idempotencyKey(req),
-      ),
-      meta: { requestId: req.id },
-    };
-  }
-  @Get("projects/:id/assisted-sessions")
-  @Header("Cache-Control", "no-store")
-  async assistedState(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.participation.assisted(id, req.headers.authorization),
-      meta: { requestId: req.id },
-    };
-  }
+
   @Post("projects/:id/invitations")
   @Header("Cache-Control", "no-store")
   async invite(
@@ -2477,11 +2301,11 @@ export class ParticipationController {
       meta: { requestId: req.id },
     };
   }
-  @Post("invitations/:token/requests")
+  @Post("invitations/:token/accept")
   @Header("Cache-Control", "no-store")
   async apply(
     @Param("token") token: string,
-    @Body() body: ParticipationNoticeDto,
+    @Body() body: AcceptInvitationDto,
     @Req() req: FastifyRequest,
   ) {
     return {
@@ -2493,36 +2317,7 @@ export class ParticipationController {
       meta: { requestId: req.id },
     };
   }
-  @Get("projects/:id/binding-requests")
-  @Header("Cache-Control", "no-store")
-  async requests(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.participation.requests(id, req.headers.authorization),
-      meta: { requestId: req.id },
-    };
-  }
-  @Post("binding-requests/:id/approve")
-  @Header("Cache-Control", "no-store")
-  @ApiHeader({ name: "Idempotency-Key", required: true })
-  async approve(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: ApprovalDto,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.participation.approve(
-        id,
-        body,
-        idempotencyKey(req),
-        req.id,
-        req.headers.authorization,
-      ),
-      meta: { requestId: req.id },
-    };
-  }
+
   @Get("projects/:id/participation")
   @Header("Cache-Control", "no-store")
   async state(
@@ -2534,62 +2329,7 @@ export class ParticipationController {
       meta: { requestId: req.id },
     };
   }
-  @Post("projects/:id/consents")
-  @Header("Cache-Control", "no-store")
-  @ApiHeader({ name: "Idempotency-Key", required: true })
-  async consent(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: ConsentDto,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.participation.consent(
-        id,
-        body,
-        idempotencyKey(req),
-        req.headers.authorization,
-      ),
-      meta: { requestId: req.id },
-    };
-  }
-  @Post("projects/:id/consents/start")
-  @Header("Cache-Control", "no-store")
-  @ApiHeader({ name: "Idempotency-Key", required: true })
-  async startConsent(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: StartConsentDto,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.participation.consent(
-        id,
-        body,
-        idempotencyKey(req),
-        req.headers.authorization,
-        "start",
-      ),
-      meta: { requestId: req.id },
-    };
-  }
-  @Post("projects/:id/consents/revoke")
-  @Header("Cache-Control", "no-store")
-  @ApiHeader({ name: "Idempotency-Key", required: true })
-  async revoke(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: RevokeDto,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.participation.consent(
-        id,
-        { ...body, granted: false },
-        idempotencyKey(req),
-        req.headers.authorization,
-        "revoke",
-      ),
-      meta: { requestId: req.id },
-    };
-  }
+
   @Post("projects/:id/care-requests")
   @Header("Cache-Control", "no-store")
   async openCare(

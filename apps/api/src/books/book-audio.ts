@@ -104,23 +104,8 @@ export class BookAudio implements OnModuleDestroy {
           revision.contentHash !== entry.contentHash
         )
           throw new NotFoundException();
-        // Online editing does not overwrite a historical entry. A decision about
-        // this exact revision can still withdraw it independently of the current draft.
-        const decision = await tx.storyDecision.findFirst({
-          where: {
-            projectId: entry.projectId,
-            storyId: entry.storyId,
-            revisionId: entry.revisionId,
-          },
-          orderBy: { sequence: "desc" },
-        });
-        if (
-          !decision?.confirmed ||
-          !decision.allowInBook ||
-          decision.contentHash !== entry.contentHash ||
-          decision.subjectId !== actor.subjectId
-        )
-          throw new ForbiddenException();
+        // The fixed paper-book entry retains its exact revision and clip list.
+        // Current draft inclusion does not rewrite a delivered book.
         const audio = entry.audio as unknown as FrozenAudio[];
         if (
           !Array.isArray(audio) ||

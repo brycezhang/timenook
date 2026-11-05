@@ -169,7 +169,7 @@ Page({
           context === sessionClient.context()
         ) {
           projectOverviewClient.select(this.projectId);
-          showProjectTab(this, "project", overview.bookTitle);
+          showProjectTab(this, "home", overview.bookTitle);
           this.setData({
             overview,
             interviews: overview.interviews.map((interview) => ({
@@ -320,7 +320,7 @@ Page({
   async onShow() {
     showProjectTab(
       this,
-      "project",
+      "home",
       this.data.overview?.bookTitle || this.data.p?.title,
     );
     if (dataMode() === "live") {
@@ -364,7 +364,7 @@ Page({
         .length,
       pending: p.stories.filter((s) => s.confirmedVersion !== s.version).length,
     });
-    showProjectTab(this, "project", p.title);
+    showProjectTab(this, "home", p.title);
     this.filterStories();
   },
   filterStories() {
@@ -431,10 +431,10 @@ Page({
     go("invite", dataMode() === "live" ? `projectId=${this.projectId}` : "");
   },
   project() {
-    switchProjectTab("project", this.projectId);
+    switchProjectTab("home", this.projectId);
   },
   book() {
-    switchProjectTab("book", this.projectId);
+    go("book", `projectId=${this.projectId}`);
   },
   account() {
     switchProjectTab("account", this.projectId);

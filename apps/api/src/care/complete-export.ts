@@ -506,18 +506,9 @@ export class CompleteExports implements OnModuleDestroy {
         : (source?.storyVersions ?? []);
       for (const ref of refs) {
         const revision = await tx.storyRevision.findFirst({
-            where: { id: ref.revisionId, projectId },
-          }),
-          decision = await tx.storyDecision.findFirst({
-            where: { revisionId: ref.revisionId, projectId },
-            orderBy: { sequence: "desc" },
-          });
-        if (
-          !revision ||
-          !decision?.confirmed ||
-          decision.contentHash !== ref.contentHash ||
-          (file.path.startsWith("books/") && !decision.allowInBook)
-        )
+          where: { id: ref.revisionId, projectId },
+        });
+        if (!revision || revision.contentHash !== ref.contentHash)
           throw new ForbiddenException();
       }
     }
@@ -890,20 +881,10 @@ export class CompleteExports implements OnModuleDestroy {
         where: { projectId: row.projectId },
         orderBy: [{ storyId: "asc" }, { version: "asc" }],
       })) {
-        const decision = await tx.storyDecision.findFirst({
-          where: { revisionId: revision.id, projectId: row.projectId },
-          orderBy: { sequence: "desc" },
-        });
-        if (
-          !decision?.confirmed ||
-          decision.contentHash !== revision.contentHash ||
-          decision.subjectId !== row.subjectId
-        )
-          continue;
         const provenance =
           revision.origin === "ai"
-            ? "AI 整理，已由本人核对确认"
-            : "AI 整理并经人工校对，已由本人核对确认";
+            ? "根据讲述由 AI 整理"
+            : "根据讲述整理并经项目成员编辑";
         const paragraphs = revision.paragraphs as {
           text: string;
           sourceRefs: string[];
@@ -981,15 +962,10 @@ export class CompleteExports implements OnModuleDestroy {
         });
         let allowed = true;
         for (const ref of references) {
-          const decision = await tx.storyDecision.findFirst({
-            where: { revisionId: ref.revisionId },
-            orderBy: { sequence: "desc" },
+          const revision = await tx.storyRevision.findFirst({
+            where: { id: ref.revisionId, projectId: row.projectId },
           });
-          if (
-            !decision?.confirmed ||
-            !decision.allowInBook ||
-            decision.contentHash !== ref.contentHash
-          )
+          if (!revision || revision.contentHash !== ref.contentHash)
             allowed = false;
         }
         if (!allowed) continue;

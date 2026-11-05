@@ -1,5 +1,5 @@
-import { dataMode } from "../../services/mode";
 import { switchProjectTab } from "../../services/navigation";
+import { dataMode } from "../../services/mode";
 import { sessionClient } from "../../services/session";
 import { paymentClient, paymentStatus } from "../../services/payments";
 import type { PaymentOrderView } from "../../../packages/contracts/src";
@@ -169,7 +169,7 @@ Page({
     if (project) go("production", `projectId=${project.id}`);
   },
   catalog() {
-    go("purchase");
+    go("new-book");
   },
   invite() {
     const project = this.data.activeOrder?.project;
@@ -178,7 +178,7 @@ Page({
   project() {
     const project = this.data.activeOrder?.project;
     if (dataMode() === "live") {
-      if (project) go("project", `projectId=${project.id}`);
+      if (project) switchProjectTab("home", project.id);
       return;
     }
     home();
@@ -187,6 +187,6 @@ Page({
     home("book");
   },
   support() {
-    go("service", "kind=support");
+    go("terms");
   },
 });

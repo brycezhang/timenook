@@ -104,6 +104,10 @@ export class ReviseStoryDto {
     text: string;
   }[];
 }
+class StoryInclusionDto {
+  @ApiProperty() @IsBoolean() included!: boolean;
+  @ApiProperty() @IsInt() @Min(0) expectedVersion!: number;
+}
 class StoryDecisionDto {
   @ApiProperty({ format: "uuid" }) @IsUUID() revisionId!: string;
   @ApiProperty() @Matches(/^[a-f0-9]{64}$/) contentHash!: string;
@@ -190,214 +194,224 @@ export class Stories {
       projectId,
       authorization,
       body.assistedSessionId,
-      async (tx, actor) => {
-        const requestHash = hash(
-          JSON.stringify({
-            interviewId: body.interviewId,
-            baseVersion: body.baseVersion,
-          }),
-        );
-        const prior = await tx.storyCommand.findUnique({
-          where: {
-            projectId_actorId_key: {
-              projectId,
-              actorId: actor.operatorUserId,
-              key,
-            },
-          },
-        });
-        const interview = await tx.interview.findFirst({
-          where: {
-            id: body.interviewId,
-            projectId,
-            subjectId: actor.subjectId,
-            bindingVersion: actor.bindingVersion,
-            accessEpoch: actor.accessEpoch,
-          },
-        });
-        if (!interview) throw new ForbiddenException();
-        const clips = await tx.recordingClip.findMany({
-          where: { projectId, interviewId: interview.id },
-          orderBy: { sequence: "asc" },
-        });
-        if (!clips.length) throw new ConflictException("No saved audio");
-        if (
-          await tx.recordingIntent.count({
-            where: { projectId, interviewId: interview.id, state: "pending" },
-          })
-        )
-          throw new ConflictException("Save all audio first");
-        for (const clip of clips)
-          if (
-            !(await this.participation.processingGrant(tx, {
-              ...clip,
-              sourceAssistedSessionId: clip.assistedSessionId,
-            }))
-          )
-            throw new ForbiddenException();
-        if (prior) {
-          if (prior.requestHash !== requestHash) throw new ConflictException();
-          const generation = await tx.storyGeneration.findUniqueOrThrow({
-            where: { taskId: prior.taskId },
-          });
-          return this.view(
-            tx,
-            projectId,
-            generation.storyId,
-            prior.taskId,
-            false,
-          );
-        }
-        let story = await tx.story.findUnique({
-          where: { interviewId: interview.id },
-        });
-        if ((story?.version ?? 0) !== body.baseVersion)
-          throw new ConflictException();
-        const { snapshot } = await readProjectAdmissionIn(tx, projectId),
-          admission = snapshot.admission as Prisma.JsonObject,
-          d04 = admission.d04 as Prisma.JsonObject,
-          quotaKind = body.baseVersion === 0 ? "organization" : "regeneration",
-          quota = (d04.userQuotas as Prisma.JsonObject)[
-            quotaKind === "organization"
-              ? "storyOrganizations"
-              : "activeRegenerations"
-          ] as Prisma.JsonObject;
-        if (
-          (d04.review as Prisma.JsonObject).state !== "frozen" ||
-          d04.systemRetriesChargeUserQuota !== false ||
-          quota.unit !== "count" ||
-          !Number.isSafeInteger(quota.value) ||
-          Number(quota.value) < 1
-        )
-          throw new ServiceUnavailableException();
-        if (
-          (await tx.storyGeneration.count({
-            where: { projectId, quotaKind },
-          })) >= Number(quota.value)
-        )
-          throw new ConflictException("Story quota exhausted");
-        story ??= await tx.story.create({
-          data: { id: randomUUID(), projectId, interviewId: interview.id },
-        });
-        const sources = await Promise.all(
-          clips.map(async (clip) => {
-            const asset = await tx.recordingAsset.findUniqueOrThrow({
-                where: { id: clip.assetId },
-              }),
-              sealed = await tx.sealedInput.findUniqueOrThrow({
-                where: { clipId: clip.id },
-              }),
-              transcription = await tx.productionTask.findFirstOrThrow({
-                where: { projectId, clipId: clip.id, kind: "transcribe_audio" },
-              }),
-              question = await tx.actualPlanQuestion.findUniqueOrThrow({
-                where: { id: clip.actualQuestionId },
-              });
-            return {
-              projectId,
-              clipId: clip.id,
-              intentId: clip.intentId,
-              interviewId: interview.id,
-              assetId: asset.id,
-              sealedInputId: sealed.id,
-              inputHash: asset.sha256,
-              transcriptionTaskId: transcription.id,
-              actualQuestionId: question.id,
-              question: {
-                id: question.id,
-                planRevision: question.planRevision,
-                snapshot: question.snapshot,
-                source: question.source ?? {
-                  kind: question.questionKey ? "plan" : question.starterKind,
-                },
-              },
-              sequence: clip.sequence,
-              savedAt: sealed.createdAt,
-            };
-          }),
-        );
-        const preferences = await tx.interviewPreferences.findUniqueOrThrow({
-            where: { projectId },
-          }),
-          id = randomUUID(),
-          now = new Date();
-        const inputHash = hash(
-          JSON.stringify({
-            sources,
-            preferences,
-            baseVersion: body.baseVersion,
-          }),
-        );
-        // A new HTTP key is not proof that an unresolved provider request failed.
-        const matching = await tx.productionTask.findMany({
-          where: { projectId, kind: "compose_story", inputHash },
-          select: { id: true, state: true },
-        });
-        if (
-          matching.some((t) => t.state === "submitting") ||
-          (await tx.taskAttempt.count({
-            where: {
-              taskId: { in: matching.map((t) => t.id) },
-              state: { in: ["submitting", "unknown"] },
-            },
-          }))
-        )
-          throw new ConflictException("Original provider outcome is unknown");
-        await tx.productionTask.create({
-          data: {
-            id,
-            projectId,
-            subjectId: actor.subjectId,
-            bindingVersion: actor.bindingVersion,
-            accessEpoch: actor.accessEpoch,
-            inputHash,
-            kind: "compose_story",
-            state: "waiting_inputs",
-            configuration: this.configuration(),
-            configurationHash: hash(JSON.stringify(this.configuration())),
-            deadline: this.config.generation
-              ? new Date(now.getTime() + this.config.generation.deadlineMs)
-              : null,
-            providerRequestId: randomUUID(),
-          },
-        });
-        await tx.storyGeneration.create({
-          data: {
-            taskId: id,
-            projectId,
-            storyId: story.id,
-            baseVersion: body.baseVersion,
-            preferences: JSON.parse(JSON.stringify(preferences)),
-            quotaKind: body.baseVersion === 0 ? "organization" : "regeneration",
-            userSubmittedAt: now,
-            allSavedAt: new Date(
-              Math.max(...sources.map((s) => s.savedAt.getTime())),
-            ),
-          },
-        });
-        for (const { savedAt, ...source } of sources)
-          await tx.storySource.create({
-            data: {
-              taskId: id,
-              ...source,
-              question: source.question as Prisma.InputJsonObject,
-            },
-          });
-        await tx.taskOutbox.create({ data: { id: randomUUID(), taskId: id } });
-        await tx.storyCommand.create({
-          data: {
-            projectId,
-            actorId: actor.operatorUserId,
-            key,
-            requestHash,
-            taskId: id,
-          },
-        });
-        return this.view(tx, projectId, story.id, id, false);
-      },
+      (tx, actor) => this.organizeIn(tx, projectId, body, actor, key),
       "existing",
     );
   }
+  async organizeIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    body: OrganizeDto,
+    actor: {
+      operatorUserId: string;
+      subjectId: string;
+      bindingVersion: number;
+      accessEpoch: number;
+    },
+    key: string,
+    automatic = false,
+  ) {
+    await this.participation.requireCreationIn(tx, projectId);
+    const requestHash = hash(
+      JSON.stringify({
+        interviewId: body.interviewId,
+        baseVersion: body.baseVersion,
+      }),
+    );
+    const prior = await tx.storyCommand.findUnique({
+      where: {
+        projectId_actorId_key: {
+          projectId,
+          actorId: actor.operatorUserId,
+          key,
+        },
+      },
+    });
+    const interview = await tx.interview.findFirst({
+      where: {
+        id: body.interviewId,
+        projectId,
+        subjectId: actor.subjectId,
+        bindingVersion: actor.bindingVersion,
+        accessEpoch: actor.accessEpoch,
+      },
+    });
+    if (!interview) throw new ForbiddenException();
+    const clips = await tx.recordingClip.findMany({
+      where: { projectId, interviewId: interview.id },
+      orderBy: { sequence: "asc" },
+    });
+    if (!clips.length) throw new ConflictException("No saved audio");
+    if (
+      await tx.recordingIntent.count({
+        where: { projectId, interviewId: interview.id, state: "pending" },
+      })
+    )
+      throw new ConflictException("Save all audio first");
+    for (const clip of clips)
+      if (
+        !(await this.participation.processingGrant(tx, {
+          ...clip,
+          sourceAssistedSessionId: clip.assistedSessionId,
+        }))
+      )
+        throw new ForbiddenException();
+    if (prior) {
+      if (prior.requestHash !== requestHash) throw new ConflictException();
+      const generation = await tx.storyGeneration.findUniqueOrThrow({
+        where: { taskId: prior.taskId },
+      });
+      return this.view(tx, projectId, generation.storyId, prior.taskId, false);
+    }
+    let story = await tx.story.findUnique({
+      where: { interviewId: interview.id },
+    });
+    if ((story?.version ?? 0) !== body.baseVersion)
+      throw new ConflictException();
+    const { snapshot } = await readProjectAdmissionIn(tx, projectId),
+      admission = snapshot.admission as Prisma.JsonObject,
+      d04 = admission.d04 as Prisma.JsonObject,
+      quotaKind = body.baseVersion === 0 ? "organization" : "regeneration",
+      quota = (d04.userQuotas as Prisma.JsonObject)[
+        quotaKind === "organization"
+          ? "storyOrganizations"
+          : "activeRegenerations"
+      ] as Prisma.JsonObject;
+    if (
+      (d04.review as Prisma.JsonObject).state !== "frozen" ||
+      d04.systemRetriesChargeUserQuota !== false ||
+      quota.unit !== "count" ||
+      !Number.isSafeInteger(quota.value) ||
+      Number(quota.value) < 1
+    )
+      throw new ServiceUnavailableException();
+    const quotaExceeded =
+      (await tx.storyGeneration.count({ where: { projectId, quotaKind } })) >=
+      Number(quota.value);
+    if (quotaExceeded && !automatic)
+      throw new ConflictException("Story quota exhausted");
+    story ??= await tx.story.create({
+      data: { id: randomUUID(), projectId, interviewId: interview.id },
+    });
+    const sources = await Promise.all(
+      clips.map(async (clip) => {
+        const asset = await tx.recordingAsset.findUniqueOrThrow({
+            where: { id: clip.assetId },
+          }),
+          sealed = await tx.sealedInput.findUniqueOrThrow({
+            where: { clipId: clip.id },
+          }),
+          transcription = await tx.productionTask.findFirstOrThrow({
+            where: { projectId, clipId: clip.id, kind: "transcribe_audio" },
+          }),
+          question = await tx.actualPlanQuestion.findUniqueOrThrow({
+            where: { id: clip.actualQuestionId },
+          });
+        return {
+          projectId,
+          clipId: clip.id,
+          intentId: clip.intentId,
+          interviewId: interview.id,
+          assetId: asset.id,
+          sealedInputId: sealed.id,
+          inputHash: asset.sha256,
+          transcriptionTaskId: transcription.id,
+          actualQuestionId: question.id,
+          question: {
+            id: question.id,
+            planRevision: question.planRevision,
+            snapshot: question.snapshot,
+            source: question.source ?? {
+              kind: question.questionKey ? "plan" : question.starterKind,
+            },
+          },
+          sequence: clip.sequence,
+          savedAt: sealed.createdAt,
+        };
+      }),
+    );
+    const preferences = await tx.interviewPreferences.findUniqueOrThrow({
+        where: { projectId },
+      }),
+      id = randomUUID(),
+      now = new Date();
+    const inputHash = hash(
+      JSON.stringify({
+        sources,
+        preferences,
+        baseVersion: body.baseVersion,
+      }),
+    );
+    // A new HTTP key is not proof that an unresolved provider request failed.
+    const matching = await tx.productionTask.findMany({
+      where: { projectId, kind: "compose_story", inputHash },
+      select: { id: true, state: true },
+    });
+    if (
+      matching.some((t) => t.state === "submitting") ||
+      (await tx.taskAttempt.count({
+        where: {
+          taskId: { in: matching.map((t) => t.id) },
+          state: { in: ["submitting", "unknown"] },
+        },
+      }))
+    )
+      throw new ConflictException("Original provider outcome is unknown");
+    await tx.productionTask.create({
+      data: {
+        id,
+        projectId,
+        subjectId: actor.subjectId,
+        bindingVersion: actor.bindingVersion,
+        accessEpoch: actor.accessEpoch,
+        inputHash,
+        kind: "compose_story",
+        state: quotaExceeded ? "failed" : "waiting_inputs",
+        errorCode: quotaExceeded ? "STORY_QUOTA_EXHAUSTED" : null,
+        configuration: this.configuration(),
+        configurationHash: hash(JSON.stringify(this.configuration())),
+        deadline: this.config.generation
+          ? new Date(now.getTime() + this.config.generation.deadlineMs)
+          : null,
+        providerRequestId: randomUUID(),
+      },
+    });
+    await tx.storyGeneration.create({
+      data: {
+        taskId: id,
+        projectId,
+        storyId: story.id,
+        baseVersion: body.baseVersion,
+        preferences: JSON.parse(JSON.stringify(preferences)),
+        quotaKind: quotaExceeded ? "quota-blocked" : quotaKind,
+        userSubmittedAt: now,
+        allSavedAt: new Date(
+          Math.max(...sources.map((s) => s.savedAt.getTime())),
+        ),
+      },
+    });
+    for (const { savedAt, ...source } of sources)
+      await tx.storySource.create({
+        data: {
+          taskId: id,
+          ...source,
+          question: source.question as Prisma.InputJsonObject,
+        },
+      });
+    if (!quotaExceeded)
+      await tx.taskOutbox.create({ data: { id: randomUUID(), taskId: id } });
+    await tx.storyCommand.create({
+      data: {
+        projectId,
+        actorId: actor.operatorUserId,
+        key,
+        requestHash,
+        taskId: id,
+      },
+    });
+    return this.view(tx, projectId, story.id, id, false);
+  }
+
   revise(
     projectId: string,
     id: string,
@@ -432,7 +446,7 @@ export class Stories {
     operator: { id: string; realm: "product" | "admin" },
     key: string,
   ) {
-    await this.participation.requireMaterialIn(tx, projectId, "activeData");
+    await this.participation.requireCreationIn(tx, projectId);
     await this.participation.requireMaterialIn(
       tx,
       projectId,
@@ -502,6 +516,92 @@ export class Stories {
         contentHash: applied.contentHash,
       },
     };
+  }
+  inclusion(
+    projectId: string,
+    id: string,
+    body: StoryInclusionDto,
+    authorization?: string,
+  ) {
+    return this.participation.withPlanAccess(
+      projectId,
+      authorization,
+      undefined,
+      async (tx, actor) => {
+        await this.participation.requireCreationIn(tx, projectId);
+        const story = await tx.story.findFirst({ where: { id, projectId } });
+        if (!story || story.version !== body.expectedVersion)
+          throw new ConflictException();
+        await tx.story.update({
+          where: { id },
+          data: { included: body.included },
+        });
+        const directory = await tx.planDirectoryVersion.findFirst({
+          where: { projectId },
+          orderBy: { version: "desc" },
+        });
+        if (directory && story.included !== body.included) {
+          const chapters = structuredClone(directory.chapters) as unknown as {
+            key: string;
+            title: string;
+            storyRefs: string[];
+          }[];
+          if (body.included && story.currentRevisionId) {
+            if (!chapters.length)
+              chapters.push({
+                key: "life-stories",
+                title: "我的故事",
+                storyRefs: [],
+              });
+            if (!chapters.some((c) => c.storyRefs.includes(id)))
+              chapters[0].storyRefs.push(id);
+          } else
+            chapters.forEach((c) => {
+              c.storyRefs = c.storyRefs.filter((ref) => ref !== id);
+            });
+          await tx.planDirectoryVersion.create({
+            data: {
+              projectId,
+              version: directory.version + 1,
+              chapters,
+              contentHash: hash(JSON.stringify(chapters)),
+              createdBy: actor.userId,
+            },
+          });
+          if (!body.included) {
+            const cover = await tx.bookCoverVersion.findFirst({
+              where: { projectId },
+              orderBy: { version: "desc" },
+            });
+            // A cover sourced from a removed story must not leave an invalid book input.
+            const revision = story.currentRevisionId
+              ? await tx.storyRevision.findUnique({
+                  where: { id: story.currentRevisionId },
+                })
+              : null;
+            const photos = revision?.photoSnapshot as unknown as {
+              entries?: { assets: { id: string }[] }[];
+            } | null;
+            if (
+              cover?.photoAssetId &&
+              photos?.entries?.some((p) =>
+                p.assets.some((a) => a.id === cover.photoAssetId),
+              )
+            )
+              await tx.bookCoverVersion.create({
+                data: {
+                  projectId,
+                  version: cover.version + 1,
+                  salutation: cover.salutation,
+                  photoAssetId: null,
+                  createdBy: actor.userId,
+                },
+              });
+          }
+        }
+        return this.view(tx, projectId, id);
+      },
+    );
   }
   decide(
     projectId: string,
@@ -1041,6 +1141,37 @@ export class Stories {
       data: { version: revision.version, currentRevisionId: revision.id },
     });
     if (updated.count !== 1) throw new ConflictException();
+    if (!story.currentRevisionId && story.included) {
+      const directory = await tx.planDirectoryVersion.findFirst({
+        where: { projectId: story.projectId },
+        orderBy: { version: "desc" },
+      });
+      if (directory) {
+        const chapters = structuredClone(directory.chapters) as unknown as {
+          key: string;
+          title: string;
+          storyRefs: string[];
+        }[];
+        if (!chapters.length)
+          chapters.push({
+            key: "life-stories",
+            title: "我的故事",
+            storyRefs: [],
+          });
+        if (!chapters.some((c) => c.storyRefs.includes(story.id))) {
+          chapters[0].storyRefs.push(story.id);
+          await tx.planDirectoryVersion.create({
+            data: {
+              projectId: story.projectId,
+              version: directory.version + 1,
+              chapters,
+              contentHash: hash(JSON.stringify(chapters)),
+              createdBy: command.command?.operatorId ?? "story-generation",
+            },
+          });
+        }
+      }
+    }
     return revision;
   }
   async applyIn(
@@ -1279,28 +1410,7 @@ export class Stories {
       undefined,
       async (tx, actor) => {
         const view = await this.view(tx, projectId, id);
-        const previous = await tx.storyDecision.findFirst({
-          where: {
-            projectId,
-            storyId: id,
-            subjectId: actor.subjectId,
-          },
-          orderBy: { sequence: "desc" },
-          select: { allowInBook: true },
-        });
-        return {
-          ...view,
-          confirmation: {
-            canDecide: actor.subjectDecision === "self",
-            // A binding changes the operator, not this subject's explicit refusal.
-            allowInBook: previous?.allowInBook ?? true,
-            noticeVersion: participationNotice(
-              (await readProjectAdmissionIn(tx, projectId)).snapshot,
-              !!this.config.acceptance,
-            ).noticeVersion,
-            evidencePrefix: this.config.acceptance ? "internal:" : "synthetic:",
-          },
-        };
+        return { ...view, canEdit: true };
       },
     );
   }
@@ -1361,26 +1471,25 @@ export class StoriesController {
       meta: { requestId: req.id },
     };
   }
-  @Post(":storyId/decisions")
+  @Post(":storyId/inclusion")
   @Header("Cache-Control", "no-store")
-  @ApiHeader({ name: "Idempotency-Key", required: true })
-  async decide(
+  async inclusion(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Param("storyId", new ParseUUIDPipe()) storyId: string,
-    @Body() body: StoryDecisionDto,
+    @Body() body: StoryInclusionDto,
     @Req() req: FastifyRequest,
   ) {
     return {
-      data: await this.stories.decide(
+      data: await this.stories.inclusion(
         id,
         storyId,
         body,
         req.headers.authorization,
-        req.headers["idempotency-key"] as string | undefined,
       ),
       meta: { requestId: req.id },
     };
   }
+
   @Get(":storyId")
   @Header("Cache-Control", "no-store")
   async read(

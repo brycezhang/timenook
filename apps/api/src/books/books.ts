@@ -191,6 +191,8 @@ export class Books implements OnModuleDestroy {
   }
   private async sourceTerms(tx: Prisma.TransactionClient, projectId: string) {
     const terms = await this.bookTerms(tx, projectId);
+    if (!terms.canRecord)
+      throw new ForbiddenException("当前项目已停止制作服务");
     if (
       !terms.retention?.confirmedStories ||
       terms.retention.confirmedStories.state === "deleted" ||
@@ -246,30 +248,10 @@ export class Books implements OnModuleDestroy {
       orderBy: { createdAt: "asc" },
     })) {
       if (!story.currentRevisionId) continue;
+      if (!story.included) continue;
       const revision = await tx.storyRevision.findUniqueOrThrow({
-          where: { id: story.currentRevisionId },
-        }),
-        decision = await tx.storyDecision.findFirst({
-          where: {
-            projectId,
-            storyId: story.id,
-            revisionId: revision.id,
-            bindingVersion: subject.bindingVersion,
-            accessEpoch: project.accessEpoch,
-          },
-          orderBy: { sequence: "desc" },
-        });
-      if (
-        !decision?.confirmed ||
-        !decision.allowInBook ||
-        (revision.reviewItems as string[]).some(
-          (item) =>
-            !(
-              revision.reviewResolutions as { item: string; reason: string }[]
-            ).some((resolution) => resolution.item === item),
-        )
-      )
-        continue;
+        where: { id: story.currentRevisionId },
+      });
       const photo = revision.photoSnapshot as unknown as PhotoMaterials | null;
       const audio = (revision.audioManifest ??
         revision.sourceManifest) as unknown as {
@@ -511,27 +493,19 @@ export class Books implements OnModuleDestroy {
     for (const story of snapshot.chapters.flatMap(
       (chapter) => chapter.stories,
     )) {
-      const decision = await tx.storyDecision.findFirst({
+      const revision = await tx.storyRevision.findFirst({
         where: {
-          projectId: input.projectId,
+          id: story.revisionId,
           storyId: story.id,
-          revisionId: story.revisionId,
-          subjectId: input.subjectId,
-          bindingVersion: input.bindingVersion,
-          ...(input.accessEpoch === undefined
-            ? {}
-            : { accessEpoch: input.accessEpoch }),
+          projectId: input.projectId,
         },
-        orderBy: { sequence: "desc" },
       });
       if (
-        !decision?.confirmed ||
-        !decision.allowInBook ||
-        decision.contentHash !== story.contentHash
+        !revision ||
+        revision.contentHash !== story.contentHash ||
+        !revision.paragraphs
       )
-        throw new ConflictException(
-          "Current permission for every frozen story version required",
-        );
+        throw new ConflictException("Frozen story content is unavailable");
     }
   }
   // Quality review uses the immutable file actually printed, even after a newer
@@ -580,10 +554,13 @@ export class Books implements OnModuleDestroy {
     const stories = await tx.story.findMany({
       where: { projectId: row.projectId },
       orderBy: { createdAt: "asc" },
-      select: { id: true, currentRevisionId: true },
+      select: { id: true, currentRevisionId: true, included: true },
     });
     const revisions = new Map(
-      stories.map((story) => [story.id, story.currentRevisionId]),
+      stories.map((story) => [
+        story.id,
+        story.included ? story.currentRevisionId : null,
+      ]),
     );
     let currentDirectory = {
       ...snapshot.directory,
@@ -591,30 +568,12 @@ export class Books implements OnModuleDestroy {
       contentHash: directory.contentHash,
     };
     if (directory.version === 1 && snapshot.directory.version === 1) {
-      const decisions = await tx.storyDecision.findMany({
-        where: {
-          projectId: row.projectId,
-          subjectId: row.subjectId,
-          bindingVersion: row.bindingVersion,
-          accessEpoch,
-        },
-        orderBy: { sequence: "desc" },
-        select: { revisionId: true, confirmed: true, allowInBook: true },
-      });
-      const latest = new Map<string, (typeof decisions)[number]>();
-      for (const decision of decisions)
-        if (!latest.has(decision.revisionId))
-          latest.set(decision.revisionId, decision);
       const chapters = [
         {
           key: "life-stories",
           title: "我的故事",
           storyRefs: stories
-            .filter((story) => {
-              const decision =
-                story.currentRevisionId && latest.get(story.currentRevisionId);
-              return decision && decision.confirmed && decision.allowInBook;
-            })
+            .filter((story) => story.included && story.currentRevisionId)
             .map((story) => story.id),
         },
       ];
@@ -1564,35 +1523,7 @@ export class BooksController {
       meta: { requestId: req.id },
     };
   }
-  @Get("confirmations")
-  @Header("Cache-Control", "no-store")
-  async confirmations(
-    @Param("id", new ParseUUIDPipe()) id: string,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.books.confirmations(id, req.headers.authorization),
-      meta: { requestId: req.id },
-    };
-  }
-  @Post("confirmations")
-  @Header("Cache-Control", "no-store")
-  @ApiHeader({ name: "Idempotency-Key", required: true })
-  async confirmContent(
-    @Param("id", new ParseUUIDPipe()) id: string,
-    @Body() body: ConfirmBookContentDto,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.books.confirmContent(
-        id,
-        body,
-        req.headers.authorization,
-        req.headers["idempotency-key"] as string,
-      ),
-      meta: { requestId: req.id },
-    };
-  }
+
   @Post("cover")
   @Header("Cache-Control", "no-store")
   @ApiHeader({ name: "Idempotency-Key", required: true })

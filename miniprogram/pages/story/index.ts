@@ -12,15 +12,9 @@ import { paymentKey } from "../../services/payments";
 import { projectOverviewClient } from "../../services/project-overview";
 import type { StoryView, StoryContext } from "../../../packages/contracts/src";
 function stage(story: StoryView | null) {
-  if (story?.decision?.confirmed)
-    return story.decision.allowInBook
-      ? "本人已确认这版，允许入书"
-      : "本人已确认这版，暂不入书";
   const task = story?.task;
   if (!task)
-    return story?.revision
-      ? "故事已整理，待本人核对"
-      : "录音保存后，可以整理这段讲述";
+    return story?.revision ? "故事已整理" : "录音保存后，可以整理这段讲述";
   return task.state === "waiting_inputs"
     ? task.errorCode === "DEPENDENCY_FAILED"
       ? "有录音转写失败，原声已保存"
@@ -30,7 +24,7 @@ function stage(story: StoryView | null) {
       : task.state === "submitting"
         ? "正在整理故事，可离开"
         : task.state === "succeeded"
-          ? "故事已整理，待本人核对"
+          ? "故事已整理"
           : task.state === "no_speech"
             ? "未识别到语音，原声已保存，请回听后再录一段"
             : task.state === "no_content"
@@ -450,7 +444,7 @@ Page({
           ) {
             Object.assign(view, {
               story: result?.story ?? null,
-              privateError: "正文暂时不可查看，请核对讲述者的共享授权",
+              privateError: "当前无法查看正文，请重新登录或查询",
             });
           } else throw error;
         }
@@ -767,10 +761,38 @@ Page({
         this.setData({ busy: false });
     }
   },
+  audioSelection() {
+    if (this.data.story)
+      go(
+        "story-audio",
+        `projectId=${this.projectId}&storyId=${this.data.story.id}`,
+      );
+  },
+  async toggleInclusion() {
+    const story = this.data.story;
+    if (!story?.revision || this.data.busy) return;
+    const generation = this.generation,
+      owner = sessionClient.context();
+    this.setData({ busy: true, error: "" });
+    try {
+      const value = await storyClient.inclusion(
+        this.projectId,
+        story.id,
+        story.version,
+        story.included === false,
+      );
+      if (this.currentLive(generation, owner)) this.setData({ story: value });
+    } catch (e) {
+      if (this.currentLive(generation, owner))
+        this.setData({ error: e instanceof Error ? e.message : "未能保存" });
+    } finally {
+      if (this.currentLive(generation, owner)) this.setData({ busy: false });
+    }
+  },
   editLivePhotos() {
     go(
       "photos",
-      `projectId=${this.projectId}&interviewId=${this.interviewId}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+      `projectId=${this.projectId}&interviewId=${this.interviewId}&storyId=${this.data.story?.id || ""}`,
     );
   },
   async stopLiveAudio() {

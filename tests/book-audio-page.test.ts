@@ -132,6 +132,7 @@ function harness(authenticated = true) {
           destroy() {
             p.destroyed = true;
           },
+          onTimeUpdate() {},
           onEnded(fn: any) {
             p.ended = fn;
           },

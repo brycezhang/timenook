@@ -82,7 +82,7 @@ export interface FulfillmentDeliveryCommand {
 export interface FulfillmentMaterials {
   address: FirstCopyAddress;
   pdf: { sha256: string; bytes: number };
-  grantExpiresAt: string;
+  grantExpiresAt: string | null;
   handoffId: string;
 }
 

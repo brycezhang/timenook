@@ -1,3 +1,9 @@
+import { storyClient } from "../../services/stories";
+import {
+  revisionInput,
+  storyBody,
+  markEditing,
+} from "../../services/book-editor";
 import { watchPermission } from "../../services/project-access";
 import { paymentKey } from "../../services/payments";
 import {
@@ -19,6 +25,7 @@ type Event = {
 };
 Page({
   data: {
+    rows: [] as { id: string; title: string; image: string }[],
     previewPath: "",
     photos: [] as LocalPhoto[],
     snapshot: null as PhotoMaterials | null,
@@ -27,6 +34,8 @@ Page({
     status: "",
     busy: false,
   },
+  picking: false,
+  storyId: "",
   projectId: "",
   interviewId: "",
   assistedSessionId: "",
@@ -38,6 +47,7 @@ Page({
   stopProjectWatch: undefined as (() => void) | undefined,
   stopSessionWatch: undefined as (() => void) | undefined,
   onLoad(q: Record<string, string>) {
+    this.storyId = q.storyId || "";
     this.projectId = q.projectId ?? "";
     this.interviewId = q.interviewId ?? "";
     this.assistedSessionId = q.assistedSessionId ?? "";
@@ -74,6 +84,7 @@ Page({
     }
   },
   async onShow() {
+    if (this.picking) return;
     this.stopSessionWatch?.();
     this.stopSessionWatch = undefined;
     const ownerContext = sessionClient.context();
@@ -98,6 +109,7 @@ Page({
     const g = ++this.generation,
       context = sessionClient.context();
     this.setData({
+      rows: [],
       previewPath: "",
       photos: [],
       snapshot: null,
@@ -120,8 +132,9 @@ Page({
       });
       this.setData({
         snapshot: result.snapshot,
-        status: "每张照片分别保存和上传；原文件会保留",
+        status: "",
       });
+      void this.renderPhotos();
       this.stopProjectWatch?.();
       this.stopProjectWatch = watchPermission(
         () => this.current(g, context),
@@ -159,6 +172,7 @@ Page({
     }
   },
   onHide() {
+    if (this.picking) return;
     this.stopProjectWatch?.();
     this.stopProjectWatch = undefined;
     this.stopSessionWatch?.();
@@ -170,6 +184,7 @@ Page({
     this.owner?.unsubscribe();
     this.owner = null;
     this.setData({
+      rows: [],
       previewPath: "",
       photos: [],
       snapshot: null,
@@ -180,6 +195,8 @@ Page({
     });
   },
   onUnload() {
+    this.picking = false;
+    markEditing(false);
     this.onHide();
   },
   async choose() {
@@ -194,6 +211,7 @@ Page({
         this.assistedSessionId || undefined,
       );
       if (!this.current(g, context)) return;
+      this.picking = true;
       const result =
         await new Promise<WechatMiniprogram.ChooseMediaSuccessCallbackResult>(
           (resolve, reject) =>
@@ -208,6 +226,7 @@ Page({
         );
       if (!this.current(g, context)) return;
       await this.owner!.add(result.tempFiles);
+      void this.queueUploads();
     } catch (error) {
       if (this.current(g, context))
         this.setData({
@@ -220,11 +239,22 @@ Page({
       )
         this.onHide();
     } finally {
+      this.picking = false;
       if (this.current(g, context)) this.setData({ busy: false });
     }
   },
+  async queueUploads() {
+    for (const photo of this.owner
+      ?.snapshot()
+      .filter((p) => p.state === "local") || [])
+      await this.upload({
+        currentTarget: { dataset: { id: photo.clientPhotoId } },
+        detail: { value: "" },
+      });
+  },
   async retrySave(e: Event) {
     await this.owner?.retrySave(e.currentTarget.dataset.id);
+    void this.queueUploads();
   },
 
   async upload(e: Event) {
@@ -251,8 +281,11 @@ Page({
         else if (
           (result.snapshot?.revision ?? 0) >=
           (this.data.snapshot?.revision ?? 0)
-        )
+        ) {
           this.setData({ snapshot: result.snapshot });
+          void this.renderPhotos();
+          await this.applyStoryPhotos();
+        }
       }
     } catch (error) {
       if (
@@ -268,6 +301,7 @@ Page({
 
   caption(e: Event) {
     if (this.data.busy) return;
+    markEditing(true);
     this.editingRevision ??= this.data.snapshot?.revision ?? null;
     this.setData({
       hasDraft: true,
@@ -329,9 +363,11 @@ Page({
               : next,
           captions: {},
           hasDraft: false,
-          status:
-            "照片引用已保存为新版本；原声无需重录，故事确认由后续版本流程处理",
+          status: "照片已保存",
         });
+        markEditing(false);
+        void this.renderPhotos();
+        await this.applyStoryPhotos();
       }
     } catch (error) {
       if (
@@ -412,7 +448,96 @@ Page({
         this.setData({ status: "取消预留未确认，可重试；本机原文件仍在" });
     }
   },
-  back() {
-    wx.navigateBack();
+  async applyStoryPhotos() {
+    if (!this.storyId || !this.data.snapshot) return;
+    const story = await storyClient.read(this.projectId, this.storyId);
+    if (
+      !story.revision ||
+      story.revision.photoSnapshot?.id === this.data.snapshot.id
+    )
+      return;
+    const input = revisionInput(story, story.revision.title, storyBody(story));
+    input.photoSnapshotId = this.data.snapshot.id;
+    await storyClient.revise(this.projectId, story.id, input, paymentKey());
+  },
+  async renderPhotos() {
+    const n = this.generation,
+      owner = sessionClient.context(),
+      snapshot = this.data.snapshot;
+    this.setData({
+      rows: (snapshot?.entries || []).map((p) => ({
+        id: p.photoId,
+        title: p.caption,
+        image: "",
+      })),
+    });
+    await Promise.all(
+      (snapshot?.entries || []).map(async (p) => {
+        const asset = p.assets.find((a) => a.kind === "preview");
+        if (!asset) return;
+        try {
+          const image = await privatePhotoPreview(
+            this.projectId,
+            this.interviewId,
+            p.photoId,
+            asset,
+            () => this.current(n, owner),
+          );
+          if (this.current(n, owner))
+            this.setData({
+              rows: this.data.rows.map((r) =>
+                r.id === p.photoId ? { ...r, image } : r,
+              ),
+            });
+          else await clearPhotoPreviews([image]);
+        } catch {}
+      }),
+    );
+  },
+  sort(e: WechatMiniprogram.CustomEvent<{ ids: string[] }>) {
+    const entries = this.data.snapshot?.entries;
+    if (entries)
+      void this.revise(
+        e.detail.ids.map((id) => ({
+          photoId: id,
+          caption:
+            this.data.captions[id] ??
+            entries.find((p) => p.photoId === id)!.caption,
+        })),
+      );
+  },
+  editCaption(e: WechatMiniprogram.CustomEvent<{ id: string; value: string }>) {
+    this.caption({
+      currentTarget: { dataset: { id: e.detail.id } },
+      detail: { value: e.detail.value },
+    });
+  },
+  showPhoto(e: WechatMiniprogram.CustomEvent<{ id: string }>) {
+    const image = this.data.rows.find((r) => r.id === e.detail.id)?.image;
+    if (image) {
+      this.picking = true;
+      wx.previewImage({
+        current: image,
+        urls: this.data.rows.map((r) => r.image).filter(Boolean),
+        complete: () => {
+          this.picking = false;
+        },
+      });
+    }
+  },
+  async back() {
+    if (this.data.hasDraft)
+      await this.saveCaption({
+        currentTarget: { dataset: {} },
+        detail: { value: "" },
+      });
+    if (this.data.hasDraft) return;
+    try {
+      await this.applyStoryPhotos();
+      markEditing(false);
+      wx.navigateBack();
+    } catch {
+      this.setData({ status: "照片尚未同步到故事，请重试保存" });
+    }
   },
 });

@@ -754,28 +754,10 @@ export class Fulfillment implements OnModuleDestroy {
         "Only the active frozen reservation may disclose materials",
       );
     if (!attempt.qualityRequestId) this.matches(order, this.binding(attempt));
-    const grant = await tx.fulfillmentGrant.findFirst({
-        where: { attemptId },
-        orderBy: { sequence: "desc" },
-      }),
-      project = await tx.project.findUniqueOrThrow({
-        where: { id: order.projectId },
-      }),
-      subject = await tx.projectSubject.findUniqueOrThrow({
-        where: { projectId: order.projectId },
-      }),
-      care = await tx.careRequest.findUniqueOrThrow({
-        where: { id: attempt.caseId },
-      });
-    if (
-      !grant ||
-      grant.expiresAt.getTime() <= Date.now() ||
-      grant.accessEpoch !== project.accessEpoch ||
-      grant.subjectId !== subject.id ||
-      grant.bindingVersion !== subject.bindingVersion ||
-      care.kind !== "production_handoff" ||
-      care.state === "completed"
-    )
+    const care = await tx.careRequest.findUniqueOrThrow({
+      where: { id: attempt.caseId },
+    });
+    if (care.kind !== "production_handoff" || care.state === "completed")
       throw new ForbiddenException();
     if (
       !(await this.preflight(
@@ -794,7 +776,7 @@ export class Fulfillment implements OnModuleDestroy {
     return {
       address: attempt.address as unknown as FirstCopyAddress,
       pdf: { sha256: output.sha256, bytes: output.bytes },
-      grantExpiresAt: grant.expiresAt.toISOString(),
+      grantExpiresAt: null,
       handoffId: attempt.handoffId,
     };
   }
@@ -1374,24 +1356,7 @@ export class Fulfillment implements OnModuleDestroy {
 @ApiBearerAuth()
 export class FulfillmentController {
   constructor(private readonly fulfillment: Fulfillment) {}
-  @Post("grants")
-  @Header("Cache-Control", "no-store")
-  @ApiHeader({ name: "Idempotency-Key", required: true })
-  async grant(
-    @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: GrantDto,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.fulfillment.grant(
-        id,
-        body,
-        req.headers.authorization,
-        idempotencyKey(req),
-      ),
-      meta: { requestId: req.id },
-    };
-  }
+
   @Get() @Header("Cache-Control", "no-store") async progress(
     @Param("id", ParseUUIDPipe) id: string,
     @Req() req: FastifyRequest,

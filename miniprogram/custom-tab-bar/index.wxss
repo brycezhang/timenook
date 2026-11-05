@@ -5,7 +5,7 @@
   left: 0;
   right: 0;
   display: flex;
-  background: #f8f4ed;
+  background: #fffdf8;
   border-top: 1rpx solid #e5ddcf;
   padding: 12rpx 0 calc(14rpx + env(safe-area-inset-bottom));
 }
@@ -17,14 +17,14 @@
   align-items: center;
   justify-content: center;
   gap: 6rpx;
-  min-height: 96rpx;
+  min-height: 112rpx;
   margin: 0;
   padding: 0;
   background: transparent;
   border: 0;
   border-radius: 0;
   line-height: 1.5;
-  font-size: 23rpx;
+  font-size: 36rpx;
   color: #827b6d;
 }
 .tab::after {

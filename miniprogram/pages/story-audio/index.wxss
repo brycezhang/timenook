@@ -1,0 +1,9 @@
+.audio-choice {
+  color: #46563c;
+  border: 2rpx solid #a9b39a;
+  border-radius: 16rpx;
+  padding: 10rpx 20rpx;
+}
+.selected {
+  background: #e4eadb;
+}

@@ -27,16 +27,21 @@ async function walk(dir) {
 const files = (await walk("miniprogram")).filter(
   (file) =>
     !release ||
-    !/\/(?:pages\/(?:audio-probe|account-link)\/|services\/(?:audio-probe|account-link)\.ts)/.test(
+    !/\/(?:pages\/(?:audio-probe|account-link|assisted|settings|service|refunds|quality|export|deletion-status|project)\/|services\/(?:audio-probe|account-link|assisted|settings|service|refunds|quality|export|deletion-status|project)\.ts)/.test(
       file,
     ),
 );
 const config = JSON.parse(await fs.readFile("miniprogram/app.json", "utf8"));
 if (release)
   config.pages = config.pages.filter(
-    (page) => !/^pages\/(audio-probe|account-link)\//.test(page),
+    (page) =>
+      !/^pages\/(audio-probe|account-link|assisted|settings|service|refunds|quality|export|deletion-status|project)\//.test(
+        page,
+      ),
   );
-for (const file of files.filter((f) => !f.endsWith(".ts"))) {
+for (const file of files.filter(
+  (f) => !f.endsWith(".ts") && f !== "miniprogram/app.json",
+)) {
   const dest = file.replace("miniprogram/", out + "/");
   await fs.mkdir(path.dirname(dest), { recursive: true });
   if (file.endsWith(".wxml") && release) {

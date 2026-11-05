@@ -1,272 +1,68 @@
 import { NATIVE_TABS } from "../../config";
-import {
-  showProjectTab,
-  switchProjectTab,
-  tabProjectId,
-} from "../../services/navigation";
-import { type Project } from "../../domain/model";
-import { clear, go, home, list, read, select } from "../../services/store";
-import { dataMode } from "../../services/mode";
 import { sessionClient } from "../../services/session";
-import { projectOverviewClient } from "../../services/project-overview";
-import type { ProjectOverview } from "../../../packages/contracts/src";
-type E = {
-  currentTarget: { dataset: Record<string, string> };
-  detail: { value: string };
-};
+import { showProjectTab, switchProjectTab } from "../../services/navigation";
+import { go } from "../../services/store";
 Page({
-  data: {
-    nativeTabs: NATIVE_TABS,
-    p: null as Project | null,
-    count: 0,
-    projects: [] as Project[],
-    live: false,
-    loggedIn: false,
-    busy: false,
-    status: "",
-    overview: null as ProjectOverview | null,
-    memberships: [] as { projectId: string; state: string }[],
-  },
-  exports() {
-    if (this.projectId) go("export", `projectId=${this.projectId}`);
-  },
-  projectId: "",
+  data: { nativeTabs: NATIVE_TABS, loggedIn: false, busy: false, status: "" },
   generation: 0,
   loginPending: false,
-  visible: false,
-  stopSessionWatch: undefined as (() => void) | undefined,
-  expiry: undefined as ReturnType<typeof setTimeout> | undefined,
-  onLoad(q) {
-    if (dataMode() === "live") {
-      this.projectId = tabProjectId(q.projectId);
-      this.setData({ live: true });
+  async onShow() {
+    showProjectTab(this, "account");
+    if (this.loginPending) return;
+    const n = ++this.generation;
+    try {
+      const user = await sessionClient.restore();
+      if (n === this.generation) this.setData({ loggedIn: !!user, status: "" });
+    } catch (e) {
+      if (n === this.generation)
+        this.setData({
+          loggedIn: false,
+          status: e instanceof Error ? e.message : "请重新登录",
+        });
     }
   },
   onHide() {
-    this.visible = false;
-    this.clearPrivateView();
-  },
-  clearPrivateView() {
-    if (this.data.live) {
-      ++this.generation;
-      this.stopSessionWatch?.();
-      this.stopSessionWatch = undefined;
-      if (this.expiry) clearTimeout(this.expiry);
-      this.setData({
-        overview: null,
-        memberships: [],
-        busy: this.loginPending,
-      });
-    }
-  },
-  onUnload() {
-    this.onHide();
-  },
-  async refresh() {
-    await this.onShow();
-  },
-  async onShow() {
-    this.visible = true;
-    if (this.loginPending || this.data.busy) return;
-    showProjectTab(
-      this,
-      "account",
-      this.data.overview?.bookTitle || this.data.p?.title,
-    );
-    if (dataMode() === "live") {
-      this.projectId = tabProjectId() || this.projectId;
-      const generation = ++this.generation,
-        context = sessionClient.context();
-      this.stopSessionWatch?.();
-      this.stopSessionWatch = sessionClient.onInvalidated(() => {
-        this.clearPrivateView();
-        this.projectId = "";
-        this.setData({ loggedIn: false, status: "登录已失效，请重新登录" });
-      });
-      this.setData({
-        live: true,
-        busy: true,
-        status: "",
-        overview: null,
-        memberships: [],
-        loggedIn: !!context,
-      });
-      if (!context) {
-        this.projectId = "";
-        this.setData({ busy: false, status: "登录后，打开你的故事书与订单。" });
-        return;
-      }
-      try {
-        const result = await projectOverviewClient.memberships();
-        if (
-          generation !== this.generation ||
-          context !== sessionClient.context()
-        )
-          return;
-        this.setData({ memberships: result.projects });
-        const available = result.projects.filter((p) => p.state !== "pending");
-        if (!available.some((p) => p.projectId === this.projectId))
-          this.projectId = available[0]?.projectId ?? "";
-        if (!this.projectId) {
-          this.setData({
-            status: "还没有故事书，可以挑选一份礼物，或查看收到的邀请。",
-          });
-          return;
-        }
-        const overview = await projectOverviewClient.read(this.projectId);
-        if (
-          generation !== this.generation ||
-          context !== sessionClient.context()
-        )
-          return;
-        projectOverviewClient.select(this.projectId);
-        this.setData({ overview });
-        showProjectTab(this, "account", overview.bookTitle);
-        if (overview.accessExpiresAt)
-          this.expiry = setTimeout(
-            () => {
-              if (generation === this.generation) {
-                this.clearPrivateView();
-                this.setData({ status: "资料访问已到期，请重新查询" });
-              }
-            },
-            Math.min(
-              2147483647,
-              Math.max(0, Date.parse(overview.accessExpiresAt) - Date.now()),
-            ),
-          );
-      } catch (error) {
-        if (generation === this.generation)
-          this.setData({
-            overview: null,
-            memberships:
-              context === sessionClient.context() ? this.data.memberships : [],
-            status:
-              context !== sessionClient.context()
-                ? "账号已变化，请重新查询项目"
-                : error instanceof Error
-                  ? error.message
-                  : "查询失败，请重试",
-          });
-      } finally {
-        if (generation === this.generation) this.setData({ busy: false });
-      }
-      return;
-    }
-    const p = read();
-    if (!p) {
-      home("home");
-      return;
-    }
-    this.setData({
-      live: false,
-      p,
-      count: p.recordings.length,
-      projects: list(),
-    });
-    showProjectTab(this, "account", p.title);
-  },
-  shop() {
-    go("home", "browse=1");
+    if (!this.loginPending) ++this.generation;
   },
   async login() {
     if (this.data.busy) return;
     this.loginPending = true;
-    this.setData({ busy: true, status: "正在登录…" });
+    this.setData({ busy: true, status: "" });
     try {
       await sessionClient.login();
-    } catch (error) {
+      this.setData({ loggedIn: true });
+    } catch (e) {
       this.setData({
-        loggedIn: false,
-        status: error instanceof Error ? error.message : "登录失败，请重试",
+        status: e instanceof Error ? e.message : "登录未完成，请重试",
       });
-      return;
     } finally {
       this.loginPending = false;
       this.setData({ busy: false });
     }
-    if (this.visible) await this.onShow();
   },
   async logout() {
     if (this.data.busy) return;
-    this.clearPrivateView();
-    this.projectId = "";
-    this.setData({ busy: true, loggedIn: false });
+    this.setData({ busy: true });
     try {
       await sessionClient.logout();
-      home("home");
-    } catch {
+    } catch (e) {
       this.setData({
-        status: "本机已退出，服务端撤销未确认；原会话将在到期后失效。",
+        status: e instanceof Error ? e.message : "退出结果待查询",
       });
     } finally {
-      this.setData({ busy: false });
+      this.setData({ busy: false, loggedIn: false });
     }
   },
-  rights() {
-    go("welcome", this.projectId ? `projectId=${this.projectId}&manage=1` : "");
+  projects() {
+    go("projects");
   },
-  switchProject(e: E) {
-    if (this.data.live) {
-      const id = e.currentTarget.dataset.id;
-      if (!this.data.memberships.some((m) => m.projectId === id)) return;
-      if (
-        this.data.memberships.find((m) => m.projectId === id)?.state ===
-        "pending"
-      ) {
-        go("welcome", `projectId=${id}`);
-        return;
-      }
-      this.clearPrivateView();
-      projectOverviewClient.select(id);
-      switchProjectTab("project", id);
-      return;
-    }
-    select(e.currentTarget.dataset.id);
-    home();
+  purchase() {
+    go("new-book");
   },
-  order() {
-    go("order");
+  terms() {
+    go("terms");
   },
-  settings() {
-    go("settings", this.data.live ? `projectId=${this.projectId}` : "");
-  },
-  invite() {
-    if (this.data.live && this.data.overview?.role === "narrator") {
-      go("welcome", `projectId=${this.projectId}`);
-      return;
-    }
-    go("invite", this.data.live ? `projectId=${this.projectId}` : "");
-  },
-  service(e: E) {
-    go(
-      "service",
-      "kind=" +
-        e.currentTarget.dataset.kind +
-        (this.data.live ? `&projectId=${this.projectId}` : ""),
-    );
-  },
-  reset() {
-    wx.showModal({
-      title: "重新体验",
-      content:
-        "这会清除当前本机演示项目及其资料索引，其他项目会保留。请先导出需要保留的内容。",
-      confirmText: "清除重来",
-      success: (r) => {
-        if (r.confirm) {
-          clear();
-          home(read() ? "account" : "home");
-        }
-      },
-    });
-  },
-  project() {
-    switchProjectTab("project", this.projectId);
-  },
-  book() {
-    switchProjectTab("book", this.projectId);
-  },
-  account() {
-    switchProjectTab("account", this.projectId);
+  home() {
+    switchProjectTab("home");
   },
 });

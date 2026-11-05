@@ -42,7 +42,9 @@ export interface ProjectOverview {
   bookTitle: string;
   metadataVersion: number;
   subjectId: string;
-  role: "narrator" | "initiator";
+  role: "member" | "narrator" | "initiator";
+  canInvite?: boolean;
+  canRecord?: boolean;
   canDecide: boolean;
   stories: StoryView[];
   tasks: import("./tasks").ProductionTaskView[];
@@ -69,6 +71,8 @@ export interface StoryRevisionView {
   origin: "ai" | "participant";
 }
 export interface StoryView {
+  included?: boolean;
+  canEdit?: boolean;
   confirmation?: {
     canDecide: boolean;
     allowInBook: boolean;

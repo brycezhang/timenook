@@ -28,7 +28,7 @@ function validate(plan: PersonalPlan, projectId: string): PersonalPlan {
     !Array.isArray(plan.preferences.blockedTopics) ||
     !Array.isArray(plan.questionStates) ||
     !Array.isArray(plan.actualQuestions) ||
-    !["self", "assisted", null].includes(plan.subjectDecision) ||
+    !["member", "self", "assisted", null].includes(plan.subjectDecision) ||
     (plan.accessExpiresAt !== null &&
       !Number.isFinite(Date.parse(plan.accessExpiresAt)))
   )
