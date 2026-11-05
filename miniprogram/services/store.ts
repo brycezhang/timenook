@@ -5,6 +5,7 @@ import {
   type Recipient,
 } from "../domain/model";
 import { dataMode, livePageAllowed } from "./mode";
+import { isProjectTab, switchProjectTab } from "./navigation";
 const KEY = "timenook.frontend.v1";
 interface Library {
   version: 2;
@@ -79,10 +80,18 @@ export function go(page: string, query = "") {
     home("home");
     return;
   }
+  if (isProjectTab(page)) {
+    switchProjectTab(page, /(?:^|&)projectId=([^&]*)/.exec(query)?.[1]);
+    return;
+  }
   wx.navigateTo({ url: `/pages/${page}/index${query ? "?" + query : ""}` });
 }
 export function home(page = "project") {
   if (dataMode() === "live") page = "home";
+  if (isProjectTab(page)) {
+    switchProjectTab(page);
+    return;
+  }
   wx.reLaunch({ url: `/pages/${page}/index` });
 }
 export function toast(title: string) {

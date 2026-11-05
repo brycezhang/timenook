@@ -62,3 +62,36 @@
   min-height: 48px;
   white-space: normal;
 }
+
+.participation-page .title {
+  margin-top: 30rpx;
+}
+.consent-start {
+  padding-top: 20rpx;
+}
+.consent-start .subtitle {
+  font-size: 32rpx;
+  line-height: 1.95;
+}
+.consent-start-action {
+  margin-top: 64rpx;
+  width: 100%;
+}
+.consent-details-toggle,
+.management-toggle {
+  width: 100%;
+  text-align: left;
+  min-height: 96rpx;
+}
+.consent-details {
+  font-size: 27rpx;
+  color: var(--muted);
+  line-height: 1.9;
+}
+.consent-details view + view {
+  margin-top: 20rpx;
+}
+.management-toggle {
+  margin-top: 40rpx;
+  border-top: 1rpx solid var(--line);
+}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAdminTime } from "../utils/time";
 import { onMounted, ref, computed } from "vue";
 import { Alert, Button } from "antdv-next";
 import { ADMIN_PERMISSIONS } from "@timenook/contracts";
@@ -27,6 +28,7 @@ const stateLabel = (state: string) =>
     waiting_provider: "等待供应商",
     succeeded: "处理完成",
     no_speech: "无有效语音",
+    no_content: "已转写，暂未形成故事",
     failed: "处理失败",
     obsolete: "内容已变化",
     waiting_inputs: "等待输入准备完成",
@@ -90,8 +92,8 @@ onMounted(refresh);
       <p>项目：{{ task.projectId }}</p>
       <p v-if="task.errorCode">{{ task.errorCode }}</p>
       <p v-if="task.providerCode">供应商状态：{{ task.providerCode }}</p>
-      <p>首次排队：{{ task.queuedAt }}</p>
-      <p v-if="task.deadline">处理截止：{{ task.deadline }}</p>
+      <p>首次排队：{{ formatAdminTime(task.queuedAt) }}</p>
+      <p v-if="task.deadline">处理截止：{{ formatAdminTime(task.deadline) }}</p>
       <p>外部尝试 {{ task.attempts.length }} 次；实际费用待供应商核对。</p>
       <Button
         v-if="canRetry && task.retryable"

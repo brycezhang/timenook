@@ -1,0 +1,10 @@
+ALTER TABLE package_versions DROP CONSTRAINT package_versions_realm_check;
+ALTER TABLE package_versions ADD CONSTRAINT package_versions_realm_check CHECK (realm IN ('local','production'));
+ALTER TABLE package_versions DROP CONSTRAINT package_versions_purpose_check;
+ALTER TABLE package_versions ADD CONSTRAINT package_versions_purpose_check CHECK (purpose IN ('local_preview','production','e2e'));
+ALTER TABLE payment_orders ADD COLUMN list_amount integer NOT NULL DEFAULT 99900 CHECK (list_amount = 99900);
+ALTER TABLE payment_orders ADD COLUMN is_e2e boolean NOT NULL DEFAULT false;
+ALTER TABLE payment_orders DROP CONSTRAINT payment_orders_amount_check;
+ALTER TABLE payment_orders ADD CONSTRAINT payment_orders_amount_check CHECK ((is_e2e AND amount=1 AND mode='wechat') OR (NOT is_e2e AND amount=99900));
+ALTER TABLE payment_transactions DROP CONSTRAINT payment_transactions_amount_check;
+ALTER TABLE payment_transactions ADD CONSTRAINT payment_transactions_amount_check CHECK (amount IN (1,99900));

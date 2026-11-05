@@ -7,7 +7,7 @@ import {
 export async function paymentAdmin(
   config: ApiConfig,
   app: Awaited<ReturnType<typeof createApplication>>,
-  permissions = ["service-terms:write", "audit:read"],
+  permissions = ["audit:read"],
 ) {
   const auth = await authenticateFeishu(
     config,

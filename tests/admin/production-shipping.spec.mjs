@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { waitForAdminStartup } from "./admin-startup.mjs";
 import { createRequire } from "node:module";
 import { createHash, randomUUID } from "node:crypto";
 import { resolve, join } from "node:path";
@@ -68,6 +69,7 @@ test.beforeAll(async () => {
     );
     adminHeaders = await paymentAdmin(fixture.config, fixture.app, [
       "ops:read",
+      "orders:read",
       "fulfillment:write",
       "care:write",
       "audit:read",
@@ -201,16 +203,17 @@ async function openMini(
   await expect(page).toHaveTitle("时光里 · 岁月成书");
   return page;
 }
-async function openAdmin(browser) {
+async function openAdmin(browser, headers = adminHeaders) {
   const context = await browser.newContext({
     ignoreHTTPSErrors: true,
+    timezoneId: "America/Los_Angeles",
     viewport: { width: 1280, height: 900 },
   });
-  const split = adminHeaders.cookie.indexOf("=");
+  const split = headers.cookie.indexOf("=");
   await context.addCookies([
     {
-      name: adminHeaders.cookie.slice(0, split),
-      value: adminHeaders.cookie.slice(split + 1),
+      name: headers.cookie.slice(0, split),
+      value: headers.cookie.slice(split + 1),
       domain: "localhost",
       path: "/api/v1/admin",
       secure: true,
@@ -220,10 +223,15 @@ async function openAdmin(browser) {
   ]);
   const page = await context.newPage();
   observe(page);
-  await page.goto(`${adminOrigin}/admin/`);
-  await expect(page).toHaveTitle("时光里 · 运营管理");
-  await expect(page).toHaveURL(`${adminOrigin}/admin/`);
-  await page.getByRole("button", { name: "生产与物流", exact: true }).click();
+  await waitForAdminStartup(page, async () => {
+    await page.goto(`${adminOrigin}/admin/`);
+    await page.goto(
+      `${adminOrigin}/admin/production?q=${project.order.id}&page=1&pageSize=20`,
+    );
+    await expect(
+      page.getByRole("heading", { name: "生产单管理", exact: true }),
+    ).toBeVisible({ timeout: 30000 });
+  });
   return page;
 }
 
@@ -246,7 +254,7 @@ async function fillDate(page, label, date) {
     type === "datetime-local"
       ? await page.evaluate((iso) => {
           const value = new Date(iso);
-          return new Date(value.getTime() - value.getTimezoneOffset() * 60000)
+          return new Date(value.getTime() + 8 * 60 * 60 * 1000)
             .toISOString()
             .slice(0, 23);
         }, date.toISOString())
@@ -254,19 +262,166 @@ async function fillDate(page, label, date) {
   await input.fill(
     type === "datetime-local"
       ? step
-        ? value.replace(/\.000$/, "").replace(/:00$/, "")
+        ? value
+            .replace(/(\.\d*?[1-9])0+$/, "$1")
+            .replace(/\.0+$/, "")
+            .replace(/:00$/, "")
         : value.slice(0, 16)
       : value,
   );
 }
+
+test("logout unmounts private production details while session refresh and late materials are pending", async ({
+  browser,
+}) => {
+  const previous = process.cwd();
+  let target;
+  try {
+    process.chdir(resolve("apps/api"));
+    target = await apiRequire(
+      "./dist-test/test/first-copy-fixture.js",
+    ).readyReservedFirstCopy();
+  } finally {
+    process.chdir(previous);
+  }
+  const { createFeishuAccount, authenticateFeishu } = apiRequire(
+    "./dist-test/test/admin-feishu-fixture.js",
+  );
+  const account = createFeishuAccount(fixture.config, ["fulfillment:write"]);
+  const login = async () => {
+    const auth = await authenticateFeishu(fixture.config, fixture.app, account);
+    return {
+      cookie: auth.cookie,
+      origin: fixture.config.admin.origin,
+      "x-csrf-token": auth.csrf,
+    };
+  };
+  let headers = await login();
+  const base = `/v1/admin/fulfillment/${target.order.id}`;
+  const created = fixture.data(
+    await fixture.app.inject({
+      method: "POST",
+      url: `${base}/attempts`,
+      headers: { ...headers, "idempotency-key": randomUUID() },
+      payload: {
+        ...target.binding,
+        supplierRef: "record:synthetic-provider",
+        dueAt: new Date(Date.now() + 86400000).toISOString(),
+      },
+    }),
+  );
+  fixture.data(
+    await fixture.request(
+      "POST",
+      `/v1/projects/${target.projectId}/fulfillment/grants`,
+      target.narrator.token,
+      {
+        ...target.binding,
+        attemptId: created.current.id,
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:logout materials regression grant",
+      },
+    ),
+  );
+  for (const lateRead of [false, true]) {
+    await test.step(
+      lateRead ? "late material read" : "already displayed address",
+      async () => {
+        if (lateRead) headers = await login();
+        const admin = await openAdmin(browser, headers);
+        let releaseSession, releaseMaterials;
+        const sessionGate = new Promise((done) => {
+          releaseSession = done;
+        });
+        const materialsGate = new Promise((done) => {
+          releaseMaterials = done;
+        });
+        try {
+          await admin.goto(
+            `${adminOrigin}/admin/production/${target.order.id}`,
+          );
+          await admin
+            .getByRole("button", { name: "查看限时生产资料", exact: true })
+            .click();
+          await expect(
+            admin.getByText("合成收件人", { exact: false }).first(),
+          ).toBeVisible();
+          let sessionStarted;
+          const sessionPending = new Promise((done) => {
+            sessionStarted = done;
+          });
+          await admin.route("**/api/v1/admin/session", async (route) => {
+            const response = await route.fetch();
+            expect((await response.json()).data.authenticated).toBe(false);
+            sessionStarted();
+            await sessionGate;
+            await route.fulfill({ response });
+          });
+          let materialsPending;
+          if (lateRead) {
+            let materialsStarted;
+            materialsPending = new Promise((done) => {
+              materialsStarted = done;
+            });
+            await admin.route(
+              `**/api/v1/admin/fulfillment/${target.order.id}/attempts/${created.current.id}/materials`,
+              async (route) => {
+                const response = await route.fetch();
+                expect(response.status()).toBe(200);
+                materialsStarted();
+                await materialsGate;
+                await route.fulfill({ response });
+              },
+            );
+            await admin
+              .getByRole("button", { name: "查看限时生产资料", exact: true })
+              .click();
+            await materialsPending;
+          }
+          await admin
+            .getByRole("button", { name: "退出登录", exact: true })
+            .click();
+          await sessionPending;
+          await expect(admin.locator(".fulfillment-page")).toHaveCount(0);
+          await expect(
+            admin.getByText("合成收件人", { exact: false }),
+          ).toHaveCount(0);
+          if (lateRead) {
+            const response = admin.waitForResponse((value) =>
+              value.url().endsWith(`/attempts/${created.current.id}/materials`),
+            );
+            releaseMaterials();
+            await response;
+            await expect(admin.locator(".fulfillment-page")).toHaveCount(0);
+            await expect(
+              admin.getByText("合成地址一号", { exact: false }),
+            ).toHaveCount(0);
+          }
+          releaseSession();
+          await expect(
+            admin.getByRole("button", { name: "飞书登录", exact: true }),
+          ).toBeVisible();
+        } finally {
+          releaseMaterials();
+          releaseSession();
+          await admin.context().close();
+        }
+      },
+    );
+  }
+});
 
 test("operator hands off the authorized exact PDF, records supplier acceptance and shipping, and user sees the unique delivery", async ({
   browser,
 }) => {
   const admin = await openAdmin(browser);
   await admin
-    .getByRole("button", { name: "查看此生产单", exact: true })
+    .getByRole("button", { name: project.order.id, exact: true })
     .click();
+  await expect(admin).toHaveURL(
+    new RegExp(`/admin/production/${project.order.id}`),
+  );
   await expect(admin.getByLabel("印厂引用", { exact: true })).toHaveValue(
     "record:synthetic-provider",
   );
@@ -295,9 +450,9 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
   await admin
     .getByRole("button", { name: "重新查询生产单", exact: true })
     .click();
-  await admin
-    .getByRole("button", { name: "查看此生产单", exact: true })
-    .click();
+  await expect(admin).toHaveURL(
+    new RegExp(`/admin/production/${project.order.id}`),
+  );
   await admin
     .getByRole("button", { name: "查看限时生产资料", exact: true })
     .click();
@@ -316,6 +471,17 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
   expect(bytes.length).toBe(project.book.pdf.bytes);
   expect(createHash("sha256").update(bytes).digest("hex")).toBe(
     project.book.pdf.sha256,
+  );
+  const addressDownload = admin.waitForEvent("download");
+  await admin
+    .getByRole("button", { name: "下载本次配送地址", exact: true })
+    .click();
+  const addressFile = await addressDownload,
+    addressStream = await addressFile.createReadStream(),
+    addressChunks = [];
+  for await (const chunk of addressStream) addressChunks.push(chunk);
+  expect(Buffer.concat(addressChunks).toString("utf8")).toContain(
+    "合成地址一号",
   );
   await command(admin, "记录人工交接已开始", "/handoff");
   await admin
@@ -351,6 +517,31 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
   );
   expect(continuing.current.state).toBe("in_production");
   expect(continuing.entitlementState).toBe("consumed");
+  await narrator
+    .getByRole("button", { name: "重新查询生产与物流", exact: true })
+    .click();
+  await expect(
+    narrator.getByText("印厂已确认接单，正在制作", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    admin.getByRole("button", { name: "保存实际发货记录", exact: true }),
+  ).toBeDisabled();
+  const printedAt = new Date();
+  await fillDate(admin, "完成印制时间", printedAt);
+  await admin
+    .getByLabel("完成印制证据", { exact: true })
+    .fill("synthetic:核实实体书完成印制");
+  const printed = await command(admin, "记录完成印制", "/printing");
+  expect(printed.current.printedBy).toBeTruthy();
+  expect(printed.current.printedAt).toBe(printedAt.toISOString());
+  await narrator
+    .getByRole("button", { name: "重新查询生产与物流", exact: true })
+    .click();
+  await expect(narrator.getByText("已生产", { exact: true })).toBeVisible();
+  await admin.reload();
+  await expect(
+    admin.getByRole("heading", { name: "已生产", exact: true }),
+  ).toBeVisible();
   await admin.getByLabel("物流公司", { exact: true }).fill("合成快递");
   await admin
     .getByLabel("物流单号", { exact: true })
@@ -363,11 +554,17 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
   await admin
     .getByLabel("物流证据", { exact: true })
     .fill("synthetic:人工核对物流");
+  const shipped = await command(admin, "保存实际发货记录", "/shipping");
+  expect(shipped.current.wechat).toBeNull();
   await admin
     .getByLabel("微信发货证据", { exact: true })
-    .fill("synthetic:隔离发货管理结果");
-  await admin.getByLabel(/微信发货处理结果/).selectOption("recorded");
-  await command(admin, "保存物流与微信发货记录", "/shipping");
+    .fill("synthetic:平台处理失败回执");
+  await admin
+    .getByLabel("微信发货处理结果", { exact: true })
+    .selectOption("failed");
+  const platform = await command(admin, "保存微信处理结果", "/wechat");
+  expect(platform.current.wechat.result).toBe("failed");
+  expect(platform.current.tracking).toEqual(shipped.current.tracking);
   await admin
     .getByLabel("回执或处理证据", { exact: true })
     .fill("synthetic:已发货后请求取消");
@@ -416,7 +613,13 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
     .getByLabel("交付证据", { exact: true })
     .fill("synthetic:人工核对签收");
   view = await command(admin, "记录交付完成", "/delivery");
-  expect(view.serviceTerms.playback.startsAt).toBe(deliveredAt);
+  await expect(
+    admin.getByText(
+      `交付完成：${new Date(Date.parse(deliveredAt) + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace("T", " ")}`,
+      { exact: true },
+    ),
+  ).toBeVisible();
+  expect(view.serviceTerms.playback.expiresAt).toBeNull();
   const originalExpiry = view.serviceTerms.playback.expiresAt;
   await narrator
     .getByRole("button", { name: "重新查询生产与物流", exact: true })
@@ -442,6 +645,24 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
   await expect(
     admin.locator(".production-row").getByText(/已交付/),
   ).toBeVisible();
+  await admin.getByRole("link", { name: "返回查询位置", exact: true }).click();
+  await expect(admin).toHaveURL(
+    `${adminOrigin}/admin/production?q=${project.order.id}&page=1&pageSize=20`,
+  );
+  await expect(
+    admin.getByRole("button", { name: project.order.id, exact: true }),
+  ).toBeVisible();
+  await admin.goBack();
+  await expect(admin).toHaveURL(
+    new RegExp(`/admin/production/${project.order.id}`),
+  );
+  await admin.goForward();
+  await expect(
+    admin.getByRole("heading", { name: "生产单管理", exact: true }),
+  ).toBeVisible();
+  await admin
+    .getByRole("button", { name: project.order.id, exact: true })
+    .click();
   await admin.setViewportSize({ width: 390, height: 844 });
   await expect(
     admin.getByRole("heading", { name: "生产与物流", exact: true }),
@@ -449,7 +670,9 @@ test("operator hands off the authorized exact PDF, records supplier acceptance a
   const mobileRefresh = admin.waitForResponse(
     (response) =>
       response.request().method() === "GET" &&
-      response.url().endsWith("/v1/admin/fulfillment"),
+      new URL(response.url()).pathname.endsWith(
+        `/v1/admin/fulfillment/${project.order.id}`,
+      ),
   );
   await admin
     .getByRole("button", { name: "重新查询生产单", exact: true })
@@ -565,11 +788,10 @@ test("verified cancellation permits corrected address confirmation and a new att
     path: "/tmp/timenook-t23-corrected-reservation-390.png",
   });
   const admin = await openAdmin(browser);
-  await admin
-    .locator(".production-row")
-    .filter({ hasText: retry.order.id })
-    .getByRole("button", { name: "查看此生产单", exact: true })
-    .click();
+  await admin.goto(`${adminOrigin}/admin/production/${retry.order.id}`);
+  await expect(
+    admin.getByRole("heading", { name: "生产单详情", exact: true }),
+  ).toBeVisible();
   await fillDate(admin, "本次处理期限", new Date(Date.now() + 86400000));
   const next = await command(admin, "建立生产尝试", "/attempts");
   expect(next.orderId).toBe(retry.order.id);
@@ -604,6 +826,9 @@ test("withdrawing sharing clears the initiator production and tracking details",
   expect(body).not.toContain("合成快递");
   await buyer.screenshot({ path: "/tmp/timenook-t24-denied-390.png" });
   const narrator = await openMini(browser, narratorSession, project, "welcome");
+  await narrator
+    .getByRole("button", { name: "调整用途与资料服务", exact: true })
+    .click();
   await narrator
     .getByRole("button", { name: "查看撤回处置进度", exact: true })
     .click();
@@ -641,14 +866,9 @@ test("shared Care intake verifies the chosen withdrawal purpose and shows the ac
   browser,
 }) => {
   const page = await openAdmin(browser);
-  await page.getByRole("button", { name: "客服工单", exact: true }).click();
-  const current = await fixture.state(project, project.narrator.token);
-  await page.getByLabel("代录项目编号").fill(project.projectId);
+  await page.goto(`${adminOrigin}/admin/users/projects/${project.projectId}`);
   await page.getByLabel("代录申请类型").selectOption("withdraw");
   await page.getByLabel("本人申请撤回范围").selectOption("ai");
-  await page
-    .getByLabel("代录来源绑定版本")
-    .fill(String(current.bindingVersion));
   await command(page, "代录本人申请", "/care-requests");
   await expect(
     page.getByText("本人申请撤回范围：AI 处理", { exact: true }),

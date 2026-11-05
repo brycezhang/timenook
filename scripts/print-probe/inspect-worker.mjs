@@ -9,7 +9,9 @@ let doc;
 try {
   if (![2, 3].includes(scale)) throw Error("INVALID_PDF_SCALE");
   if (
-    process.env.PRINT_PROBE_ENABLED !== "synthetic-local" ||
+    !["synthetic-local", "internal-acceptance"].includes(
+      process.env.PRINT_PROBE_ENABLED,
+    ) ||
     process.env.NODE_ENV === "production"
   )
     throw Error("PRINT_PROBE_DISABLED");

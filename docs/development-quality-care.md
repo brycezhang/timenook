@@ -1,14 +1,12 @@
 # 原单质量售后与重印（T28）
 
-2026-10-29 当前方案以 [ADR 0017](adr/0017-lifetime-service-and-retention.md) 为准：制作及其必要资料长期有效；D06 人工处理 SLA、D07 退款/质量窗口与私人访问授权 TTL 仍独立执行。下文按新目标更新，代码对齐与本轮验证尚待完成，历史有限期测试不证明新规则已实现。
-
-T28 / [#29](https://github.com/brycezhang/timenook/issues/29) 沿用 T23 生产尝试、T27 退款及共享客服工单。当前只支持明确隔离的合成配置；D06/D07、实际印厂责任与回执、设备及商户能力仍须真实验收。
+T28 / [#29](https://github.com/brycezhang/timenook/issues/29) 沿用 T23 生产尝试、T27 退款及共享客服工单。2026-11-02 [#154](https://github.com/brycezhang/timenook/issues/154) 已把已有质量申请嵌入订单详情，并在已受保护的内部 books 装配下注册相同用例。领取/核验支持 `internal:` 证据；本人授权使用当前服务端告知版本，不再写死合成版本。缺少原 D06/D07 的申请明确不可领取或批准，不制造商业售后政策、实物资格或自动批准。工程见[后台记录](delivery/2026-11-02/admin/154-engineering.md)，未部署；D06/D07、实际印厂责任与回执、设备及质量资金仍须真实验收。
 
 ## 用户与运营流程
 
 买方或当前绑定讲述者从原订单/生产记录选择实际已交付的一次制作，提交质量情形与最多 1500 字说明。后端固定原付款单、唯一首本生产单、原尝试、书稿/PDF hash 与物流关联；申请时间由服务端保存。用户选择可读的版本/交付记录，内部句柄由页面传递。
 
-说明进入项目所属的可清理 `quality_evidence`，申请、命令及审计保留摘要与必要身份事实。列表/共享工单元数据不携带说明正文、地址或 PDF 字节。运营通过飞书管理会话、`care:write`、CSRF 与审计领取工单，按原销售 D06 日历/流程核验并录入绝对截止及证据引用。负责人、领取时间和截止一次固定，重放不延长；测试中的未来时间不代表商业 SLA。
+说明进入项目所属的可清理 `quality_evidence`，申请、命令及审计保留摘要与必要身份事实。列表/共享工单元数据不携带说明正文、地址或 PDF 字节。运营从订单待处理筛选及订单详情打开已有申请，通过飞书管理会话、`care:write`、CSRF 与审计领取工单，按原销售 D06 日历/流程核验并录入绝对截止及证据引用。负责人、领取时间和截止一次固定，重放不延长；测试中的未来时间不代表商业 SLA。
 
 本人明确选择原版 PDF、本次文字证据或两者，授予当前负责人限时读取；有效期最多 30 分钟。发起人使用本人在场的既有 `book_confirmation` 协助 Session 才能代操作；付款本身不能授权。本人授权绑定原尝试、subject、绑定版本、epoch 和当前撤回序号。每次读取通过 Participation.subjectCareGrantIn 重验本人当前 collection 与原授权方式；同机方式须是本次有效 book_confirmation Session。向发起人 sharing 是独立目的，本人可以拒绝买方共享而单独授权客服，买方普通内容访问仍拒绝。相关同机拒绝即使未递增 epoch，也会使旧 grant 失效；合法重授用途后，须明确重新授予本次质量访问。同机 AI/sharing 单项拒绝不取消这份专属印刷核对权限。
 
@@ -29,7 +27,7 @@ PDF 使用 T24 的 `ProjectStreams`：文件读取前捕获 fence，发送前及
 
 普通首本提交不能复活 consumed 权益。新尝试独立冻结稿、地址和两方确认；交接及材料读取继续重验。T27 的 productionFrozen、firstCopyCancellationRequired、creationState 仍执行；售后不清除商业冻结/终止。质量取消只结束本次尝试，不恢复原首本。未知接单先核实同一尝试，明确取消后才可继续原单救济。
 
-后续质量交付记录在本次尝试及不可变回执中；原 `FulfillmentDelivery` 和首次交付事实保持唯一。D03 资料服务长期有效，D07 售后窗口仍按其原事实及政策判断，重印、物流重放或新的签收不能擅自重开窗口。
+后续质量交付记录在本次尝试及不可变回执中；原 `FulfillmentDelivery` 和 `delivery_completed` 起算事实保持唯一，资料服务长期有效，不因重印或新的签收改变。
 
 ## 接口
 
@@ -46,18 +44,18 @@ PDF 使用 T24 的 `ProjectStreams`：文件读取前捕获 fence，发送前及
 
 ## T26 清理消费清单
 
-T28 不新增证据图片/上传对象或副本存储；质量文字证据与售后书稿沿项目关联登记。支撑长期制作/下载的资料不按服务期限自动清理；本人主动删除仍覆盖相应私人内容及各层副本。专属授权仍须在其安全有效期内，最少申请状态与财务事实另按适用规则保留。T26 按以下项目关联接入同一主动删除清单，具体运行结果另留证：
+T28 不新增证据图片/上传对象或副本存储；本次新增内容为 `quality_evidence.description`，必要资料长期保留；本人核验删除后拒绝新增私人说明或读取，最少申请状态仍可查询。T26 按以下项目关联接入同一用户删除清单，实际外部执行单独留证：
 
 | 资产/类别                       | 项目与定位                                                                                                                         | 清理责任                                                                                                   |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | 质量文字证据 `quality_evidence` | project_id + request_id + category=quality_evidence                                                                                | 清空 description，记录 erased_at；覆盖数据库及备份/历史副本，不能只隐藏 UI                                 |
 | 专属授权事实                    | quality_grants.project_id / request_id / assisted_session_id / access_sequence / expires_at                                        | 按冻结规则清理授权关联或保留最少审计；清理内容前一并撤销本项目所有有效能力，不能只删最新一行而复活旧 grant |
-| 运营核验引用                    | quality_requests.assignment_evidence_ref / review_evidence_ref；care_requests.verification_evidence，按 case_id 关联项目           | 按主动删除范围清理可识别内容；保留最少状态、时间、hash及必要审计事实                                       |
+| 运营核验引用                    | quality_requests.assignment_evidence_ref / review_evidence_ref；care_requests.verification_evidence，按 case_id 关联项目           | 按冻结保留规则清理可识别内容；保留最少状态、时间、hash及必要审计事实                                       |
 | 售后新稿及确定 PDF              | 仍是既有 book_versions/book_outputs 和 books.storageRoot 下的 object_key                                                           | 复用 Book/PDF 类别清单，遍历所有尝试引用，覆盖新旧稿、临时目录和历史对象                                   |
 | 生产地址/物流副本               | 既有 first_copy_addresses / first_copy_orders / fulfillment_attempts / fulfillment_records.evidence，沿 attempt_id/project_id 定位 | 复用生产地址/履约类别，包含质量尝试的冻结副本                                                              |
 | 浏览器/小程序临时 PDF、证据显示 | 当前申请/工单及授权截止                                                                                                            | 前端离页、切号、到期与权限失败清理；主动另存及实际印厂副本按原规则分别说明                                 |
 
-`quality_commands` 只保存请求 hash，不嵌入用户正文；`quality_grants` 仅是有期限的授权事实。不得以后向不可清理命令/审计 JSON 塞入新增私人内容。T26 的主动删除、逐层清理和备份恢复防复活仍由责任票交付，本文清单不代表已经删除。
+`quality_commands` 只保存请求 hash，不嵌入用户正文；`quality_grants` 仅是有期限的授权事实。不得以后向不可清理命令/审计 JSON 塞入新增私人内容。T26 的逐层清理和删除后防复活仍由责任票交付，本文清单不代表已经删除。
 
 ## 本地验证
 

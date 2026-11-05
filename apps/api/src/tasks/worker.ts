@@ -13,7 +13,10 @@ export async function startProductionWorker(app: NestFastifyApplication) {
     tasks = app.get(ProductionTasks),
     rights = app.get(PrivacyRights),
     deletions = app.get(Deletions),
-    exports = config.books ? app.get(CompleteExports) : null;
+    exports =
+      config.books?.mode === "synthetic-local"
+        ? app.get(CompleteExports)
+        : null;
   await rights.assertHealthy();
   const prefix = `${config.redisKeyPrefix ?? "timenook"}:production`;
   const producer = new Redis(config.redisUrl, {
@@ -41,7 +44,7 @@ export async function startProductionWorker(app: NestFastifyApplication) {
     async recoverDue() {
       await rights.assertHealthy();
       await deletions.sweep();
-      await exports?.cleanupExpired();
+      await exports?.cleanupTemporary();
       const ids = await tasks.due();
       for (const id of ids) {
         await queue.add(

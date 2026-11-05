@@ -24,9 +24,17 @@ import {
   ApiCookieAuth,
   ApiProduces,
 } from "@nestjs/swagger";
-import { Equals, IsIn, Matches, IsISO8601, IsOptional } from "class-validator";
+import {
+  Equals,
+  IsIn,
+  Matches,
+  IsISO8601,
+  IsOptional,
+  IsInt,
+  Min,
+} from "class-validator";
 import { Prisma, PrismaClient, CareExport } from "@prisma/client";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { ADMIN_PERMISSIONS } from "@timenook/contracts";
 import { AdminAccess } from "../admin/admin-access";
@@ -46,6 +54,12 @@ import {
 import { join } from "node:path";
 import type { CompleteExportView } from "@timenook/contracts";
 import { API_CONFIG, ApiConfig } from "../config";
+import { readProjectAdmissionIn } from "../projects/project-admission";
+import {
+  participationNotice,
+  E2E_NOTICE_VERSION,
+} from "../catalog/e2e-package";
+import { INTERNAL_NOTICE_VERSION } from "../projects/internal-profile";
 import { Participation } from "../identity/participation";
 import { IdentityAccess } from "../identity/identity-access";
 import { ProjectServiceTerms } from "../projects/service-terms";
@@ -57,23 +71,56 @@ export class ExportRequestDto {
   @ApiProperty({ enum: ["self", "initiator"] })
   @IsIn(["self", "initiator"])
   recipient!: "self" | "initiator";
-  @ApiProperty() @Equals("synthetic-d08-v1") noticeVersion!: string;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @IsIn(["synthetic-d08-v1", INTERNAL_NOTICE_VERSION, E2E_NOTICE_VERSION])
+  noticeVersion!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  evidenceRef!: string;
 }
 export class ExportReviewDto {
   @ApiProperty() @IsISO8601() dueAt!: string;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  evidenceRef!: string;
   @ApiProperty({ required: false })
   @IsOptional()
-  @Matches(/^synthetic:[^\r\n]{3,160}$/)
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
   recipientRef?: string;
 }
 export class ExportDeliveryDto {
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  evidenceRef!: string;
 }
 export class ExportReceiptDto {
   @ApiProperty() @Matches(/^[a-f0-9]{64}$/) sha256!: string;
 }
+export class ExportStaffVerificationDto {
+  @ApiProperty() @IsInt() @Min(0) expectedAccessSequence!: number;
+  @ApiProperty() @IsInt() @Min(0) expectedBindingVersion!: number;
+  @ApiProperty() @IsInt() @Min(0) expectedAccessEpoch!: number;
+  @ApiProperty() @IsISO8601() expiresAt!: string;
+  @ApiProperty() @Equals("complete_export_delivery") purpose!: string;
+  @ApiProperty()
+  @IsIn(["synthetic-d08-v1", INTERNAL_NOTICE_VERSION, E2E_NOTICE_VERSION])
+  noticeVersion!: string;
+  @ApiProperty() @Equals(true) identityVerified!: boolean;
+  @ApiProperty() @Equals(true) subjectConsented!: boolean;
+  @ApiProperty()
+  @Matches(/^record:[-A-Za-z0-9_:]{3,120}$/)
+  identityProcedureRef!: string;
+  @ApiProperty()
+  @Matches(/^record:[-A-Za-z0-9_:]{3,120}$/)
+  confirmationChannelRef!: string;
+  @ApiProperty()
+  @Matches(/^record:(?:synthetic|internal)-[-A-Za-z0-9_:]{3,120}$/)
+  verificationRef!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
+  recipientRef!: string;
+}
+const STAFF_ACCESS_MS = 30 * 60000;
 type ExportSource = {
   path: string;
   sha256: string;
@@ -96,20 +143,12 @@ type ExportSales = {
     d08?: {
       withoutWechat?: {
         export?: {
+          identityVerificationRef: string;
+          confirmationChannelRef: string;
           neverDefaultToInitiator: boolean;
           recipient: string;
           deliveryChannelRef: string;
         };
-      };
-    };
-  };
-};
-type ExportRetention = {
-  d03: {
-    retention: {
-      exportPackages: {
-        startsAt: string;
-        duration: { value: number; unit: string };
       };
     };
   };
@@ -119,9 +158,9 @@ type ExportBatch = {
   sources: ExportSource[];
   counts: Record<string, number>;
 };
-class SourceRetentionExpired extends ForbiddenException {
+class SourceDeleted extends ForbiddenException {
   constructor() {
-    super("EXPORT_SOURCE_RETENTION_EXPIRED");
+    super("EXPORT_SOURCE_DELETED");
   }
 }
 @Injectable()
@@ -133,6 +172,7 @@ export class CompleteExports implements OnModuleDestroy {
     private readonly identity: IdentityAccess,
     private readonly participation: Participation,
     private readonly rights: PrivacyRights,
+    private readonly streams: ProjectStreams,
     @Inject(BOOK_OBJECTS) private readonly objects: ProbeObjects,
   ) {
     this.database = new PrismaClient({ datasourceUrl: config.databaseUrl });
@@ -144,16 +184,43 @@ export class CompleteExports implements OnModuleDestroy {
   }
   private async projectIn(tx: Prisma.TransactionClient, id: string) {
     await tx.$queryRaw`SELECT id FROM projects WHERE id=${id}::uuid FOR UPDATE`;
-    const project = await tx.project.findUnique({ where: { id } });
-    if (!project) throw new NotFoundException();
+    const admission = await readProjectAdmissionIn(tx, id);
     await tx.$queryRaw`SELECT id FROM project_subjects WHERE project_id=${id}::uuid FOR UPDATE`;
     const subject = await tx.projectSubject.findUniqueOrThrow({
-        where: { projectId: id },
-      }),
-      order = await tx.paymentOrder.findUniqueOrThrow({
-        where: { id: project.orderId! },
-      });
-    return { project, subject, order };
+      where: { projectId: id },
+    });
+    return { ...admission, subject };
+  }
+  private manual(p: Awaited<ReturnType<CompleteExports["projectIn"]>>) {
+    return (
+      !!this.config.acceptance &&
+      ["internal-acceptance", "paid-e2e"].includes(String(p.snapshot.scope))
+    );
+  }
+  private validateEvidence(
+    p: Awaited<ReturnType<CompleteExports["projectIn"]>>,
+    body: {
+      noticeVersion?: string;
+      evidenceRef?: string;
+      recipientRef?: string;
+      verificationRef?: string;
+    },
+  ) {
+    const notice = participationNotice(p.snapshot, !!this.config.acceptance);
+    if (
+      (body.noticeVersion !== undefined &&
+        body.noticeVersion !== notice.noticeVersion) ||
+      [body.evidenceRef, body.recipientRef].some(
+        (v) => v !== undefined && !v.startsWith(notice.evidencePrefix),
+      ) ||
+      (body.verificationRef !== undefined &&
+        !body.verificationRef.startsWith(
+          notice.evidencePrefix === "internal:"
+            ? "record:internal-"
+            : "record:synthetic-",
+        ))
+    )
+      throw new BadRequestException();
   }
   private user<T>(
     id: string,
@@ -167,13 +234,13 @@ export class CompleteExports implements OnModuleDestroy {
     return this.database.$transaction(async (tx) => {
       const user = await this.identity.current(authorization, tx),
         p = await this.projectIn(tx, id);
-      if (user.id !== p.subject.boundUserId && user.id !== p.order.buyerId)
+      if (user.id !== p.subject.boundUserId && user.id !== p.initiatorUserId)
         throw new ForbiddenException();
       return work(tx, p, user.id);
     });
   }
   private async policy(tx: Prisma.TransactionClient, id: string) {
-    const terms = await this.terms.read(id, undefined, tx);
+    const terms = await this.terms.read(id, tx);
     if (!terms.exportRequests) throw new ConflictException();
     return terms;
   }
@@ -205,9 +272,7 @@ export class CompleteExports implements OnModuleDestroy {
         contentAllowed !== false &&
         !!userId &&
         row.recipientUserId === userId &&
-        ["ready", "delivered"].includes(row.state) &&
-        !!row.expiresAt &&
-        row.expiresAt.getTime() > Date.now(),
+        ["ready", "delivered"].includes(row.state),
     };
   }
   request(
@@ -218,6 +283,7 @@ export class CompleteExports implements OnModuleDestroy {
   ) {
     return this.user(id, authorization, async (tx, p, userId) => {
       if (p.subject.boundUserId !== userId) throw new ForbiddenException();
+      this.validateEvidence(p, body);
       const prior = await tx.careRequest.findUnique({
         where: {
           projectId_operatorId_operatorRealm_idempotencyKey: {
@@ -243,7 +309,7 @@ export class CompleteExports implements OnModuleDestroy {
         );
       }
       const terms = await this.policy(tx, id);
-      if (terms.exportRequests!.state === "expired")
+      if (terms.exportRequests!.state === "deleted")
         throw new ForbiddenException();
       const care = await this.participation.openExportCaseIn(
         tx,
@@ -260,7 +326,8 @@ export class CompleteExports implements OnModuleDestroy {
           bindingVersion: p.subject.bindingVersion,
           accessEpoch: p.project.accessEpoch,
           recipient: body.recipient,
-          recipientUserId: body.recipient === "self" ? userId : p.order.buyerId,
+          recipientUserId:
+            body.recipient === "self" ? userId : p.initiatorUserId,
           evidenceRef: body.evidenceRef,
         },
       });
@@ -272,10 +339,10 @@ export class CompleteExports implements OnModuleDestroy {
     });
   }
   async read(id: string, authorization?: string) {
-    await this.cleanupExpired();
+    await this.cleanupTemporary();
     return this.user(id, authorization, async (tx, p, userId) => {
       const terms = await this.policy(tx, id),
-        snapshot = p.order.packageSnapshot as unknown as ExportSales;
+        snapshot = p.snapshot as unknown as ExportSales;
       const rows = await tx.careExport.findMany({
         where: {
           projectId: id,
@@ -289,15 +356,23 @@ export class CompleteExports implements OnModuleDestroy {
         projectId: id,
         canRequest:
           p.subject.boundUserId === userId &&
-          terms.exportRequests!.state !== "expired",
+          terms.exportRequests!.state !== "deleted",
         amountDueFen: 0,
         requestWindow: terms.exportRequests,
-        service: {
-          within: snapshot.admission.d06.completeExport.within.value,
-          unit: "business_days",
-          ownerRef: snapshot.admission.d06.completeExport.ownerRef,
-          calendarRef: snapshot.admission.d06.businessCalendarRef,
-        },
+        ...participationNotice(p.snapshot, !!this.config.acceptance),
+        service: this.manual(p)
+          ? {
+              within: null,
+              unit: "business_days",
+              ownerRef: null,
+              calendarRef: null,
+            }
+          : {
+              within: snapshot.admission.d06.completeExport.within.value,
+              unit: "business_days",
+              ownerRef: snapshot.admission.d06.completeExport.ownerRef,
+              calendarRef: snapshot.admission.d06.businessCalendarRef,
+            },
         accessEpoch: p.project.accessEpoch,
         requests: await Promise.all(
           rows.map(async (row) => {
@@ -318,9 +393,9 @@ export class CompleteExports implements OnModuleDestroy {
                   (row.manifest as { files?: unknown }).files,
                 );
               } catch (error) {
-                if (!(error instanceof SourceRetentionExpired)) throw error;
+                if (!(error instanceof SourceDeleted)) throw error;
                 value.canDownload = false;
-                value.missingReason = "EXPORT_SOURCE_RETENTION_EXPIRED";
+                value.missingReason = "EXPORT_SOURCE_DELETED";
               }
             }
             return value;
@@ -356,18 +431,13 @@ export class CompleteExports implements OnModuleDestroy {
       );
     if (requireContent && contentAllowed === false)
       throw new ForbiddenException("EXPORT_CURRENT_AUTHORIZATION_REQUIRED");
-    if (
-      terms.exportRequests!.expiresAt &&
-      care.createdAt.getTime() >= Date.parse(terms.exportRequests!.expiresAt)
-    )
-      throw new ForbiddenException();
     const row = await tx.careExport.findUnique({ where: { id } });
     if (
       row &&
       (row.subjectId !== p.subject.id ||
         row.bindingVersion !== p.subject.bindingVersion ||
         row.accessEpoch !== p.project.accessEpoch ||
-        ["revoked", "expired"].includes(row.state))
+        ["revoked"].includes(row.state))
     )
       throw new ForbiddenException();
     if (row?.manifest) {
@@ -409,8 +479,7 @@ export class CompleteExports implements OnModuleDestroy {
     }
     for (const kind of kinds) {
       if (!terms.retention?.[kind]) throw new ForbiddenException();
-      if (terms.retention[kind].state === "expired")
-        throw new SourceRetentionExpired();
+      if (terms.retention[kind].state === "deleted") throw new SourceDeleted();
     }
   }
   private async sourceRetentionIn(
@@ -418,10 +487,7 @@ export class CompleteExports implements OnModuleDestroy {
     projectId: string,
     files: unknown,
   ) {
-    this.assertSourceRetention(
-      await this.terms.read(projectId, undefined, tx),
-      files,
-    );
+    this.assertSourceRetention(await this.terms.read(projectId, tx), files);
   }
   private async versionScopeIn(
     tx: Prisma.TransactionClient,
@@ -464,16 +530,18 @@ export class CompleteExports implements OnModuleDestroy {
   ) {
     const p = await this.scopeIn(tx, id, adminId, false),
       reviewHash = digest(body);
+    this.validateEvidence(p, body);
     if (p.row?.acceptedAt) {
       if (p.row.reviewHash !== reviewHash || p.row.ownerId !== adminId)
         throw new ConflictException();
       return this.view(p.row, undefined, p.contentAllowed);
     }
     if (Date.parse(body.dueAt) <= Date.now()) throw new BadRequestException();
-    const snapshot = p.order.packageSnapshot as unknown as ExportSales;
+    const snapshot = p.snapshot as unknown as ExportSales;
     if (
-      !snapshot.admission?.d06?.completeExport ||
-      !snapshot.admission.d06.businessCalendarRef
+      !this.manual(p) &&
+      (!snapshot.admission?.d06?.completeExport ||
+        !snapshot.admission.d06.businessCalendarRef)
     )
       throw new ConflictException();
     let row = p.row;
@@ -513,11 +581,225 @@ export class CompleteExports implements OnModuleDestroy {
         reviewHash,
       },
     });
+    if (row.recipient === "verified_alternative")
+      await this.initialStaffGrantIn(tx, { ...p, row }, adminId);
     return this.view(row, undefined, p.contentAllowed);
+  }
+  private verificationPolicy(
+    p: Awaited<ReturnType<CompleteExports["scopeIn"]>>,
+  ) {
+    const policy = (p.snapshot as unknown as ExportSales).admission?.d08
+      ?.withoutWechat?.export;
+    if (
+      !policy?.identityVerificationRef ||
+      !policy.confirmationChannelRef ||
+      !policy.neverDefaultToInitiator ||
+      !policy.deliveryChannelRef ||
+      p.subject.boundUserId !== null ||
+      p.row?.recipient !== "verified_alternative" ||
+      !p.row.recipientRef ||
+      p.row.ownerId !== p.care.verifiedBy
+    )
+      throw new ForbiddenException();
+    return policy;
+  }
+  private async staffAccessIn(
+    tx: Prisma.TransactionClient,
+    p: Awaited<ReturnType<CompleteExports["scopeIn"]>>,
+    adminId: string,
+  ) {
+    const row = await tx.exportStaffGrant.findFirst({
+      where: { caseId: p.care.id },
+      orderBy: { sequence: "desc" },
+    });
+    const accessSequence = await this.participation.exportAccessSequenceIn(
+      tx,
+      p.project.id,
+    );
+    const available = !!(
+      row &&
+      p.contentAllowed !== false &&
+      row.adminId === adminId &&
+      p.row?.ownerId === adminId &&
+      row.subjectId === p.subject.id &&
+      row.bindingVersion === p.subject.bindingVersion &&
+      row.accessEpoch === p.project.accessEpoch &&
+      row.accessSequence === accessSequence &&
+      row.recipientHash === digest(p.row.recipientRef) &&
+      row.expiresAt.getTime() > Date.now()
+    );
+    return {
+      row,
+      view: {
+        id: row?.id ?? null,
+        available,
+        expiresAt: row?.expiresAt.toISOString() ?? null,
+        purpose: "complete_export_delivery",
+        identityProcedureRef:
+          this.verificationPolicy(p).identityVerificationRef,
+        confirmationChannelRef:
+          this.verificationPolicy(p).confirmationChannelRef,
+        bindingVersion: p.subject.bindingVersion,
+        accessEpoch: p.project.accessEpoch,
+        accessSequence,
+      },
+    };
+  }
+  private async initialStaffGrantIn(
+    tx: Prisma.TransactionClient,
+    p: Awaited<ReturnType<CompleteExports["scopeIn"]>>,
+    adminId: string,
+  ) {
+    const policy = this.verificationPolicy(p);
+    if (
+      !p.care.verifiedAt ||
+      !p.care.verificationNotice ||
+      !p.care.verificationEvidence ||
+      p.care.verificationAccessSequence === null
+    )
+      throw new ForbiddenException();
+    const accessSequence = await this.participation.exportAccessSequenceIn(
+      tx,
+      p.project.id,
+    );
+    if (
+      p.care.verificationAccessSequence !== accessSequence ||
+      p.care.verifiedAt.getTime() + STAFF_ACCESS_MS <= Date.now()
+    )
+      throw new ConflictException(
+        "A fresh recorded subject verification is required",
+      );
+    await tx.exportStaffGrant.create({
+      data: {
+        id: randomUUID(),
+        caseId: p.care.id,
+        projectId: p.project.id,
+        subjectId: p.subject.id,
+        adminId,
+        bindingVersion: p.subject.bindingVersion,
+        accessEpoch: p.project.accessEpoch,
+        accessSequence: p.care.verificationAccessSequence,
+        key: "initial-case-verification",
+        requestHash: digest({
+          verificationHash: p.care.verificationHash,
+          recipient: p.row!.recipientRef,
+        }),
+        source: "case_verification",
+        purpose: "complete_export_delivery",
+        noticeVersion: p.care.verificationNotice,
+        identityProcedureRef: policy.identityVerificationRef,
+        confirmationChannelRef: policy.confirmationChannelRef,
+        recipientHash: digest(p.row!.recipientRef),
+        evidenceHash: digest({
+          caseId: p.care.id,
+          verification: p.care.verificationEvidence,
+        }),
+        verifiedAt: p.care.verifiedAt,
+        expiresAt: new Date(p.care.verifiedAt.getTime() + STAFF_ACCESS_MS),
+      },
+    });
+  }
+  async verifyStaffAccessIn(
+    tx: Prisma.TransactionClient,
+    id: string,
+    adminId: string,
+    key: string,
+    body: ExportStaffVerificationDto,
+  ) {
+    const p = await this.scopeIn(tx, id, adminId),
+      policy = this.verificationPolicy(p);
+    this.validateEvidence(p, body);
+    if (
+      p.row!.ownerId !== adminId ||
+      body.expectedBindingVersion !== p.subject.bindingVersion ||
+      body.expectedAccessEpoch !== p.project.accessEpoch ||
+      body.recipientRef !== p.row!.recipientRef ||
+      body.identityProcedureRef !== policy.identityVerificationRef ||
+      body.confirmationChannelRef !== policy.confirmationChannelRef ||
+      body.noticeVersion !== p.care.verificationNotice
+    )
+      throw new ForbiddenException();
+    const accessSequence = await this.participation.exportAccessSequenceIn(
+      tx,
+      p.project.id,
+    );
+    if (body.expectedAccessSequence !== accessSequence)
+      throw new ConflictException(
+        "Subject authorization changed; verify the subject again",
+      );
+    const prior = await tx.exportStaffGrant.findUnique({
+      where: { caseId_key: { caseId: id, key } },
+    });
+    if (prior) {
+      if (prior.requestHash !== digest(body) || prior.adminId !== adminId)
+        throw new ConflictException();
+      return { id: prior.id, expiresAt: prior.expiresAt.toISOString() };
+    }
+    if (
+      await tx.exportStaffGrant.findUnique({
+        where: {
+          source_evidenceHash: {
+            source: "renewed_verification",
+            evidenceHash: digest(body.verificationRef),
+          },
+        },
+      })
+    )
+      throw new ConflictException(
+        "A fresh recorded subject verification is required",
+      );
+    const now = new Date(),
+      expiresAt = new Date(body.expiresAt);
+    if (
+      expiresAt <= now ||
+      expiresAt.getTime() > now.getTime() + STAFF_ACCESS_MS
+    )
+      throw new BadRequestException();
+    const row = await tx.exportStaffGrant
+      .create({
+        data: {
+          id: randomUUID(),
+          projectId: p.project.id,
+          caseId: id,
+          subjectId: p.subject.id,
+          adminId,
+          bindingVersion: p.subject.bindingVersion,
+          accessEpoch: p.project.accessEpoch,
+          accessSequence: body.expectedAccessSequence,
+          key,
+          requestHash: digest(body),
+          source: "renewed_verification",
+          purpose: body.purpose,
+          noticeVersion: body.noticeVersion,
+          identityProcedureRef: body.identityProcedureRef,
+          confirmationChannelRef: body.confirmationChannelRef,
+          recipientHash: digest(body.recipientRef),
+          evidenceHash: digest(body.verificationRef),
+          verifiedAt: now,
+          expiresAt,
+        },
+      })
+      .catch((error: unknown) => {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        )
+          throw new ConflictException(
+            "A fresh recorded subject verification is required",
+          );
+        throw error;
+      });
+    return { id: row.id, expiresAt: row.expiresAt.toISOString() };
   }
   async adminReadIn(tx: Prisma.TransactionClient, id: string, adminId: string) {
     const p = await this.scopeIn(tx, id, adminId, false);
-    return p.row ? this.view(p.row, undefined, p.contentAllowed) : null;
+    if (!p.row) return null;
+    return {
+      ...this.view(p.row, undefined, p.contentAllowed),
+      ...(p.row.recipient === "verified_alternative"
+        ? { staffAccess: (await this.staffAccessIn(tx, p, adminId)).view }
+        : {}),
+    };
   }
   async startIn(
     tx: Prisma.TransactionClient,
@@ -740,7 +1022,7 @@ export class CompleteExports implements OnModuleDestroy {
       await this.sourceRetentionIn(tx, row.projectId, sources);
     } catch (error) {
       if (
-        error instanceof SourceRetentionExpired ||
+        error instanceof SourceDeleted ||
         (error instanceof ConflictException &&
           /^EXPORT_[A-Z_]+$/.test(error.message))
       )
@@ -792,7 +1074,7 @@ export class CompleteExports implements OnModuleDestroy {
     files.unshift({
       path: "README.txt",
       bytes: Buffer.from(
-        "岁月成书 · 完整资料导出\n\n无需登录平台即可读取。audio/ 为原始录音，非合成音频；transcripts/ 为未经校对的文件 ASR 原始转录；stories/ 为指定版本本人确认稿，逐份标明 AI 整理及人工校对来源；photos/ 为原始照片；books/ 为当时可交付的固定 PDF。manifest.json 记录每份文件的相对路径、字节数、SHA256 与版本/来源关系。某类数量为 0 表示该类尚未创建或未获确认交付，不能据此认定已删除。\n\n录音是讲述者真实原声；当前测试素材为合成样本，不代表已取得真实私人素材。原始转录可能有识别错误，确认稿以本人核验的具体版本为准。使用任意 ZIP 工具解压后，核对 manifest.json 的全部路径与 SHA256；缺件或 hash 不一致请联系原服务方。manifest 本身由下载包的 SHA256 保护。\n\n下载后副本由接收人保管，平台撤回或到期不能收回已传输文件或纸书。包下载期限与原始资料保留期限分别执行；重试和重复领取不会延长下载期限。完整导出已包含，不额外收费。\n",
+        "岁月成书 · 完整资料导出\n\n无需登录平台即可读取。audio/ 为原始录音，非合成音频；transcripts/ 为未经校对的文件 ASR 原始转录；stories/ 为指定版本本人确认稿，逐份标明 AI 整理及人工校对来源；photos/ 为原始照片；books/ 为当时可交付的固定 PDF。manifest.json 记录每份文件的相对路径、字节数、SHA256 与版本/来源关系。某类数量为 0 表示该类尚未创建或未获确认交付，不能据此认定已删除。\n\n录音是讲述者真实原声；当前测试素材为合成样本，不代表已取得真实私人素材。原始转录可能有识别错误，确认稿以本人核验的具体版本为准。使用任意 ZIP 工具解压后，核对 manifest.json 的全部路径与 SHA256；缺件或 hash 不一致请联系原服务方。manifest 本身由下载包的 SHA256 保护。\n\n已完成资料包可持续下载，必要资料长期保留；下载时仍须具备本人当前授权。本人可主动撤回或删除资料；下载后副本由接收人保管，平台无法收回已传输文件或纸书。完整导出已包含，不额外收费。\n",
       ),
       provenance: "资料包可读说明",
       source: { counts: batch.counts },
@@ -841,27 +1123,14 @@ export class CompleteExports implements OnModuleDestroy {
       row.leaseUntil.getTime() <= Date.now()
     )
       throw new ConflictException();
-    const policy = await tx.projectServiceTerms.findUniqueOrThrow({
-        where: { projectId: row.projectId },
-      }),
-      rule = (policy.policy as unknown as ExportRetention).d03.retention
-        .exportPackages;
-    if (
-      rule?.startsAt !== "export_ready" ||
-      rule.duration?.unit !== "calendar_days" ||
-      !Number.isSafeInteger(rule.duration.value) ||
-      rule.duration.value < 1
-    )
-      throw new ConflictException();
-    const readyAt = new Date(),
-      expiresAt = new Date(readyAt.getTime() + rule.duration.value * 86400000);
+    const readyAt = new Date();
     return this.view(
       await tx.careExport.update({
         where: { id: row.id },
         data: {
           state: "ready",
           readyAt,
-          expiresAt,
+          expiresAt: null,
           objectKey: archive.objectKey,
           sha256: archive.sha256,
           bytes: archive.bytes.length,
@@ -890,8 +1159,6 @@ export class CompleteExports implements OnModuleDestroy {
           !row ||
           row.recipientUserId !== userId ||
           !["ready", "delivered"].includes(row.state) ||
-          !row.expiresAt ||
-          row.expiresAt.getTime() <= Date.now() ||
           !row.objectKey ||
           !row.sha256 ||
           !row.bytes
@@ -899,7 +1166,7 @@ export class CompleteExports implements OnModuleDestroy {
           throw new ForbiddenException();
         return row;
       });
-    await this.cleanupExpired();
+    await this.cleanupTemporary();
     const before = await check(),
       bytes = await this.readPackage(before),
       after = await check();
@@ -920,9 +1187,7 @@ export class CompleteExports implements OnModuleDestroy {
         scope.project.id !== id ||
         !row ||
         row.recipientUserId !== userId ||
-        !["ready", "delivered"].includes(row.state) ||
-        !row.expiresAt ||
-        row.expiresAt.getTime() <= Date.now()
+        !["ready", "delivered"].includes(row.state)
       )
         throw new ForbiddenException();
       if (row.sha256 !== body.sha256) throw new ConflictException();
@@ -952,13 +1217,12 @@ export class CompleteExports implements OnModuleDestroy {
   ) {
     const p = await this.scopeIn(tx, id, adminId),
       row = p.row;
+    this.validateEvidence(p, body);
     if (
       !row ||
       row.recipient !== "verified_alternative" ||
       !row.recipientRef ||
       !row.readyAt ||
-      !row.expiresAt ||
-      row.expiresAt.getTime() <= Date.now() ||
       !["ready", "delivered"].includes(row.state)
     )
       throw new ForbiddenException();
@@ -993,12 +1257,13 @@ export class CompleteExports implements OnModuleDestroy {
       !row ||
       row.recipient !== "verified_alternative" ||
       !row.objectKey ||
-      !row.expiresAt ||
-      row.expiresAt.getTime() <= Date.now() ||
       !["ready", "delivered"].includes(row.state)
     )
       throw new ForbiddenException();
-    return row;
+    const grant = await this.staffAccessIn(tx, p, adminId);
+    if (!grant.view.available || !grant.row)
+      throw new ForbiddenException("EXPORT_STAFF_ACCESS_REQUIRED");
+    return { ...row, staffGrantId: grant.row.id };
   }
   async readPackage(row: CareExport) {
     const path = this.path(row.objectKey!);
@@ -1043,9 +1308,7 @@ export class CompleteExports implements OnModuleDestroy {
       const live =
         row &&
         ((row.objectKey === `exports/${file}` &&
-          ["ready", "delivered"].includes(row.state) &&
-          !!row.expiresAt &&
-          row.expiresAt.getTime() > Date.now()) ||
+          ["ready", "delivered"].includes(row.state)) ||
           (row.state === "packing" &&
             row.fence === Number(match[2]) &&
             !!row.leaseUntil &&
@@ -1057,26 +1320,9 @@ export class CompleteExports implements OnModuleDestroy {
     }
     return removed;
   }
-  async cleanupExpired() {
+  async cleanupTemporary() {
     await this.rights.assertHealthy();
-    await this.rights.expireExports();
-    const rows = await this.database.careExport.findMany({
-      where: {
-        expiresAt: { lte: new Date() },
-        state: { in: ["ready", "delivered", "expired"] },
-      },
-    });
-    for (const row of rows) {
-      await this.database.careExport.updateMany({
-        where: { id: row.id, state: { in: ["ready", "delivered"] } },
-        data: { state: "expired", fence: { increment: 1 }, leaseUntil: null },
-      });
-      if (row.objectKey) await rm(this.path(row.objectKey), { force: true });
-    }
-    return {
-      expired: rows.length,
-      orphaned: await this.removeOrphanPackages(),
-    };
+    return { orphaned: await this.removeOrphanPackages() };
   }
 }
 @Controller("v1/projects/:id/exports")
@@ -1198,7 +1444,21 @@ export class AdminCompleteExportsController {
     return this.access.command(
       req,
       ADMIN_PERMISSIONS.writeCare,
-      work,
+      async (tx) => {
+        const caseId = (req.params as { caseId?: string }).caseId;
+        if (caseId) {
+          const care = await tx.careRequest.findUnique({
+            where: { id: caseId },
+            select: { projectId: true },
+          });
+          if (care)
+            Object.assign(req, {
+              adminResourceType: "project",
+              adminResourceId: care.projectId,
+            });
+        }
+        return work(tx);
+      },
       req.method === "GET",
     );
   }
@@ -1252,7 +1512,7 @@ export class AdminCompleteExportsController {
       } catch (error) {
         await this.exports.fail(
           batch,
-          error instanceof SourceRetentionExpired
+          error instanceof SourceDeleted
             ? error.message
             : "EXPORT_SOURCE_MISSING_OR_PERMISSION_CHANGED",
         );
@@ -1280,6 +1540,24 @@ export class AdminCompleteExportsController {
       meta: { requestId: req.id },
     };
   }
+  @Post("care-requests/:caseId/export/access-verification")
+  @Header("Cache-Control", "no-store")
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  async accessVerification(
+    @Param("caseId", new ParseUUIDPipe()) id: string,
+    @Body() body: ExportStaffVerificationDto,
+    @Req() req: FastifyRequest,
+  ) {
+    const key = idempotencyKey(req);
+    return {
+      data: await this.run(req, "care.export.access-verification", (admin) =>
+        this.command(req, (tx) =>
+          this.exports.verifyStaffAccessIn(tx, id, admin, key, body),
+        ),
+      ),
+      meta: { requestId: req.id },
+    };
+  }
   @Get("care-requests/:caseId/export/download")
   @Header("Cache-Control", "private, no-store")
   @ApiProduces("application/zip")
@@ -1292,10 +1570,16 @@ export class AdminCompleteExportsController {
       req,
       "care.export.alternative-download",
       async (admin) => {
-        const check = () =>
-            this.command(req, (tx) =>
+        let capturedGrant: string | undefined;
+        const check = async () => {
+            const row = await this.command(req, (tx) =>
               this.exports.alternativeDownloadIn(tx, id, admin),
-            ),
+            );
+            if (capturedGrant && row.staffGrantId !== capturedGrant)
+              throw new ForbiddenException();
+            capturedGrant = row.staffGrantId;
+            return row;
+          },
           before = await check(),
           fence = await this.streams.fence(before.projectId);
         const bytes = await this.exports.readPackage(before);
@@ -1333,7 +1617,7 @@ export class AdminCompleteExportsController {
     return {
       data: await this.run(req, "care.export.cleanup", async () => {
         await this.command(req, async () => undefined);
-        return this.exports.cleanupExpired();
+        return this.exports.cleanupTemporary();
       }),
       meta: { requestId: req.id },
     };

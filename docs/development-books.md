@@ -1,6 +1,6 @@
 # T20 书稿快照与完整 PDF
 
-2026-10-29 当前方案以 [ADR 0017](adr/0017-lifetime-service-and-retention.md) 为准：制作、下载及其必要资料长期有效；下文按新目标更新，代码对齐与本轮验证尚待完成。历史有限期测试保留为当时结果，不证明新规则已实现。
+2026-10-29 当前方案以 [ADR 0017](adr/0017-lifetime-service-and-retention.md) 为准：制作、下载及其必要资料长期有效；长期服务工程调整见 [#105](https://github.com/brycezhang/timenook/issues/105)与[开发说明](development-lifetime-service.md)。历史有限期测试仅为当时结果；本轮只整理文档，不新增运行验收结论。
 
 本票把 T19 的确定故事版本接入 T04 的固定排版与 T15 的共享任务。接口与小程序页面用于本地合成环境的工程验证；D01 印厂规格与 D08 实际标识准入仍待责任票验收，不能据此提交正式生产。T21 的版本固定回听见[书中原声入口](development-book-audio.md)；T22 双方确认与首本预留见[首本制作](development-first-copy.md)，实际生产交接由 T23 实现。
 

@@ -1,3 +1,4 @@
+import { readProjectAdmissionIn } from "../projects/project-admission";
 import { PrivacyRights } from "../care/privacy-rights";
 import { Followups } from "../followups/followups";
 import { Books } from "../books/books";
@@ -177,7 +178,15 @@ export class ProductionTasks implements OnModuleDestroy {
       where: {
         id: task.id,
         fence: task.fence,
-        state: { notIn: ["succeeded", "no_speech", "invalidated", "obsolete"] },
+        state: {
+          notIn: [
+            "succeeded",
+            "no_speech",
+            "no_content",
+            "invalidated",
+            "obsolete",
+          ],
+        },
       },
       data: {
         state: task.kind !== "transcribe_audio" ? "obsolete" : "invalidated",
@@ -203,12 +212,8 @@ export class ProductionTasks implements OnModuleDestroy {
     );
   }
   private async budget(tx: Prisma.TransactionClient, projectId: string) {
-    const p = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
-    const order = await tx.paymentOrder.findUniqueOrThrow({
-      where: { id: p.orderId! },
-    });
-    const admission = (order.packageSnapshot as Prisma.JsonObject).admission as
-      Prisma.JsonObject | undefined;
+    const { snapshot } = await readProjectAdmissionIn(tx, projectId);
+    const admission = snapshot.admission as Prisma.JsonObject | undefined;
     const d04 = admission?.d04 as Prisma.JsonObject | undefined;
     const raw = d04?.providerBudget as Prisma.JsonObject | undefined;
     const count = (key: string, unit: string) => {
@@ -568,7 +573,7 @@ export class ProductionTasks implements OnModuleDestroy {
             : result.state === "unknown"
               ? "manual_review"
               : noContent
-                ? "no_speech"
+                ? "no_content"
                 : result.state,
           errorCode:
             result.state === "unknown"
@@ -1109,7 +1114,7 @@ export class ProductionTasks implements OnModuleDestroy {
                 task.state === "invalidated" ||
                 task.state === "obsolete"
               ? "contact_support"
-              : task.state === "succeeded"
+              : task.state === "succeeded" || task.state === "no_content"
                 ? "continue"
                 : "leave_and_return",
       submittedAt: task.submittedAt?.toISOString() ?? null,

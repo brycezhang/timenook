@@ -2,7 +2,7 @@
 
 日期：2026-10-29。对应 [T30 #31](https://github.com/brycezhang/timenook/issues/31)。本轮交付不依赖微信小程序和支付配置的验收准备，依据 [T30 票据](../2026-10-22/tickets/30-pilot-acceptance.md)、[父规格](../2026-10-22/spec.md)及 [PRD 第 13–15 节](../../时光里_岁月成书_MVP_PRD.md)。
 
-**当前结论：准备材料已整理；T30 的七项真实验收均未完成，销售保持关闭。** 2026-10-29 长期服务方案已按 [ADR 0017](../../adr/0017-lifetime-service-and-retention.md) 确认；本次仅更新目标与验收准备，旧期限实现及历史测试不能证明新规则已通过。 T29 仍是原生 blocked-by；其正式环境验收和前序责任票的真实证据继续保留。本文中的“可复用”指适用范围内的工程或历史运行证据，不表示对应 A/X 项已通过。
+**当前结论：准备材料已整理；T30 的七项真实验收均未完成，销售保持关闭。** 2026-10-29 长期服务方案已按 [ADR 0017](../../adr/0017-lifetime-service-and-retention.md) 确认；长期服务工程调整见 [#105](https://github.com/brycezhang/timenook/issues/105)与[开发说明](../../development-lifetime-service.md)，历史有限期测试不替代新规则的环境验收。 T29 仍是原生 blocked-by；其正式环境验收和前序责任票的真实证据继续保留。本文中的“可复用”指适用范围内的工程或历史运行证据，不表示对应 A/X 项已通过。
 
 ## 本轮完成与执行顺序
 
@@ -48,7 +48,7 @@ T30 分别记录系统功能与线下运营：系统验证确定 PDF 的生成/�
 | [CI 第一阶段](ci-phase1.md)、[完整 main CI 40808534825](https://github.com/brycezhang/timenook/actions/runs/40808534825) | `5ff5e81dd7e542325d5e55d49b1601920c2ede41` 完整回归成功，原验证用例 1029 项，另有 CI 工具自测 | 证明该代码和隔离测试配置的回归；覆盖真实 PostgreSQL/Redis、锁与恢复机制，不替代 T30 真实证据 |
 | [后续 main CI 40809855516](https://github.com/brycezhang/timenook/actions/runs/40809855516) | `1dde025` 说明文档检查成功 | 后续为说明文档变更，不记作又一次完整回归；实际验收仍固定代码、配置和产物 |
 | T02/T03/T04：[PR #37](https://github.com/brycezhang/timenook/pull/37)、[#41](https://github.com/brycezhang/timenook/pull/41)、[#38](https://github.com/brycezhang/timenook/pull/38) | 录音/私有存储、供应商协议、图片/PDF/入口机制已交付 | 本地工程主要使用合成素材和供应商网络替身；真实设备、口音质量、印厂规格/实物仍缺 |
-| T05/T08/T09：[PR #39](https://github.com/brycezhang/timenook/pull/39)、[#40](https://github.com/brycezhang/timenook/pull/40)、[#34](https://github.com/brycezhang/timenook/pull/34) | 参数完整性校验、动态关系/套餐预览、单套模板复制已交付 | D02/D03 长期规则已决定，旧有限期模板/契约仍须改造；D04–D08 及 D01/D09/D10 的未定政策与真实证据继续待核实。结构校验不证明真实审核通过 |
+| T05/T08/T09：[PR #39](https://github.com/brycezhang/timenook/pull/39)、[#40](https://github.com/brycezhang/timenook/pull/40)、[#34](https://github.com/brycezhang/timenook/pull/34) | 参数完整性校验、动态关系/套餐预览、单套模板复制已交付 | D02/D03 长期规则与契约已由 #105 调整；D04–D08 及 D01/D09/D10 的未定政策与真实证据继续待核实。结构校验不证明真实审核通过 |
 | T06/T07/T10/T11/T12：[PR #35](https://github.com/brycezhang/timenook/pull/35)、[#36](https://github.com/brycezhang/timenook/pull/36)、[#43](https://github.com/brycezhang/timenook/pull/43)、[#46](https://github.com/brycezhang/timenook/pull/46)、[#47](https://github.com/brycezhang/timenook/pull/47) | 会话、原运营认证、支付、旧有限期契约、参与和同机本人证据已交付；旧期限结果不证明长期规则已实现；当前飞书认证调整见 [ADR 0016](../../adr/0016-feishu-admin-login.md)及 [#81](https://github.com/brycezhang/timenook/issues/81) | 微信/资金、真实管理员和 D08 本人核验未完成；付款不替代讲述者授权 |
 | T13–T19：PR #48–#54；下表逐票链接 | 计划、录音/照片、持久转写、可选追问、故事与本人确认已集成 | 真实样本、双端、生产模型/提示词/预算和正式业务装配仍待验；浏览器和 Mac 原生编译不能证明真机通过 |
 | T20–T23：[PR #56](https://github.com/brycezhang/timenook/pull/56)、[#57](https://github.com/brycezhang/timenook/pull/57)、[#58](https://github.com/brycezhang/timenook/pull/58)、[#59](https://github.com/brycezhang/timenook/pull/59) | 固定 PDF/hash、版本原声、双方确认/首本、生产尝试及物流事实已交付 | 合成 PDF/入口/回执不证明正式规格、真实扫码、印厂接收或实物 |
@@ -83,7 +83,7 @@ T30 分别记录系统功能与线下运营：系统验证确定 PDF 的生成/�
 | A18 首本权益 | [T22](../2026-10-22/evidence/T22.md)、[T23](../2026-10-22/evidence/T23.md) | 已付 999 元后首本/约定运费不再收费，重放不重复投产 | 先确认 D05/D07 和交接去重流程；待真实支付及印厂 |
 | A19 实物交付 | [T04](../2026-10-22/evidence/T04.md)、[T21](../2026-10-22/evidence/T21.md)、[T23](../2026-10-22/evidence/T23.md) | 印厂文件=双方确认 PDF hash、接单/物流、纸书全文/照片与扫码原声一致 | 先收规格/报价/回执样式；完整通过待同一真项目、纸书和微信 |
 | A20 未授权扫码 | [T04](../2026-10-22/evidence/T04.md)、[T11](../2026-10-22/evidence/T11.md)、[T21](../2026-10-22/evidence/T21.md)、[T24](../2026-10-22/evidence/T24.md) | 实际纸码/正式路径，匿名/外人拒绝，授权双方回听及撤权后拒绝 | 先定扫码身份矩阵；待微信、纸码、D03/D08 |
-| A21 资料导出 | [T25](../2026-10-22/evidence/T25.md) | 真实完整包、来源与版本清单、独立可读、本人/替代交付、长期下载及当前权限 | 按已定 D03 长期方案补实现，核实 D06/D08 和逐文件核验清单；待授权样本及真实交付 |
+| A21 资料导出 | [T25](../2026-10-22/evidence/T25.md) | 真实完整包、来源与版本清单、独立可读、本人/替代交付、长期下载及当前权限 | 消费 #105 长期服务工程结果，核实 D06/D08 和逐文件核验清单；待授权样本及真实交付 |
 | A22 撤回和删除 | [T24](../2026-10-22/evidence/T24.md)、[T26](../2026-10-22/evidence/T26.md) | 本人核验、访问停止、生产暂停、各层副本结果、真实恢复不复活 | 先定主动删除渠道/处理时限/介质/供应商回执；实测按 T24/T26/T29 责任补齐 |
 | A23 重复退款 | [T05](../2026-10-22/evidence/T05.md)、[T27](../2026-10-22/evidence/T27.md) | 实际金额/原单、重复通知/查单/退款、未知资金及权益/生产一致 | 先冻结 D07 并列对账字段；待真实支付/退款 |
 | A24 质量售后 | [T23](../2026-10-22/evidence/T23.md)、[T28](../2026-10-22/evidence/T28.md) | 实物问题、原 PDF/生产尝试/物流、救济与原单重印或退款 | 先定质量分类、窗口、责任人与印厂约定；实际售后待实物/资金 |

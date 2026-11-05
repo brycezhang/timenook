@@ -24,7 +24,12 @@ interface CatalogPage {
     packageTerms: { label: string; text: string }[];
     packageTitle: string;
     availability: string;
+    purchasable: boolean;
+    actualPrice: string;
+    isE2e: boolean;
+    shippingRegions: { code: string; label: string }[];
     selectedLabel: string;
+    customLabelValue: string;
     selection: unknown;
   };
   setData(patch: Partial<CatalogPage["data"]>): void;
@@ -115,6 +120,45 @@ function complete(requests: WechatMiniprogram.RequestOption[]) {
       request.url.endsWith("recipient-types") ? directory : offer,
     );
 }
+
+test("a gift chosen on the homepage selects the matching current server relationship", async () => {
+  const { page, requests } = harness();
+  page.onLoad({ recipient: encodeURIComponent("恩师") });
+  const loading = page.onShow();
+  complete(requests);
+  await loading;
+  assert.equal(page.data.selectedLabel, "恩师");
+  assert.deepEqual(JSON.parse(JSON.stringify(page.data.selection)), {
+    recipientCode: "mentor",
+    recipientRevision: 2,
+    customLabel: null,
+  });
+});
+
+test("homepage gifts remain selected as custom labels when the server directory has no matching relationship", async () => {
+  for (const types of [[], directory.types]) {
+    for (const label of ["妈妈", "爸爸"]) {
+      const { page, requests, sideEffects } = harness();
+      page.onLoad({ recipient: encodeURIComponent(label) });
+      const loading = page.onShow();
+      respond(requests[0], { ...directory, types });
+      respond(requests[1], offer);
+      await loading;
+      assert.equal(page.data.selectedLabel, label);
+      assert.equal(page.data.customLabelValue, label);
+      assert.equal(
+        JSON.stringify(page.data.selection),
+        JSON.stringify({
+          recipientCode: null,
+          recipientRevision: null,
+          customLabel: label,
+        }),
+      );
+      assert.equal(page.data.recipientTypes.length, types.length);
+      assert.deepEqual(sideEffects, []);
+    }
+  }
+});
 
 test("live purchase displays server relationships and the same package, supports a custom label without making a global type or project", async () => {
   const { page, requests, sideEffects } = harness();
@@ -243,4 +287,129 @@ test("invalid HTTP payloads do not create a buyable offer and demo mode makes no
   await demo.page.onShow();
   assert.equal(demo.requests.length, 0);
   assert.equal(demo.page.data.mode, "demo");
+});
+
+const availableOffer = {
+  ...offer,
+  purchasable: true,
+  reason: "AVAILABLE",
+  checkout: { listAmount: 99900, amount: 1, currency: "CNY", isE2e: true },
+  version: {
+    ...offer.version,
+    purpose: "e2e",
+    shippingRegions: [{ code: "CN-110000", label: "北京" }],
+  },
+};
+test("an eligible buyer sees the 999 label and explicit one-fen charge from the authenticated package", async () => {
+  const { page, requests, storage } = harness();
+  storage.set("timenook.session.v1:https://example.test/timenook/v1", {
+    user: { id: "11111111-1111-4111-8111-111111111111" },
+    session: {
+      id: "22222222-2222-4222-8222-222222222222",
+      token: "a".repeat(43),
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    },
+  });
+  const loading = page.onShow();
+  respond(
+    requests.find((r) => r.url.endsWith("recipient-types"))!,
+    directory,
+  );
+  const current = requests.find((r) => r.url.endsWith("packages/current"))!;
+  assert.equal(current.header?.authorization, "Bearer " + "a".repeat(43));
+  respond(current, availableOffer);
+  await loading;
+  assert.equal(page.data.catalogError, "");
+  assert.equal(page.data.packagePrice, "999.00");
+  assert.equal(page.data.actualPrice, "0.01");
+  assert.equal(page.data.isE2e, true);
+  assert.equal(page.data.purchasable, true);
+  assert.equal(page.data.shippingRegions[0].label, "北京");
+});
+
+test("ordinary checkout uses the full price while unavailable or inconsistent discounts cannot become buyable", async () => {
+  for (const [payload, price, purchasable] of [
+    [
+      {
+        ...availableOffer,
+        checkout: {
+          listAmount: 99900,
+          amount: 99900,
+          currency: "CNY",
+          isE2e: false,
+        },
+        version: { ...availableOffer.version, purpose: "production" },
+      },
+      "999.00",
+      true,
+    ],
+    [
+      {
+        purchasable: false,
+        reason: "PACKAGE_PREPARING",
+        version: null,
+        checkout: null,
+      },
+      "",
+      false,
+    ],
+    [
+      {
+        ...availableOffer,
+        checkout: {
+          listAmount: 99900,
+          amount: 1,
+          currency: "CNY",
+          isE2e: false,
+        },
+      },
+      "",
+      false,
+    ],
+  ] as const) {
+    const { page, requests } = harness();
+    const loading = page.onShow();
+    respond(requests[0], directory);
+    respond(requests[1], payload);
+    await loading;
+    assert.equal(page.data.purchasable, purchasable);
+    assert.equal(page.data.actualPrice, price);
+  }
+});
+
+test("a late account-specific offer cannot carry one-fen eligibility into a different session", async () => {
+  const { page, requests, storage } = harness();
+  const loading = page.onShow();
+  storage.set("timenook.session.v1:https://example.test/timenook/v1", {
+    user: { id: "11111111-1111-4111-8111-111111111111" },
+    session: {
+      id: "22222222-2222-4222-8222-222222222222",
+      token: "a".repeat(43),
+      expiresAt: "2099-01-01T00:00:00Z",
+    },
+  });
+  respond(requests[0], directory);
+  respond(requests[1], availableOffer);
+  await loading;
+  assert.equal(page.data.purchasable, false);
+  assert.equal(page.data.actualPrice, "");
+});
+
+test("expired catalog authentication clears loading and offers a reload without keeping eligibility", async () => {
+  const { page, requests, storage } = harness();
+  storage.set("timenook.session.v1:https://example.test/timenook/v1", {
+    user: { id: "11111111-1111-4111-8111-111111111111" },
+    session: {
+      id: "22222222-2222-4222-8222-222222222222",
+      token: "a".repeat(43),
+      expiresAt: "2099-01-01T00:00:00Z",
+    },
+  });
+  const showing = page.onShow();
+  respond(requests[0], directory);
+  respond(requests[1], {}, 401);
+  await showing;
+  assert.equal(page.data.loading, false);
+  assert.equal(page.data.purchasable, false);
+  assert.match(page.data.catalogError, /登录/);
 });

@@ -1,3 +1,4 @@
+import { participationNotice } from "../catalog/e2e-package";
 import {
   Body,
   Controller,
@@ -8,6 +9,9 @@ import {
   ParseUUIDPipe,
   Req,
   Injectable,
+  Optional,
+  Inject,
+  ServiceUnavailableException,
   ConflictException,
   BadRequestException,
 } from "@nestjs/common";
@@ -24,6 +28,7 @@ import type { FastifyRequest } from "fastify";
 import { Participation } from "../identity/participation";
 import { Stories } from "../stories/stories";
 import { Interviews } from "./interviews";
+import { readProjectAdmissionIn } from "./project-admission";
 import { ProductionTasks } from "../tasks/tasks";
 class ProjectMetadataDto {
   @ApiProperty() @IsInt() @Min(0) expectedVersion!: number;
@@ -33,9 +38,11 @@ class ProjectMetadataDto {
 export class ProjectOverview {
   constructor(
     private readonly participation: Participation,
-    private readonly stories: Stories,
+    @Optional() @Inject(Stories) private readonly stories: Stories | undefined,
     private readonly interviews: Interviews,
-    private readonly tasks: ProductionTasks,
+    @Optional()
+    @Inject(ProductionTasks)
+    private readonly tasks: ProductionTasks | undefined,
   ) {}
   private async view(
     tx: Prisma.TransactionClient,
@@ -46,10 +53,18 @@ export class ProjectOverview {
       accessExpiresAt: string | null;
     },
   ) {
-    const p = await tx.project.findUniqueOrThrow({ where: { id: projectId } }),
-      order = await tx.paymentOrder.findUniqueOrThrow({
-        where: { id: p.orderId! },
-      });
+    const admission = await readProjectAdmissionIn(tx, projectId),
+      p = admission.project;
+    const storyRows = await tx.story.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "asc" },
+    });
+    const taskRows = await tx.productionTask.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "asc" },
+    });
+    if ((storyRows.length && !this.stories) || (taskRows.length && !this.tasks))
+      throw new ServiceUnavailableException();
     const canReadStories = await this.participation.materialAvailableIn(
       tx,
       projectId,
@@ -62,7 +77,7 @@ export class ProjectOverview {
           orderBy: { createdAt: "desc" },
         })
       ).map((s) =>
-        this.stories.view(tx, projectId, s.id, undefined, canReadStories),
+        this.stories!.view(tx, projectId, s.id, undefined, canReadStories),
       ),
     );
     const confirmed = stories.filter((s) => s.decision?.confirmed).length,
@@ -79,6 +94,7 @@ export class ProjectOverview {
             s.task.state,
           ),
       ),
+      needsMore = stories.some((s) => s.task?.state === "no_content"),
       waiting = stories.some(
         (s) =>
           s.task &&
@@ -91,7 +107,12 @@ export class ProjectOverview {
       );
     return {
       projectId,
-      bookTitle: p.bookTitle ?? order.bookTitle,
+      bookTitle: p.bookTitle ?? admission.snapshot.bookTitle ?? "人生故事书",
+      source: admission.source,
+      ...participationNotice(
+        admission.snapshot,
+        admission.source === "internal-acceptance",
+      ),
       metadataVersion: p.metadataVersion,
       subjectId: actor.subjectId,
       role: actor.subjectDecision === "self" ? "narrator" : "initiator",
@@ -103,7 +124,7 @@ export class ProjectOverview {
             where: { projectId },
             orderBy: { createdAt: "asc" },
           })
-        ).map((task) => this.tasks.view(tx, task, false)),
+        ).map((task) => this.tasks!.view(tx, task, false)),
       ),
       interviews: (await this.interviews.listIn(tx, projectId)).interviews,
       summary: { pending, confirmed, included },
@@ -111,11 +132,13 @@ export class ProjectOverview {
         ? "有故事需要恢复或人工协助，原声仍保留"
         : waiting
           ? "正在处理已保存的讲述，可离开后返回"
-          : pending
-            ? "请本人核对并确认故事，再单独决定是否入书"
-            : stories.length
-              ? "可继续讲述或查看已确认故事"
-              : "从一段讲述开始",
+          : needsMore
+            ? "已识别到文字，暂未形成故事，可继续补充讲述"
+            : pending
+              ? "请本人核对并确认故事，再单独决定是否入书"
+              : stories.length
+                ? "可继续讲述或查看已确认故事"
+                : "从一段讲述开始",
       accessExpiresAt: actor.accessExpiresAt,
     };
   }

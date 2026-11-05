@@ -1,3 +1,4 @@
+import { readProjectAdmissionIn } from "../projects/project-admission";
 import {
   Injectable,
   Inject,
@@ -270,11 +271,8 @@ export class Followups {
           : this.ruleFinish(input);
         const inputHash = hash(JSON.stringify(input));
         if (!finishReason) {
-          const order = await tx.paymentOrder.findUniqueOrThrow({
-              where: { id: plan.orderId! },
-            }),
-            d04 = (order.packageSnapshot as Prisma.JsonObject)
-              .admission as Prisma.JsonObject;
+          const { snapshot } = await readProjectAdmissionIn(tx, projectId),
+            d04 = snapshot.admission as Prisma.JsonObject;
           const policy = d04.d04 as Prisma.JsonObject,
             quota = (policy.userQuotas as Prisma.JsonObject)
               .followUps as Prisma.JsonObject;

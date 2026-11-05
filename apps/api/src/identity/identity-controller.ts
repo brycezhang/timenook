@@ -10,7 +10,7 @@ import {
   Post,
   Req,
 } from "@nestjs/common";
-import { IsString, Length, Matches } from "class-validator";
+import { IsString, IsOptional, IsUUID, Length, Matches } from "class-validator";
 import type { FastifyRequest } from "fastify";
 import type { LoginCommand } from "@timenook/contracts";
 import { IdentityAccess } from "./identity-access";
@@ -40,6 +40,12 @@ export class WechatLoginDto implements LoginCommand {
   code!: string;
 }
 
+class SessionLoginDto extends WechatLoginDto {
+  @IsOptional()
+  @IsUUID()
+  expectedUserId?: string;
+}
+
 @Controller("v1")
 @ApiTags("Identity")
 @ApiResponse({ status: 400, type: ErrorResponseDto })
@@ -55,9 +61,16 @@ export class IdentityController {
   @ApiResponse({ status: 429, type: ErrorResponseDto })
   @ApiResponse({ status: 502, type: ErrorResponseDto })
   @ApiResponse({ status: 503, type: ErrorResponseDto })
-  async login(@Body() command: WechatLoginDto, @Req() request: FastifyRequest) {
+  async login(
+    @Body() command: SessionLoginDto,
+    @Req() request: FastifyRequest,
+  ) {
     return {
-      data: await this.identity.login(command.code, request.ip),
+      data: await this.identity.login(
+        command.code,
+        request.ip,
+        command.expectedUserId,
+      ),
       meta: { requestId: request.id },
     };
   }

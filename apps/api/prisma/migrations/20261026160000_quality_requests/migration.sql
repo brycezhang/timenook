@@ -1,5 +1,5 @@
 ALTER TABLE care_requests DROP CONSTRAINT care_requests_kind_check;
-ALTER TABLE care_requests ADD CONSTRAINT care_requests_kind_check CHECK(kind IN ('rebind','withdraw','export','delete','correction','first_copy_expiry','production_handoff','refund','quality'));
+ALTER TABLE care_requests ADD CONSTRAINT care_requests_kind_check CHECK(kind IN ('rebind','withdraw','export','delete','correction','production_handoff','refund','quality'));
 CREATE TABLE quality_requests (
  id uuid PRIMARY KEY, case_id uuid NOT NULL UNIQUE REFERENCES care_requests(id),
  order_id uuid NOT NULL REFERENCES payment_orders(id),

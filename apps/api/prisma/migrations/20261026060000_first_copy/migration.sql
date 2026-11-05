@@ -95,8 +95,7 @@ CREATE UNIQUE INDEX "fulfillment_events_order_id_kind_key" ON "fulfillment_event
 ALTER TABLE first_copy_entitlements DROP CONSTRAINT first_copy_entitlements_state_check;
 ALTER TABLE first_copy_entitlements ADD CONSTRAINT first_copy_entitlements_state_check CHECK(state IN ('available','reserved','suspended','revoked'));
 ALTER TABLE care_requests DROP CONSTRAINT care_requests_kind_check;
-ALTER TABLE care_requests ADD CONSTRAINT care_requests_kind_check CHECK(kind IN ('rebind','withdraw','export','delete','correction','first_copy_expiry'));
-CREATE UNIQUE INDEX first_copy_expiry_once ON care_requests(project_id) WHERE kind='first_copy_expiry';
+ALTER TABLE care_requests ADD CONSTRAINT care_requests_kind_check CHECK(kind IN ('rebind','withdraw','export','delete','correction'));
 ALTER TABLE first_copy_addresses ADD FOREIGN KEY(project_id) REFERENCES projects(id), ADD CHECK(version>0);
 ALTER TABLE book_confirmations ADD FOREIGN KEY(project_id,book_id) REFERENCES book_versions(project_id,id), ADD FOREIGN KEY(subject_id) REFERENCES project_subjects(id), ADD FOREIGN KEY(actor_id) REFERENCES users(id), ADD FOREIGN KEY(assisted_evidence_id) REFERENCES assisted_version_evidence(id), ADD CHECK(role IN ('narrator','initiator')), ADD CHECK((role='narrator' AND address_hash IS NULL AND address_version IS NULL) OR (role='initiator' AND address_hash IS NOT NULL AND address_version > 0));
 ALTER TABLE first_copy_orders ADD FOREIGN KEY(entitlement_id) REFERENCES first_copy_entitlements(id), ADD FOREIGN KEY(payment_order_id,project_id) REFERENCES projects(order_id,id), ADD FOREIGN KEY(project_id,book_id) REFERENCES book_versions(project_id,id), ADD FOREIGN KEY(narrator_confirmation_id) REFERENCES book_confirmations(id), ADD FOREIGN KEY(initiator_confirmation_id) REFERENCES book_confirmations(id), ADD CHECK(state IN ('reserved','approved'));

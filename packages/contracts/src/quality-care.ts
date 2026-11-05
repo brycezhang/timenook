@@ -29,7 +29,7 @@ export interface QualityAccessCommand {
   scopes: QualityScope[];
   expiresAt: string;
   consented: true;
-  noticeVersion: "synthetic-d08-v1";
+  noticeVersion: string;
   assistedSessionId?: string;
 }
 export interface QualityReviewCommand {
@@ -52,6 +52,12 @@ export interface QualityAttemptOption extends FirstCopyBinding {
   tracking: { carrier: string; number: string; shippedAt: string } | null;
 }
 export interface QualityRequestView {
+  noticeVersion: string;
+  handling: {
+    assignmentAvailable: boolean;
+    reviewAvailable: boolean;
+    unavailableReason: string | null;
+  };
   id: string;
   caseId: string;
   orderId: string;

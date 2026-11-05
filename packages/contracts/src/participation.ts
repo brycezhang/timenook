@@ -5,17 +5,26 @@ export interface InvitationView {
   process: string[];
   purposes: ConsentPurpose[];
   noticeVersion: string;
-  policyStatus: "synthetic-only" | "pending";
+  policyStatus:
+    "synthetic-only" | "internal-acceptance" | "paid-e2e" | "pending";
+  evidencePrefix?: string;
+  noticeText?: string;
+  source?: "paid" | "internal-acceptance";
   choice: string;
 }
 export interface ParticipationState {
   projectId: string;
+  bookTitle?: string;
   subjectId: string;
   role: "narrator" | "initiator";
   bindingVersion: number;
   accessEpoch: number;
   noticeVersion: string;
-  policyStatus: "synthetic-only" | "pending";
+  policyStatus:
+    "synthetic-only" | "internal-acceptance" | "paid-e2e" | "pending";
+  evidencePrefix?: string;
+  noticeText?: string;
+  source?: "paid" | "internal-acceptance";
   choices: { purpose: ConsentPurpose; granted: boolean | null }[];
   consent: ConsentDecisionView[];
   canCollect: boolean;
@@ -75,13 +84,13 @@ export interface CareCase {
     | "export"
     | "delete"
     | "correction"
-    | "first_copy_expiry"
     | "production_handoff"
     | "refund"
     | "quality";
   createdAt: string;
   supportCaseRef?: string;
   changes?: CareBindingChangeView[];
+  verificationScope?: { accessSequence: number };
   verification?: {
     operatorAdminId: string;
     createdAt: string;
@@ -89,6 +98,7 @@ export interface CareCase {
     noticeVersion: string | null;
     method: string;
     accessEpoch: number | null;
+    accessSequence: number | null;
   } | null;
 }
 export interface ProjectCareRequestView {
@@ -99,7 +109,6 @@ export interface ProjectCareRequestView {
     | "export"
     | "delete"
     | "correction"
-    | "first_copy_expiry"
     | "production_handoff"
     | "refund"
     | "quality";
@@ -136,7 +145,8 @@ export interface WithdrawalStatus {
     id: string;
     accessEpoch: number;
     purpose: ConsentPurpose | "all" | "binding";
-    reason: "self_wechat" | "assisted" | "care_verified" | "rebind";
+    reason:
+      "self_wechat" | "self_web" | "assisted" | "care_verified" | "rebind";
     applied: boolean;
     productionAction:
       | "not_required"

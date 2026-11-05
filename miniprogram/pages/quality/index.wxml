@@ -1,6 +1,6 @@
 <view class="page quality-page">
  <view class="title">质量售后与进展</view>
- <view class="note section">隔离合成验证。质量问题由客服按购买时的政策核验；重印沿用原订单，不另付款，也不新增首本权益。</view>
+ <view class="note section">质量问题由客服按购买时的政策核验；重印沿用原订单，不另付款，也不新增首本权益。</view>
  <view wx:if="{{status}}" class="section note" role="alert">{{status}}</view>
  <button class="btn secondary" bindtap="refresh" disabled="{{busy}}">重新查询质量售后</button>
  <view wx:if="{{view}}">
@@ -43,5 +43,5 @@
   </view>
  </view>
  <button class="btn secondary section" bindtap="production" disabled="{{busy}}">查看原订单生产与物流</button>
- <view class="note section">原交付时间和资料服务期限保持原约定。已传至设备的文件、用户另存资料及纸书不能远程收回。</view>
+ <view class="note section">原交付时间保持不变，资料服务长期有效。已传至设备的文件、用户另存资料及纸书不能远程收回。</view>
 </view>

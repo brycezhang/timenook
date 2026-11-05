@@ -2,7 +2,9 @@ import type { ProjectPlan } from "./index";
 export interface PaymentOrderView {
   id: string;
   outTradeNo: string;
-  amount: 99900;
+  listAmount: 99900;
+  amount: 1 | 99900;
+  isE2e: boolean;
   currency: "CNY";
   mode: "local-verification" | "wechat";
   state: "pending" | "paid" | "closed";

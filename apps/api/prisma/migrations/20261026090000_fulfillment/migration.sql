@@ -80,7 +80,7 @@ CREATE UNIQUE INDEX "fulfillment_deliveries_attempt_id_key" ON "fulfillment_deli
 ALTER TABLE first_copy_entitlements DROP CONSTRAINT first_copy_entitlements_state_check;
 ALTER TABLE first_copy_entitlements ADD CONSTRAINT first_copy_entitlements_state_check CHECK(state IN ('available','reserved','consumed','suspended','revoked'));
 ALTER TABLE care_requests DROP CONSTRAINT care_requests_kind_check;
-ALTER TABLE care_requests ADD CONSTRAINT care_requests_kind_check CHECK(kind IN ('rebind','withdraw','export','delete','correction','first_copy_expiry','production_handoff'));
+ALTER TABLE care_requests ADD CONSTRAINT care_requests_kind_check CHECK(kind IN ('rebind','withdraw','export','delete','correction','production_handoff'));
 CREATE UNIQUE INDEX first_copy_orders_project_id_id_key ON first_copy_orders(project_id,id);
 ALTER TABLE fulfillment_attempts ADD FOREIGN KEY(project_id,order_id) REFERENCES first_copy_orders(project_id,id), ADD FOREIGN KEY(case_id) REFERENCES care_requests(id), ADD FOREIGN KEY(owner_admin_id) REFERENCES admin_accounts(id), ADD CHECK(sequence>0), ADD CHECK(state IN ('approved','handoff_pending','in_production','shipped','delivered','cancellation_pending','cancelled'));
 CREATE UNIQUE INDEX one_live_fulfillment_attempt ON fulfillment_attempts(order_id) WHERE state <> 'cancelled';

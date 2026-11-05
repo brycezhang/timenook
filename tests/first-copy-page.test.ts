@@ -94,6 +94,8 @@ function harness() {
 function context(): any {
   return {
     projectId,
+    noticeVersion: "synthetic-d08-v1",
+    evidencePrefix: "synthetic:",
     role: "initiator",
     book: {
       id: versionId,
@@ -118,7 +120,6 @@ function context(): any {
       terms: [{ label: "配送约定", text: "合成样本：审核后按约定配送" }],
     },
     creation: { state: "active", expiresAt: null },
-    expiryReview: { available: false, caseId: null },
     blockers: [
       "ADDRESS_REQUIRED",
       "NARRATOR_CONFIRMATION_REQUIRED",
@@ -285,40 +286,6 @@ test("first-copy submission binds both hashes and address and retries an uncerta
   h.page.onUnload();
 });
 
-test("expired creation permits only a separate manual-review request without a PDF, address or production order", async () => {
-  const h = harness();
-  h.page.onLoad({ projectId });
-  const show = h.page.onShow(),
-    initial = context();
-  initial.book = null;
-  initial.creation = {
-    state: "expired",
-    expiresAt: new Date(h.clock.now - 1).toISOString(),
-  };
-  initial.expiryReview.available = true;
-  initial.blockers = ["CREATION_EXPIRED", "BOOK_NOT_READY"];
-  h.respond(0, initial);
-  await show;
-  await h.page.submit();
-  assert.equal(h.requests.length, 1);
-  const review = h.page.requestExpiryReview();
-  assert.equal(
-    h.requests[1].url,
-    `${base}/projects/${projectId}/first-copy/expiry-review`,
-  );
-  assert.deepEqual(JSON.parse(JSON.stringify(h.requests[1].data)), {});
-  const saved = structuredClone(initial);
-  saved.expiryReview = {
-    available: false,
-    caseId: "55555555-5555-4555-8555-555555555555",
-  };
-  h.respond(1, saved);
-  await review;
-  assert.equal(h.page.data.context.production, null);
-  assert.match(h.page.data.status, /人工审核/);
-  h.page.onUnload();
-});
-
 test("a confirmation finishing at exact content expiry clears private book and address before its timer runs", async () => {
   const h = harness();
   h.page.onLoad({ projectId, versionId });
@@ -398,28 +365,6 @@ test("switching accounts before a submit clears the former book and address befo
   await submit;
   assert.equal(h.page.data.context, null);
   assert.equal(h.page.data.name, "");
-  h.page.onUnload();
-});
-
-test("the exact known creation deadline disables submission without waiting for its page timer", async () => {
-  const h = harness();
-  h.page.onLoad({ projectId, versionId });
-  const show = h.page.onShow(),
-    initial = context();
-  initial.confirmations = { narrator: true, initiator: true };
-  initial.address.hash = "c".repeat(64);
-  initial.canSubmit = true;
-  initial.blockers = [];
-  initial.creation.expiresAt = new Date(h.clock.now + 500).toISOString();
-  h.respond(0, initial);
-  await show;
-  h.clock.now += 500;
-  const submit = h.page.submit();
-  assert.equal(h.requests.length, 1);
-  await submit;
-  assert.equal(h.page.data.canSubmit, false);
-  assert.match(h.page.data.status, /制作期限/);
-  assert.equal(h.page.data.context.book.id, versionId);
   h.page.onUnload();
 });
 
@@ -641,5 +586,26 @@ test("existing production without the definitive revision capability cannot save
   await h.page.confirmInitiator();
   await h.page.submit();
   assert.equal(h.requests.length, 1);
+  h.page.onUnload();
+});
+
+test("an internal project without payment shows its actual zero payment and denies physical production", async () => {
+  const h = harness();
+  h.page.onLoad({ projectId });
+  const loading = h.page.onShow();
+  const value = context();
+  value.payment.paidAmountFen = 0;
+  value.blockers = [
+    "PHYSICAL_PRODUCTION_UNAVAILABLE",
+    "ENTITLEMENT_UNAVAILABLE",
+  ];
+  value.canSubmit = false;
+  value.canConfirmNarrator = false;
+  h.respond(0, value);
+  await loading;
+  assert.equal(h.page.data.paidAmount, "0.00");
+  assert.equal(h.page.data.canPrepareProduction, false);
+  assert.equal(h.page.data.canSubmit, false);
+  assert.match(h.page.data.blockerLabels.join(" "), /不含实物制作权益/);
   h.page.onUnload();
 });

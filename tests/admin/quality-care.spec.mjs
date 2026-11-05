@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { waitForAdminStartup } from "./admin-startup.mjs";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { resolve, join } from "node:path";
@@ -220,10 +221,16 @@ async function openAdmin(browser, headers = adminHeaders) {
   ]);
   const page = await context.newPage();
   observe(page);
-  await page.goto(`${adminOrigin}/admin/`);
-  await expect(page).toHaveTitle("时光里 · 运营管理");
-  await expect(page).toHaveURL(`${adminOrigin}/admin/`);
-  await page.getByRole("button", { name: "客服工单", exact: true }).click();
+  await waitForAdminStartup(page, async () => {
+    await page.goto(`${adminOrigin}/admin/`);
+    await expect(page).toHaveTitle("时光里 · 运营管理");
+    await expect(page).toHaveURL(`${adminOrigin}/admin/orders`, {
+      timeout: 30000,
+    });
+  });
+  await expect(
+    page.getByRole("menuitem", { name: "客服工单", exact: true }),
+  ).toHaveCount(0);
   return page;
 }
 
@@ -236,6 +243,18 @@ async function command(page, name, suffix) {
       response.request().method() === "POST" && response.url().endsWith(suffix),
   );
   await page.getByRole("button", { name, exact: true }).click();
+  if (
+    page.url().startsWith(adminOrigin) &&
+    [
+      "按购买政策批准退款",
+      "结束尚未执行的申请",
+      "执行原退款",
+      "记录原生产核验结果",
+      "记录原政策核验方案",
+      "创建原订单重印尝试",
+    ].includes(name)
+  )
+    await page.getByRole("button", { name: "确认操作", exact: true }).click();
   const response = await pending;
   expect(response.status(), await response.text()).toBe(201);
   return (await response.json()).data;
@@ -251,6 +270,25 @@ async function inApi(work) {
   }
 }
 async function openCase(page, caseId) {
+  const selected = await fixture.db.qualityRequest.findUniqueOrThrow({
+    where: { caseId },
+  });
+  if (!page.url().includes(`/orders/${selected.orderId}`)) {
+    await page.goto(
+      `${adminOrigin}/admin/orders?q=${selected.orderId}&pending=true`,
+    );
+    const order = await fixture.db.paymentOrder.findUniqueOrThrow({
+      where: { id: selected.orderId },
+    });
+    await page
+      .getByRole("button", { name: order.outTradeNo, exact: true })
+      .click();
+  } else if (new URL(page.url()).searchParams.get("case") === caseId) {
+    await page
+      .getByRole("button", { name: "查询原质量工单", exact: true })
+      .click();
+    return;
+  }
   const loading = page.waitForResponse((r) =>
     r.url().endsWith(`/quality/cases/${caseId}`),
   );
@@ -343,7 +381,11 @@ test("quality request, personal scoped materials and original-order reprint use 
     .fill("synthetic:原D06日历与质量处理责任已核验");
   await admin
     .getByLabel("质量处理截止", { exact: true })
-    .fill(new Date(Date.now() + 86400000).toISOString().slice(0, 16));
+    .fill(
+      new Date(Date.now() + 86400000 + 8 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 16),
+    );
   await command(admin, "领取本次质量工单", "/assign");
   const narrator = await openMini(browser, narratorSession);
   const granted = await grant(narrator);
@@ -378,8 +420,18 @@ test("quality request, personal scoped materials and original-order reprint use 
   await admin
     .getByRole("button", { name: "继续原单生产与物流", exact: true })
     .click();
+  await expect(admin).toHaveURL(
+    new RegExp(`/production/${project.order.id}\\?from=`),
+  );
   await expect(
     admin.getByText("生产单：" + project.order.id, { exact: true }),
+  ).toBeVisible();
+  await admin
+    .getByRole("button", { name: "返回查询位置", exact: true })
+    .click();
+  await expect(admin).toHaveURL(new RegExp(`case=${requested.caseId}`));
+  await expect(
+    admin.getByRole("heading", { name: "质量核验与原单重印", exact: true }),
   ).toBeVisible();
   await narrator
     .getByRole("button", { name: "重新查询质量售后", exact: true })
@@ -406,18 +458,50 @@ test("reviewed revised remedy enters existing book and fresh confirmation views,
     );
   const buyerAccount = await session(p.buyer.who);
   const buyer = await openMini(browser, buyerAccount, p);
+  const bookLoaded = buyer.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      /\/projects\/[^/]+\/book$/.test(new URL(response.url()).pathname),
+  );
   await buyer
     .getByRole("button", { name: "修订书稿并重新核对", exact: true })
     .click();
-  await expect(buyer).toHaveURL(
-    new RegExp(`#/book\\?projectId=${p.projectId}`),
+  await expect(buyer).toHaveURL(`${origin}/#/book`);
+  const bookResponse = await bookLoaded;
+  expect(bookResponse.status()).toBe(200);
+  const book = (await bookResponse.json()).data;
+  expect(book.projectId).toBe(p.projectId);
+  expect(book.current).toMatchObject({
+    id: p.book.id,
+    projectId: p.projectId,
+    snapshotHash: p.book.snapshotHash,
+  });
+  await expect(buyer.locator(".live-book .book-summary .title")).toHaveText(
+    p.book.snapshot.cover.title,
   );
   await expect(
     buyer.getByRole("button", { name: "双方确认与首本制作", exact: true }),
   ).toBeVisible();
+  const confirmationLoaded = buyer.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      /\/projects\/[^/]+\/first-copy$/.test(new URL(response.url()).pathname),
+  );
   await buyer
     .getByRole("button", { name: "双方确认与首本制作", exact: true })
     .click();
+  await expect(buyer).toHaveURL(
+    `${origin}/#/print?projectId=${p.projectId}&versionId=${p.book.id}`,
+  );
+  const confirmationResponse = await confirmationLoaded;
+  expect(confirmationResponse.status()).toBe(200);
+  const confirmation = (await confirmationResponse.json()).data;
+  expect(confirmation.projectId).toBe(p.projectId);
+  expect(confirmation.book).toMatchObject({
+    id: p.book.id,
+    projectId: p.projectId,
+    snapshotHash: p.book.snapshotHash,
+  });
   await expect(buyer.getByText(/本次为原订单质量售后的书稿修订/)).toBeVisible();
   await expect(
     buyer.getByRole("button", { name: "使用首本权益提交制作", exact: true }),
@@ -443,6 +527,7 @@ test("reviewed revised remedy enters existing book and fresh confirmation views,
     payer.getByText("收到的书漏页 · 待客服核验", { exact: true }),
   ).toBeVisible();
   const moneyAdmin = await openAdmin(browser, refundProject.headers);
+  await moneyAdmin.goto(`${adminOrigin}/admin/orders/${refundProject.orderId}`);
   const detail = moneyAdmin.waitForResponse((r) =>
     r.url().includes("/refunds/cases/"),
   );
@@ -591,6 +676,12 @@ test("an explicit assisted quality grant does not grant the buyer private conten
       },
     ),
   );
+  await admin.getByRole("button", { name: "刷新", exact: true }).last().click();
+  await openCase(admin, second.caseId);
+  await expect(
+    admin.getByText("本次质量说明：合成专属客服质量说明", { exact: true }),
+  ).toHaveCount(0);
+  await expect(admin.locator('canvas[data-page-number="1"]')).toHaveCount(0);
   await buyer
     .getByRole("button", { name: "重新查询质量售后", exact: true })
     .click();

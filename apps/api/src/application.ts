@@ -1,3 +1,4 @@
+import { validateInternalMediaConfig } from "./media/product-runtime";
 import { PrivacyRights } from "./care/privacy-rights";
 import {
   Deletions,
@@ -61,7 +62,6 @@ import {
   PersonalPlans,
   PersonalPlanController,
 } from "./projects/personal-plan-controller";
-import { AdminTermsController } from "./payments/admin-terms-controller";
 import {
   Participation,
   ParticipationController,
@@ -107,6 +107,8 @@ import cookie from "@fastify/cookie";
 import { AdminAccess } from "./admin/admin-access";
 import { ADMIN_FEISHU_FETCH } from "./admin/feishu";
 import { AdminController } from "./admin/admin-controller";
+import { AdminUsersController } from "./admin/admin-users-controller";
+import { AdminOrdersController } from "./admin/admin-orders-controller";
 import { randomUUID } from "node:crypto";
 import {
   Controller,
@@ -128,6 +130,7 @@ import {
   ApiConfig,
   ConfigurationError,
   validateAiProbeConfig,
+  validateWebConfig,
 } from "./config";
 import { Infrastructure } from "./infrastructure";
 import { errorResponse, HttpErrorFilter } from "./http-error-filter";
@@ -141,6 +144,14 @@ import {
 import { ErrorResponseDto, HealthResponseDto } from "./health-contract";
 import { IdentityAccess, WECHAT_FETCH } from "./identity/identity-access";
 import { IdentityController } from "./identity/identity-controller";
+import { WebController } from "./web/web-controller";
+import { WebAccess } from "./web/web-access";
+import {
+  WechatLinks,
+  WebWechatLinkController,
+  NativeWechatLinkController,
+} from "./identity/wechat-link";
+import { HttpException } from "@nestjs/common";
 
 @Controller("health")
 @ApiTags("Health")
@@ -176,6 +187,8 @@ class HealthController {
     HealthController,
     IdentityController,
     AdminController,
+    AdminOrdersController,
+    AdminUsersController,
     CatalogController,
     AdminCatalogController,
   ],
@@ -194,6 +207,34 @@ export async function createApplication(
     refundRuntime?: Partial<RefundRuntime>;
   } = {},
 ): Promise<NestFastifyApplication> {
+  if (
+    config.acceptance &&
+    (config.acceptance.mode !== "internal-acceptance" ||
+      config.acceptance.profileVersion !== "internal-acceptance-v1" ||
+      !config.web ||
+      !config.privacyJournal ||
+      (config.payments && config.payments.mode !== "ordinary-merchant"))
+  )
+    throw new ConfigurationError(
+      "Internal acceptance requires its profile, web sessions, independent privacy journal and ordinary merchant payments when configured",
+    );
+  if (config.web) {
+    validateWebConfig(config.web);
+    if (
+      config.environment !== "test" &&
+      !config.acceptance &&
+      (config.payments ||
+        config.participation ||
+        config.recording ||
+        config.photos ||
+        config.transcription ||
+        config.generation ||
+        config.books)
+    )
+      throw new ConfigurationError(
+        "Web product runtime requires the separate controlled acceptance assembly and lifetime-service verification",
+      );
+  }
   if (options.feishuFetch && config.environment !== "test")
     throw new ConfigurationError(
       "Feishu transport overrides require isolated tests",
@@ -203,6 +244,7 @@ export async function createApplication(
       "Refund scheduling and clock overrides require isolated tests",
     );
   if (config.books) {
+    const internal = config.books.mode === "internal-acceptance";
     let url: URL;
     try {
       url = new URL(config.books.entryBaseUrl);
@@ -210,31 +252,49 @@ export async function createApplication(
       throw new ConfigurationError("Book original-entry URL is invalid");
     }
     if (
-      config.environment !== "test" ||
-      config.books.mode !== "synthetic-local" ||
+      (internal
+        ? !config.acceptance ||
+          config.environment === "production" ||
+          config.books.specificationVersion !== "internal-a5-candidate-v1" ||
+          config.books.provenanceVersion !== "internal-provenance-v1" ||
+          url.origin !== config.web?.origin ||
+          url.pathname !== "/app/audio/"
+        : config.environment !== "test" ||
+          config.books.mode !== "synthetic-local" ||
+          !/^synthetic-/.test(config.books.specificationVersion) ||
+          !/^synthetic-/.test(config.books.provenanceVersion) ||
+          !url.hostname.endsWith(".invalid") ||
+          url.pathname !== "/timenook/audio/") ||
       !config.recording ||
       !config.books.storageRoot.startsWith("/") ||
-      !/^synthetic-/.test(config.books.specificationVersion) ||
-      !/^synthetic-/.test(config.books.provenanceVersion) ||
       (config.books.maxPhotoBytes !== undefined &&
         (!Number.isSafeInteger(config.books.maxPhotoBytes) ||
           config.books.maxPhotoBytes < 1 ||
           config.books.maxPhotoBytes > 33554432)) ||
       url.protocol !== "https:" ||
-      !url.hostname.endsWith(".invalid") ||
-      url.pathname !== "/timenook/audio/" ||
       url.username ||
       url.password ||
       url.search ||
       url.hash
     )
       throw new ConfigurationError(
-        "Book rendering requires explicit isolated synthetic specification and provenance",
+        "Book rendering requires an explicit internal acceptance or isolated synthetic configuration",
       );
+  }
+  const internalMedia = config.recording?.mode === "internal-acceptance";
+  if (internalMedia) {
+    try {
+      validateInternalMediaConfig(config);
+    } catch {
+      throw new ConfigurationError(
+        "Internal media requires explicit product OSS, ASR and DeepSeek configuration",
+      );
+    }
   }
   const generation = config.generation;
   if (
     generation &&
+    !internalMedia &&
     (config.environment !== "test" ||
       !config.recording ||
       !config.participation ||
@@ -260,6 +320,7 @@ export async function createApplication(
     );
   if (
     config.photos &&
+    !internalMedia &&
     (config.environment !== "test" ||
       config.photos.mode !== "synthetic-local" ||
       !config.recording ||
@@ -273,6 +334,7 @@ export async function createApplication(
     );
   if (
     config.transcription &&
+    !internalMedia &&
     (config.environment !== "test" ||
       !config.recording ||
       config.transcription.mode !== "synthetic-local" ||
@@ -298,6 +360,7 @@ export async function createApplication(
     );
   if (
     config.recording &&
+    !internalMedia &&
     (config.environment !== "test" ||
       config.recording.mode !== "synthetic-local" ||
       !config.participation ||
@@ -330,19 +393,21 @@ export async function createApplication(
     throw new ConfigurationError(
       "D08 synthetic participation requires isolated local payment verification tests",
     );
+  // Both payment modes use an explicit external protocol substitute in tests.
+  // Development/production always use the native merchant transport.
   if (
-    config.payments &&
-    ((config.payments.mode === "local-verification"
-      ? config.environment !== "test" ||
-        !options.paymentFetch ||
-        options.paymentFetch === fetch
-      : config.payments.mode !== "ordinary-merchant" ||
-        config.environment === "test" ||
-        !!options.paymentFetch) ||
-      config.payments.appId !== config.wechat?.appId)
+    (options.paymentFetch && config.environment !== "test") ||
+    (config.payments &&
+      (!["local-verification", "ordinary-merchant"].includes(
+        config.payments.mode,
+      ) ||
+        (config.environment === "test"
+          ? !options.paymentFetch || options.paymentFetch === fetch
+          : config.payments.mode !== "ordinary-merchant") ||
+        config.payments.appId !== config.wechat?.appId))
   )
     throw new ConfigurationError(
-      "Payments require isolated local verification transport or ordinary merchant native transport for this AppID",
+      "Payments require explicit isolated test transport or ordinary merchant native transport for this AppID",
     );
   if (config.payments) {
     try {
@@ -375,12 +440,14 @@ export async function createApplication(
     );
   }
   const productEnabled = !!(
+    config.acceptance ||
     config.payments ||
     config.participation ||
     config.recording ||
     config.books
   );
-  if (productEnabled && !config.privacyJournal)
+  const privateEnabled = productEnabled || !!config.web;
+  if (privateEnabled && !config.privacyJournal)
     throw new ConfigurationError(
       "Product private capabilities require an independent privacy journal",
     );
@@ -419,22 +486,26 @@ export async function createApplication(
   const module = {
     module: AppModule,
     controllers: [
+      ...(config.web ? [WebController, WebWechatLinkController] : []),
+      NativeWechatLinkController,
       PaymentWebhookController,
       RefundWebhookController,
+      ...(config.payments
+        ? [RefundsController, AdminRefundsController, OrdersController]
+        : []),
       ...(productEnabled
         ? [
-            RefundsController,
-            AdminRefundsController,
-            OrdersController,
-            AdminTermsController,
             ParticipationController,
             AdminCareController,
             DeletionController,
             AdminDeletionController,
           ]
         : []),
-      ...(config.participation
+      ...(config.participation || config.acceptance
         ? [PersonalPlanController, InterviewsController]
+        : []),
+      ...(config.recording || config.acceptance
+        ? [ProjectOverviewController]
         : []),
       ...(config.photos ? [PhotosController, PhotoObjectsController] : []),
       ...(config.recording
@@ -443,22 +514,30 @@ export async function createApplication(
             StoriesController,
             ...(config.books
               ? [
-                  QualityCareController,
-                  AdminQualityCareController,
                   BooksController,
-                  CompleteExportsController,
-                  AdminCompleteExportsController,
                   BookAudioController,
                   FirstCopyController,
                   FulfillmentController,
                   AdminFulfillmentController,
                   AdminFirstCopyController,
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
+                    ? [
+                        CompleteExportsController,
+                        AdminCompleteExportsController,
+                      ]
+                    : []),
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
+                    ? [QualityCareController, AdminQualityCareController]
+                    : []),
                 ]
               : []),
             FollowupsController,
             StoryCareController,
             AdminStoryCareController,
-            ProjectOverviewController,
             RecordingObjectsController,
             ProductionTasksController,
             AdminTasksController,
@@ -473,6 +552,7 @@ export async function createApplication(
         : []),
     ],
     providers: [
+      ...(config.web ? [WebAccess] : []),
       { provide: API_CONFIG, useValue: config },
       { provide: ADMIN_FEISHU_FETCH, useValue: options.feishuFetch ?? fetch },
       Infrastructure,
@@ -503,17 +583,26 @@ export async function createApplication(
             },
           ]
         : []),
+      ...(config.recording || config.acceptance ? [ProjectOverview] : []),
       { provide: AI_FETCH, useValue: options.aiFetch ?? fetch },
       ...(config.recording
         ? [
             ...(config.books
               ? [
-                  QualityCare,
                   Books,
-                  FirstCopies,
-                  CompleteExports,
-                  Fulfillment,
                   BookAudio,
+                  FirstCopies,
+                  Fulfillment,
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
+                    ? [CompleteExports]
+                    : []),
+                  ...(config.books.mode === "synthetic-local" ||
+                  (config.books.mode === "internal-acceptance" &&
+                    config.acceptance)
+                    ? [QualityCare]
+                    : []),
                   {
                     provide: BOOK_OBJECTS,
                     useValue:
@@ -528,7 +617,6 @@ export async function createApplication(
             Stories,
             Followups,
             StoryCare,
-            ProjectOverview,
             ProductionTasks,
             {
               provide: TASK_OBJECTS,
@@ -569,6 +657,7 @@ export async function createApplication(
         : []),
       { provide: WECHAT_FETCH, useValue: options.wechatFetch ?? fetch },
       IdentityAccess,
+      WechatLinks,
       ProjectStreams,
       Participation,
       PersonalPlans,
@@ -597,6 +686,18 @@ export async function createApplication(
       abortOnError: false,
     },
   );
+  if (config.web)
+    adapter.getInstance().addHook("onRequest", async (request, reply) => {
+      try {
+        await app.get(WebAccess).bridge(request);
+      } catch (error) {
+        const status = error instanceof HttpException ? error.getStatus() : 503;
+        return reply
+          .header("Cache-Control", "no-store")
+          .status(status)
+          .send(errorResponse(status, request.id));
+      }
+    });
   adapter.getInstance().addHook("onSend", async (request, reply, payload) => {
     if (request.routeOptions.url?.startsWith("/v1/admin/")) {
       // Validation rejects before the controller; only the fixed action, generated
@@ -619,9 +720,9 @@ export async function createApplication(
     });
   }
   try {
-    if (productEnabled) {
+    if (privateEnabled) {
       await app.get(PrivacyRights).initialize();
-      await app.get(Deletions).sweep();
+      if (productEnabled) await app.get(Deletions).sweep();
     }
   } catch (error) {
     await app.close();
@@ -629,7 +730,7 @@ export async function createApplication(
   }
   adapter.getInstance().addHook("onRequest", async (request) => {
     if (
-      productEnabled &&
+      privateEnabled &&
       !request.url.startsWith("/health/live") &&
       !request.url.startsWith("/docs") &&
       !request.url.startsWith("/openapi")

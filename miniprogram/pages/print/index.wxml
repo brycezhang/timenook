@@ -1,17 +1,16 @@
 <block wx:if="{{live}}">
   <view class="page live-first-copy">
     <view class="title">确认书稿与首本制作</view>
-    <view class="note section">隔离合成验证，尚未开放正式生产。请双方分别核对同一版完整 PDF；付款不能代替讲述者本人确认。</view>
+    <view class="note section">请核对本版书稿、双方确认及制作资格。请双方分别核对同一版完整 PDF；付款不能代替讲述者本人确认。</view>
     <view wx:if="{{status}}" class="soft section" role="alert">{{status}}</view>
     <view wx:if="{{busy}}" class="note section" role="status">正在查询或保存，请稍候…</view>
     <block wx:if="{{context}}">
       <view class="paper section">
         <view class="section-title">首本实体书</view>
-        <view class="section">已付 ¥999 · 制作 {{context.payment.copies}} 本</view>
+        <view class="section">实际支付 ¥{{paidAmount}} · 首本制作资格以当前核验为准</view>
         <view class="section">本次无需支付 · ¥0</view>
-        <view class="note">以上付款与配送信息来自本项目购买时的销售快照；当前仅为合成测试。</view>
+        <view class="note">以上付款与配送信息来自本项目购买时的销售快照；制作资格以服务端记录为准。</view>
         <view wx:for="{{context.shipping.terms}}" wx:key="index" class="section"><view>{{item.label}}</view><view class="note">{{item.text}}</view></view>
-        <view wx:if="{{context.creation.expiresAt}}" class="note section">约定制作截止时间：{{context.creation.expiresAt}}</view>
       </view>
       <view wx:if="{{context.qualityRevisionRequestId}}" class="soft section">本次为原订单质量售后的书稿修订。原已交付文件与首本消费事实保留；新稿须双方重新核对，再由客服创建原单重印尝试，不新增购买或首本权益。</view><view wx:if="{{context.canReviseProduction && !context.qualityRevisionRequestId}}" class="soft section">上次生产已确认取消。原生产单及历史版本记录保留；可更正地址或调整书稿，再按当前版本重新确认与提交。仅改地址由发起人重新确认；书稿内容变化须双方重新核对。</view>
       <view wx:if="{{context.book}}" class="paper section">
@@ -32,8 +31,8 @@
         <textarea class="first-copy-evidence section" value="{{narratorEvidence}}" data-role="narrator" bindinput="evidenceInput" maxlength="160" auto-height="{{true}}" placeholder="记录本人核对本版内容的独立说明" />
         <button class="btn section" bindtap="confirmNarrator" disabled="{{busy || !narratorChecked || !narratorEvidence || versionMismatch || !context.book || context.book.state !== 'ready'}}">保存本人内容确认</button>
       </view>
-      <button wx:if="{{context.role === 'initiator' && !canConfirmNarrator && (!context.production || context.canReviseProduction)}}" class="btn secondary section" bindtap="assist" disabled="{{busy || !context.book || versionMismatch}}">本人在场，开始当次书稿确认协助</button>
-      <view wx:if="{{context.role === 'initiator' && (!context.production || context.canReviseProduction)}}" class="paper section">
+      <button wx:if="{{canPrepareProduction && context.role === 'initiator' && !canConfirmNarrator && (!context.production || context.canReviseProduction)}}" class="btn secondary section" bindtap="assist" disabled="{{busy || !context.book || versionMismatch}}">本人在场，开始当次书稿确认协助</button>
+      <view wx:if="{{canPrepareProduction && context.role === 'initiator' && (!context.production || context.canReviseProduction)}}" class="paper section">
         <view class="section-title">收货信息</view>
         <view class="field"><text class="label">收件人</text><input value="{{name}}" data-field="name" bindinput="input" maxlength="30" placeholder="填写收件人姓名" disabled="{{busy}}" /></view>
         <view class="field"><text class="label">手机号</text><input value="{{phone}}" data-field="phone" bindinput="input" maxlength="11" type="number" placeholder="填写11位手机号" disabled="{{busy}}" /></view>
@@ -46,9 +45,7 @@
         <button class="btn section" bindtap="confirmInitiator" disabled="{{busy || addressDirty || versionMismatch || !initiatorChecked || !initiatorEvidence || !context.address.hash || !context.book || context.book.state !== 'ready'}}">保存排版与地址确认</button>
       </view>
       <view wx:if="{{blockerLabels.length && (!context.production || context.canReviseProduction)}}" class="soft section"><view wx:for="{{blockerLabels}}" wx:key="index" class="note section">{{item}}</view></view>
-      <button wx:if="{{context.role === 'initiator' && !context.qualityRevisionRequestId && (!context.production || context.canReviseProduction)}}" class="btn section" bindtap="submit" disabled="{{busy || !canSubmit || addressDirty || versionMismatch}}">使用首本权益提交制作</button>
-      <button wx:if="{{context.expiryReview.available}}" class="btn secondary section" bindtap="requestExpiryReview" disabled="{{busy}}">申请制作期限人工审核</button>
-      <view wx:if="{{context.expiryReview.caseId}}" class="soft section">制作期限人工审核工单已记录，等待核验。工单不能替代书稿确认，也不会自动放行制作或删除资料。</view>
+      <button wx:if="{{canPrepareProduction && context.role === 'initiator' && !context.qualityRevisionRequestId && (!context.production || context.canReviseProduction)}}" class="btn section" bindtap="submit" disabled="{{busy || !canSubmit || addressDirty || versionMismatch}}">使用首本权益提交制作</button>
       <view wx:if="{{context.production}}" class="paper section"><view class="section-title">{{context.qualityRevisionRequestId ? '原订单质量重印修订' : context.canReviseProduction ? '上次生产已确认取消' : '首本制作已预留'}}</view><view wx:if="{{!context.canReviseProduction}}" class="section">{{context.production.state === 'approved' ? '已审核' : '等待审核'}} · 制作 {{context.production.copies}} 本 · 本次无需支付</view><view class="note">生产单：{{context.production.id}}</view><view class="note section">{{context.qualityRevisionRequestId ? '双方重新确认后，由客服创建原订单的新重印尝试。普通首本提交继续关闭，不新增购买或首本权益。' : context.canReviseProduction ? '本次修订尚未重新提交；再次提交后会重新锁定，不能修改旧生产尝试的文件或地址。' : '审核后按约定安排制作与寄送。'}}</view></view>
     </block>
     <button wx:if="{{context && context.production}}" class="btn section" bindtap="production" disabled="{{busy}}">查看生产与物流</button>
@@ -56,6 +53,7 @@
     <button class="btn secondary section" bindtap="book" disabled="{{busy}}">返回成书总览</button>
   </view>
 </block>
+<!-- @development:start -->
 <block wx:else="">
 <view class="page with-dock"
   ><view class="row print-product"
@@ -110,7 +108,7 @@
         class="grow"
         ><view>书稿确认</view
         ><view class="small muted"
-          >{{ready?'本人内容与子女校对均已确认':'请先阅读并确认完整书稿'}}</view
+          >{{ready?'本人内容与发起人校对均已确认':'请先阅读并确认完整书稿'}}</view
         ></view
       ></view
     ><button class="link" bindtap="review"
@@ -134,3 +132,4 @@
   ><view class="dock-note">本次无需支付 · 不会创建真实印刷订单</view></view
 >
 </block>
+<!-- @development:end -->

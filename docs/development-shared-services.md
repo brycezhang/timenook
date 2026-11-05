@@ -15,10 +15,10 @@
 | 数据库     | deed 同一 RDS 连接主机、账号、密码；数据库 `timenook`，独立业务表和迁移历史 |
 | Redis      | 复用 deed 的云端连接；应用键前缀 `timenook-cloud`                           |
 | OSS        | 独立私有 Bucket `timenook`，上海 `cn-shanghai`，沿用 deed AccessKey；探针前缀 `timenook/probe/` |
-| 网页       | 本地 `http://127.0.0.1:5173/`，Vite 代理到上述公网 API                      |
+| 网页       | 内测产品 `https://sgl.wootoon.cn/app/`；本地预览仍可通过 Vite 代理到公网 API |
 | 小程序     | 本地开发者工具加载 `dist/miniprogram/`，API 基址为上述公网 HTTPS 地址       |
 
-API 使用 `NODE_ENV=development`，这是受控联调服务；当前正式业务门禁尚不支持跳过微信凭据直接启用生产。公网文档入口被 Nginx 拒绝，探针需要独立短期身份。2026-11-01 已配置独立小程序 AppID/Secret 并重启 API，微信登录与会话实测见[本轮记录](delivery/2026-11-01/wechat-login.md)；支付模式仍关闭。
+API 使用 `NODE_ENV=development`，这是受控联调服务。2026-10-29 起通过显式 `INTERNAL_ACCEPTANCE_ENABLED=1` 启用独立无付款项目和预建网页账号，使用真实产品授权、OSS/AI/Worker与PDF，不伪造微信或支付。网页同源 `/api/` 代理现有API，实际结果见[统一流程运行验收](delivery/2026-10-29/mobile-web-online.md)。公网文档入口继续由Nginx拒绝，探针仍使用独立短期身份；2026-11-01 已配置微信身份并完成开发者工具单账号登录与商户关联的无付款验证；后台配置由用户确认完成。普通商户业务模块及支付/退款通知已与内部验收共存并部署，公网订单鉴权、无效通知拒绝和网页内测开关通过；详见[支付运行记录](delivery/2026-11-01/payment-runtime.md)。实际资金和真机另验，真实新销售创建仍关闭。
 
 2026-10-28 域名配置与线上验证见 [域名配置记录](delivery/2026-10-28/domain-ingress.md)。管理页面 `/admin/`、管理 API/Cookie `/api/v1/admin` 和微信支付通知的实现与验收按 [ADR 0015](adr/0015-dedicated-domain-ingress.md) 执行。
 
@@ -45,7 +45,7 @@ TIMENOOK_AUDIO_PROBE_BUILD=1 pnpm build:frontend
 pnpm check:native
 ```
 
-网页保留明确标识的本机演示，演示项目不是云端产品项目。原生录音探针是独立受控入口，不依赖微信登录；身份须由服务器 CLI 生成并通过私有文件交给操作员。微信身份配置及登录实测见[本轮记录](delivery/2026-11-01/wechat-login.md)；真机权限、完整合法域名和设备采集仍按实际证据分别验收。
+网页保留明确标识的本机演示，演示项目不是云端产品项目。微信身份与无付款商户验证见[本轮记录](delivery/2026-11-01/wechat-login.md)。原生录音探针是独立受控入口，不依赖微信登录；身份须由服务器 CLI 生成并通过私有文件交给操作员。真机权限、合法域名和设备采集仍待实际验证。
 
 本机 `.env` 继续只连接可丢弃的本地 PostgreSQL/Redis，供自动化回归使用，不把云端库配置替换进去。
 

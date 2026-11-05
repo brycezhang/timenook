@@ -143,7 +143,6 @@ before(async () => {
   const snapshot = JSON.parse(
     readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
   );
-  snapshot.admission.d02.duration.value = 1;
   const draftId = randomUUID();
   await db.packageDraft.create({
     data: { id: draftId, realm: "local", ...snapshot },
@@ -729,6 +728,159 @@ test("review resolutions append a revision and narrator fact confirmation can re
   assert.equal(reread.decision.confirmed, true);
   assert.equal(reread.decision.allowInBook, false);
 });
+test("a single actual confirmation click retains an earlier explicit inclusion refusal across edits until the narrator changes it", async () => {
+  const p = await readyStory(),
+    url = `/v1/projects/${p.projectId}/stories/${p.story.id}`;
+  const corrected = data(
+    await request("POST", `${url}/revisions`, p.buyer.token, {
+      ...correction(p.story),
+      reviewResolutions: [
+        { item: "确切年代待本人核对", reason: "本人要求保留大约年代" },
+      ],
+    }),
+  );
+  const refused = data(
+    await request(
+      "POST",
+      `${url}/decisions`,
+      p.narrator.token,
+      decision(corrected, false),
+    ),
+  );
+  assert.equal(refused.decision.allowInBook, false);
+  const edited = data(
+    await request("POST", `${url}/revisions`, p.buyer.token, {
+      ...correction(corrected),
+      reviewResolutions: corrected.revision.reviewResolutions,
+    }),
+  );
+  const reading = data(await request("GET", url, p.narrator.token), 200);
+  assert.equal(
+    reading.decision,
+    null,
+    "editing cannot inherit content confirmation",
+  );
+  assert.equal(
+    reading.confirmation.allowInBook,
+    false,
+    "simplified UI cannot silently widen a refusal",
+  );
+  const click = {
+    ...decision(edited, false),
+    evidenceRef: `synthetic:click:story-confirm:${randomUUID()}`,
+  };
+  const key = randomUUID();
+  const confirmed = data(
+    await request("POST", `${url}/decisions`, p.narrator.token, click, key),
+  );
+  assert.equal(confirmed.decision.confirmed, true);
+  assert.equal(confirmed.decision.allowInBook, false);
+  assert.equal(confirmed.decision.contentHash, edited.revision.contentHash);
+  assert.equal(confirmed.decision.operatorUserId, p.narrator.id);
+  assert.equal(confirmed.decision.evidenceRef, click.evidenceRef);
+  assert.equal(
+    data(
+      await request("POST", `${url}/decisions`, p.narrator.token, click, key),
+    ).decision.id,
+    confirmed.decision.id,
+  );
+  const allowed = data(
+    await request(
+      "POST",
+      `${url}/decisions`,
+      p.narrator.token,
+      decision(edited, true),
+    ),
+  );
+  assert.equal(allowed.decision.allowInBook, true);
+});
+
+test("a narrator account rebind preserves the same subject's refusal until an explicit new decision", async () => {
+  const p = await readyStory(),
+    url = `/v1/projects/${p.projectId}/stories/${p.story.id}`;
+  const corrected = data(
+    await request("POST", `${url}/revisions`, p.buyer.token, {
+      ...correction(p.story),
+      reviewResolutions: [
+        { item: "确切年代待本人核对", reason: "本人要求保留大约年代" },
+      ],
+    }),
+  );
+  data(
+    await request(
+      "POST",
+      `${url}/decisions`,
+      p.narrator.token,
+      decision(corrected, false),
+    ),
+  );
+  const replacement = await login(),
+    old = await state(p, p.narrator.token);
+  const care = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/care-requests`,
+      p.narrator.token,
+      {
+        kind: "rebind",
+        targetUserId: replacement.id,
+        expectedBindingVersion: old.bindingVersion,
+      },
+    ),
+  );
+  const headers = await paymentAdmin(config, app, ["care:write"]);
+  data(
+    await app.inject({
+      method: "POST",
+      url: `/v1/admin/projects/${p.projectId}/rebind`,
+      headers: { ...headers, "idempotency-key": randomUUID() },
+      payload: {
+        ...notice(),
+        supportCaseRef: care.supportCaseRef,
+        targetUserId: replacement.id,
+        expectedBindingVersion: old.bindingVersion,
+      },
+    }),
+  );
+  for (const purpose of ["collection", "ai", "sharing"])
+    data((await choose(p, replacement.token, purpose, true)).response);
+  const reading = data(await request("GET", url, replacement.token), 200);
+  assert.equal(
+    reading.decision,
+    null,
+    "old binding cannot confirm content for the new account",
+  );
+  assert.equal(
+    reading.confirmation.allowInBook,
+    false,
+    "same-subject refusal survives binding change",
+  );
+  const confirmed = data(
+    await request("POST", `${url}/decisions`, replacement.token, {
+      ...decision(reading, reading.confirmation.allowInBook),
+      evidenceRef: `synthetic:click:story-confirm:${randomUUID()}`,
+    }),
+  );
+  assert.equal(confirmed.decision.allowInBook, false);
+  assert.equal(confirmed.decision.subjectId, p.subjectId);
+  assert.equal(confirmed.decision.bindingVersion, old.bindingVersion + 1);
+  const allowed = data(
+    await request(
+      "POST",
+      `${url}/decisions`,
+      replacement.token,
+      decision(reading, true),
+    ),
+  );
+  assert.equal(allowed.decision.allowInBook, true);
+  assert.equal(
+    data(await request("GET", url, replacement.token), 200).confirmation
+      .allowInBook,
+    true,
+  );
+  assert.equal((await request("GET", url, p.narrator.token)).statusCode, 403);
+});
+
 test("correction and decision retries keep one result but recheck current sharing before replay", async () => {
   const p = await readyStory(),
     url = `/v1/projects/${p.projectId}/stories/${p.story.id}`,
@@ -1349,6 +1501,15 @@ test("Care correction needs a narrator's expiring story grant and verified case,
   assert.equal(corrected.revision.origin, "participant");
   assert.equal(corrected.revision.operatorRealm, "admin");
   assert.equal(corrected.decision, null);
+  const projectDetail = data(
+    await adminRequest("GET", `/v1/admin/users/projects/${p.projectId}`),
+    200,
+  );
+  assert.ok(
+    projectDetail.history.some(
+      (entry: { action: string }) => entry.action === "care.story.revise",
+    ),
+  );
   t.mock.method(Date, "now", () => Date.parse(grant.expiresAt));
   assert.equal((await adminRequest("GET", path)).statusCode, 403);
   t.mock.restoreAll();

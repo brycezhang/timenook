@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAdminTime } from "../utils/time";
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { Alert, Button, Input } from "antdv-next";
 import type { DeletionStatus, DeletionItemView } from "@timenook/contracts";
@@ -179,8 +180,8 @@ onMounted(refresh);
           value.permanentProjectDeletion
             ? "全项目删除已核验且不可逆；清理结果逐项核实。"
             : value.changes.length
-              ? "按类别到期清理，未表示全项目删除。独立有效的资料继续按原规则处理。"
-              : "尚无已核验删除或保留期届满记录。"
+              ? "已记录核验删除范围，各层清理结果逐项核实。"
+              : "尚无已核验删除记录。"
         }}
       </p>
       <p>
@@ -210,7 +211,8 @@ onMounted(refresh);
           }}
         </p>
         <p>
-          原处理截止：{{ item.deadline || "规则或起算待确认"
+          原处理截止：{{
+            item.deadline ? formatAdminTime(item.deadline) : "规则或起算待确认"
           }}<span
             v-if="
               item.deadline &&
@@ -226,7 +228,9 @@ onMounted(refresh);
           }}
         </p>
         <p v-if="item.evidenceRef">本项回执：{{ item.evidenceRef }}</p>
-        <p v-if="item.completedAt">本层完成时间：{{ item.completedAt }}</p>
+        <p v-if="item.completedAt">
+          本层完成时间：{{ formatAdminTime(item.completedAt) }}
+        </p>
         <Button v-if="editable(item)" :disabled="busy" @click="select(item)"
           >录入此项核验记录</Button
         >

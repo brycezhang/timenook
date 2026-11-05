@@ -15,7 +15,6 @@ function record(v: CompleteExportView, projectId: string) {
       "packing",
       "ready",
       "failed",
-      "expired",
       "revoked",
       "delivered",
     ].includes(v.state) ||
@@ -61,6 +60,7 @@ export const completeExportClient = {
     recipient: "self" | "initiator",
     evidence: string,
     key: string,
+    notice: Pick<CompleteExportContext, "noticeVersion" | "evidencePrefix">,
   ) {
     if (!uuid(projectId)) throw Error("项目编号无效");
     return record(
@@ -70,8 +70,8 @@ export const completeExportClient = {
           key,
           data: {
             recipient,
-            noticeVersion: "synthetic-d08-v1",
-            evidenceRef: `synthetic:${evidence}`,
+            noticeVersion: notice.noticeVersion,
+            evidenceRef: `${notice.evidencePrefix}${evidence}`,
           },
         },
       ),

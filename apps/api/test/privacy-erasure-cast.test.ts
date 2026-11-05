@@ -139,7 +139,7 @@ async function item(
   `;
   await tx.$executeRaw`
     INSERT INTO privacy_deletions(id,project_id,trigger,categories,effective_at,scoped_export_id)
-    VALUES(${event}::uuid,${owner}::uuid,'retention_expiry',${JSON.stringify([category])}::jsonb,now(),${target.scopedExportId ?? null}::uuid)
+    VALUES(${event}::uuid,${owner}::uuid,'verified_request',${JSON.stringify([category])}::jsonb,now(),${target.scopedExportId ?? null}::uuid)
   `;
   await tx.$executeRaw`
     INSERT INTO privacy_deletion_items(id,event_id,project_id,category,layer,target_table,target_key,target_columns)

@@ -134,7 +134,6 @@ export function validatePackage(
 const starts: Record<string, string> = {
   payment_verified: "付款核验成功",
   subject_participation: "讲述者开始参与",
-  creation_expired: "制作权益到期",
   delivery_completed: "实体书交付完成",
   asset_created: "素材创建",
   export_ready: "导出包就绪",
@@ -165,14 +164,9 @@ export function publicTerms(
       text: `${at(d01, "widthMm")} × ${at(d01, "heightMm")} mm；${at(d01, "paper")}；${at(d01, "binding")}；${at(d01, "color")}；${at(d01, "minPages")}–${at(d01, "maxPages")} 页。`,
     },
     {
-      key: "creation_window",
-      label: "制作期限",
-      text: `自${start("d02.startsAt")}起 ${value("d02.duration.value")} 个自然日。未开始参与的最长等待为付款后 ${value("d02.notStarted.maxWait.value")} 个自然日，之后${read("d02.notStarted.resolution") === "expire_creation" ? "制作权益到期" : "联系并提供退款处理"}。`,
-    },
-    {
-      key: "creation_expiration",
-      label: "暂停与到期",
-      text: `暂停时${read("d02.pause.clock") === "stops" ? "停止" : "继续"}计时，累计最多 ${value("d02.pause.maxTotal.value")} 天，达到上限后${read("d02.pause.atLimit") === "resume_clock" ? "恢复计时" : "人工核验"}。到期后停止新录音，首本制作${read("d02.expiration.firstCopy") === "blocked" ? "停止受理" : "需人工核验"}；资料按各自保留期限处理。`,
+      key: "creation_service",
+      label: "制作服务",
+      text: "长期有效。可持续录音和整理；首本数量、双方确认、付款及退款权益仍按本项目约定执行。",
     },
     {
       key: "shipping",
@@ -181,11 +175,11 @@ export function publicTerms(
     },
     {
       label: "原声回听",
-      text: `自${start("d03.onlinePlayback.startsAt")}起 ${value("d03.onlinePlayback.duration.value")} 天，到期停止在线访问。`,
+      text: "长期有效。本人可依当前授权回听原声。",
     },
     {
       label: "完整资料导出",
-      text: `已包含，客服核验本人身份及范围后人工交付原声、转录、确认稿、照片、PDF和清单。申请期限自${start("d03.exportRequests.startsAt")}起 ${value("d03.exportRequests.duration.value")} 天。`,
+      text: "已包含且长期有效，客服核验本人身份及范围后交付原声、转录、确认稿、照片、PDF和清单。已完成的资料包可持续下载。",
     },
   ];
   for (const [key, label] of Object.entries({
@@ -200,11 +194,10 @@ export function publicTerms(
     activeData: "活动资料",
     historicalObjects: "历史对象",
     backupCopies: "备份副本",
-    supplierCopies: "服务方副本",
   }))
     terms.push({
       label: `${label}保留`,
-      text: `自${start(`d03.retention.${key}.startsAt`)}起 ${value(`d03.retention.${key}.duration.value`)} 天。`,
+      text: "为持续制作、回听和下载所需的资料长期保留；本人主动撤回或删除时按核验流程处理。",
     });
   for (const [key, label] of Object.entries({
     activeData: "活动资料",
@@ -216,10 +209,6 @@ export function publicTerms(
       label: `${label}删除`,
       text: `删除请求核验后 ${value(`d03.deletion.${key}.within.value`)} 个自然日内处理，分别告知进度。`,
     });
-  terms.push({
-    label: "到期告知",
-    text: `提前 ${value("d03.expiryNotice.advance.value")} 天告知；退款不等于删除资料。`,
-  });
   for (const [key, label] of Object.entries({
     recordingPerClip: "单段录音",
     recordingTotal: "总录音",

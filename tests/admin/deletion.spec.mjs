@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { waitForAdminStartup } from "./admin-startup.mjs";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { resolve, join } from "node:path";
@@ -203,7 +204,7 @@ async function openMini(browser, account, target = project, route = "welcome") {
   await expect(page).toHaveTitle("时光里 · 岁月成书");
   return page;
 }
-async function openAdmin(browser) {
+async function openAdmin(browser, target = project) {
   const context = await browser.newContext({
     ignoreHTTPSErrors: true,
     viewport: { width: 1280, height: 900 },
@@ -222,10 +223,12 @@ async function openAdmin(browser) {
   ]);
   const page = await context.newPage();
   observe(page);
-  await page.goto(`${adminOrigin}/admin/`);
-  await expect(page).toHaveTitle("时光里 · 运营管理");
-  await expect(page).toHaveURL(`${adminOrigin}/admin/`);
-  await page.getByRole("button", { name: "客服工单", exact: true }).click();
+  await waitForAdminStartup(page, async () => {
+    await page.goto(`${adminOrigin}/admin/users/projects/${target.projectId}`);
+    await expect(
+      page.getByRole("heading", { name: "项目详情", exact: true }),
+    ).toBeVisible({ timeout: 30000 });
+  });
   return page;
 }
 
@@ -243,6 +246,9 @@ test("本人申请删除、客服核验、在线停止与逐层外部证据保�
   browser,
 }) => {
   const mini = await openMini(browser, narratorSession);
+  await mini
+    .getByRole("button", { name: "调整用途与资料服务", exact: true })
+    .click();
   await expect(
     mini.getByRole("button", {
       name: "提交本人删除申请，等待客服核验",
@@ -274,7 +280,7 @@ test("本人申请删除、客服核验、在线停止与逐层外部证据保�
     .getByRole("button", { name: `查看 ${created.id}`, exact: true })
     .click();
   await expect(
-    admin.getByText("尚无已核验删除或保留期届满记录。", { exact: false }),
+    admin.getByText("尚无已核验删除记录。", { exact: false }),
   ).toBeVisible();
   await admin
     .getByLabel("D08 核验证据引用", { exact: true })
@@ -351,7 +357,7 @@ test("本人申请删除、客服核验、在线停止与逐层外部证据保�
   await expect(mini.getByText("在线访问已停止", { exact: true })).toBeVisible();
   await expect(mini.getByText(/项目删除不可逆/)).toBeVisible();
   await expect(
-    mini.getByText("备份待到期或核验", { exact: true }).first(),
+    mini.getByText("备份清理待核验", { exact: true }).first(),
   ).toBeVisible();
   const backup = confirmed.changes
     .flatMap((change) => change.items)
@@ -450,13 +456,15 @@ test("管理员切换工单后，旧删除清单的迟到响应不会恢复旧�
       },
     }),
   );
-  const admin = await openAdmin(browser);
+  const admin = await openAdmin(browser, a.p);
   await admin
     .getByRole("button", { name: `查看 ${a.care.id}`, exact: true })
     .click();
   const panel = admin.locator('section[aria-label="逐层资料删除"]');
   await expect(panel.getByText(/全项目删除已核验且不可逆/)).toBeVisible();
-  let release, received;
+  let release,
+    received,
+    lateHandled = false;
   const gate = new Promise((resolve) => {
     release = resolve;
   });
@@ -469,7 +477,8 @@ test("管理员切换工单后，旧删除清单的迟到响应不会恢复旧�
       const response = await route.fetch();
       received();
       await gate;
-      await route.fulfill({ response });
+      await route.fulfill({ response }).catch(() => {});
+      lateHandled = true;
     },
   );
   try {
@@ -478,19 +487,29 @@ test("管理员切换工单后，旧删除清单的迟到响应不会恢复旧�
       .click();
     await arrived;
     await admin
+      .getByRole("link", { name: "用户管理", exact: true })
+      .first()
+      .click();
+    await admin
+      .getByRole("textbox", { name: "搜索用户", exact: true })
+      .fill(b.p.projectId);
+    await admin.getByRole("button", { name: "查询", exact: true }).click();
+    await admin
+      .getByRole("button", { name: b.p.buyer.id, exact: true })
+      .click();
+    await admin
+      .locator(`a[href^="/admin/users/projects/${b.p.projectId}"]`)
+      .first()
+      .click();
+    await admin
       .getByRole("button", { name: `查看 ${b.care.id}`, exact: true })
       .click();
     await expect(
       admin.getByText(`共享工单：record:${b.care.id}`, { exact: true }),
     ).toBeVisible();
-    await expect(
-      panel.getByText(/尚无已核验删除或保留期届满记录/),
-    ).toBeVisible();
-    const late = admin.waitForResponse((response) =>
-      response.url().endsWith(`/care-requests/${a.care.id}/deletion-status`),
-    );
+    await expect(panel.getByText(/尚无已核验删除记录/)).toBeVisible();
     release();
-    await late;
+    await expect.poll(async () => lateHandled).toBe(true);
     await expect(panel.getByText(/全项目删除已核验且不可逆/)).toHaveCount(0);
     await expect(
       panel.getByRole("button", {

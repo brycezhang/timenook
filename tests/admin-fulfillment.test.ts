@@ -3,13 +3,18 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { transform } from "esbuild";
+import {
+  formatAdminTime,
+  formatAdminTimeInput,
+  parseAdminTimeInput,
+} from "../apps/admin/src/utils/time";
 async function harness() {
   const script = readFileSync("apps/admin/src/views/fulfillment.vue", "utf8")
     .split('<script setup lang="ts">')[1]
     .split("</script>")[0]
     .replace(/^import[\s\S]*?;\n/gm, "");
   const { code } = await transform(
-    `${script}\nexport { rows, selected, busy, error, supplierRef, dueAt, materials, createAttempt, open, loadMaterials, evidence, receipt, carrier, trackingNumber, shippedAt, shippingEvidence, wechatEvidence, wechatResult, saveShipping, continueProduction };`,
+    `${script}\nexport { rows, selected, busy, error, supplierRef, dueAt, materials, createAttempt, open, loadMaterials, evidence, receipt, carrier, trackingNumber, shippedAt, shippingEvidence, wechatEvidence, wechatResult, saveShipping, saveWechat, continueProduction };`,
     { loader: "ts", format: "cjs" },
   );
   const calls: {
@@ -24,6 +29,9 @@ async function harness() {
   runInNewContext(code, {
     module,
     exports: module.exports,
+    formatAdminTime,
+    formatAdminTimeInput,
+    parseAdminTimeInput,
     ref: (value: unknown) => ({ value }),
     computed: (fn: () => unknown) => ({
       get value() {
@@ -94,7 +102,7 @@ test("operational creation binds the selected reservation and keeps one uncertai
   assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0].args[1])), {
     ...view.reservation,
     supplierRef: "synthetic:local-printer",
-    dueAt: new Date("2098-10-26T14:30").toISOString(),
+    dueAt: "2098-10-26T06:30:00.000Z",
   });
   const key = h.calls[0].args[2];
   h.calls[0].reject(new Error("synthetic network failure"));
@@ -177,7 +185,7 @@ test("unknown supplier receipt stays a pending command owned by the same attempt
   h.unmount();
 });
 
-test("a later WeChat result uses the original immutable tracking including seconds and milliseconds", async () => {
+test("a later WeChat result changes only platform handling and preserves immutable tracking", async () => {
   const h = await harness(),
     view: any = initial();
   view.current = {
@@ -198,12 +206,12 @@ test("a later WeChat result uses the original immutable tracking including secon
   h.page.shippingEvidence.value = "synthetic:shipping-check";
   h.page.wechatEvidence.value = "synthetic:wechat-record-confirmed";
   h.page.wechatResult.value = "recorded";
-  const saving = h.page.saveShipping();
-  assert.equal(
-    (h.calls[1].args[3] as any).shippedAt,
-    "2026-10-25T04:30:45.123Z",
-  );
-  assert.equal((h.calls[1].args[3] as any).wechat.result, "recorded");
+  const saving = h.page.saveWechat();
+  assert.equal(h.calls[1].args[2], "wechat");
+  assert.deepEqual(JSON.parse(JSON.stringify(h.calls[1].args[3])), {
+    evidenceRef: "synthetic:wechat-record-confirmed",
+    result: "recorded",
+  });
   h.calls[1].resolve(view);
   await saving;
   assert.equal(h.page.selected.value.current.state, "delivered");

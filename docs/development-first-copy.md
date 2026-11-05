@@ -1,8 +1,6 @@
 # 双方确认与首本制作本地验证
 
-2026-10-29 当前方案以 [ADR 0017](adr/0017-lifetime-service-and-retention.md) 为准：制作长期有效；下文按新目标更新，代码对齐与本轮验证尚待完成。历史有限期测试保留为当时结果，不证明新规则已实现。
-
-T22 接入 T10 已核验付款及唯一首本权益、T12 当次协助证据和 T20/T21 确定书稿。当前仍由 `books.mode=synthetic-local` 与 `environment=test` 隔离，只在既有 Book 合成应用中注册路由；默认配置和生产不能启用。D02 长期规则已决定；本票不代替 D01/D05/D06 的真实冻结，不付款、不联系印厂，也不执行 T23 的交接。
+T22 接入 T10 已核验付款及唯一首本权益、T12 当次协助证据和 T20/T21 确定书稿。当前仍由 `books.mode=synthetic-local` 与 `environment=test` 隔离，只在既有 Book 合成应用中注册路由；默认配置和生产不能启用。本票不冻结 D01/D05/D06，不付款、不联系印厂，也不执行 T23 的交接。
 
 ## 用户接口
 
@@ -10,7 +8,7 @@ T22 接入 T10 已核验付款及唯一首本权益、T12 当次协助证据和 
 
 | 路径             | 方法 | 输入与结果                                                                                                                           |
 | ---------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `/`              | GET  | 当前书稿、双方有效确认、地址版本/hash、已付金额、制作一本/本次零付款、原订单配送/生产/物流约定、长期权益和拒绝原因                   |
+| `/`              | GET  | 当前书稿、双方有效确认、地址版本/hash、已付金额、制作一本/本次零付款、原订单配送/生产/物流约定、长期制作状态和拒绝原因               |
 | `/address`       | POST | 发起人提交 `expectedVersion, recipientName, phone, regionCode, detail`；地区必须在原销售快照包含范围内且不在排除范围                 |
 | `/confirmations` | POST | `role, bookVersionId, snapshotHash, pdfHash, noticeVersion, evidenceRef`；发起人另传 `addressHash`，当次协助另传 `assistedSessionId` |
 | `/submit`        | POST | 发起人提交 `bookVersionId, snapshotHash, pdfHash, addressHash`；唯一预留首本，返回原生产单或冲突                                     |
@@ -23,15 +21,13 @@ T22 接入 T10 已核验付款及唯一首本权益、T12 当次协助证据和 
 
 成功预留在同一事务内写唯一首本单、权益 `reserved`、审计事件和持久 Outbox。一个项目、付款订单和权益分别唯一；同键同载荷及不同键并发返回同一生产单，同键异载荷或已预留单不同内容返回 409。Outbox 仅保存交接事实，T22 没有新增队列或自动向印厂提交。
 
-## 生产审核与长期制作
+## 审核与长期资格
 
-`POST /v1/admin/first-copy/:id/approve` 的 `:id` 是生产单 ID，输入为同一组四项版本/hash 绑定。要求独立管理员飞书会话、CSRF、`fulfillment:write` 和幂等键，由 AdminAccess 同事务审计。审核再次执行付款、权益、当前版本、许可、授权、冻结、规格和双方确认，不设置服务期限门禁。返回仅需项目与生产信息，不返回私人书稿全文或地址，也不授予运营私人内容读取权限。
+`POST /v1/admin/first-copy/:id/approve` 的 `:id` 是生产单 ID，输入为同一组四项版本/hash 绑定。要求独立管理员飞书会话、CSRF、`fulfillment:write` 和幂等键，由 AdminAccess 同事务审计。审核再次执行付款、权益、当前版本、许可、授权、冻结、规格与双方确认。返回仅含 `projectId, production`，不返回私人正文或地址，也不授予运营私人内容读取权限。
 
-制作长期有效，符合付款权益、当前授权和同版确认条件时可随时提交首本。移除 `/expiry-review`、`first_copy_expiry` 工单及暂停/恢复计时操作；时间推进不能转入人工到期审核。若底层日期必须填写，固定 2099-12-31 仅作占位，后台不可配置，用户端不显示倒计时。退款冻结、权益终止、争议 hold 和主动撤回仍按实际规则限制生产，不属于服务计时。
+按 [ADR0017](adr/0017-lifetime-service-and-retention.md)，制作资格长期有效；`creation.expiresAt=null`，不计算起算、暂停或到期。`/expiry-review`、期限管理接口和对应权限已移除。退款导致的 suspended/terminated、唯一首本权益、当前授权及主动删除继续阻止不合法提交；长期服务不增加首本数量，也不免除版本确认。
 
 ## 复现
-
-新验收须覆盖跨时间提交/审核与重启、旧期限入口移除，同时复验并发唯一预留、同版确认和撤回。以下入口可复用，实际结果须按新提交留证。
 
 先按[本地开发](development.md)准备回环 PostgreSQL/Redis、Node 22.23.4、pnpm 10.34.7、固定字体及 Chromium。API 测试只使用可丢弃独立 schema；微信、支付、ASR/文本边界均为明确合成替身。
 

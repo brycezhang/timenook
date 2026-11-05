@@ -360,6 +360,119 @@ test("verified notification and active query concurrently activate exactly one p
   assert.equal(next.state, "paid");
   assert.notEqual(next.project.id, result.project.id);
 });
+test("buyer cancels an order before payment preparation without contacting WeChat or granting a project", async () => {
+  const token = await login("cancel-before-prepare");
+  const order = (await create(token)).json().data;
+  const headers = {
+    authorization: `Bearer ${token}`,
+    "idempotency-key": randomUUID(),
+  };
+  const before = paymentRequests.length;
+  const closed = await app.inject({
+    method: "POST",
+    url: `/v1/orders/${order.id}/close`,
+    headers,
+    payload: {},
+  });
+  assert.equal(closed.statusCode, 201, closed.body);
+  assert.equal(closed.json().data.state, "closed");
+  assert.equal(closed.json().data.project, null);
+  const recovered = await readOrder(token, order.id);
+  assert.equal(recovered.json().data.state, "closed");
+  assert.equal(recovered.json().data.project, null);
+  const prepared = await app.inject({
+    method: "POST",
+    url: `/v1/orders/${order.id}/payment`,
+    headers,
+    payload: {},
+  });
+  assert.equal(prepared.statusCode, 409, prepared.body);
+  assert.equal(
+    paymentRequests.length,
+    before,
+    "no provider order exists to close or query",
+  );
+});
+
+test("cancellation preserves an in-flight payment until the original WeChat order can be reconciled", async () => {
+  const token = await login("cancel-prepare-race");
+  const order = (await create(token)).json().data;
+  const headers = {
+    authorization: `Bearer ${token}`,
+    "idempotency-key": randomUUID(),
+  };
+  let reached!: () => void, release!: () => void;
+  const gated = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const resume = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const concurrent = await createApplication(config, {
+    wechatFetch,
+    paymentFetch: async (input, init) => {
+      if (new URL(String(input)).pathname === "/v3/pay/transactions/jsapi") {
+        reached();
+        await resume;
+      }
+      return paymentFetch(input, init);
+    },
+  });
+  try {
+    const preparing = concurrent.inject({
+      method: "POST",
+      url: `/v1/orders/${order.id}/payment`,
+      headers,
+      payload: {},
+    });
+    // Hold the external request after the durable submission reservation.
+    await gated;
+    const before = paymentRequests.length;
+    const uncertain = await concurrent.inject({
+      method: "POST",
+      url: `/v1/orders/${order.id}/close`,
+      headers,
+      payload: {},
+    });
+    assert.equal(uncertain.statusCode, 201, uncertain.body);
+    assert.equal(uncertain.json().data.state, "pending");
+    assert.equal(uncertain.json().data.project, null);
+    const trace = paymentRequests.slice(before);
+    assert.ok(
+      trace.some(
+        (request) =>
+          request.method === "GET" && request.path.includes(order.outTradeNo),
+      ),
+      "unknown submissions are queried by their original order number",
+    );
+    assert.ok(
+      trace.some((request) =>
+        request.path.includes(`${order.outTradeNo}/close`),
+      ),
+      "a reserved payment must be closed through its original provider order",
+    );
+    release();
+    const prepared = await preparing;
+    assert.equal(prepared.statusCode, 201, prepared.body);
+    assert.equal(prepared.json().data.status, "prepared");
+    const recovered = (await readOrder(token, order.id)).json().data;
+    assert.equal(recovered.state, "pending");
+    assert.equal(recovered.project, null);
+    const closed = await concurrent.inject({
+      method: "POST",
+      url: `/v1/orders/${order.id}/close`,
+      headers,
+      payload: {},
+    });
+    assert.equal(closed.statusCode, 201, closed.body);
+    assert.equal(closed.json().data.state, "closed");
+    assert.equal(closed.json().data.project, null);
+  } finally {
+    release();
+    await concurrent.close();
+  }
+});
+
 test("close reconciles the provider and preserves a racing payment; unpaid closed orders never get entitlement or another payment attempt", async () => {
   const token = await login("closing");
   const order = await prepareOrder(token);
@@ -693,28 +806,30 @@ test("a buyer can create and replay an order with a single database connection",
     await limited.close();
   }
 });
-test("payment activation freezes independent service terms while participation and delivery clocks remain unstarted", async () => {
+test("payment activation grants lifetime service before participation without a business expiry", async () => {
   const token = await login("terms");
   const order = await prepareOrder(token);
   paid(order.outTradeNo);
   const result = (await readOrder(token, order.id)).json().data;
-  assert.equal(result.project.terms.policyStatus, "synthetic-fixed-policy");
-  assert.equal(result.project.terms.creation.state, "not_started");
+  assert.equal(result.project.terms.policyStatus, "lifetime");
+  assert.equal(result.project.terms.creation.state, "active");
   assert.equal(result.project.terms.creation.expiresAt, null);
-  assert.equal(result.project.terms.playback.state, "not_started");
-  assert.equal(result.project.terms.exportRequests.state, "not_started");
+  assert.equal(result.project.terms.playback.state, "active");
+  assert.equal(result.project.terms.exportRequests.state, "active");
   assert.equal(result.project.terms.retention.originalAudio.expiresAt, null);
   assert.equal(result.project.terms.deleteData, false);
-  assert.match(result.project.terms.notStarted.reviewAt, /Z$/);
+  assert.equal(result.project.terms.canRecord, true);
+  assert.equal(result.project.terms.notStarted, undefined);
+  assert.equal(result.project.terms.pause, undefined);
 });
-test("trusted participation and delivery facts start frozen clocks once across concurrent replay, restart and exact expiry boundaries", async () => {
+test("trusted participation and delivery facts are idempotent while lifetime service remains available beyond 2099", async () => {
   const token = await login("term-facts");
   const order = await prepareOrder(token);
   paid(order.outTradeNo, { success_time: "2026-01-01T00:00:00.000Z" });
   const project = (await readOrder(token, order.id)).json().data.project;
   const terms = new ProjectServiceTerms(
     config.databaseUrl,
-    () => new Date("2027-01-01T00:00:00.000Z"),
+    () => new Date("2100-01-01T00:00:00.000Z"),
   );
   try {
     const fact = {
@@ -730,43 +845,20 @@ test("trusted participation and delivery facts start frozen clocks once across c
         occurredAt: new Date("2026-01-03T00:00:00.000Z"),
       }),
     );
-    assert.equal(
-      (await terms.read(project.id, new Date("2026-06-30T23:59:59.999Z")))
-        .creation?.state,
-      "active",
-    );
-    const exact = await terms.read(
-      project.id,
-      new Date("2026-07-01T00:00:00.000Z"),
-    );
-    assert.equal(exact.creation?.state, "expired");
-    assert.equal(exact.canRecord, false);
-    assert.equal(exact.deleteData, false);
-    assert.equal(
-      (await terms.read(project.id, new Date("2026-07-01T00:00:00.001Z")))
-        .creation?.state,
-      "expired",
-    );
     await terms.recordFact({
       projectId: project.id,
       eventId: "delivery-fact",
       kind: "delivery_completed",
       occurredAt: new Date("2026-06-01T00:00:00.000Z"),
     });
-    const delivered = await terms.read(
-      project.id,
-      new Date("2027-06-01T00:00:00.000Z"),
-    );
-    assert.equal(delivered.playback?.state, "expired");
-    assert.equal(delivered.exportRequests?.state, "expired");
+    const delivered = await terms.read(project.id);
+    assert.equal(delivered.playback?.state, "active");
+    assert.equal(delivered.exportRequests?.state, "active");
     assert.equal(delivered.retention?.originalAudio.state, "active");
     assert.equal(delivered.deleteData, false);
     const restarted = new ProjectServiceTerms(config.databaseUrl);
     try {
-      assert.deepEqual(
-        await restarted.read(project.id, new Date("2027-06-01T00:00:00.000Z")),
-        delivered,
-      );
+      assert.deepEqual(await restarted.read(project.id), delivered);
     } finally {
       await restarted.close();
     }
@@ -774,172 +866,22 @@ test("trusted participation and delivery facts start frozen clocks once across c
     await terms.close();
   }
 });
-test("the fixed pause policy stops creation only up to its frozen cumulative cap and preserves clock history on replay", async () => {
-  const token = await login("pauses");
-  const order = await prepareOrder(token);
-  paid(order.outTradeNo, { success_time: "2026-01-01T00:00:00.000Z" });
-  const id = (await readOrder(token, order.id)).json().data.project.id;
-  let now = new Date("2026-02-01T00:00:00.000Z");
-  const terms = new ProjectServiceTerms(config.databaseUrl, () => now);
-  const operatorId = randomUUID();
-  try {
-    await terms.recordFact({
-      projectId: id,
-      eventId: "subject-joined",
-      kind: "subject_participation",
-      occurredAt: new Date("2026-01-02T00:00:00.000Z"),
-    });
-    const command = {
-      projectId: id,
-      eventId: "pause-case-1",
-      kind: "pause" as const,
-      operatorId,
-      supportCaseRef: "record:synthetic-shared-case",
-    };
-    await terms.changePause(command);
-    assert.equal((await terms.read(id)).creation?.state, "paused");
-    now = new Date("2026-02-11T00:00:00.000Z");
-    await terms.changePause({
-      ...command,
-      eventId: "resume-case-1",
-      kind: "resume",
-    });
-    await terms.changePause(command);
-    assert.equal(
-      (await terms.read(id)).creation?.expiresAt,
-      "2026-07-11T00:00:00.000Z",
-    );
-    now = new Date("2026-02-12T00:00:00.000Z");
-    await terms.changePause({ ...command, eventId: "pause-case-2" });
-    assert.equal(
-      (await terms.read(id, new Date("2026-03-03T23:59:59.999Z"))).creation
-        ?.state,
-      "paused",
-    );
-    assert.equal(
-      (await terms.read(id, new Date("2026-03-04T00:00:00.000Z"))).creation
-        ?.state,
-      "active",
-    );
-    assert.equal(
-      (await terms.read(id, new Date("2026-08-01T00:00:00.000Z"))).creation
-        ?.expiresAt,
-      "2026-07-31T00:00:00.000Z",
-    );
-    now = new Date("2026-03-05T00:00:00.000Z");
-    await assert.rejects(() =>
-      terms.changePause({ ...command, eventId: "pause-over-cap" }),
-    );
-  } finally {
-    await terms.close();
-  }
-});
-
-test("support pauses require admin permission, CSRF and a shared case; mutation and audit commit together", async () => {
-  const token = await login("support");
-  const order = await prepareOrder(token);
-  const supportStart = Date.now() - 2 * 86400000;
-  paid(order.outTradeNo, {
-    success_time: new Date(supportStart).toISOString(),
-  });
-  const project = (await readOrder(token, order.id)).json().data.project;
-  const terms = new ProjectServiceTerms(config.databaseUrl);
-  try {
-    await terms.recordFact({
-      projectId: project.id,
-      eventId: "support-participation",
-      kind: "subject_participation",
-      occurredAt: new Date(supportStart + 86400000),
-    });
-  } finally {
-    await terms.close();
-  }
-  const url = `/v1/admin/service-terms/${project.id}/pause`;
-  const payload = {
-    action: "pause",
-    supportCaseRef: "record:synthetic-shared-case",
-  };
+test("service-term administration endpoints are absent", async () => {
+  const id = randomUUID();
   assert.equal(
-    (
-      await app.inject({
-        method: "POST",
-        url,
-        headers: {
-          authorization: `Bearer ${token}`,
-          "idempotency-key": randomUUID(),
-        },
-        payload,
-      })
-    ).statusCode,
-    401,
-  );
-  const headers = {
-    ...(await paymentAdmin(config, app)),
-    "idempotency-key": randomUUID(),
-  };
-  assert.equal(
-    (
-      await app.inject({
-        method: "POST",
-        url,
-        headers: { ...headers, "x-csrf-token": "" },
-        payload,
-      })
-    ).statusCode,
-    403,
+    (await app.inject({ method: "GET", url: `/v1/admin/service-terms/${id}` }))
+      .statusCode,
+    404,
   );
   assert.equal(
     (
       await app.inject({
         method: "POST",
-        url,
-        headers,
+        url: `/v1/admin/service-terms/${id}/pause`,
         payload: { action: "pause" },
       })
     ).statusCode,
-    400,
-  );
-  const changed = await app.inject({ method: "POST", url, headers, payload });
-  assert.equal(changed.statusCode, 201, changed.body);
-  assert.equal(changed.json().data.creation.state, "paused");
-  assert.equal(
-    (await app.inject({ method: "POST", url, headers, payload })).statusCode,
-    201,
-  );
-  for (const conflicting of [
-    { ...payload, action: "resume" },
-    { ...payload, supportCaseRef: "record:different-shared-case" },
-  ]) {
-    const conflict = await app.inject({
-      method: "POST",
-      url,
-      headers,
-      payload: conflicting,
-    });
-    assert.equal(conflict.statusCode, 409);
-    assert.equal(conflict.json().error.code, "IDEMPOTENCY_CONFLICT");
-  }
-  const audits = await app.inject({
-    method: "GET",
-    url: "/v1/admin/audit",
-    headers: { cookie: headers.cookie },
-  });
-  assert.ok(
-    audits
-      .json()
-      .data.some(
-        (a: { action: string; result: string }) =>
-          a.action === "service-terms.pause" && a.result === "success",
-      ),
-  );
-  const denied = {
-    ...(await paymentAdmin(config, app, ["audit:read"])),
-    "idempotency-key": randomUUID(),
-  };
-  assert.equal(
-    (await app.inject({ method: "POST", url, headers: denied, payload }))
-      .statusCode,
-    403,
+    404,
   );
 });
 test("prepare reconciles a successful unknown submission and refreshes expired prepay parameters only after querying the original unpaid order", async () => {

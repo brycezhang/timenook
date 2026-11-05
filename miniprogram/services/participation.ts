@@ -13,6 +13,9 @@ import { sessionClient } from "./session";
 import { paymentKey } from "./payments";
 const uuid = (s: string) => /^[0-9a-f-]{36}$/.test(s);
 const token = (s: string) => /^[A-Za-z0-9_-]{43}$/.test(s);
+function evidence(noticeVersion: string, text: string) {
+  return `${["internal-participation-v1", "paid-e2e-participation-v1"].includes(noticeVersion) ? "internal:" : "synthetic:"}${text}`;
+}
 function state(value: ParticipationState) {
   if (
     !value ||
@@ -21,7 +24,7 @@ function state(value: ParticipationState) {
     !Number.isSafeInteger(value.accessEpoch) ||
     !Number.isSafeInteger(value.bindingVersion) ||
     !Array.isArray(value.choices) ||
-    value.choices.length !== 3 ||
+    value.choices.length !== CONSENT_PURPOSES.length ||
     !CONSENT_PURPOSES.every((p) =>
       value.choices.some(
         (c) => c.purpose === p && [true, false, null].includes(c.granted),
@@ -70,7 +73,7 @@ export const participationClient = {
       typeof result.inviter !== "string" ||
       !Array.isArray(result.process) ||
       !Array.isArray(result.purposes) ||
-      result.purposes.length !== 3
+      result.purposes.length !== CONSENT_PURPOSES.length
     )
       throw new Error("邀请无效或已到期");
     return result;
@@ -91,7 +94,10 @@ export const participationClient = {
       projectId: string;
       state: string;
     }>(`/invitations/${value}/requests`, {
-      data: { noticeVersion, evidenceRef: "synthetic:本人阅读告知并申请参与" },
+      data: {
+        noticeVersion,
+        evidenceRef: evidence(noticeVersion, "本人阅读告知并申请参与"),
+      },
       key: paymentKey(),
     });
   },
@@ -113,11 +119,16 @@ export const participationClient = {
       `/projects/${id}/binding-requests`,
     );
   },
-  async approve(id: string, expectedBindingVersion: number, key: string) {
+  async approve(
+    id: string,
+    expectedBindingVersion: number,
+    key: string,
+    noticeVersion = "synthetic-d08-v1",
+  ) {
     return sessionClient.request(`/binding-requests/${id}/approve`, {
       data: {
         expectedBindingVersion,
-        evidenceRef: "synthetic:发起人明确核对申请者账号",
+        evidenceRef: evidence(noticeVersion, "发起人明确核对申请者账号"),
       },
       key,
     });
@@ -138,9 +149,31 @@ export const participationClient = {
           key,
           data: {
             noticeVersion: current.noticeVersion,
-            evidenceRef: "synthetic:本人分别选择资料用途",
+            evidenceRef: evidence(
+              current.noticeVersion,
+              "本人分别选择资料用途",
+            ),
             purpose,
             ...(!revoke ? { granted } : {}),
+            expectedBindingVersion: current.bindingVersion,
+            expectedAccessEpoch: current.accessEpoch,
+          },
+        },
+      ),
+    );
+  },
+  async start(current: ParticipationState, key: string) {
+    return state(
+      await sessionClient.request<ParticipationState>(
+        `/projects/${current.projectId}/consents/start`,
+        {
+          key,
+          data: {
+            noticeVersion: current.noticeVersion,
+            evidenceRef: evidence(
+              current.noticeVersion,
+              `click:purpose-start:${key}`,
+            ),
             expectedBindingVersion: current.bindingVersion,
             expectedAccessEpoch: current.accessEpoch,
           },
@@ -163,7 +196,10 @@ export const participationClient = {
           purpose,
           granted,
           noticeVersion: current.noticeVersion,
-          evidenceRef: `synthetic:当次同机本人选择:${key}`,
+          evidenceRef: evidence(
+            current.noticeVersion,
+            `当次同机本人选择:${key}`,
+          ),
           ...(expectedSessionId ? { expectedSessionId } : {}),
           expectedBindingVersion: current.bindingVersion,
           expectedAccessEpoch: current.accessEpoch,
@@ -242,7 +278,6 @@ export const participationClient = {
             "export",
             "delete",
             "correction",
-            "first_copy_expiry",
             "production_handoff",
             "refund",
             "quality",

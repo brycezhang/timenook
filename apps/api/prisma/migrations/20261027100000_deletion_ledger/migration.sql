@@ -15,7 +15,7 @@ CREATE TABLE privacy_recovery_holds(event_id uuid PRIMARY KEY REFERENCES privacy
 CREATE TRIGGER immutable_privacy_hold BEFORE UPDATE OR DELETE ON privacy_recovery_holds FOR EACH ROW EXECUTE FUNCTION protect_service_terms();
 CREATE TABLE privacy_deletions (
  id uuid PRIMARY KEY REFERENCES privacy_events(id),project_id uuid NOT NULL REFERENCES projects(id),request_id uuid,scoped_export_id uuid,
- trigger text NOT NULL CHECK(trigger IN ('verified_request','retention_expiry')),categories jsonb NOT NULL,effective_at timestamptz(3) NOT NULL,created_at timestamptz(3) NOT NULL DEFAULT now()
+ trigger text NOT NULL CHECK(trigger IN ('verified_request')),categories jsonb NOT NULL,effective_at timestamptz(3) NOT NULL,created_at timestamptz(3) NOT NULL DEFAULT now()
 );
 CREATE INDEX privacy_deletions_project ON privacy_deletions(project_id);
 CREATE TABLE privacy_deletion_items (

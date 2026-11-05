@@ -4,7 +4,7 @@
 
 # T30 · 完成内部实物闭环与付费试点验收
 
-2026-10-29 当前目标按 [ADR 0017](../../../adr/0017-lifetime-service-and-retention.md) 更新；长期规则已决定，相关实现及验收仍须重新留证。既有工程结果不证明新规则已通过。
+2026-10-29 当前目标按 [ADR 0017](../../../adr/0017-lifetime-service-and-retention.md) 更新；长期规则及工程调整见 [#105](https://github.com/brycezhang/timenook/issues/105)；正式环境、设备及供应商验收仍按原责任票留证。
 
 GitHub：[#31](https://github.com/brycezhang/timenook/issues/31) · 状态以 GitHub 为准。
 阶段：S5

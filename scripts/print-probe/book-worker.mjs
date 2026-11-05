@@ -11,7 +11,9 @@ const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
 let browser;
 try {
   if (
-    process.env.PRINT_PROBE_ENABLED !== "synthetic-local" ||
+    !["synthetic-local", "internal-acceptance"].includes(
+      process.env.PRINT_PROBE_ENABLED,
+    ) ||
     process.env.NODE_ENV === "production"
   )
     throw Error("PRINT_PROBE_DISABLED");
@@ -19,7 +21,15 @@ try {
   const inputBytes = await readFile(input),
     sourceBook = JSON.parse(inputBytes);
   const book = sourceBook;
-  const product = book.scope === "synthetic-product-book";
+  const product = [
+    "synthetic-product-book",
+    "internal-acceptance-book",
+  ].includes(book.scope);
+  if (
+    (book.scope === "internal-acceptance-book") !==
+    (process.env.PRINT_PROBE_ENABLED === "internal-acceptance")
+  )
+    throw Error("BOOK_SCOPE_MISMATCH");
   if (
     (!product && book.scope !== "synthetic-local-probe") ||
     typeof book.title !== "string" ||

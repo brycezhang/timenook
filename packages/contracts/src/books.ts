@@ -52,7 +52,7 @@ export interface BookSnapshot {
     heightMm: number;
     bleedMm: number;
     productionReady: false;
-    status: "synthetic-unfrozen";
+    status: "synthetic-unfrozen" | "internal-acceptance-candidate";
   };
   provenance: { version: string; notice: string };
 }
@@ -69,7 +69,7 @@ export interface BookVersionView {
   pdf: { sha256: string; bytes: number } | null;
   toc: { title: string; page: number }[] | null;
   renderer: object | null;
-  /** Frozen book access follows bookPdf; source editing/generation expires separately. */
+  /** Current private access deadline; necessary book/source retention is lifetime. */
   accessExpiresAt: string | null;
   draftAccess: { allowed: boolean; expiresAt: string | null };
   /** Live access to the separate raw thumbnail; never part of the book snapshot. */
@@ -91,6 +91,21 @@ export interface BookContext {
     title: string;
   }[];
   current: BookVersionView | null;
+  accessExpiresAt: string | null;
+  /** Internal acceptance produces a review PDF without print or payment rights. */
+  physicalProduction?: boolean;
+}
+
+export interface BookConfirmationContext {
+  projectId: string;
+  bookVersionId: string | null;
+  snapshotHash: string | null;
+  pdfHash: string | null;
+  role: "initiator" | "narrator";
+  canConfirm: boolean;
+  confirmations: { narrator: boolean; initiator: boolean };
+  noticeVersion: string;
+  physicalProduction: boolean;
   accessExpiresAt: string | null;
 }
 
@@ -131,18 +146,20 @@ export interface FirstCopyOrderView extends FirstCopyBinding {
   amountDueFen: 0;
 }
 export type FirstCopyBlocker =
+  | "PHYSICAL_PRODUCTION_UNAVAILABLE"
+  | "PRODUCTION_PDF_UNAPPROVED"
   | "BOOK_NOT_READY"
   | "ADDRESS_REQUIRED"
   | "NARRATOR_CONFIRMATION_REQUIRED"
   | "INITIATOR_CONFIRMATION_REQUIRED"
-  | "CREATION_PAUSED"
-  | "CREATION_EXPIRED"
   | "POLICY_PENDING"
   | "SPECIFICATION_MISMATCH"
   | "ENTITLEMENT_UNAVAILABLE"
   | "PROJECT_FROZEN"
   | "ALREADY_SUBMITTED";
 export interface FirstCopyContext {
+  noticeVersion: string;
+  evidencePrefix: string;
   projectId: string;
   role: "initiator" | "narrator";
   book: BookVersionView | null;
@@ -165,7 +182,6 @@ export interface FirstCopyContext {
     terms: import("./catalog").PackageTerm[];
   };
   creation: { state: string; expiresAt: string | null };
-  expiryReview: { available: boolean; caseId: string | null };
   blockers: FirstCopyBlocker[];
   canSubmit: boolean;
   canReviseProduction: boolean;
@@ -178,5 +194,4 @@ export interface FirstCopyContext {
 export interface FirstCopyApprovalView {
   projectId: string;
   production: FirstCopyOrderView;
-  expiryReview: { available: boolean; caseId: string | null };
 }

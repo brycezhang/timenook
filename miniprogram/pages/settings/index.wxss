@@ -1,5 +1,5 @@
 .live-settings {
-  font-size: 40rpx;
+  font-size: 34rpx;
   line-height: 1.7;
 }
 .live-title {
@@ -7,12 +7,12 @@
   width: 100%;
   min-height: 104rpx;
   padding: 22rpx;
-  font-size: 40rpx;
+  font-size: 34rpx;
   border: 2rpx solid #c7bb9e;
   border-radius: 12rpx;
 }
 .live-settings .btn {
-  font-size: 40rpx;
+  font-size: 34rpx;
   min-width: 96rpx;
   min-height: 96rpx;
   line-height: 1.5;

@@ -131,7 +131,6 @@ before(async () => {
   const snapshot = JSON.parse(
     readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
   );
-  snapshot.admission.d02.duration.value = 1;
   const draftId = randomUUID();
   await db.packageDraft.create({
     data: { id: draftId, realm: "local", ...snapshot },
@@ -986,117 +985,6 @@ test("photo routes remain disabled by default and synthetic configuration is rej
   );
 });
 
-test("original-photo retention cannot be bypassed by reading its asset ID", async () => {
-  const snapshot = JSON.parse(
-    readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
-  );
-  snapshot.admission.d03.retention.originalPhotos.duration.value = 1;
-  const draftId = randomUUID(),
-    version = randomUUID();
-  await db.packageDraft.create({
-    data: { id: draftId, realm: "local", ...snapshot },
-  });
-  await db.packageVersion.create({
-    data: {
-      id: version,
-      realm: "local",
-      purpose: "local_preview",
-      draftId,
-      draftRevision: 1,
-      snapshot,
-      publicOffer: {
-        title: "合成",
-        price: { value: 99900, unit: "fen", currency: "CNY" },
-      },
-    },
-  });
-  const p = await bound(version);
-  data((await choose(p, p.narrator.token, "collection", true)).response);
-  const plan = data(
-    await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token),
-    200,
-  );
-  const i = data(
-    await request(
-      "POST",
-      `/v1/projects/${p.projectId}/interviews`,
-      p.narrator.token,
-      {
-        clientInterviewId: randomUUID(),
-        expectedPlanRevision: plan.revision,
-        starterKind: "photo",
-      },
-    ),
-  );
-  const q = {
-    ...p,
-    interview: i,
-    base: `/v1/projects/${p.projectId}/interviews/${i.id}/photos`,
-  };
-  const bytes = await sharp({
-    create: { width: 40, height: 30, channels: 3, background: "white" },
-  })
-    .png()
-    .toBuffer();
-  const photo = await reserve(q, bytes);
-  await upload(q, photo, bytes);
-  const sealed = data(
-    await request("POST", `${q.base}/${photo.id}/seal`, q.narrator.token, {}),
-  );
-  // Controlled expiry fixture, not a real delivery event or retention policy.
-  await db.projectServiceEvent.create({
-    data: {
-      projectId: q.projectId,
-      eventId: `synthetic-delivery:${randomUUID()}`,
-      kind: "delivery_completed",
-      occurredAt: new Date(Date.now() - 86400001),
-    },
-  });
-  // Establish actual original-photo expiry before checking its HTTP boundary.
-  // A published but uncommitted deletion correctly closes private reads with
-  // 503; that recovery window is not the completed-retention state under test.
-  await app.get(Deletions).sweep(new Date());
-  const receipts = await db.$queryRaw<{ state: string }[]>`
-    SELECT i.state FROM privacy_deletion_items i
-    JOIN privacy_deletions d ON d.id=i.event_id
-    WHERE d.project_id=${q.projectId}::uuid AND d.scoped_export_id IS NULL
-      AND i.layer='active_database' AND i.category='originalPhotos'
-  `;
-  assert.ok(receipts.length > 0, "actual original-photo erasure was registered");
-  assert.ok(receipts.every((item) => item.state === "completed"));
-  assert.equal(
-    (
-      await request(
-        "GET",
-        `${q.base}/${photo.id}/content/original`,
-        q.narrator.token,
-      )
-    ).statusCode,
-    403,
-  );
-  const original = sealed.assets.find((a: any) => a.kind === "original");
-  assert.equal(
-    (
-      await request(
-        "GET",
-        `${q.base}/${photo.id}/assets/${original.id}/content`,
-        q.narrator.token,
-      )
-    ).statusCode,
-    403,
-  );
-  assert.equal(
-    (
-      await request(
-        "GET",
-        `${q.base}/${photo.id}/content/preview`,
-        q.narrator.token,
-      )
-    ).statusCode,
-    200,
-  );
-});
-
 test("an unsupported photo can release its reservation and recover with a supported replacement at the quota limit", async () => {
   const fixture = JSON.parse(
     readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
@@ -1337,6 +1225,57 @@ test("collection-only assistance can recover only its current photo intents with
   } finally {
     Date.now = realNow;
   }
+});
+
+test("collection context hides sealed material history until the initiator has separate sharing permission", async () => {
+  const p = await interview(),
+    bytes = await sharp({
+      create: { width: 40, height: 30, channels: 3, background: "white" },
+    })
+      .png()
+      .toBuffer(),
+    photo = await reserve(p, bytes);
+  await upload(p, photo, bytes);
+  data(
+    await request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
+  );
+  const current = await state(p, p.buyer.token),
+    assisted = data(
+      await request(
+        "POST",
+        `/v1/projects/${p.projectId}/assisted-sessions`,
+        p.buyer.token,
+        {
+          ...notice(),
+          purpose: "collection",
+          granted: true,
+          expectedBindingVersion: current.bindingVersion,
+          expectedAccessEpoch: current.accessEpoch,
+        },
+      ),
+    );
+  const context = data(
+    await request("POST", `${p.base}/context`, p.buyer.token, {
+      assistedSessionId: assisted.id,
+    }),
+  );
+  assert.deepEqual(context.photos, []);
+  assert.equal(context.snapshot, null);
+  assert.equal((await request("GET", p.base, p.buyer.token)).statusCode, 403);
+  data((await choose(p, p.narrator.token, "sharing", true)).response);
+  const shared = data(await request("GET", p.base, p.buyer.token), 200);
+  assert.equal(shared.snapshot.entries[0].photoId, photo.id);
+  assert.ok(
+    shared.snapshot.entries[0].assets.some((a: any) => a.kind === "preview"),
+  );
+  assert.equal(
+    data(
+      await request("POST", `${p.base}/context`, p.buyer.token, {
+        assistedSessionId: assisted.id,
+      }),
+    ).snapshot,
+    null,
+  );
 });
 
 test("a lost material-edit response replays its exact immutable result even after later revisions", async () => {

@@ -15,6 +15,15 @@ const client = new RequestClient({
 });
 import type { CompleteExportView } from "@timenook/contracts";
 export const completeExportApi = {
+  async verifyAccess(id: string, body: object, key: string, csrf: string) {
+    return (
+      await client.post<ApiResponse<{ id: string; expiresAt: string }>>(
+        `/care-requests/${id}/export/access-verification`,
+        body,
+        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
+      )
+    ).data;
+  },
   async read(id: string) {
     return (
       await client.get<ApiResponse<CompleteExportView | null>>(
@@ -235,48 +244,30 @@ export const catalogApi = {
       )
     ).data;
   },
+  async publish(draft: { id: string; revision: number }, csrf: string) {
+    return (
+      await client.post<ApiResponse<PackageVersion>>(
+        `/catalog/package-drafts/${draft.id}/publish`,
+        { expectedRevision: draft.revision, confirmRealParameters: true },
+        { headers: { "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
+  async publishE2e(csrf: string) {
+    return (
+      await client.post<ApiResponse<PackageVersion>>(
+        "/catalog/e2e-versions",
+        {},
+        { headers: { "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
   async freeze(draft: { id: string; revision: number }, csrf: string) {
     return (
       await client.post<ApiResponse<PackageVersion>>(
         `/catalog/package-drafts/${draft.id}/preview-versions`,
         { expectedRevision: draft.revision },
         { headers: { "X-CSRF-Token": csrf } },
-      )
-    ).data;
-  },
-};
-
-export interface ServiceTermsView {
-  policyStatus: string;
-  creation?: {
-    state: string;
-    startsAt: string | null;
-    expiresAt: string | null;
-  };
-  playback?: { state: string; expiresAt: string | null };
-  exportRequests?: { state: string; expiresAt: string | null };
-  notStarted?: { reviewAt: string; action: string };
-}
-export const serviceTermsApi = {
-  async read(projectId: string) {
-    return (
-      await client.get<ApiResponse<ServiceTermsView>>(
-        `/service-terms/${projectId}`,
-      )
-    ).data;
-  },
-  async pause(
-    projectId: string,
-    action: "pause" | "resume",
-    supportCaseRef: string,
-    key: string,
-    csrf: string,
-  ) {
-    return (
-      await client.post<ApiResponse<ServiceTermsView>>(
-        `/service-terms/${projectId}/pause`,
-        { action, supportCaseRef },
-        { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
       )
     ).data;
   },
@@ -333,15 +324,24 @@ export const careApi = {
       )
     ).data;
   },
-  async verify(care: CareCase, evidenceRef: string, key: string, csrf: string) {
+  async verify(
+    care: CareCase,
+    evidenceRef: string,
+    key: string,
+    csrf: string,
+    noticeVersion = "synthetic-d08-v1",
+  ) {
     return (
       await client.post<ApiResponse<{ state: string }>>(
         `/care-requests/${care.id}/verify`,
         {
-          noticeVersion: "synthetic-d08-v1",
+          noticeVersion,
           evidenceRef,
           expectedBindingVersion: care.sourceBindingVersion,
           expectedAccessEpoch: care.sourceAccessEpoch,
+          ...(care.kind === "export"
+            ? { expectedAccessSequence: care.verificationScope?.accessSequence }
+            : {}),
         },
         { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
       )
@@ -356,7 +356,13 @@ export const careApi = {
     return (await client.get<ApiResponse<CareCase>>(`/care-requests/${id}`))
       .data;
   },
-  async rebind(care: CareCase, evidenceRef: string, key: string, csrf: string) {
+  async rebind(
+    care: CareCase,
+    evidenceRef: string,
+    key: string,
+    csrf: string,
+    noticeVersion = "synthetic-d08-v1",
+  ) {
     return (
       await client.post<
         ApiResponse<{ bindingVersion: number; accessEpoch: number }>
@@ -366,7 +372,7 @@ export const careApi = {
           supportCaseRef: `record:${care.id}`,
           targetUserId: care.targetUserId,
           expectedBindingVersion: care.sourceBindingVersion,
-          noticeVersion: "synthetic-d08-v1",
+          noticeVersion,
           evidenceRef,
         },
         { headers: { "X-CSRF-Token": csrf, "Idempotency-Key": key } },
@@ -400,11 +406,15 @@ import type {
   FulfillmentShippingCommand,
   FulfillmentDeliveryCommand,
   FulfillmentMaterials,
+  AdminProductionPage,
 } from "@timenook/contracts";
 export const fulfillmentApi = {
-  async list() {
-    return (await client.get<ApiResponse<FulfillmentView[]>>("/fulfillment"))
-      .data;
+  async list(query = "") {
+    return (
+      await client.get<ApiResponse<AdminProductionPage>>(
+        `/fulfillment?${query}`,
+      )
+    ).data;
   },
   async read(orderId: string) {
     return (
@@ -442,7 +452,14 @@ export const fulfillmentApi = {
   async command(
     orderId: string,
     attemptId: string,
-    action: "handoff" | "receipt" | "cancel" | "shipping" | "delivery",
+    action:
+      | "handoff"
+      | "receipt"
+      | "cancel"
+      | "printing"
+      | "shipping"
+      | "wechat"
+      | "delivery",
     input:
       | {}
       | FulfillmentReceiptCommand

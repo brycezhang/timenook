@@ -348,7 +348,7 @@ test("both participants confirm the same actual PDF, address changes invalidate 
   await narrator.context().close();
 
   const buyer = await openPrint(browser, buyerSession);
-  await expect(buyer.getByText(/已付.*999/).first()).toBeVisible();
+  await expect(buyer.getByText(/实际支付 ¥999\.00/).first()).toBeVisible();
   await expect(buyer.getByText(/本次无需支付/).first()).toBeVisible();
   await buyer.screenshot({ path: "/tmp/timenook-t22-paid-390.png" });
   const submit = buyer.getByRole("button", {

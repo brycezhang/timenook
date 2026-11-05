@@ -4,14 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "pnpm run build:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api build && pnpm --filter @timenook/admin build && pnpm run build:website",
-    "typecheck": "pnpm run typecheck:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api typecheck && pnpm --filter @timenook/admin typecheck && pnpm run typecheck:website",
+    "build": "pnpm run build:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api build && pnpm --filter @timenook/admin build && pnpm run build:website && pnpm run build:web",
+    "typecheck": "pnpm run typecheck:frontend && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api typecheck && pnpm --filter @timenook/admin typecheck && pnpm run typecheck:website && pnpm run typecheck:web",
     "test": "pnpm run test:frontend && pnpm --filter @timenook/api test && pnpm run test:print && pnpm run test:release",
     "check": "pnpm run typecheck && pnpm test && pnpm run build",
     "check:native": "node scripts/check-native.mjs",
     "build:frontend": "node scripts/build.mjs && vite build --outDir dist/preview",
     "typecheck:frontend": "tsc --noEmit && tsc -p tsconfig.preview.json --noEmit",
-    "test:frontend": "tsx --test --test-timeout=30000 tests/*.test.ts",
+    "test:frontend": "tsx --test --test-timeout=30000 tests/*.test.ts tests/*.test.cjs",
     "dev:api": "pnpm -r --filter @timenook/api... build && pnpm --filter @timenook/api start",
     "services:up": "docker compose up -d --wait",
     "services:down": "docker compose down",
@@ -33,7 +33,17 @@
     "build:website": "pnpm --filter @timenook/website build",
     "typecheck:website": "pnpm --filter @timenook/website typecheck",
     "test:website": "pnpm --filter @timenook/website test",
-    "package:website": "pnpm --filter @timenook/website package"
+    "package:website": "pnpm --filter @timenook/website package",
+    "dev:web": "pnpm --filter @timenook/web dev",
+    "build:web": "pnpm --filter @timenook/web build",
+    "typecheck:web": "pnpm --filter @timenook/web typecheck",
+    "test:web": "pnpm exec playwright test tests/admin/web-entry.spec.mjs tests/admin/web-session.spec.mjs tests/admin/web-product-session.spec.mjs tests/admin/web-checkout.spec.mjs -c playwright.admin.config.mjs",
+    "test:native-e2e": "node scripts/test-native-e2e.cjs",
+    "test:native-login": "node scripts/test-native-login.cjs",
+    "test:native-automation": "node --test tests/native-automation.test.cjs",
+    "build:miniprogram": "TIMENOOK_MINIPROGRAM_PROFILE=release node scripts/build.mjs",
+    "build:miniprogram:development": "TIMENOOK_MINIPROGRAM_PROFILE=development node scripts/build.mjs",
+    "test:native-mvp": "node scripts/test-native-login.cjs --orders-required --mvp"
   },
   "devDependencies": {
     "@napi-rs/canvas": "0.1.100",
@@ -45,6 +55,7 @@
     "libheif-js": "1.23.5",
     "lucide-static": "^0.468.0",
     "miniprogram-api-typings": "^4.0.0",
+    "miniprogram-automator": "0.13.0",
     "pdfjs-dist": "5.4.624",
     "prettier": "^3.9.10",
     "qrcode": "1.5.4",
@@ -58,5 +69,8 @@
   "engines": {
     "node": ">=22.23.4 <23",
     "pnpm": ">=10.34.7 <11"
+  },
+  "dependencies": {
+    "@breezystack/lamejs": "1.2.7"
   }
 }

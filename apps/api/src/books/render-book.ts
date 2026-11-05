@@ -12,6 +12,7 @@ const normalized = (s: string) =>
     .replace(/⻓/g, "长")
     .replace(/⻚/g, "页")
     .replace(/⻔/g, "门")
+    .replace(/⻘/g, "青")
     .replace(/\s/g, "");
 /** T04 owns pagination, fonts, Chromium and PDF inspection. This adapter supplies only a frozen product snapshot. */
 export async function renderBook(
@@ -79,8 +80,10 @@ export async function renderBook(
     const entries = snapshot.chapters.flatMap((c) =>
       c.stories.flatMap((s) => (s.entry ? [s.entry] : [])),
     );
+    const internal =
+      snapshot.specification.status === "internal-acceptance-candidate";
     const book = {
-      scope: "synthetic-product-book",
+      scope: internal ? "internal-acceptance-book" : "synthetic-product-book",
       title: snapshot.cover.title,
       salutation: snapshot.cover.salutation,
       coverPhoto: snapshot.cover.photo
@@ -100,7 +103,12 @@ export async function renderBook(
       heapMiB: 256,
       rssLimit: 2048,
       timeLimit: 60000,
-      env: { NODE_ENV: "test", PRINT_PROBE_ENABLED: "synthetic-local" },
+      env: {
+        NODE_ENV: internal ? "development" : "test",
+        PRINT_PROBE_ENABLED: internal
+          ? "internal-acceptance"
+          : "synthetic-local",
+      },
     };
     await runBounded({
       ...limits,

@@ -1,3 +1,7 @@
+import {
+  E2E_NOTICE_VERSION,
+  participationNotice,
+} from "../catalog/e2e-package";
 import { PrivacyRights } from "../care/privacy-rights";
 import { isDeepStrictEqual } from "node:util";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -30,7 +34,6 @@ import {
 } from "@nestjs/swagger";
 import {
   IsString,
-  Equals,
   Matches,
   IsInt,
   Min,
@@ -48,7 +51,13 @@ import {
 } from "@prisma/client";
 import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
-import { IdentityAccess } from "./identity-access";
+import {
+  IdentityAccess,
+  readSelfMethodIn,
+  readSessionContextIn,
+} from "./identity-access";
+import { readProjectAdmissionIn } from "../projects/project-admission";
+import { INTERNAL_NOTICE_VERSION } from "../projects/internal-profile";
 import { closeProjectStreams } from "../media/project-streams";
 import { ProjectServiceTerms } from "../projects/service-terms";
 import { idempotencyKey } from "../payments/orders";
@@ -100,15 +109,17 @@ function careView(
   };
 }
 class ParticipationNoticeDto {
-  @ApiProperty({ enum: ["synthetic-d08-v1"] })
-  @Equals("synthetic-d08-v1")
+  @ApiProperty({
+    enum: ["synthetic-d08-v1", INTERNAL_NOTICE_VERSION, E2E_NOTICE_VERSION],
+  })
+  @IsIn(["synthetic-d08-v1", INTERNAL_NOTICE_VERSION, E2E_NOTICE_VERSION])
   noticeVersion!: string;
   @ApiProperty({
     description:
-      "Isolated synthetic evidence only; no real identity verification",
+      "Explicit current notice choice; internal runtime records evidence from the actual authenticated session",
   })
   @IsString()
-  @Matches(/^synthetic:[^\r\n]{3,160}$/)
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
   evidenceRef!: string;
 }
 class AssistedSessionDto extends ParticipationNoticeDto {
@@ -132,15 +143,17 @@ class ApprovalDto {
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
   @ApiProperty()
   @IsString()
-  @Matches(/^synthetic:[^\r\n]{3,160}$/)
+  @Matches(/^(?:synthetic:|internal:)[^\r\n]{3,160}$/)
   evidenceRef!: string;
 }
-class RevokeDto extends ParticipationNoticeDto {
+class StartConsentDto extends ParticipationNoticeDto {
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedBindingVersion!: number;
+  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedAccessEpoch!: number;
+}
+class RevokeDto extends StartConsentDto {
   @ApiProperty({ enum: CONSENT_PURPOSES })
   @IsIn(CONSENT_PURPOSES)
   purpose!: (typeof CONSENT_PURPOSES)[number];
-  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedBindingVersion!: number;
-  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedAccessEpoch!: number;
 }
 class ConsentDto extends RevokeDto {
   @ApiProperty() @IsBoolean() granted!: boolean;
@@ -162,6 +175,15 @@ export class CareRequestDto {
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
 }
 export class VerifyCareDto extends ParticipationNoticeDto {
+  @ApiProperty({
+    minimum: 0,
+    required: false,
+    description: "Required for export subject verification",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedAccessSequence?: number;
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedBindingVersion!: number;
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) expectedAccessEpoch!: number;
 }
@@ -189,7 +211,11 @@ export class Participation
     this.terms = new ProjectServiceTerms(config.databaseUrl);
   }
   onModuleInit() {
-    if (this.config.participation?.mode !== "synthetic-d08") return;
+    if (
+      !this.config.acceptance &&
+      this.config.participation?.mode !== "synthetic-d08"
+    )
+      return;
     this.revocationSweep = setInterval(() => {
       if (this.sweeping) return;
       this.sweeping = this.reconcileRevocations()
@@ -202,8 +228,9 @@ export class Participation
   }
   private policy() {
     if (
-      this.config.environment !== "test" ||
-      this.config.participation?.mode !== "synthetic-d08"
+      !this.config.acceptance &&
+      (this.config.environment !== "test" ||
+        this.config.participation?.mode !== "synthetic-d08")
     )
       throw new ServiceUnavailableException();
   }
@@ -214,13 +241,35 @@ export class Participation
   ) {
     if (lock)
       await tx.$queryRaw`SELECT id FROM projects WHERE id=${id}::uuid FOR UPDATE`;
-    const p = await tx.project.findUnique({ where: { id } });
     await this.rights.requireAvailableIn(tx, id);
-    const order = p?.orderId
-      ? await tx.paymentOrder.findUnique({ where: { id: p.orderId } })
-      : null;
-    if (!p || !order || order.state !== "paid") throw new NotFoundException();
-    return { ...p, order };
+    const admission = await readProjectAdmissionIn(tx, id);
+    return {
+      ...admission.project,
+      initiatorUserId: admission.initiatorUserId,
+      source: admission.source,
+      snapshot: admission.snapshot,
+    };
+  }
+  private validateNotice(
+    body: { noticeVersion: string; evidenceRef?: string },
+    snapshot: Prisma.JsonObject,
+  ) {
+    const notice = participationNotice(snapshot, !!this.config.acceptance);
+    if (
+      body.noticeVersion !== notice.noticeVersion ||
+      (body.evidenceRef !== undefined &&
+        !body.evidenceRef.startsWith(notice.evidencePrefix))
+    )
+      throw new BadRequestException();
+  }
+  private async evidenceIn(
+    tx: Prisma.TransactionClient,
+    authorization: string | undefined,
+    supplied: string,
+  ) {
+    if (!this.config.acceptance) return supplied;
+    const context = await readSessionContextIn(tx, authorization);
+    return `${context.method}:${context.sessionId}:${supplied}`;
   }
   private async subject(tx: Prisma.TransactionClient, id: string) {
     await tx.$queryRaw`SELECT id FROM project_subjects WHERE project_id=${id}::uuid FOR UPDATE`;
@@ -236,7 +285,7 @@ export class Participation
     const token = randomBytes(32).toString("base64url");
     const invite = await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
-      if (p.order.buyerId !== user.id) throw new ForbiddenException();
+      if (p.initiatorUserId !== user.id) throw new ForbiddenException();
       if ((await this.subject(tx, id)).boundUserId)
         throw new ConflictException();
       await tx.invitation.updateMany({
@@ -271,11 +320,11 @@ export class Participation
     const invite = await this.invitation(this.db, token);
     const p = await this.project(this.db, invite.projectId);
     return {
-      inviter: `发起人账号尾号 ${p.order.buyerId.slice(-6)}`,
+      inviter: `发起人账号尾号 ${p.initiatorUserId.slice(-6)}`,
       process: ["说一段", "保存后看看故事", "确认成书"],
       purposes: [...CONSENT_PURPOSES],
-      noticeVersion: "synthetic-d08-v1",
-      policyStatus: this.config.participation ? "synthetic-only" : "pending",
+      ...participationNotice(p.snapshot, !!this.config.acceptance),
+      source: p.source,
       choice:
         "采集保存讲述与照片；AI处理素材；向本项目发起人共享。可分别拒绝或撤回；入书须另行确认。请向邀请人核对账号尾号，提示不能替代本人核验。",
     };
@@ -291,7 +340,13 @@ export class Participation
       const found = await this.invitation(tx, token);
       const p = await this.project(tx, found.projectId, true);
       const invite = await this.invitation(tx, token);
-      if (user.id === p.order.buyerId) throw new ForbiddenException();
+      this.validateNotice(body, p.snapshot);
+      const evidenceRef = await this.evidenceIn(
+        tx,
+        authorization,
+        body.evidenceRef,
+      );
+      if (user.id === p.initiatorUserId) throw new ForbiddenException();
       const application = await tx.bindingRequest.upsert({
         where: {
           invitationId_applicantUserId: {
@@ -304,6 +359,7 @@ export class Participation
           invitationId: invite.id,
           applicantUserId: user.id,
           ...body,
+          evidenceRef,
         },
         update: {},
         select: { id: true, state: true },
@@ -313,6 +369,10 @@ export class Participation
   }
   async memberships(authorization?: string) {
     const user = await this.identity.current(authorization);
+    const created = await this.db.project.findMany({
+      where: { createdBy: user.id },
+      select: { id: true },
+    });
     const bound = await this.db.projectSubject.findMany({
       where: { boundUserId: user.id },
       select: { projectId: true },
@@ -330,6 +390,7 @@ export class Participation
     });
     return {
       projects: [
+        ...created.map((p) => ({ projectId: p.id, state: "initiator" })),
         ...bound.map((p) => ({ ...p, state: "bound" })),
         ...invitations
           .filter((p) => !bound.some((b) => b.projectId === p.projectId))
@@ -341,7 +402,7 @@ export class Participation
     const user = await this.identity.current(authorization);
     return this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
-      if (p.order.buyerId !== user.id) throw new ForbiddenException();
+      if (p.initiatorUserId !== user.id) throw new ForbiddenException();
       const invitations = await tx.invitation.findMany({
         where: {
           projectId: id,
@@ -379,7 +440,7 @@ export class Participation
       if (!application || !invite) throw new NotFoundException();
       const p = await this.project(tx, invite.projectId, true);
       if (
-        p.order.buyerId !== user.id ||
+        p.initiatorUserId !== user.id ||
         application.applicantUserId === user.id
       )
         throw new ForbiddenException();
@@ -456,9 +517,9 @@ export class Participation
           operatorRealm: "product",
           noticeVersion: application.noticeVersion,
           method: "initiator_review",
-          evidenceRef: (await this.activeDataPayloadExpiredIn(tx, p.id))
+          evidenceRef: (await this.activeDataDeletedIn(tx, p.id))
             ? null
-            : body.evidenceRef,
+            : await this.evidenceIn(tx, authorization, body.evidenceRef),
           requestId,
         },
       });
@@ -474,7 +535,7 @@ export class Participation
     return this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       const subject = await this.subject(tx, id);
-      if (p.order.buyerId !== user.id && subject.boundUserId !== user.id)
+      if (p.initiatorUserId !== user.id && subject.boundUserId !== user.id)
         throw new ForbiddenException();
       return this.status(tx, p, subject, user.id);
     });
@@ -516,7 +577,30 @@ export class Participation
         session.operatorUserId === record.operatorUserId
       );
     }
-    return record.granted && record.method === "self_wechat";
+    return (
+      record.granted && ["self_wechat", "self_web"].includes(record.method)
+    );
+  }
+  /** The caller holds the project lock; a verification may only consume the
+   * exact authorization sequence observed during that subject encounter. */
+  async exportAccessSequenceIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ) {
+    await this.rights.assertReplayed(projectId);
+    await this.rights.requireAvailableIn(tx, projectId);
+    const latest = await tx.projectAccessRevocation.findFirst({
+      where: {
+        projectId,
+        OR: [
+          { reason: { not: "assisted" } },
+          { purpose: { in: ["collection", "sharing", "all", "binding"] } },
+        ],
+      },
+      orderBy: { sequence: "desc" },
+      select: { sequence: true },
+    });
+    return latest?.sequence ?? 0;
   }
   private async collectionStampIn(
     tx: Prisma.TransactionClient,
@@ -596,8 +680,9 @@ export class Participation
       [...decisions].map(([purpose, record]) => [purpose, record.granted]),
     );
     const enabled =
-      this.config.environment === "test" &&
-      this.config.participation?.mode === "synthetic-d08";
+      !!this.config.acceptance ||
+      (this.config.environment === "test" &&
+        this.config.participation?.mode === "synthetic-d08");
     const effective: Partial<Record<ConsentPurpose, boolean>> = {};
     // Sequence orders the actual purpose decisions. Assisted choices produce
     // permission only while their latest matching session remains valid.
@@ -623,15 +708,20 @@ export class Participation
       await this.currentPurposesIn(tx, p, subject);
     const deleted = await this.rights.deletedIn(tx, p.id);
     const collection = !deleted && enabled && effective.collection === true;
-    const terms = await this.terms.read(p.id, undefined, tx);
+    const terms = await this.terms.read(p.id, tx);
     return {
       projectId: p.id,
+      bookTitle:
+        !deleted &&
+        (narrator || !subject.boundUserId || effective.sharing === true)
+          ? (p.bookTitle ?? undefined)
+          : undefined,
       subjectId: subject.id,
       bindingVersion: subject.bindingVersion,
       accessEpoch: p.accessEpoch,
       role: narrator ? "narrator" : "initiator",
-      noticeVersion: "synthetic-d08-v1",
-      policyStatus: enabled ? "synthetic-only" : "pending",
+      ...participationNotice(p.snapshot, !!this.config.acceptance),
+      source: p.source,
       choices: CONSENT_PURPOSES.map((purpose) => ({
         purpose,
         granted:
@@ -642,7 +732,7 @@ export class Participation
             ...record,
             ...(operatorAdminId ? { operatorAdminId } : {}),
             evidenceRef:
-              terms.retention?.activeData?.state === "expired"
+              terms.retention?.activeData?.state === "deleted"
                 ? null
                 : record.evidenceRef,
             purpose: record.purpose as ConsentPurpose,
@@ -654,27 +744,31 @@ export class Participation
         narrator &&
         collection &&
         terms.canRecord &&
-        terms.retention?.activeData?.state !== "expired",
+        terms.retention?.activeData?.state !== "deleted",
       canProcessAi: narrator && collection && effective.ai === true,
       canRead:
         collection &&
         (narrator ||
-          (p.order.buyerId === userId && effective.sharing === true)),
+          (p.initiatorUserId === userId && effective.sharing === true)),
     };
   }
   async consent(
     id: string,
-    body: ConsentDto,
+    body: ConsentDto | StartConsentDto,
     key: string,
     authorization?: string,
     action = "consent",
   ) {
     const user = await this.identity.current(authorization);
     this.policy();
+    const granted = action === "start" || (body as ConsentDto).granted;
+    const purposes =
+      action === "start" ? CONSENT_PURPOSES : [(body as ConsentDto).purpose];
     const result = await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       await this.rights.requireAvailableIn(tx, id);
       const subject = await this.subject(tx, id);
+      this.validateNotice(body, p.snapshot);
       if (
         subject.boundUserId !== user.id ||
         subject.bindingVersion !== body.expectedBindingVersion
@@ -696,40 +790,45 @@ export class Participation
       }
       if (p.accessEpoch !== body.expectedAccessEpoch)
         throw new ConflictException();
-      const payloadExpired = await this.activeDataPayloadExpiredIn(tx, id);
-      if (payloadExpired && body.granted)
+      const payloadDeleted = await this.activeDataDeletedIn(tx, id);
+      if (payloadDeleted && granted)
         throw new ForbiddenException(
-          "Expired activity cannot acquire new authorization payload",
+          "Deleted activity cannot acquire new authorization payload",
         );
       const updated = await tx.project.update({
         where: { id },
         // New positive purpose choices do not revoke existing capabilities.
         // Withdrawals advance the revocation fence and cannot revive old work.
-        data: { accessEpoch: body.granted ? p.accessEpoch : { increment: 1 } },
+        data: { accessEpoch: granted ? p.accessEpoch : { increment: 1 } },
       });
-      await tx.consentRecord.create({
-        data: {
-          id: randomUUID(),
-          projectId: id,
-          subjectId: subject.id,
-          bindingVersion: subject.bindingVersion,
-          accessEpoch: updated.accessEpoch,
-          operatorUserId: user.id,
-          granteeUserId: body.purpose === "sharing" ? p.order.buyerId : null,
-          purpose: body.purpose,
-          granted: body.granted,
-          noticeVersion: body.noticeVersion,
-          evidenceRef: payloadExpired ? null : body.evidenceRef,
-          method: "self_wechat",
-        },
-      });
-      if (!body.granted)
+      const evidenceRef = payloadDeleted
+        ? null
+        : await this.evidenceIn(tx, authorization, body.evidenceRef);
+      const method = await readSelfMethodIn(tx, authorization);
+      for (const purpose of purposes)
+        await tx.consentRecord.create({
+          data: {
+            id: randomUUID(),
+            projectId: id,
+            subjectId: subject.id,
+            bindingVersion: subject.bindingVersion,
+            accessEpoch: updated.accessEpoch,
+            operatorUserId: user.id,
+            granteeUserId: purpose === "sharing" ? p.initiatorUserId : null,
+            purpose,
+            granted,
+            noticeVersion: body.noticeVersion,
+            evidenceRef,
+            method,
+          },
+        });
+      if (!granted)
         await this.recordRevocationIn(
           tx,
           id,
           updated.accessEpoch,
-          body.purpose,
-          "self_wechat",
+          (body as ConsentDto).purpose,
+          await readSelfMethodIn(tx, authorization),
         );
       await tx.participationCommand.create({
         data: {
@@ -749,7 +848,7 @@ export class Participation
         user.id,
       );
     });
-    if (!body.granted) await this.reconcileRevocations(id);
+    if (!granted) await this.reconcileRevocations(id);
     return result;
   }
   async care(
@@ -762,7 +861,7 @@ export class Participation
     return this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       const subject = await this.subject(tx, id);
-      if (p.order.buyerId !== user.id && subject.boundUserId !== user.id)
+      if (p.initiatorUserId !== user.id && subject.boundUserId !== user.id)
         throw new ForbiddenException();
       if (body) {
         this.policy();
@@ -816,7 +915,8 @@ export class Participation
     if (subject.bindingVersion !== body.expectedBindingVersion)
       throw new ConflictException();
     if (body.kind === "rebind") {
-      if (body.targetUserId === p.order.buyerId) throw new ForbiddenException();
+      if (body.targetUserId === p.initiatorUserId)
+        throw new ForbiddenException();
       if (subject.boundUserId === body.targetUserId)
         throw new ConflictException();
       if (
@@ -944,8 +1044,9 @@ export class Participation
     )
       throw new ForbiddenException();
     if (
-      !(await this.status(tx, p, subject, care.requesterId ?? p.order.buyerId))
-        .canRead
+      !(
+        await this.status(tx, p, subject, care.requesterId ?? p.initiatorUserId)
+      ).canRead
     )
       throw new ForbiddenException();
     return {
@@ -988,10 +1089,19 @@ export class Participation
     await tx.$queryRaw`SELECT id FROM care_requests WHERE id=${id}::uuid FOR UPDATE`;
     const care = (await tx.careRequest.findUnique({ where: { id } }))!;
     // Operational review and production cases are not D08 subject-right requests.
-    if (
-      ["first_copy_expiry", "production_handoff", "quality"].includes(care.kind)
-    )
+    if (["production_handoff", "quality"].includes(care.kind))
       throw new ConflictException();
+    const verificationAccessSequence =
+      care.kind === "export"
+        ? await this.exportAccessSequenceIn(tx, p.id)
+        : null;
+    if (
+      care.kind === "export" &&
+      body.expectedAccessSequence !== verificationAccessSequence
+    )
+      throw new ConflictException(
+        "Subject authorization changed; verify the subject again",
+      );
     const hash = digest(JSON.stringify(body));
     const result = () => ({
       id,
@@ -1019,7 +1129,7 @@ export class Participation
     )
       throw new ConflictException();
     let epoch: number | null = null;
-    const payloadExpired = await this.activeDataPayloadExpiredIn(tx, p.id);
+    const payloadDeleted = await this.activeDataDeletedIn(tx, p.id);
     if (["withdraw", "delete"].includes(care.kind)) {
       epoch = (
         await tx.project.update({
@@ -1041,7 +1151,7 @@ export class Participation
             purpose,
             granted: false,
             noticeVersion: body.noticeVersion,
-            evidenceRef: payloadExpired ? null : body.evidenceRef,
+            evidenceRef: payloadDeleted ? null : body.evidenceRef,
             method: "care_verified",
           },
         });
@@ -1052,10 +1162,11 @@ export class Participation
         state: "verified",
         verifiedBy: operatorId,
         verifiedAt: new Date(),
+        verificationAccessSequence,
         verificationKey: key,
         verificationHash: hash,
-        verificationEvidence: payloadExpired ? null : body.evidenceRef,
-        verificationNotice: payloadExpired ? null : body.noticeVersion,
+        verificationEvidence: payloadDeleted ? null : body.evidenceRef,
+        verificationNotice: payloadDeleted ? null : body.noticeVersion,
         revokedAccessEpoch: epoch,
       },
     });
@@ -1096,14 +1207,21 @@ export class Participation
           verifiedAt: true,
           verificationEvidence: true,
           verificationNotice: true,
+          verificationAccessSequence: true,
           revokedAccessEpoch: true,
         },
       });
       if (!row) throw new NotFoundException();
-      const payloadExpired = await this.activeDataPayloadExpiredIn(
-        tx,
-        row.projectId,
-      );
+      const payloadDeleted = await this.activeDataDeletedIn(tx, row.projectId);
+      // Page context is observed now. The later command must return this exact
+      // sequence, never have the server upgrade an old verification body.
+      let verificationScope: { accessSequence: number } | undefined;
+      if (row.kind === "export" && !payloadDeleted) {
+        await this.project(tx, row.projectId, true);
+        verificationScope = {
+          accessSequence: await this.exportAccessSequenceIn(tx, row.projectId),
+        };
+      }
       const changes: CareBindingChangeView[] = (
         await tx.bindingChange.findMany({
           where: { supportCaseId: id },
@@ -1123,11 +1241,12 @@ export class Participation
         })
       ).map((change) => ({
         ...change,
-        evidenceRef: payloadExpired ? null : change.evidenceRef,
+        evidenceRef: payloadDeleted ? null : change.evidenceRef,
         createdAt: change.createdAt.toISOString(),
       }));
       return {
         ...careView(row),
+        ...(verificationScope ? { verificationScope } : {}),
         supportCaseRef: `record:${id}`,
         correctionGrant: await tx.storyCareGrant.findUnique({
           where: { caseId: id },
@@ -1137,10 +1256,11 @@ export class Participation
           ? {
               operatorAdminId: row.verifiedBy,
               createdAt: row.verifiedAt?.toISOString(),
-              evidenceRef: payloadExpired ? null : row.verificationEvidence,
-              noticeVersion: payloadExpired ? null : row.verificationNotice,
+              evidenceRef: payloadDeleted ? null : row.verificationEvidence,
+              noticeVersion: payloadDeleted ? null : row.verificationNotice,
               method: "care_verified",
               accessEpoch: row.revokedAccessEpoch,
+              accessSequence: row.verificationAccessSequence,
             }
           : null,
         changes,
@@ -1159,7 +1279,7 @@ export class Participation
     this.policy();
     const p = await this.project(tx, id, true);
     const subject = await this.subject(tx, id);
-    if (body.targetUserId === p.order.buyerId) throw new ForbiddenException();
+    if (body.targetUserId === p.initiatorUserId) throw new ForbiddenException();
     const hash = digest(JSON.stringify(body));
     const prior = await tx.participationCommand.findUnique({
       where: { projectId_action_key: { projectId: id, action: "rebind", key } },
@@ -1231,7 +1351,7 @@ export class Participation
         supportCaseId: caseId,
         noticeVersion: body.noticeVersion,
         method: "care_verified",
-        evidenceRef: (await this.activeDataPayloadExpiredIn(tx, id))
+        evidenceRef: (await this.activeDataDeletedIn(tx, id))
           ? null
           : body.evidenceRef,
         requestId,
@@ -1267,25 +1387,24 @@ export class Participation
     return this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
       const subject = await this.subject(tx, id);
-      if (user.id !== p.order.buyerId && user.id !== subject.boundUserId)
+      if (user.id !== p.initiatorUserId && user.id !== subject.boundUserId)
         throw new ForbiddenException();
       const state = await this.status(tx, p, subject, user.id);
       if (!state.canRead) throw new ForbiddenException();
       const active = await this.materialAvailableIn(tx, id, "activeData");
       return {
         ...state,
-        bookTitle: active ? p.order.bookTitle : null,
+        bookTitle: active
+          ? (p.bookTitle ?? p.snapshot.bookTitle ?? "人生故事书")
+          : null,
         subjectName: active ? subject.name : null,
       };
     });
   }
-  async activeDataPayloadExpiredIn(
-    tx: Prisma.TransactionClient,
-    projectId: string,
-  ) {
+  async activeDataDeletedIn(tx: Prisma.TransactionClient, projectId: string) {
     if (await this.rights.deletedIn(tx, projectId, "activeData")) return true;
-    const terms = await this.terms.read(projectId, undefined, tx);
-    return terms.retention?.activeData?.state === "expired";
+    const terms = await this.terms.read(projectId, tx);
+    return terms.retention?.activeData?.state === "deleted";
   }
   // Plan callers keep authentication, current purpose/epoch checks and writes
   // under the same Session -> Project -> Subject lock order.
@@ -1295,9 +1414,9 @@ export class Participation
     category: string,
   ) {
     if (await this.rights.deletedIn(tx, projectId, category)) return false;
-    const terms = await this.terms.read(projectId, undefined, tx),
+    const terms = await this.terms.read(projectId, tx),
       rule = terms.retention?.[category];
-    return !!rule && rule.state !== "expired";
+    return !!rule && rule.state !== "deleted";
   }
   async requireMaterialIn(
     tx: Prisma.TransactionClient,
@@ -1318,7 +1437,7 @@ export class Participation
         bindingVersion: number;
         accessEpoch: number;
         subjectId: string;
-        method: "self_wechat" | "assisted" | "participant";
+        method: "self_wechat" | "self_web" | "assisted" | "participant";
         assistedSessionId?: string;
         accessExpiresAt: string | null;
         subjectDecision: "self" | "assisted" | null;
@@ -1331,13 +1450,15 @@ export class Participation
       const user = await this.identity.current(authorization, tx);
       const p = await this.project(tx, projectId, true);
       const subject = await this.subject(tx, projectId);
-      if (user.id !== p.order.buyerId && user.id !== subject.boundUserId)
+      if (user.id !== p.initiatorUserId && user.id !== subject.boundUserId)
         throw new ForbiddenException();
       const state = await this.status(tx, p, subject, user.id);
       if (!state.canRead) throw new ForbiddenException();
-      let method: "self_wechat" | "assisted" | "participant" = "participant";
+      let method: "self_wechat" | "self_web" | "assisted" | "participant" =
+        "participant";
       if (subjectDecision) {
-        if (subject.boundUserId === user.id) method = "self_wechat";
+        if (subject.boundUserId === user.id)
+          method = await readSelfMethodIn(tx, authorization);
         else {
           if (!subjectDecision.assistedSessionId)
             throw new ForbiddenException();
@@ -1396,7 +1517,7 @@ export class Participation
         operatorUserId: string;
         bindingVersion: number;
         accessEpoch: number;
-        method: "self_wechat" | "assisted";
+        method: "self_wechat" | "self_web" | "assisted";
         assistedSessionId?: string;
       },
     ) => Promise<T>,
@@ -1410,14 +1531,14 @@ export class Participation
       if (mode === "record")
         await this.requireMaterialIn(tx, projectId, "activeData");
       const subject = await this.subject(tx, projectId);
-      let method: "self_wechat" | "assisted";
+      let method: "self_wechat" | "self_web" | "assisted";
       if (subject.boundUserId === user.id) {
         const state = await this.status(tx, p, subject, user.id);
         if (!(mode === "record" ? state.canCollect : state.canRead))
           throw new ForbiddenException();
-        method = "self_wechat";
+        method = await readSelfMethodIn(tx, authorization);
       } else {
-        if (!assistedSessionId || user.id !== p.order.buyerId)
+        if (!assistedSessionId || user.id !== p.initiatorUserId)
           throw new ForbiddenException();
         await this.authorizeAssisted(tx, {
           projectId,
@@ -1489,11 +1610,11 @@ export class Participation
         (await this.taskRevokedIn(tx, input.projectId, input.taskId)))
     )
       return null;
-    const terms = await this.terms.read(p.id, undefined, tx);
+    const terms = await this.terms.read(p.id, tx);
     if (
-      terms.retention?.activeData?.state === "expired" ||
-      terms.retention?.originalAudio?.state === "expired" ||
-      terms.retention?.transcripts?.state === "expired"
+      terms.retention?.activeData?.state === "deleted" ||
+      terms.retention?.originalAudio?.state === "deleted" ||
+      terms.retention?.transcripts?.state === "deleted"
     )
       return null;
     let grant: Prisma.JsonObject;
@@ -1502,7 +1623,17 @@ export class Participation
         !(await this.status(tx, p, subject, subject.boundUserId)).canProcessAi
       )
         return null;
-      grant = { method: "self_wechat" };
+      const decision = await tx.consentRecord.findFirst({
+        where: {
+          projectId: p.id,
+          bindingVersion: subject.bindingVersion,
+          purpose: "collection",
+        },
+        orderBy: { sequence: "desc" },
+      });
+      grant = {
+        method: decision?.method === "self_web" ? "self_web" : "self_wechat",
+      };
     } else {
       const collection = await this.latestAssisted(tx, p.id, "collection");
       const ai = await this.latestAssisted(tx, p.id, "ai");
@@ -1575,7 +1706,7 @@ export class Participation
     if (!enabled || effective.collection !== true) return false;
     if (subject.boundUserId === input.operatorUserId) return true;
     if (
-      project.order.buyerId !== input.operatorUserId ||
+      project.initiatorUserId !== input.operatorUserId ||
       !input.assistedSessionId
     )
       return false;
@@ -1659,7 +1790,7 @@ export class Participation
       !!row &&
       row.projectId === p.id &&
       row.subjectId === subject.id &&
-      row.operatorUserId === p.order.buyerId &&
+      row.operatorUserId === p.initiatorUserId &&
       row.granted &&
       !!row.evidenceRef &&
       row.bindingVersion === subject.bindingVersion &&
@@ -1697,7 +1828,7 @@ export class Participation
     if (
       command.purpose === "collection" &&
       command.requireRecording !== false &&
-      !(await this.terms.read(p.id, undefined, tx)).canRecord
+      !(await this.terms.read(p.id, tx)).canRecord
     )
       throw new ForbiddenException();
     return {
@@ -1739,8 +1870,12 @@ export class Participation
       !["story", "book"].includes(command.content.kind) ||
       !/^[-a-f0-9]{36}$/.test(command.content.versionId) ||
       !/^([a-f0-9]{64})$/.test(command.content.hash) ||
-      command.noticeVersion !== "synthetic-d08-v1" ||
-      !/^synthetic:[^\r\n]{3,160}$/.test(command.evidenceRef) ||
+      command.noticeVersion !==
+        participationNotice(
+          (await this.project(tx, command.projectId)).snapshot,
+          !!this.config.acceptance,
+        ).noticeVersion ||
+      !/^(?:synthetic:|internal:)[^\r\n]{3,160}$/.test(command.evidenceRef) ||
       !/^[-A-Za-z0-9_:]{8,128}$/.test(command.idempotencyKey)
     )
       throw new BadRequestException();
@@ -1827,7 +1962,7 @@ export class Participation
     bindingVersion: number,
     accessEpoch: number,
     latestSessionId: string,
-    payloadExpired: boolean,
+    payloadDeleted: boolean,
   ): AssistedSessionView {
     return {
       id: row.id,
@@ -1837,7 +1972,7 @@ export class Participation
       purpose: row.purpose as AssistedPurpose,
       granted: row.granted,
       noticeVersion: row.noticeVersion,
-      evidenceRef: payloadExpired ? null : row.evidenceRef,
+      evidenceRef: payloadDeleted ? null : row.evidenceRef,
       bindingVersion: row.bindingVersion,
       accessEpoch: row.accessEpoch,
       createdAt: row.createdAt.toISOString(),
@@ -1848,7 +1983,7 @@ export class Participation
             row.bindingVersion !== bindingVersion ||
             row.accessEpoch !== accessEpoch
           ? "revoked"
-          : payloadExpired || row.expiresAt.getTime() <= Date.now()
+          : payloadDeleted || row.expiresAt.getTime() <= Date.now()
             ? "expired"
             : "active",
     };
@@ -1863,9 +1998,9 @@ export class Participation
     this.policy();
     const result = await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, id, true);
-      if (p.order.buyerId !== user.id) throw new ForbiddenException();
+      if (p.initiatorUserId !== user.id) throw new ForbiddenException();
       const subject = await this.subject(tx, id);
-      const payloadExpired = await this.activeDataPayloadExpiredIn(tx, id);
+      const payloadDeleted = await this.activeDataDeletedIn(tx, id);
       if (!body) {
         const sessions = await tx.assistedSession.findMany({
           where: { projectId: id, operatorUserId: user.id },
@@ -1881,11 +2016,12 @@ export class Participation
               subject.bindingVersion,
               p.accessEpoch,
               latest.get(row.purpose)!,
-              payloadExpired,
+              payloadDeleted,
             ),
           ),
         };
       }
+      this.validateNotice(body, p.snapshot);
       const latest = await this.latestAssisted(tx, id, body.purpose);
       const hash = digest(JSON.stringify(body));
       const prior = await tx.assistedSession.findUnique({
@@ -1904,12 +2040,12 @@ export class Participation
           subject.bindingVersion,
           p.accessEpoch,
           latest!.id,
-          payloadExpired,
+          payloadDeleted,
         );
       }
-      if (payloadExpired && body.granted)
+      if (payloadDeleted && body.granted)
         throw new ForbiddenException(
-          "Expired activity cannot acquire new authorization payload",
+          "Deleted activity cannot acquire new authorization payload",
         );
       if (
         (await tx.assistedSession.findFirst({
@@ -1956,6 +2092,9 @@ export class Participation
           latest?.id,
         );
       }
+      const evidenceRef = payloadDeleted
+        ? null
+        : await this.evidenceIn(tx, authorization, body.evidenceRef);
       const row = await tx.assistedSession.create({
         data: {
           id: randomUUID(),
@@ -1965,7 +2104,7 @@ export class Participation
           purpose: body.purpose,
           granted: body.granted,
           noticeVersion: body.noticeVersion,
-          evidenceRef: payloadExpired ? null : body.evidenceRef,
+          evidenceRef,
           bindingVersion: subject.bindingVersion,
           accessEpoch: p.accessEpoch,
           idempotencyKey: key!,
@@ -1986,7 +2125,7 @@ export class Participation
             purpose: body.purpose,
             granted: body.granted,
             noticeVersion: body.noticeVersion,
-            evidenceRef: payloadExpired ? null : body.evidenceRef,
+            evidenceRef,
             method: "assisted",
           },
         });
@@ -1997,7 +2136,7 @@ export class Participation
         subject.bindingVersion,
         p.accessEpoch,
         row.id,
-        payloadExpired,
+        payloadDeleted,
       );
     });
     if (body && !body.granted) await this.reconcileRevocations(id);
@@ -2030,7 +2169,15 @@ export class Participation
         accessEpoch:
           reason === "assisted" ? { lte: accessEpoch } : { lt: accessEpoch },
         kind: { in: kinds },
-        state: { notIn: ["succeeded", "no_speech", "invalidated", "obsolete"] },
+        state: {
+          notIn: [
+            "succeeded",
+            "no_speech",
+            "no_content",
+            "invalidated",
+            "obsolete",
+          ],
+        },
       },
       select: { id: true, fence: true },
     });
@@ -2131,7 +2278,13 @@ export class Participation
               id: target.id,
               fence: task.fence,
               state: {
-                notIn: ["succeeded", "no_speech", "invalidated", "obsolete"],
+                notIn: [
+                  "succeeded",
+                  "no_speech",
+                  "no_content",
+                  "invalidated",
+                  "obsolete",
+                ],
               },
             },
             data: {
@@ -2230,7 +2383,7 @@ export class Participation
     await this.db.$transaction(async (tx) => {
       const p = await this.project(tx, projectId, true),
         subject = await this.subject(tx, projectId);
-      if (user.id !== p.order.buyerId && user.id !== subject.boundUserId)
+      if (user.id !== p.initiatorUserId && user.id !== subject.boundUserId)
         throw new ForbiddenException();
     });
     await this.reconcileRevocations(projectId);
@@ -2395,6 +2548,25 @@ export class ParticipationController {
         body,
         idempotencyKey(req),
         req.headers.authorization,
+      ),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post("projects/:id/consents/start")
+  @Header("Cache-Control", "no-store")
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  async startConsent(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: StartConsentDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.participation.consent(
+        id,
+        body,
+        idempotencyKey(req),
+        req.headers.authorization,
+        "start",
       ),
       meta: { requestId: req.id },
     };

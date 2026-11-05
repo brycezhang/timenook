@@ -45,8 +45,35 @@ model CareExport {
  reviewHash String? @map("review_hash") @db.Char(64)
  @@unique([projectId,id])
  @@index([projectId,state])
- @@index([expiresAt])
  @@map("care_exports")
+}
+
+// Minimal immutable authorization facts; evidence/recipient payloads remain outside this table.
+model ExportStaffGrant {
+ id String @id @db.Uuid
+ sequence BigInt @unique @default(autoincrement())
+ projectId String @map("project_id") @db.Uuid
+ caseId String @map("case_id") @db.Uuid
+ subjectId String @map("subject_id") @db.Uuid
+ adminId String @map("admin_id") @db.Uuid
+ bindingVersion Int @map("binding_version")
+ accessEpoch Int @map("access_epoch")
+ accessSequence Int @map("access_sequence")
+ key String
+ requestHash String @map("request_hash") @db.Char(64)
+ source String
+ purpose String
+ noticeVersion String @map("notice_version")
+ identityProcedureRef String @map("identity_procedure_ref")
+ confirmationChannelRef String @map("confirmation_channel_ref")
+ recipientHash String @map("recipient_hash") @db.Char(64)
+ evidenceHash String @map("evidence_hash") @db.Char(64)
+ verifiedAt DateTime @map("verified_at") @db.Timestamptz(3)
+ expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+ @@unique([caseId,key])
+ @@unique([source,evidenceHash])
+ @@index([caseId,sequence])
+ @@map("export_staff_grants")
 }
 
 model OutlineTemplateVersion {
@@ -112,6 +139,8 @@ model User {
   createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   identities WechatIdentity[]
   sessions   Session[]
+  webLoginTickets WebLoginTicket[]
+  wechatLinks WechatLink[]
 
   @@map("users")
 }
@@ -135,10 +164,56 @@ model Session {
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
   user      User      @relation(fields: [userId], references: [id])
+  webSession WebSession?
+  wechatLinks WechatLink[]
 
   @@index([userId])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+model WebLoginTicket {
+  id String @id @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  tokenHash String @unique @map("token_hash") @db.Char(64)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  user User @relation(fields: [userId], references: [id])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("web_login_tickets")
+}
+
+model WebSession {
+  sessionId String @id @map("session_id") @db.Uuid
+  keyHash String @map("key_hash") @db.Char(64)
+  session Session @relation(fields: [sessionId], references: [id])
+  @@map("web_sessions")
+}
+
+model WechatLink {
+  id String @id @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  sessionId String @map("session_id") @db.Uuid
+  codeHash String @unique @map("code_hash") @db.Char(64)
+  proofHash String? @unique @map("proof_hash") @db.Char(64)
+  verificationCode String? @map("verification_code") @db.Char(6)
+  appId String? @map("app_id")
+  openId String? @map("open_id")
+  state String @default("waiting")
+  attempts Int @default(0)
+  webConfirmed Boolean @default(false) @map("web_confirmed")
+  nativeConfirmed Boolean @default(false) @map("native_confirmed")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  user User @relation(fields: [userId], references: [id])
+  session Session @relation(fields: [sessionId], references: [id])
+  @@index([sessionId])
+  @@index([appId, openId])
+  @@index([expiresAt])
+  @@map("wechat_links")
 }
 
 // An exchange is consumed before the external request, including unknown results.
@@ -183,6 +258,9 @@ model AdminSession {
   @@map("admin_sessions")
 }
 model AdminAudit {
+  resourceType String? @map("resource_type")
+  resourceId String? @map("resource_id")
+  @@index([resourceType,resourceId,createdAt],map:"admin_audit_resource")
   id String @id @db.Uuid
   operatorId String? @map("operator_id") @db.Uuid
   action String
@@ -298,7 +376,7 @@ model ProbeAiGeneration {
   @@map("probe_ai_generations")
 }
 
-// T10 local verification only. Financial fields/snapshots are immutable.
+// Local verification and ordinary merchant orders. Financial fields/snapshots are immutable.
 model PaymentOrder {
   firstCopyCancellationRequired Boolean @default(false) @map("first_copy_cancellation_required")
   productionFrozen Boolean @default(false) @map("production_frozen")
@@ -311,6 +389,8 @@ model PaymentOrder {
   outTradeNo String @unique @map("out_trade_no")
   idempotencyKey String @map("idempotency_key")
   requestHash String @map("request_hash") @db.Char(64)
+  listAmount Int @default(99900) @map("list_amount")
+  isE2e Boolean @default(false) @map("is_e2e")
   amount Int
   currency String
   mode String
@@ -430,9 +510,23 @@ model PaymentInbox {
  @@map("payment_inbox")
 }
 
+model InternalProjectAdmission {
+ id String @id @db.Uuid
+ projectId String @unique @map("project_id") @db.Uuid
+ initiatorUserId String @map("initiator_user_id") @db.Uuid
+ provisionKey String @unique @map("provision_key")
+ requestHash String @map("request_hash") @db.Char(64)
+ profileVersion String @map("profile_version")
+ snapshot Json
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([projectId,id])
+ @@map("internal_project_admissions")
+}
+
 model ProjectServiceTerms {
  projectId String @id @map("project_id") @db.Uuid
- packageVersionId String @map("package_version_id") @db.Uuid
+ packageVersionId String? @map("package_version_id") @db.Uuid
+ internalAdmissionId String? @map("internal_admission_id") @db.Uuid
  policy Json
  activatedAt DateTime @map("activated_at") @db.Timestamptz(3)
  @@map("project_service_terms")
@@ -443,8 +537,6 @@ model ProjectServiceEvent {
  eventId String @map("event_id")
  kind String
  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
- supportCaseRef String? @map("support_case_ref")
- operatorId String? @map("operator_id") @db.Uuid
  @@id([projectId,eventId])
  @@index([projectId,occurredAt])
  @@map("project_service_events")
@@ -520,6 +612,7 @@ model CareRequest {
   targetUserId         String?   @map("target_user_id") @db.Uuid
   sourceBindingVersion Int      @map("source_binding_version")
   sourceAccessEpoch Int @map("source_access_epoch")
+  verificationAccessSequence Int? @map("verification_access_sequence")
   verificationKey String? @map("verification_key")
   verificationHash String? @map("verification_hash") @db.Char(64)
   verificationEvidence String? @map("verification_evidence")
@@ -1273,6 +1366,8 @@ model FulfillmentOutbox {
 }
 
 model FulfillmentAttempt {
+ printedAt DateTime? @map("printed_at") @db.Timestamptz(3)
+ printedBy String? @map("printed_by") @db.Uuid
  qualityRequestId String? @map("quality_request_id") @db.Uuid
  id String @id @db.Uuid
  reservationRevision Int @map("reservation_revision")
@@ -1435,4 +1530,30 @@ model QualityGrant {
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@index([requestId,sequence])
  @@map("quality_grants")
+}
+
+model AdminOrderNote {
+ id String @id @db.Uuid
+ orderId String @map("order_id") @db.Uuid
+ operatorId String @map("operator_id") @db.Uuid
+ key String
+ content String
+ requestHash String @map("request_hash") @db.Char(64)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([orderId,operatorId,key])
+ @@index([orderId,createdAt],map:"admin_order_notes_order_created")
+ @@map("admin_order_notes")
+}
+
+model AdminUserNote {
+ id String @id @db.Uuid
+ userId String @map("user_id") @db.Uuid
+ operatorId String @map("operator_id") @db.Uuid
+ key String
+ content String
+ requestHash String @map("request_hash") @db.Char(64)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+ @@unique([userId,operatorId,key])
+ @@index([userId,createdAt])
+ @@map("admin_user_notes")
 }

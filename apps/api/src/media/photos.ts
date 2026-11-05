@@ -1,3 +1,4 @@
+import { readProjectAdmissionIn } from "../projects/project-admission";
 import { PrivacyRights } from "../care/privacy-rights";
 import { join } from "node:path";
 import { ProjectStreams } from "./project-streams";
@@ -195,12 +196,8 @@ export class Photos implements OnModuleDestroy {
   private async quota(tx: Prisma.TransactionClient, projectId: string) {
     await this.participation.requireMaterialIn(tx, projectId, "originalPhotos");
     await this.participation.requireMaterialIn(tx, projectId, "derivedPhotos");
-    const p = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
-    const order = await tx.paymentOrder.findUniqueOrThrow({
-      where: { id: p.orderId! },
-    });
-    const admission = (order.packageSnapshot as Prisma.JsonObject).admission as
-      Prisma.JsonObject | undefined;
+    const { snapshot } = await readProjectAdmissionIn(tx, projectId);
+    const admission = snapshot.admission as Prisma.JsonObject | undefined;
     const d04 = admission?.d04 as Prisma.JsonObject | undefined;
     const quotas = d04?.userQuotas as Prisma.JsonObject | undefined;
     const photos = quotas?.photos as Prisma.JsonObject | undefined;
@@ -592,7 +589,7 @@ export class Photos implements OnModuleDestroy {
       async (tx) => {
         const row = await this.intent(tx, projectId, interviewId, id);
         if (row.state !== "sealed") throw new ConflictException();
-        const terms = await this.terms.read(projectId, undefined, tx);
+        const terms = await this.terms.read(projectId, tx);
         const snapshot = await this.readSnapshot(tx, projectId, interviewId);
         const selected = snapshot?.entries
           .find((e) => e.photoId === id)
@@ -616,7 +613,7 @@ export class Photos implements OnModuleDestroy {
           terms.retention?.[
             asset.kind === "original" ? "originalPhotos" : "derivedPhotos"
           ];
-        if (!retention || retention.state === "expired")
+        if (!retention || retention.state === "deleted")
           throw new ForbiddenException();
         if (
           asset.storageScope !== this.scope ||

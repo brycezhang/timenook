@@ -1,4 +1,5 @@
 export interface StorySourceView {
+  durationMs?: number | null;
   intentId: string;
   clipId: string;
   interviewId: string;
@@ -32,6 +33,11 @@ export interface StoryDecisionView {
   createdAt: string;
 }
 export interface ProjectOverview {
+  noticeVersion?: string;
+  evidencePrefix?: string;
+  noticeText?: string;
+  policyStatus?: "internal-acceptance" | "synthetic-only" | "pending";
+  source?: "paid" | "internal-acceptance";
   projectId: string;
   bookTitle: string;
   metadataVersion: number;
@@ -63,6 +69,13 @@ export interface StoryRevisionView {
   origin: "ai" | "participant";
 }
 export interface StoryView {
+  confirmation?: {
+    canDecide: boolean;
+    allowInBook: boolean;
+    noticeVersion: string;
+    evidencePrefix: string;
+    noticeText?: string;
+  };
   appliedRevision?: { id: string; version: number; contentHash: string };
   decision?: StoryDecisionView | null;
   id: string;

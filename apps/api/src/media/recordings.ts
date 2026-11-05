@@ -1,3 +1,4 @@
+import { recordingQuotaIn, recordingUsageIn } from "./recording-budget";
 import { PrivacyRights } from "../care/privacy-rights";
 import { ProjectStreams } from "./project-streams";
 import { createTranscription } from "../tasks/tasks";
@@ -146,41 +147,11 @@ export class Recordings implements OnModuleDestroy {
     };
   }
   async usage(tx: Prisma.TransactionClient, projectId: string) {
-    const sum = await tx.recordingIntent.aggregate({
-      where: { projectId },
-      _sum: { reservedMs: true, consumedMs: true },
-    });
-    return {
-      reservedMs: sum._sum.reservedMs ?? 0,
-      consumedMs: sum._sum.consumedMs ?? 0,
-    };
+    return recordingUsageIn(tx, projectId);
   }
   private async quota(tx: Prisma.TransactionClient, projectId: string) {
     await this.participation.requireMaterialIn(tx, projectId, "originalAudio");
-    const p = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
-    const order = await tx.paymentOrder.findUniqueOrThrow({
-      where: { id: p.orderId! },
-    });
-    const admission = (order.packageSnapshot as Prisma.JsonObject).admission as
-      Prisma.JsonObject | undefined;
-    const d04 = admission?.d04 as Prisma.JsonObject | undefined;
-    const quotas = d04?.userQuotas as Prisma.JsonObject | undefined;
-    const per = quotas?.recordingPerClip as Prisma.JsonObject | undefined,
-      total = quotas?.recordingTotal as Prisma.JsonObject | undefined;
-    if (
-      (d04?.review as Prisma.JsonObject)?.state !== "frozen" ||
-      per?.unit !== "seconds" ||
-      total?.unit !== "seconds" ||
-      !Number.isSafeInteger(per.value) ||
-      !Number.isSafeInteger(total.value) ||
-      Number(per.value) < 1 ||
-      Number(total.value) < 1
-    )
-      throw new ServiceUnavailableException();
-    return {
-      perClipMs: Math.min(Number(per.value) * 1000, 300000),
-      totalMs: Number(total.value) * 1000,
-    };
+    return recordingQuotaIn(tx, projectId);
   }
   create(
     projectId: string,
@@ -302,10 +273,10 @@ export class Recordings implements OnModuleDestroy {
       async (tx) => {
         const row = await this.intent(tx, projectId, interviewId, id);
         if (row.state !== "sealed") throw new ConflictException();
-        const terms = await this.terms.read(projectId, undefined, tx);
+        const terms = await this.terms.read(projectId, tx);
         if (
-          terms.playback?.state === "expired" ||
-          terms.retention?.originalAudio?.state === "expired"
+          terms.playback?.state === "deleted" ||
+          terms.retention?.originalAudio?.state === "deleted"
         )
           throw new ForbiddenException();
         return row;

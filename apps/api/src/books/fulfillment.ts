@@ -5,6 +5,7 @@ import {
   Get,
   Post,
   Body,
+  Query,
   Param,
   ParseUUIDPipe,
   Req,
@@ -30,16 +31,12 @@ import {
   IsISO8601,
   Matches,
   IsOptional,
-  Equals,
   IsIn,
   IsString,
   MaxLength,
-  ValidateNested,
-  IsDefined,
 } from "class-validator";
-import { Type } from "class-transformer";
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { Prisma, FirstCopyOrder, FulfillmentAttempt } from "@prisma/client";
+import { Prisma, FirstCopyOrder } from "@prisma/client";
 import { randomUUID, createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -51,6 +48,8 @@ import type {
   FirstCopyAddress,
   FulfillmentMaterials,
   FulfillmentWechat,
+  AdminProductionPage,
+  AdminProductionSummary,
 } from "@timenook/contracts";
 import { ADMIN_PERMISSIONS } from "@timenook/contracts";
 import { Participation } from "../identity/participation";
@@ -58,6 +57,7 @@ import { AdminAccess } from "../admin/admin-access";
 import { idempotencyKey } from "../payments/orders";
 import { FirstCopies } from "./first-copy";
 import { API_CONFIG, ApiConfig } from "../config";
+import { participationNotice } from "../catalog/e2e-package";
 import { ProjectServiceTerms } from "../projects/service-terms";
 const digest = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -78,15 +78,19 @@ class AttemptDto extends BindingDto {
 class GrantDto extends BindingDto {
   @ApiProperty() @IsUUID() attemptId!: string;
   @ApiProperty() @IsISO8601() expiresAt!: string;
-  @ApiProperty() @Equals("synthetic-d08-v1") noticeVersion!: string;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty() @IsString() @MaxLength(100) noticeVersion!: string;
+  @ApiProperty()
+  @Matches(/^(synthetic|internal|record):[^\r\n]{3,160}$/)
+  evidenceRef!: string;
   @ApiProperty({ required: false })
   @IsOptional()
   @IsUUID()
   assistedSessionId?: string;
 }
 class EvidenceDto {
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @Matches(/^(synthetic|internal|record):[^\r\n]{3,160}$/)
+  evidenceRef!: string;
 }
 class ReceiptDto extends EvidenceDto {
   @ApiProperty({
@@ -97,9 +101,8 @@ class ReceiptDto extends EvidenceDto {
 }
 class WechatDto implements FulfillmentWechat {
   @ApiProperty()
-  @Equals("implemented_and_verified")
-  handling!: "implemented_and_verified";
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @Matches(/^(synthetic|internal|record):[^\r\n]{3,160}$/)
+  evidenceRef!: string;
   @ApiProperty({ enum: ["recorded", "pending", "failed"] })
   @IsIn(["recorded", "pending", "failed"])
   result!: "recorded" | "pending" | "failed";
@@ -112,11 +115,9 @@ class ShippingDto extends EvidenceDto {
   @Matches(/^[A-Za-z0-9-]{3,80}$/)
   number!: string;
   @ApiProperty() @IsISO8601() shippedAt!: string;
-  @ApiProperty({ type: WechatDto })
-  @IsDefined()
-  @ValidateNested()
-  @Type(() => WechatDto)
-  wechat!: WechatDto;
+}
+class PrintingDto extends EvidenceDto {
+  @ApiProperty() @IsISO8601() printedAt!: string;
 }
 class DeliveryDto extends EvidenceDto {
   @ApiProperty() @IsISO8601() deliveredAt!: string;
@@ -238,12 +239,9 @@ export class Fulfillment implements OnModuleDestroy {
       accessExpiresAt: string | null;
     },
   ): Promise<FulfillmentView> {
-    const erased = await this.participation.activeDataPayloadExpiredIn(
-      tx,
-      projectId,
-    );
+    const erased = await this.participation.activeDataDeletedIn(tx, projectId);
     const order = await tx.firstCopyOrder.findUnique({ where: { projectId } }),
-      terms = await this.terms.read(projectId, undefined, tx),
+      terms = await this.terms.read(projectId, tx),
       subject = await tx.projectSubject.findUniqueOrThrow({
         where: { projectId },
       });
@@ -277,6 +275,15 @@ export class Fulfillment implements OnModuleDestroy {
         wechat: erased
           ? null
           : (row.wechat as unknown as FulfillmentWechat | null),
+        printedAt: row.printedAt?.toISOString() ?? null,
+        printedBy: row.printedBy,
+        records: (
+          await tx.fulfillmentRecord.findMany({
+            where: { attemptId: row.id },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            select: { kind: true, operatorAdminId: true, createdAt: true },
+          })
+        ).map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })),
         deliveredAt: row.deliveredAt?.toISOString() ?? null,
         grantExpiresAt: grant?.expiresAt.toISOString() ?? null,
         cancellationNotice:
@@ -287,7 +294,18 @@ export class Fulfillment implements OnModuleDestroy {
               : "取消和实物状态以印厂核实回执为准。",
       });
     }
+    const payment = order
+      ? await tx.paymentOrder.findUniqueOrThrow({
+          where: { id: order.paymentOrderId },
+        })
+      : null;
+    const notice = participationNotice(
+      (payment?.packageSnapshot ?? {}) as Prisma.JsonObject,
+      this.config.books?.mode === "internal-acceptance",
+    );
     return {
+      noticeVersion: notice.noticeVersion,
+      evidencePrefix: notice.evidencePrefix,
       projectId,
       orderId: order?.id ?? null,
       paymentOrderId: order?.paymentOrderId ?? null,
@@ -322,12 +340,83 @@ export class Fulfillment implements OnModuleDestroy {
       (tx, actor) => this.view(tx, projectId, actor),
     );
   }
-  async listIn(tx: Tx) {
-    const orders = await tx.firstCopyOrder.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    });
-    return Promise.all(orders.map((order) => this.view(tx, order.projectId)));
+  async listIn(
+    tx: Tx,
+    query: Record<string, unknown> = {},
+  ): Promise<AdminProductionPage> {
+    const integer = (value: unknown, fallback: number, max: number) => {
+      if (value === undefined || value === "") return fallback;
+      if (
+        typeof value !== "string" ||
+        !/^[1-9]\d*$/.test(value) ||
+        Number(value) > max
+      )
+        throw new BadRequestException("Invalid pagination");
+      return Number(value);
+    };
+    const page = integer(query.page, 1, 1000000),
+      pageSize = integer(query.pageSize, 20, 100);
+    const q = typeof query.q === "string" ? query.q.trim() : "";
+    const states = [
+      "pdf_ready",
+      "approved",
+      "handoff_pending",
+      "in_production",
+      "printed",
+      "shipped",
+      "delivered",
+      "cancellation_pending",
+      "cancelled",
+    ];
+    if (
+      Object.keys(query).some(
+        (k) =>
+          !["q", "state", "pending", "exception", "page", "pageSize"].includes(
+            k,
+          ),
+      ) ||
+      (query.q !== undefined && typeof query.q !== "string") ||
+      q.length > 200 ||
+      (query.state && !states.includes(String(query.state))) ||
+      [query.pending, query.exception].some(
+        (v) =>
+          v !== undefined && v !== "" && !["true", "false"].includes(String(v)),
+      )
+    )
+      throw new BadRequestException("Invalid production filter");
+    const base = Prisma.sql`WITH production AS (
+      SELECT o.id, o.project_id AS "projectId", o.payment_order_id AS "paymentOrderId", p.out_trade_no AS "outTradeNo", COALESCE(s.name,p.subject_name) AS "subjectName", COALESCE(j.book_title,p.book_title) AS "bookTitle", o.created_at AS "createdAt", a.printed_at AS "printedAt",
+      CASE WHEN a.state='in_production' AND a.printed_at IS NOT NULL THEN 'printed' ELSE COALESCE(a.state,'pdf_ready') END AS state,
+      COALESCE(a.state NOT IN ('delivered','cancelled'),true) AS pending,
+      COALESCE(a.state IN ('handoff_pending','cancellation_pending') OR (a.due_at < now() AND a.state NOT IN ('delivered','cancelled')),false) AS exception
+      FROM first_copy_orders o JOIN payment_orders p ON p.id=o.payment_order_id JOIN projects j ON j.id=o.project_id LEFT JOIN project_subjects s ON s.project_id=j.id
+      LEFT JOIN LATERAL (SELECT state,printed_at,due_at FROM fulfillment_attempts WHERE order_id=o.id ORDER BY sequence DESC LIMIT 1) a ON true
+    ), filtered AS (SELECT * FROM production WHERE
+      (${q}='' OR concat_ws(' ',id::text,"projectId"::text,"paymentOrderId"::text,"outTradeNo","subjectName","bookTitle") ILIKE ${"%" + q.replace(/[\\%_]/g, "\\$&") + "%"})
+      AND (${String(query.state ?? "")}='' OR state=${String(query.state ?? "")})
+      AND (${String(query.pending ?? "")}='' OR pending::text=${String(query.pending ?? "")})
+      AND (${String(query.exception ?? "")}='' OR exception::text=${String(query.exception ?? "")}))`;
+    const count = await tx.$queryRaw<{ total: bigint }[]>(
+      Prisma.sql`${base} SELECT count(*) AS total FROM filtered`,
+    );
+    const rows = await tx.$queryRaw<
+      (Omit<AdminProductionSummary, "createdAt" | "printedAt"> & {
+        createdAt: Date;
+        printedAt: Date | null;
+      })[]
+    >(
+      Prisma.sql`${base} SELECT * FROM filtered ORDER BY "createdAt" DESC,id DESC OFFSET ${(page - 1) * pageSize} LIMIT ${pageSize}`,
+    );
+    return {
+      items: rows.map((r) => ({
+        ...r,
+        createdAt: r.createdAt.toISOString(),
+        printedAt: r.printedAt?.toISOString() ?? null,
+      })),
+      total: Number(count[0].total),
+      page,
+      pageSize,
+    };
   }
   async readIn(tx: Tx, id: string) {
     const order = await this.order(tx, id);
@@ -356,7 +445,7 @@ export class Fulfillment implements OnModuleDestroy {
       operatorId,
       key,
     );
-    const terms = await this.terms.read(order.projectId, undefined, tx);
+    const terms = await this.terms.read(order.projectId, tx);
     return terms.creation?.state === "active";
   }
   async createIn(
@@ -562,6 +651,20 @@ export class Fulfillment implements OnModuleDestroy {
         if (!attempt || attempt.state !== "approved")
           throw new ConflictException();
         this.matches(attempt, body);
+        const payment = await tx.paymentOrder.findUniqueOrThrow({
+          where: { id: order.paymentOrderId },
+        });
+        const notice = participationNotice(
+          payment.packageSnapshot as Prisma.JsonObject,
+          this.config.books?.mode === "internal-acceptance",
+        );
+        if (
+          body.noticeVersion !== notice.noticeVersion ||
+          !body.evidenceRef.startsWith(notice.evidencePrefix)
+        )
+          throw new BadRequestException(
+            "Applicable production authorization evidence required",
+          );
         const expiry = Date.parse(body.expiresAt);
         if (
           expiry <= Date.now() ||
@@ -733,7 +836,7 @@ export class Fulfillment implements OnModuleDestroy {
       where: { id: attemptId },
       select: { projectId: true },
     });
-    const expired = await this.participation.activeDataPayloadExpiredIn(
+    const expired = await this.participation.activeDataDeletedIn(
       tx,
       attempt.projectId,
     );
@@ -867,7 +970,7 @@ export class Fulfillment implements OnModuleDestroy {
         attemptId,
       );
     if (!prior.fresh) return this.view(tx, order.projectId);
-    const expired = await this.participation.activeDataPayloadExpiredIn(
+    const expired = await this.participation.activeDataDeletedIn(
       tx,
       order.projectId,
     );
@@ -1003,6 +1106,78 @@ export class Fulfillment implements OnModuleDestroy {
       throw new BadRequestException("Actual event time required");
     return time;
   }
+  async printingIn(
+    tx: Tx,
+    id: string,
+    attemptId: string,
+    body: PrintingDto,
+    operatorId: string,
+    key: string,
+  ) {
+    const { order, attempt } = await this.attemptIn(tx, id, attemptId);
+    const prior = await this.command(
+      tx,
+      order,
+      operatorId,
+      `printing:${attemptId}`,
+      key,
+      body,
+      attemptId,
+    );
+    if (!prior.fresh) return this.view(tx, order.projectId);
+    if (attempt.printedAt) {
+      const fact = await tx.fulfillmentRecord.findFirst({
+        where: { attemptId, kind: "printing_completed" },
+      });
+      if (!fact || !isDeepStrictEqual(fact.evidence, body))
+        throw new ConflictException("Completed printing fact is immutable");
+      return this.view(tx, order.projectId);
+    }
+    if (attempt.state !== "in_production")
+      throw new ConflictException(
+        "Verify printer acceptance before completing printing",
+      );
+    const printedAt = this.occurred(body.printedAt, attempt.createdAt);
+    await tx.fulfillmentAttempt.update({
+      where: { id: attemptId },
+      data: { printedAt, printedBy: operatorId },
+    });
+    await this.record(tx, attemptId, "printing_completed", body, operatorId);
+    return this.view(tx, order.projectId);
+  }
+  async wechatIn(
+    tx: Tx,
+    id: string,
+    attemptId: string,
+    body: WechatDto,
+    operatorId: string,
+    key: string,
+  ) {
+    const { order, attempt } = await this.attemptIn(tx, id, attemptId);
+    const prior = await this.command(
+      tx,
+      order,
+      operatorId,
+      `wechat:${attemptId}`,
+      key,
+      body,
+      attemptId,
+    );
+    if (!prior.fresh) return this.view(tx, order.projectId);
+    if (!attempt.shippedAt)
+      throw new ConflictException("Actual shipment required");
+    await this.participation.requireMaterialIn(
+      tx,
+      order.projectId,
+      "activeData",
+    );
+    await tx.fulfillmentAttempt.update({
+      where: { id: attemptId },
+      data: { wechat: json(body) },
+    });
+    await this.record(tx, attemptId, "wechat", body, operatorId);
+    return this.view(tx, order.projectId);
+  }
   async shippingIn(
     tx: Tx,
     id: string,
@@ -1024,22 +1199,12 @@ export class Fulfillment implements OnModuleDestroy {
     if (!prior.fresh) return this.view(tx, order.projectId);
     if (!["in_production", "shipped", "delivered"].includes(attempt.state))
       throw new ConflictException();
-    const payment = await tx.paymentOrder.findUniqueOrThrow({
-        where: { id: order.paymentOrderId },
-      }),
-      snapshot = payment.packageSnapshot as SalesSnapshot,
-      handling =
-        snapshot.admission?.d08?.platform?.shippingManagement
-          ?.requirementHandling;
-    if (
-      handling !== "implemented_and_verified" ||
-      body.wechat.handling !== handling
-    )
+    if (!attempt.printedAt)
       throw new ConflictException(
-        "Applicable WeChat shipping path is not ready",
+        "Actual completed printing is required before shipment",
       );
-    const shippedAt = this.occurred(body.shippedAt, attempt.createdAt),
-      expired = await this.participation.activeDataPayloadExpiredIn(
+    const shippedAt = this.occurred(body.shippedAt, attempt.printedAt),
+      expired = await this.participation.activeDataDeletedIn(
         tx,
         order.projectId,
       );
@@ -1071,7 +1236,6 @@ export class Fulfillment implements OnModuleDestroy {
         state: attempt.state === "delivered" ? "delivered" : "shipped",
         shippedAt,
         tracking: expired ? undefined : json(tracking),
-        wechat: expired ? undefined : json(body.wechat),
       },
     });
     await this.record(tx, attemptId, "shipping", body, operatorId);
@@ -1096,7 +1260,7 @@ export class Fulfillment implements OnModuleDestroy {
         attemptId,
       );
     if (!prior.fresh) return this.view(tx, order.projectId);
-    const expired = await this.participation.activeDataPayloadExpiredIn(
+    const expired = await this.participation.activeDataDeletedIn(
       tx,
       order.projectId,
     );
@@ -1252,6 +1416,13 @@ export class AdminFulfillmentController {
     action: string,
     work: (tx: Tx, id: string) => Promise<T>,
   ) {
+    const id = (req.params as { id?: string }).id;
+    if (id) {
+      Object.assign(req, {
+        adminResourceType: "production",
+        adminResourceId: id,
+      });
+    }
     return this.access.run(action, req, async () => {
       const actor = await this.access.authorized(
         req,
@@ -1266,11 +1437,12 @@ export class AdminFulfillmentController {
     });
   }
   @Get() @Header("Cache-Control", "no-store") async list(
+    @Query() query: Record<string, unknown>,
     @Req() req: FastifyRequest,
   ) {
     return {
       data: await this.run(req, "fulfillment.list", (tx) =>
-        this.fulfillment.listIn(tx),
+        this.fulfillment.listIn(tx, query),
       ),
       meta: { requestId: req.id },
     };
@@ -1357,6 +1529,52 @@ export class AdminFulfillmentController {
     return {
       data: await this.run(req, "fulfillment.receipt", (tx, actor) =>
         this.fulfillment.receiptIn(
+          tx,
+          id,
+          attemptId,
+          body,
+          actor,
+          idempotencyKey(req),
+        ),
+      ),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post(":id/attempts/:attemptId/printing")
+  @Header("Cache-Control", "no-store")
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  async printing(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("attemptId", ParseUUIDPipe) attemptId: string,
+    @Body() body: PrintingDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.run(req, "fulfillment.printing", (tx, actor) =>
+        this.fulfillment.printingIn(
+          tx,
+          id,
+          attemptId,
+          body,
+          actor,
+          idempotencyKey(req),
+        ),
+      ),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post(":id/attempts/:attemptId/wechat")
+  @Header("Cache-Control", "no-store")
+  @ApiHeader({ name: "Idempotency-Key", required: true })
+  async wechat(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("attemptId", ParseUUIDPipe) attemptId: string,
+    @Body() body: WechatDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.run(req, "fulfillment.wechat", (tx, actor) =>
+        this.fulfillment.wechatIn(
           tx,
           id,
           attemptId,

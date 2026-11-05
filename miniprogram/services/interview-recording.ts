@@ -8,7 +8,14 @@ import type {
   RecordingContext,
   RecordingInterview,
 } from "../../packages/contracts/src";
-import type { ProbeUploadForm } from "../../packages/contracts/src/audio-probe";
+import type {
+  ProbeLocalClip,
+  ProbeUploadForm,
+} from "../../packages/contracts/src/audio-probe";
+export type InterviewLocalClip = ProbeLocalClip & {
+  storage?: RecordingClip["storage"];
+};
+
 export function recordingPartition(projectId: string) {
   const account = sessionClient.context().split(":")[0];
   if (!account) throw new Error("请先登录");
@@ -67,6 +74,7 @@ export const interviewRecordingClient = {
       allowed: boolean;
       actualQuestionId: string;
       questionVersion: number;
+      maxDurationMs: number;
     }>(`/projects/${projectId}/interviews/${id}/recording-start`, {
       key: paymentKey(),
       data: {
@@ -142,11 +150,11 @@ export class InterviewRecorder extends LocalAudioRecorder {
     if (!this.canRecord())
       throw new Error("当前不能新录音，请保留本机文件并联系服务");
   }
-  start(actualQuestionId?: string) {
+  start(actualQuestionId?: string, maxDurationMs?: number) {
     if (this.uploading) return;
     if (!actualQuestionId || !/^[a-f0-9-]{36}$/.test(actualQuestionId))
       throw new Error("实际问题未确认，请重新查询");
-    super.start(actualQuestionId);
+    super.start(actualQuestionId, maxDurationMs);
   }
   async restore() {
     await super.restore();
@@ -180,7 +188,7 @@ export class InterviewRecorder extends LocalAudioRecorder {
   async upload(clientClipId: string) {
     this.currentContext();
     if (this.uploading || this.active || this.pending || this.saving) return;
-    const local = this.current.clips.find(
+    const local: InterviewLocalClip | undefined = this.current.clips.find(
       (c) => c.clientClipId === clientClipId,
     );
     if (!local) throw new Error("没有已保存的片段");
@@ -244,7 +252,7 @@ export class InterviewRecorder extends LocalAudioRecorder {
         await sessionClient.uploadRecording(form, local.path);
         this.currentContext();
         sealing = true;
-        this.update("sealing", "暂存上传完成，正在完整校验；尚未封存");
+        this.update("sealing", "录音已上传，正在确认保存，请先别退出");
         result = await sessionClient.request<RecordingClip>(
           `${base}/${remote.id}/seal`,
           { key: paymentKey(), data: body },
@@ -259,12 +267,13 @@ export class InterviewRecorder extends LocalAudioRecorder {
       )
         throw new Error("封存未确认");
       local.sealed = true;
+      local.storage = result.storage;
       this.commitClip(local);
       this.update(
         "sealed",
         result.storage === "oss"
-          ? "云端已保存；可以离开，转写状态可重新查询"
-          : "本地模拟封存完成；转写状态可查询，真实云端尚待验收",
+          ? "已上传到云端，可以离开；文字处理状态可重新查询"
+          : "已在测试环境保存，真实云端保存仍待验证",
       );
     } catch (error) {
       this.update(

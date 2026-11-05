@@ -7,6 +7,7 @@ export async function qualityAdmin() {
     "fulfillment:write",
     "care:write",
     "audit:read",
+    "orders:read",
   ]);
 }
 export function adminRequest(
@@ -23,10 +24,8 @@ export function adminRequest(
     ...(payload ? { payload } : {}),
   });
 }
-export async function deliveredQualityOrder(
-  retention: Record<string, number> = {},
-) {
-  const p = await readyReservedFirstCopy(retention),
+export async function deliveredQualityOrder() {
+  const p = await readyReservedFirstCopy(),
     headers = await qualityAdmin(),
     base = `/v1/admin/fulfillment/${p.order.id}`;
   const view = data(
@@ -60,16 +59,17 @@ export async function deliveredQualityOrder(
     }),
   );
   data(
+    await adminRequest("POST", attemptBase + "/printing", headers, {
+      printedAt: new Date().toISOString(),
+      evidenceRef: "synthetic:完成印制核验",
+    }),
+  );
+  data(
     await adminRequest("POST", attemptBase + "/shipping", headers, {
       carrier: "合成物流",
       number: "SYNTHETICQUALITY",
       shippedAt: new Date().toISOString(),
       evidenceRef: "synthetic:承运核验",
-      wechat: {
-        handling: "implemented_and_verified",
-        evidenceRef: "synthetic:微信发货",
-        result: "recorded",
-      },
     }),
   );
   const delivered = data(
@@ -90,9 +90,8 @@ export async function deliveredQualityOrder(
 }
 export async function reviewedQualityOrder(
   mode: "original" | "revised" | "refund" = "original",
-  retention: Record<string, number> = {},
 ) {
-  const p = await deliveredQualityOrder(retention),
+  const p = await deliveredQualityOrder(),
     created = data(
       await request("POST", p.qualityBase, p.buyer.token, {
         attemptId: p.attempt.id,

@@ -39,3 +39,17 @@
   min-height: 48px;
   white-space: normal;
 }
+
+/* The shared native screen keeps its first viewport on purpose selection. */
+.assisted-page { font-size: 36rpx; padding-top: 46rpx; }
+.assisted-page .title { font-size: 48rpx; }
+.assisted-page .assisted-intro { font-size: 34rpx; line-height: 1.7; margin-top: 28rpx; color: var(--muted); }
+.purpose-options { display: block; margin-top: 38rpx; background: var(--surface); border-radius: 28rpx; padding: 6rpx 28rpx; }
+.purpose-choice { display: flex; align-items: center; gap: 22rpx; padding: 30rpx 0; min-height: 100rpx; border-bottom: 1rpx solid var(--line); }
+.purpose-choice:last-child { border-bottom: 0; }
+.purpose-checkbox { flex-shrink: 0; width: 44rpx; height: 44rpx; accent-color: #566348; }
+.purpose-label { font-size: 34rpx; line-height: 1.6; font-weight: 500; }
+.purpose-description { font-size: 28rpx; line-height: 1.7; color: var(--muted); margin-top: 6rpx; }
+.selection-note { font-size: 28rpx; line-height: 1.7; color: var(--muted); margin: 26rpx 0 36rpx; }
+.assisted-page .consent-submit { font-size: 34rpx; padding: 24rpx 14rpx; }
+.assisted-page .assisted-link { background: transparent; width: 100%; color: var(--brown-dark); font-size: 30rpx; min-height: 48px; padding: 12rpx 0; }

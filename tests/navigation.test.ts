@@ -11,6 +11,7 @@ Object.assign(globalThis, {
     getStorageSync: () => structuredClone(stored),
     navigateTo: ({ url }: { url: string }) => routes.push(url),
     reLaunch: ({ url }: { url: string }) => routes.push(url),
+    switchTab: ({ url }: { url: string }) => routes.push(url),
   },
 });
 await import("../miniprogram/pages/home/index");

@@ -24,6 +24,8 @@ Page({
     regionLabels: [] as string[],
     regionOptions: [] as { label: string; selected: boolean }[],
     blockerLabels: [] as string[],
+    paidAmount: "",
+    canPrepareProduction: false,
     narratorChecked: false,
     initiatorChecked: false,
     narratorEvidence: "",
@@ -91,10 +93,6 @@ Page({
     const value = this.data.context?.accessExpiresAt;
     return !!value && Date.parse(value) <= Date.now();
   },
-  creationExpired() {
-    const value = this.data.context?.creation.expiresAt;
-    return !!value && Date.parse(value) <= Date.now();
-  },
   current(generation: number, owner: string) {
     return (
       generation === this.generation &&
@@ -117,16 +115,24 @@ Page({
       ADDRESS_REQUIRED: "请保存配送地址",
       NARRATOR_CONFIRMATION_REQUIRED: "等待讲述者确认本版内容",
       INITIATOR_CONFIRMATION_REQUIRED: "等待发起人确认本版 PDF 与当前地址",
-      CREATION_PAUSED: "制作期限已暂停，请联系服务人员核验",
-      CREATION_EXPIRED: "制作期限已到，请申请人工审核",
       POLICY_PENDING: "销售规则仍待确认，暂不能提交制作",
+      PHYSICAL_PRODUCTION_UNAVAILABLE:
+        "本项目仅限受控内容验收，不含实物制作权益",
+      PRODUCTION_PDF_UNAPPROVED: "当前 PDF 为候选稿，尚未批准实物制作",
       SPECIFICATION_MISMATCH: "书稿超出或不符合约定制作规格",
       ENTITLEMENT_UNAVAILABLE: "首本制作权益当前不可用",
       PROJECT_FROZEN: "项目当前已冻结，请联系服务人员",
       ALREADY_SUBMITTED: "首本已提交，无需再次提交",
     };
+    const canPrepareProduction = !value.blockers.some((code) =>
+      ["PHYSICAL_PRODUCTION_UNAVAILABLE", "PRODUCTION_PDF_UNAPPROVED"].includes(
+        code,
+      ),
+    );
     this.setData({
       context: value,
+      canPrepareProduction,
+      paidAmount: (value.payment.paidAmountFen / 100).toFixed(2),
       versionMismatch,
       canSubmit: value.canSubmit && !versionMismatch,
       name: address?.recipientName || "",
@@ -149,6 +155,7 @@ Page({
       addressDirty: false,
       canConfirmNarrator:
         (value.canConfirmNarrator || !!this.assistedSessionId) &&
+        canPrepareProduction &&
         !versionMismatch,
       narratorChecked: false,
       initiatorChecked: false,
@@ -179,12 +186,6 @@ Page({
           this.setData({ status: "授权已到期或账号已变化，请重新查询" });
           return;
         }
-        if (this.creationExpired() && this.data.canSubmit)
-          this.setData({
-            canSubmit: false,
-            status:
-              "制作期限已到，请重新查询并按约定申请人工审核；资料不会自动删除。",
-          });
         try {
           const permission = await participationClient.state(this.projectId);
           if (generation !== this.generation) return;
@@ -440,8 +441,8 @@ Page({
         snapshotHash: book.snapshotHash,
         pdfHash: book.pdf.sha256,
         ...(role === "initiator" ? { addressHash: value.address.hash! } : {}),
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: `synthetic:${evidence}`,
+        noticeVersion: value.noticeVersion,
+        evidenceRef: `${value.evidencePrefix}${evidence}`,
         ...(role === "narrator" && this.assistedSessionId
           ? { assistedSessionId: this.assistedSessionId }
           : {}),
@@ -469,31 +470,6 @@ Page({
         `projectId=${this.projectId}&bookVersionId=${book.id}&purpose=book_confirmation`,
       );
   },
-  async requestExpiryReview() {
-    const value = this.data.context;
-    if (
-      !value ||
-      value.role !== "initiator" ||
-      !value.expiryReview.available ||
-      this.data.busy
-    )
-      return;
-    const key = this.key({
-      operation: "expiry-review",
-      projectId: this.projectId,
-    });
-    return this.perform(async (generation: number, owner: string) => {
-      const saved = await firstCopyClient.expiryReview(this.projectId, key);
-      if (this.current(generation, owner)) {
-        this.intent = null;
-        this.accept(saved);
-        this.setData({
-          status:
-            "制作期限人工审核申请已记录。尚未预留首本，不会再次支付；资料不会自动删除。",
-        });
-      }
-    });
-  },
   book() {
     go("book", `projectId=${this.projectId}`);
   },
@@ -517,14 +493,6 @@ Page({
     if (this.data.live) {
       const value = this.data.context,
         book = value?.book;
-      if (this.creationExpired()) {
-        this.setData({
-          canSubmit: false,
-          status:
-            "制作期限已到，请重新查询并按约定申请人工审核；资料不会自动删除。",
-        });
-        return;
-      }
       if (
         !value ||
         !book?.pdf ||
@@ -555,7 +523,7 @@ Page({
           this.setData({
             status: saved.production
               ? "首本制作已预留，等待审核。本次无需支付。"
-              : "制作期限需要人工审核；尚未预留首本，不会再次支付。",
+              : "首本尚未预留，请核对当前书稿确认与权益状态。",
           });
         }
       });

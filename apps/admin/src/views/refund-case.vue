@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
-import { Button, Alert, Input, FormItem } from "antdv-next";
+import { formatAdminTime, parseAdminTimeInput } from "../utils/time";
+import { computed, ref, onMounted, onUnmounted } from "vue";
+import { Button, Alert, Input, FormItem, Modal } from "antdv-next";
 import type { RefundView } from "@timenook/contracts";
 import { REFUND_REASON_LABELS, REFUND_STATE_LABELS } from "@timenook/contracts";
 import { refundApi } from "../api/admin";
@@ -18,10 +19,17 @@ const view = ref<RefundView | null>(null),
   error = ref(""),
   evidence = ref(""),
   failureAt = ref("");
+const hasEvidence = computed(
+  () =>
+    evidence.value.startsWith("internal:") ||
+    evidence.value.startsWith("synthetic:"),
+);
 let active = true,
   generation = 0,
   intent: { input: string; key: string } | null = null;
 onUnmounted(() => {
+  confirmation?.destroy();
+  confirmation = undefined;
   active = false;
   ++generation;
   view.value = null;
@@ -51,6 +59,22 @@ function handle(failure: unknown) {
         ? "金额、原生产状态或政策尚未满足，请查询原工单核实。"
         : "操作结果未确认，请查询原退款；重试保留同一意图。";
 }
+let confirmation: ReturnType<typeof Modal.confirm> | undefined;
+function confirmCommand(
+  action: "approve" | "reject" | "submit" | "production-review",
+) {
+  confirmation?.destroy();
+  confirmation = Modal.confirm({
+    title: "确认退款操作",
+    content:
+      action === "submit"
+        ? `将按原政策向微信执行退款 ${view.value?.amountFen ?? 0} 分，请确认原单与生产核验结果。`
+        : "请确认正在处理此订单的原申请，证据和生产事实已核实。",
+    okText: "确认操作",
+    cancelText: "返回核对",
+    onOk: () => command(action),
+  });
+}
 async function command(
   action: "approve" | "reject" | "submit" | "reconcile" | "production-review",
 ) {
@@ -64,7 +88,7 @@ async function command(
           ...(current.reason === "platformUnableDeliver"
             ? {
                 failureNotifiedAt: failureAt.value
-                  ? new Date(failureAt.value).toISOString()
+                  ? new Date(parseAdminTimeInput(failureAt.value)).toISOString()
                   : undefined,
               }
             : {}),
@@ -120,7 +144,7 @@ onMounted(refresh);
         已批准金额：{{
           view.amountFen === null
             ? "待核验"
-            : `¥${(view.amountFen / 100).toFixed(2)}`
+            : `¥${(view.amountFen / 100).toFixed(2)}（${view.amountFen} 分）`
         }}
       </p>
       <p v-if="view.rule">
@@ -132,9 +156,26 @@ onMounted(refresh);
       </p>
       <p v-else>原购买政策不完整或当前执行路径不支持，不能批准。</p>
       <p v-if="view.approvedBy">
-        实际处理人：{{ view.approvedBy }}；处理期限：{{ view.dueAt }}
+        实际处理人：{{ view.approvedBy }}；处理期限：{{
+          formatAdminTime(view.dueAt)
+        }}
       </p>
-      <p v-if="view.completedAt">核实结果时间：{{ view.completedAt }}</p>
+      <p>
+        申请时间：{{ formatAdminTime(view.createdAt) }}；原申请窗口：{{
+          view.requestWindowStartedAt
+            ? formatAdminTime(view.requestWindowStartedAt)
+            : "待核验"
+        }}
+        至
+        {{
+          view.requestWindowEndsAt
+            ? formatAdminTime(view.requestWindowEndsAt)
+            : "待核验"
+        }}
+      </p>
+      <p v-if="view.completedAt">
+        核实结果时间：{{ formatAdminTime(view.completedAt) }}
+      </p>
       <Alert
         v-if="view.processingState === 'overdue'"
         type="warning"
@@ -147,41 +188,43 @@ onMounted(refresh);
         ><Input
           v-model:value="evidence"
           aria-label="退款核验证据"
-          placeholder="synthetic:核验记录引用"
+          placeholder="internal:核验记录引用（合成测试用 synthetic:）"
           :disabled="busy"
       /></FormItem>
       <label v-if="view.reason === 'platformUnableDeliver'"
         >已核实的故障告知时间<input
           v-model="failureAt"
           type="datetime-local"
+          title="北京时间（UTC+8）"
           aria-label="已核实的故障告知时间"
           :disabled="busy"
       /></label>
+      <p>日期与时间均按北京时间（UTC+8）显示和填写。</p>
       <Button
         v-if="view.state === 'requested'"
         type="primary"
-        :disabled="busy || !view.rule || !evidence.startsWith('synthetic:')"
-        @click="command('approve')"
+        :disabled="busy || !view.rule || !hasEvidence"
+        @click="confirmCommand('approve')"
         >按购买政策批准退款</Button
       >
       <Button
         v-if="view.state === 'requested' || view.state === 'approved'"
-        :disabled="busy || !evidence.startsWith('synthetic:')"
-        @click="command('reject')"
+        :disabled="busy || !hasEvidence"
+        @click="confirmCommand('reject')"
         >结束尚未执行的申请</Button
       >
       <div v-if="view.productionReviewRequired">
         <p>原交接结果须先在生产与物流中核实，未知结果不能执行退款。</p>
         <Button
-          :disabled="busy || !evidence.startsWith('synthetic:')"
-          @click="command('production-review')"
+          :disabled="busy || !hasEvidence"
+          @click="confirmCommand('production-review')"
           >记录原生产核验结果</Button
         >
       </div>
       <Button
         v-if="view.state === 'approved' || view.state === 'unknown'"
         :disabled="busy || view.productionReviewRequired"
-        @click="command('submit')"
+        @click="confirmCommand('submit')"
         >执行原退款</Button
       >
       <Button

@@ -1,3 +1,4 @@
+import { readInternalMediaConfig } from "./media/product-runtime";
 import {
   readOrdinaryMerchantConfig,
   type WechatPayConfig,
@@ -8,6 +9,7 @@ import {
   type DeepSeekConfig,
 } from "./probe/ai-providers";
 import { validOssKeyPrefix, type ProbeOssConfig } from "./probe/oss-objects";
+import { readInternalBookConfig } from "./books/book-config";
 
 export interface ApiConfig {
   environment: "development" | "test" | "production";
@@ -16,12 +18,23 @@ export interface ApiConfig {
   databaseUrl: string;
   redisUrl: string;
   wechat?: { appId: string; secret: string };
+  web?: {
+    origin: string;
+    sessionKey: string;
+    loginTtlSeconds: number;
+    sessionTtlSeconds: number;
+  };
+  acceptance?: {
+    mode: "internal-acceptance";
+    profileVersion: "internal-acceptance-v1";
+  };
   payments?: WechatPayConfig;
+  checkoutE2e?: { enabled: true; userIds: string[] };
   // No production D08 approval exists. This mode only exercises isolated tests.
   participation?: { mode: "synthetic-d08" };
   privacyJournal?: { root: string; key: string };
   books?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     storageRoot: string;
     entryBaseUrl: string;
     specificationVersion: string;
@@ -30,16 +43,16 @@ export interface ApiConfig {
     maxPhotoBytes?: number;
   };
   photos?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     placement: { widthMm: number; heightMm: number };
   };
   recording?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     storageRoot: string;
     oss?: ProbeOssConfig;
   };
   transcription?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     configVersion: string;
     doubao: import("./probe/ai-providers").DoubaoConfig;
     pollIntervalMs: number;
@@ -47,7 +60,7 @@ export interface ApiConfig {
     deadlineMs: number;
   };
   generation?: {
-    mode: "synthetic-local";
+    mode: "synthetic-local" | "internal-acceptance";
     configVersion: string;
     deepseek: DeepSeekConfig;
     submissionReservationFen: number;
@@ -130,12 +143,34 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     payments = readOrdinaryMerchantConfig(
       env,
       appId && secret ? { appId, secret } : undefined,
-      environment,
     );
   } catch {
     throw new ConfigurationError(
       "Complete valid ordinary merchant payment configuration and matching server key files are required",
     );
+  }
+  let checkoutE2e: ApiConfig["checkoutE2e"];
+  if (env.TIMENOOK_CHECKOUT_E2E_ENABLED || env.TIMENOOK_CHECKOUT_E2E_USER_IDS) {
+    const userIds = (env.TIMENOOK_CHECKOUT_E2E_USER_IDS ?? "")
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (
+      env.TIMENOOK_CHECKOUT_E2E_ENABLED !== "1" ||
+      !userIds.length ||
+      userIds.some(
+        (id) =>
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            id,
+          ),
+      ) ||
+      payments?.mode !== "ordinary-merchant" ||
+      env.INTERNAL_ACCEPTANCE_ENABLED !== "1"
+    )
+      throw new ConfigurationError(
+        "E2E checkout requires ordinary merchant, internal acceptance and an explicit user UUID allowlist",
+      );
+    checkoutE2e = { enabled: true, userIds: [...new Set(userIds)] };
   }
   const sessionTtlSeconds = Number(env.SESSION_TTL_SECONDS ?? "604800");
   if (
@@ -355,8 +390,20 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
       key: env.PRIVACY_JOURNAL_KEY,
     };
   }
+  const internalMedia = readInternalMediaConfig(env);
   return {
+    ...internalMedia,
+    books: readInternalBookConfig(env),
+    acceptance:
+      env.INTERNAL_ACCEPTANCE_ENABLED === "1"
+        ? {
+            mode: "internal-acceptance",
+            profileVersion: "internal-acceptance-v1",
+          }
+        : undefined,
+    web: readWebConfig(env),
     payments,
+    checkoutE2e,
     privacyJournal,
     aiProbe,
     audioProbe,
@@ -370,6 +417,50 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     sessionTtlSeconds,
     redisKeyPrefix: env.REDIS_KEY_PREFIX ?? "timenook",
   };
+}
+
+export function validateWebConfig(web: NonNullable<ApiConfig["web"]>) {
+  let origin: URL;
+  try {
+    origin = new URL(web.origin);
+  } catch {
+    throw new ConfigurationError("Web login requires an HTTPS origin");
+  }
+  if (
+    origin.protocol !== "https:" ||
+    origin.origin !== web.origin ||
+    origin.username ||
+    origin.password ||
+    !/^[A-Za-z0-9+/]{43}=$/.test(web.sessionKey) ||
+    Buffer.from(web.sessionKey, "base64").length !== 32 ||
+    !Number.isInteger(web.loginTtlSeconds) ||
+    web.loginTtlSeconds < 1 ||
+    web.loginTtlSeconds > 900 ||
+    !Number.isInteger(web.sessionTtlSeconds) ||
+    web.sessionTtlSeconds < 1 ||
+    web.sessionTtlSeconds > 43200
+  )
+    throw new ConfigurationError(
+      "Web login requires a 32-byte key and bounded secure session configuration",
+    );
+}
+
+function readWebConfig(env: NodeJS.ProcessEnv): ApiConfig["web"] {
+  if (
+    !env.WEB_ORIGIN &&
+    !env.WEB_SESSION_KEY &&
+    !env.WEB_LOGIN_TTL_SECONDS &&
+    !env.WEB_SESSION_TTL_SECONDS
+  )
+    return undefined;
+  const web = {
+    origin: env.WEB_ORIGIN ?? "",
+    sessionKey: env.WEB_SESSION_KEY ?? "",
+    loginTtlSeconds: Number(env.WEB_LOGIN_TTL_SECONDS ?? "900"),
+    sessionTtlSeconds: Number(env.WEB_SESSION_TTL_SECONDS ?? "43200"),
+  };
+  validateWebConfig(web);
+  return web;
 }
 
 function connectionUrl(

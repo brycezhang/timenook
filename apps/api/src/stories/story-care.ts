@@ -1,3 +1,6 @@
+import { E2E_NOTICE_VERSION } from "../catalog/e2e-package";
+import { readProjectAdmissionIn } from "../projects/project-admission";
+import { readSessionContextIn } from "../identity/identity-access";
 import {
   Injectable,
   Controller,
@@ -24,7 +27,7 @@ import {
   IsInt,
   Min,
   Matches,
-  Equals,
+  IsIn,
   IsISO8601,
   IsOptional,
 } from "class-validator";
@@ -41,8 +44,12 @@ class StoryCareDto {
   @ApiProperty() @Matches(/^[a-f0-9]{64}$/) contentHash!: string;
   @ApiProperty() @IsInt() @Min(1) expectedVersion!: number;
   @ApiProperty() @IsISO8601() expiresAt!: string;
-  @ApiProperty() @Equals("synthetic-d08-v1") noticeVersion!: string;
-  @ApiProperty() @Matches(/^synthetic:[^\r\n]{3,160}$/) evidenceRef!: string;
+  @ApiProperty()
+  @IsIn(["synthetic-d08-v1", "internal-participation-v1", E2E_NOTICE_VERSION])
+  noticeVersion!: string;
+  @ApiProperty()
+  @Matches(/^(?:synthetic|internal):[^\r\n]{3,160}$/)
+  evidenceRef!: string;
   @ApiProperty({ required: false })
   @IsOptional()
   @IsUUID()
@@ -66,6 +73,10 @@ export class StoryCare {
       authorization,
       undefined,
       async (tx, actor) => {
+        this.stories.validateNotice(
+          body,
+          (await readProjectAdmissionIn(tx, projectId)).snapshot,
+        );
         await this.participation.requireMaterialIn(tx, projectId, "activeData");
         if (
           !Number.isFinite(Date.parse(body.expiresAt)) ||
@@ -117,6 +128,15 @@ export class StoryCare {
           if (prior.requestHash !== requestHash) throw new ConflictException();
           return prior;
         }
+        const self =
+          actor.subjectDecision === "self"
+            ? await readSessionContextIn(tx, authorization)
+            : null;
+        const evidenceRef = body.evidenceRef.startsWith("internal:")
+          ? self
+            ? `${self.method}:${self.sessionId}:${body.evidenceRef}`
+            : `assisted:${body.assistedSessionId}:${body.evidenceRef}`
+          : body.evidenceRef;
         return tx.storyCareGrant.create({
           data: {
             caseId: care.id,
@@ -129,7 +149,7 @@ export class StoryCare {
             accessEpoch: actor.accessEpoch,
             expiresAt: new Date(body.expiresAt),
             noticeVersion: body.noticeVersion,
-            evidenceRef: body.evidenceRef,
+            evidenceRef,
             requestHash,
           },
         });
@@ -227,7 +247,19 @@ export class AdminStoryCareController {
       return this.access.command(
         req,
         ADMIN_PERMISSIONS.writeCare,
-        (tx) => work(tx, actor.adminId!),
+        async (tx) => {
+          const caseId = (req.params as { caseId: string }).caseId;
+          const care = await tx.careRequest.findUnique({
+            where: { id: caseId },
+            select: { projectId: true },
+          });
+          if (care)
+            Object.assign(req, {
+              adminResourceType: "project",
+              adminResourceId: care.projectId,
+            });
+          return work(tx, actor.adminId!);
+        },
         req.method === "GET",
       );
     });

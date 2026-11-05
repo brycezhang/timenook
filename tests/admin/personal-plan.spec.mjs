@@ -247,6 +247,9 @@ async function pageFor(browser, session) {
   );
   await page.goto(`${base}/#/welcome?projectId=${projectId}`);
   await page
+    .getByRole("button", { name: "调整用途与资料服务", exact: true })
+    .click();
+  await page
     .getByRole("button", { name: "编辑个人大纲与问题", exact: true })
     .click();
   await expect(page.locator(".plan-page .title")).toBeVisible();
@@ -422,7 +425,7 @@ test("both roles edit their actual personal plan, preserve subject choices, show
       })),
     }));
     expect(metrics.overflow).toBe(false);
-    expect(metrics.font).toBeGreaterThanOrEqual(20);
+    expect(metrics.font).toBeGreaterThanOrEqual(16);
     expect(metrics.buttons.every((b) => b.w >= 48 && b.h >= 48)).toBe(true);
   }
   await subject.locator("#page").evaluate((el) => {

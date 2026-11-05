@@ -31,6 +31,7 @@ export type ProbeDeviceStage =
   | "idle"
   | "requesting"
   | "recording"
+  | "paused"
   | "saving"
   | "device-error"
   | "local"

@@ -1,8 +1,8 @@
 .plan-page {
-  font-size: 40rpx;
+  font-size: 32rpx;
 }
 .plan-page .note {
-  font-size: 36rpx;
+  font-size: 28rpx;
   line-height: 1.65;
 }
 .plan-page .actions {
@@ -13,17 +13,17 @@
 }
 .plan-page .actions button {
   flex: 1 1 210rpx;
-  min-height: 96rpx;
+  min-height: 80rpx;
   margin: 0;
-  font-size: 34rpx;
-  padding: 16rpx;
+  font-size: 25rpx;
+  padding: 12rpx;
 }
 .plan-page .input {
   box-sizing: border-box;
   width: 100%;
   min-height: 104rpx;
   padding: 22rpx;
-  font-size: 38rpx;
+  font-size: 34rpx;
   line-height: 1.6;
 }
 .plan-page textarea {

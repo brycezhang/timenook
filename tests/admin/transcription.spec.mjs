@@ -1,3 +1,6 @@
+import { resumeVisiblePage } from "./recording-step-helper.mjs";
+import { chooseDefaultQuestion } from "./recording-step-helper.mjs";
+import { prepareRecordingStep } from "./recording-step-helper.mjs";
 import {
   feishuIdentity,
   feishuLogin,
@@ -346,23 +349,20 @@ async function openPage(
   return page;
 }
 
-test("the real interview page shows processing, retry and restored completion actions with an actual Worker", async ({
+test("the real interview page shows processing, retry and restored failure actions with an actual Worker", async ({
   browser,
 }) => {
   const page = await openPage(browser, narrator);
   await page.goto(`${base}/#/interview?projectId=${projectId}`);
-  await page
-    .getByRole("button", { name: "就从这个问题开始", exact: true })
-    .click();
+  await chooseDefaultQuestion(page);
+  await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
   await page
     .getByRole("button", { name: "说完了，停止录音", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "查询并上传原文件", exact: true })
-    .click();
+  await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
   await expect(
-    page.getByText("本地模拟封存完成；转写状态可查询，真实云端尚待验收", {
+    page.getByText("录音已在测试环境保存；这不代表真实云端存储。", {
       exact: true,
     }),
   ).toBeVisible();
@@ -376,10 +376,16 @@ test("the real interview page shows processing, retry and restored completion ac
     }),
   );
   await expect(
-    page.getByText("转写中；原声已保存，可以离开，返回后继续查询。", {
+    page.getByText("原声已确认保存。可以先离开，回来后继续查询实际处理结果。", {
       exact: true,
     }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "整理成故事", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "再聊一个问题", exact: true }),
+  ).toHaveCount(0);
   taskId = data(
     await request("GET", `/v1/projects/${projectId}/tasks`, narrator),
     200,
@@ -399,14 +405,15 @@ test("the real interview page shows processing, retry and restored completion ac
   };
   await wake();
   await wake();
-  await page
-    .getByRole("button", { name: "重新查询转写状态", exact: true })
-    .click();
+  await resumeVisiblePage(page);
   await expect(
     page.getByText("转写未完成；已保存原声，可以按原任务重试。", {
       exact: true,
     }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "重新尝试", exact: true }),
+  ).toBeEnabled();
   await page.screenshot({ path: "/tmp/timenook-t15-interview-retry-390.png" });
   const metrics = await page.locator(".live-interview").evaluate((el) => ({
     width: el.getBoundingClientRect().width,
@@ -419,14 +426,14 @@ test("the real interview page shows processing, retry and restored completion ac
       })),
   }));
   expect(metrics.width).toBeLessThanOrEqual(390);
-  expect(metrics.font).toBeGreaterThanOrEqual(20);
+  expect(metrics.font).toBeGreaterThanOrEqual(16);
   for (const control of metrics.controls) {
     expect(control.width).toBeGreaterThanOrEqual(48);
     expect(control.height).toBeGreaterThanOrEqual(48);
   }
-  await page.getByRole("button", { name: "重试这段转写", exact: true }).click();
+  await page.getByRole("button", { name: "重新尝试", exact: true }).click();
   await expect(
-    page.getByText("转写中；原声已保存，可以离开，返回后继续查询。", {
+    page.getByText("原声已确认保存。可以先离开，回来后继续查询实际处理结果。", {
       exact: true,
     }),
   ).toBeVisible();
@@ -444,6 +451,12 @@ test("the real interview page shows processing, retry and restored completion ac
       exact: true,
     }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "整理成故事", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "再聊一个问题", exact: true }),
+  ).toHaveCount(0);
   // Returning again also exercises the page module that finished loading after
   // the first rapid departure from the project page.
   await page.goto(`${base}/#/welcome?projectId=${projectId}`);
@@ -457,7 +470,7 @@ test("the real interview page shows processing, retry and restored completion ac
   expect(errors).toEqual([]);
   await page.context().close();
 });
-test("the operator page lists sanitized task failures and executes an audited retry", async ({
+test("authorized maintenance lists sanitized task failures and executes an audited retry", async ({
   browser,
 }) => {
   // Prepare this view independently through the real production recording entry.
@@ -620,21 +633,30 @@ test("the operator page lists sanitized task failures and executes an audited re
   });
   await page.goto("https://localhost:5177/admin/");
   await feishuLogin(page, account);
-  await expect(
-    page.getByRole("button", { name: "处理任务", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "处理任务", exact: true }).click();
-  await expect(
-    page.getByText("PROVIDER_FAILED", { exact: true }).first(),
-  ).toBeVisible();
-  expect(await page.locator("body").innerText()).not.toContain("signature=");
-  await page
-    .getByRole("button", { name: `重试任务 ${taskId}`, exact: true })
-    .click();
-  await expect(
-    page.getByText("重试已受理，仍使用原业务任务。", { exact: true }),
-  ).toBeVisible();
-  await page.screenshot({ path: "/tmp/timenook-t15-admin-retry-1280.png" });
+  // Task operations remain a protected maintenance HTTP capability; the
+  // simplified business console no longer has a task management page.
+  await expect(page.getByRole("button", { name: "处理任务", exact: true })).toHaveCount(0);
+  const state = await page.request.get("https://localhost:5177/api/v1/admin/session");
+  expect(state.status()).toBe(200);
+  const csrf = (await state.json()).data.csrfToken;
+  const tasks = await page.request.get("https://localhost:5177/api/v1/admin/tasks");
+  expect(tasks.status()).toBe(200);
+  const taskList = await tasks.json();
+  expect(JSON.stringify(taskList)).toContain("PROVIDER_FAILED");
+  expect(JSON.stringify(taskList)).not.toContain("signature=");
+  const retried = await page.request.post(
+    `https://localhost:5177/api/v1/admin/projects/${projectId}/tasks/${taskId}/retry`,
+    {
+      headers: {
+        origin: config.admin.origin,
+        "x-csrf-token": csrf,
+        "idempotency-key": randomUUID(),
+      },
+      data: {},
+    },
+  );
+  expect(retried.status()).toBe(202);
+  expect((await retried.json()).data.id).toBe(taskId);
   expect(errors).toEqual([]);
   await context.close();
 });

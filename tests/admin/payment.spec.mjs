@@ -29,7 +29,14 @@ const Redis = apiRequire("ioredis");
 const schema = `t10_browser_${randomUUID().replaceAll("-", "")}`;
 let privateDir;
 const apiCwd = resolve("apps/api");
-let api, vite, preview, databaseUrl, account, productSession, projectId;
+let api,
+  vite,
+  preview,
+  databaseUrl,
+  account,
+  productSession,
+  projectId,
+  orderId;
 const logs = [];
 function start(command, args, options) {
   const child = spawn(command, args, {
@@ -121,7 +128,6 @@ test.beforeAll(async () => {
       "catalog:read",
       "catalog:write",
       "catalog:freeze",
-      "service-terms:write",
     ],
     realm: "local",
   };
@@ -212,6 +218,7 @@ test.beforeAll(async () => {
       },
     })
   ).json().data;
+  orderId = order.id;
   await api.inject({
     method: "POST",
     url: `/v1/orders/${order.id}/payment`,
@@ -288,7 +295,7 @@ test.afterAll(async () => {
   if (privateDir) rmSync(privateDir, { recursive: true, force: true });
 });
 
-test("support uses a minimal shared-case pause form and the mini-program restores the same server project", async ({
+test("the admin has no service-term controls and the mini-program restores the same lifetime project", async ({
   page,
   context,
 }) => {
@@ -299,55 +306,18 @@ test("support uses a minimal shared-case pause form and the mini-program restore
   });
   await page.goto("./");
   await feishuLogin(page, account);
-  await page.getByRole("button", { name: "服务期限", exact: true }).click();
-  await page.getByLabel("项目编号").fill(projectId);
-  const query = page.waitForResponse(
-    (response) =>
-      response.url().endsWith(`/service-terms/${projectId}`) &&
-      response.request().method() === "GET",
-  );
-  await page.getByRole("button", { name: "查询期限" }).click();
-  await expect(page.getByText("制作进行中", { exact: true })).toBeVisible();
-  const deadline = (await (await query).json()).data.creation.expiresAt;
   await expect(
-    page.getByText("显示时区：Asia/Shanghai", { exact: true }),
-  ).toBeVisible();
-  const localDeadline = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).format(new Date(deadline));
+    page.getByRole("button", { name: "服务期限", exact: true }),
+  ).toHaveCount(0);
   await expect(
-    page.getByText(`制作到期：${localDeadline}`, { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("回听到期：未起算", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("导出申请到期：未起算", { exact: true }),
-  ).toBeVisible();
-  await page.getByLabel("共享工单引用").fill("record:synthetic-browser-case");
-  await page.getByRole("button", { name: "暂停制作计时", exact: true }).click();
-  await expect(page.getByText("制作已暂停", { exact: true })).toBeVisible();
-  await page.screenshot({ path: "/tmp/timenook-t10-admin-desktop.png" });
+    page.getByRole("button", { name: "暂停制作计时", exact: true }),
+  ).toHaveCount(0);
+  await page.screenshot({ path: "/tmp/timenook-105-admin-desktop.png" });
   await page.setViewportSize({ width: 390, height: 844 });
-  // Existing Vben responsive layout remounts its slot at this breakpoint.
-  // Wait for the mobile render before filling its new form instance.
-  await expect(page.locator(".sidebar-brand")).toHaveCount(0);
-  await expect(page.getByLabel("项目编号")).toHaveValue("");
-  // Re-enter the minimal form and recover authoritative server state.
-  await page.getByLabel("项目编号").fill(projectId);
-  await page.getByRole("button", { name: "查询期限" }).click();
-  await expect(page.getByText("制作已暂停", { exact: true })).toBeVisible();
-  await page.getByLabel("共享工单引用").fill("record:synthetic-browser-case");
-  await page.getByRole("button", { name: "恢复制作计时", exact: true }).click();
-  await expect(page.getByText("制作进行中", { exact: true })).toBeVisible();
-  await page.screenshot({ path: "/tmp/timenook-t10-admin-mobile.png" });
+  await expect(
+    page.getByRole("button", { name: "服务期限", exact: true }),
+  ).toHaveCount(0);
+  await page.screenshot({ path: "/tmp/timenook-105-admin-mobile.png" });
   const previewPage = await context.newPage();
   await previewPage.setViewportSize({ width: 390, height: 844 });
   previewPage.on("pageerror", (error) => errors.push(error.message));
@@ -362,16 +332,28 @@ test("support uses a minimal shared-case pause form and the mini-program restore
     },
     { session: productSession },
   );
+  const restoredOrder = previewPage.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/orders/${orderId}`) &&
+      response.status() === 200,
+  );
   await previewPage.goto("http://127.0.0.1:5174/#/order");
+  expect((await (await restoredOrder).json()).data.project.id).toBe(projectId);
   await expect(
     previewPage.getByText("合成付款核验完成 · 未真实扣款", { exact: true }),
   ).toBeVisible();
   await expect(
-    previewPage.getByText("项目：" + projectId, { exact: true }),
+    previewPage.getByRole("button", { name: "打开这本故事书", exact: true }),
   ).toBeVisible();
+  const refreshedOrder = previewPage.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/orders/${orderId}`) &&
+      response.status() === 200,
+  );
   await previewPage.getByRole("button", { name: "重新查询订单" }).click();
+  expect((await (await refreshedOrder).json()).data.project.id).toBe(projectId);
   await expect(
-    previewPage.getByText("项目：" + projectId, { exact: true }),
+    previewPage.getByRole("button", { name: "打开这本故事书", exact: true }),
   ).toBeVisible();
   await previewPage.screenshot({ path: "/tmp/timenook-t10-order-mobile.png" });
   await previewPage.getByRole("button", { name: "查看套餐与赠礼称呼" }).click();

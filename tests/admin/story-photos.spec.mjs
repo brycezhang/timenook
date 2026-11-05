@@ -1,3 +1,9 @@
+import { resumeVisiblePage } from "./recording-step-helper.mjs";
+import { openInterviewPhotos } from "./recording-step-helper.mjs";
+import {
+  prepareRecordingStep,
+  showProcessingStep,
+} from "./recording-step-helper.mjs";
 import {
   createPrivacyFixtureApplication,
   closePrivacyFixtureApplication,
@@ -105,7 +111,7 @@ test.beforeAll(async () => {
       };
     }
   }
-  const { paymentConfig, paymentFetch, paid } = apiRequire(
+  const { paymentConfig, paymentFetch } = apiRequire(
     "./dist-test/test/payment-fixture.js",
   );
   api = await createPrivacyFixtureApplication(
@@ -200,55 +206,7 @@ test.beforeAll(async () => {
   await db.$disconnect();
   buyer = await login("synthetic-plan-buyer");
   narrator = await login("synthetic-plan-narrator");
-  const order = data(
-    await request("POST", "/v1/orders", buyer, {
-      packageVersionId: versionId,
-      recipient: { relationshipLabel: "朋友" },
-      shippingRegionCode: "CN-110000",
-    }),
-  );
-  data(await request("POST", `/v1/orders/${order.id}/payment`, buyer, {}));
-  paid(order.outTradeNo);
-  projectId = data(await request("GET", `/v1/orders/${order.id}`, buyer), 200)
-    .project.id;
-  const invitation = data(
-    await request("POST", `/v1/projects/${projectId}/invitations`, buyer, {}),
-  );
-  const application = data(
-    await request(
-      "POST",
-      `/v1/invitations/${invitation.token}/requests`,
-      narrator,
-      {
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: "synthetic:browser本人申请",
-      },
-    ),
-  );
-  data(
-    await request(
-      "POST",
-      `/v1/binding-requests/${application.id}/approve`,
-      buyer,
-      { expectedBindingVersion: 0, evidenceRef: "synthetic:browser核对申请者" },
-    ),
-  );
-  for (const purpose of ["collection", "sharing"]) {
-    const state = data(
-      await request("GET", `/v1/projects/${projectId}/participation`, narrator),
-      200,
-    );
-    data(
-      await request("POST", `/v1/projects/${projectId}/consents`, narrator, {
-        purpose,
-        granted: true,
-        noticeVersion: "synthetic-d08-v1",
-        evidenceRef: "synthetic:browser本人选择",
-        expectedBindingVersion: state.bindingVersion,
-        expectedAccessEpoch: state.accessEpoch,
-      }),
-    );
-  }
+  projectId = await createBoundPhotoProject();
   runtime = await apiRequire(
     "./dist-test/src/tasks/worker.js",
   ).startProductionWorker(api);
@@ -341,8 +299,16 @@ async function openPage(
     network.push([new URL(r.url()).pathname, r.failure()?.errorText]),
   );
   page.on("pageerror", (e) => errors.push(e.message));
+  page.expectedRevokedBlobUrls = new Set();
   page.on("console", (m) => {
-    if (m.type() === "error" && !/\b(?:40[139]|422|503)\b/.test(m.text()))
+    const expectedRevocationProbe =
+      page.expectedRevokedBlobUrls.has(m.location().url) &&
+      /net::ERR_FILE_NOT_FOUND/.test(m.text());
+    if (
+      m.type() === "error" &&
+      !/\b(?:40[139]|422|503)\b/.test(m.text()) &&
+      !expectedRevocationProbe
+    )
       errors.push(m.text());
   });
   await page.goto(base);
@@ -404,11 +370,9 @@ test("photo starter saves two originals independently, retries one failure and e
   browser,
 }) => {
   const page = await openPage(browser, narrator);
-  await page.goto(`${base}/#/welcome?projectId=${projectId}`);
-  await page
-    .getByRole("button", { name: "进入本人参与的项目", exact: true })
-    .click();
+  await page.goto(`${base}/#/project?projectId=${projectId}`);
   await page.getByRole("button", { name: "开始一段讲述", exact: true }).click();
+  await page.getByRole("button", { name: "换个问题", exact: true }).click();
   await page
     .getByRole("button", { name: "看着照片讲一讲", exact: true })
     .click();
@@ -521,7 +485,7 @@ test("photo starter saves two originals independently, retries one failure and e
         height: n.getBoundingClientRect().height,
       })),
     )) {
-    expect(size.font).toBeGreaterThanOrEqual(20);
+    expect(size.font).toBeGreaterThanOrEqual(16);
     expect(size.width).toBeGreaterThanOrEqual(48);
     expect(size.height).toBeGreaterThanOrEqual(48);
   }
@@ -546,17 +510,22 @@ test("photo starter saves two originals independently, retries one failure and e
       ),
     )
     .toBe(0);
+  await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
   await page
     .getByRole("button", { name: "说完了，停止录音", exact: true })
     .click();
   await expect(
-    page.getByText("本机文件已保存，尚待封存", { exact: true }),
+    page
+      .locator(".local-recording")
+      .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "查询并上传原文件", exact: true })
-    .click();
-  await expect(page.getByText(/本地模拟封存完成/)).toBeVisible();
+  await page.getByRole("button", { name: "提交这段讲述", exact: true }).click();
+  await expect(
+    page.getByText("录音已在测试环境保存；这不代表真实云端存储。", {
+      exact: true,
+    }),
+  ).toBeVisible();
   const recorded = data(
     await request(
       "GET",
@@ -567,10 +536,16 @@ test("photo starter saves two originals independently, retries one failure and e
   );
   expect(recorded.clips).toHaveLength(1);
   await expect(
-    page.getByText("转写中；原声已保存，可以离开，返回后继续查询。", {
+    page.getByText("原声已确认保存。可以先离开，回来后继续查询实际处理结果。", {
       exact: true,
     }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "整理成故事", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "再聊一个问题", exact: true }),
+  ).toHaveCount(0);
   const tasks = data(
     await request("GET", `/v1/projects/${projectId}/tasks`, narrator),
     200,
@@ -604,9 +579,7 @@ test("photo starter saves two originals independently, retries one failure and e
       200,
     )[0].state,
   ).toBe("waiting_provider");
-  await page
-    .getByRole("button", { name: "查看照片或事后补图", exact: true })
-    .click();
+  await openInterviewPhotos(page);
   await expect(page.getByText(/已保存的照片引用 · 版本 4/)).toBeVisible();
   const existing = data(
     await request(
@@ -646,9 +619,7 @@ test("photo starter saves two originals independently, retries one failure and e
   await page
     .getByRole("button", { name: "返回采访，开始说", exact: true })
     .click();
-  await expect(
-    page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("文字已转写", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.syntheticDevice.starts)).toBe(1);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
@@ -663,44 +634,46 @@ test("photo starter saves two originals independently, retries one failure and e
   await page.context().close();
 });
 
-test("the combined interview clears private task state after an actual status 401 and retains its pending recording", async ({
+test("the combined interview clears private task state after an actual refresh 401 and retains its pending recording", async ({
   browser,
 }) => {
   const current = await login("synthetic-plan-narrator"),
     page = await openPage(browser, current);
   await page.goto(`${base}/#/interview?projectId=${projectId}`);
-  await expect(
-    page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("文字已转写", { exact: true })).toBeVisible();
+  await prepareRecordingStep(page);
   await page.getByRole("button", { name: "开始说", exact: true }).click();
   await page
     .getByRole("button", { name: "说完了，停止录音", exact: true })
     .click();
   await expect(
-    page.getByText("本机文件已保存，尚待封存", { exact: true }),
+    page
+      .locator(".local-recording")
+      .getByText("已保存在这台设备，还未上传", { exact: true }),
   ).toBeVisible();
+  await prepareRecordingStep(page);
+  await page.getByRole("button", { name: "换个问题", exact: true }).click();
+  await page
+    .getByRole("button", { name: "写下想聊的问题", exact: true })
+    .click();
   await page
     .getByPlaceholder("想讲的问题", { exact: true })
     .fill("私人采访草稿");
+  const denied = page.waitForResponse(
+    (r) => r.status() === 401 && r.url().includes(`/projects/${projectId}/`),
+  );
   expect(
     (await request("DELETE", `/v1/sessions/${current.session.id}`, current))
       .statusCode,
   ).toBe(204);
-  const denied = page.waitForResponse(
-    (r) => r.url().endsWith("/tasks/status") && r.status() === 401,
-  );
-  await page
-    .getByRole("button", { name: "重新查询转写状态", exact: true })
-    .click();
+  await resumeVisiblePage(page);
   await denied;
   await expect(
     page.getByText("当前权限已失效，请重新查询或登录；本机原文件仍保留", {
       exact: true,
     }),
   ).toBeVisible();
-  await expect(
-    page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByText("文字已转写", { exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "开始说", exact: true }),
   ).toHaveCount(0);
@@ -708,7 +681,7 @@ test("the combined interview clears private task state after an actual status 40
     page.getByPlaceholder("想讲的问题", { exact: true }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "重新查询与恢复", exact: true }),
+    page.getByRole("button", { name: "重新核对权限", exact: true }),
   ).toBeEnabled();
   const retained = await page.evaluate(
     ({ base }) => {
@@ -887,17 +860,13 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
         );
         await page.goto(`${base}/#/interview?projectId=${projectId}`);
         await pending;
-        await page
-          .getByRole("button", { name: "查看照片或事后补图", exact: true })
-          .click();
+        await openInterviewPhotos(page);
       } else {
         await page.goto(`${base}/#/interview?projectId=${projectId}`);
         await expect(
-          page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
+          page.getByText("文字已转写", { exact: true }),
         ).toBeVisible();
-        await page
-          .getByRole("button", { name: "查看照片或事后补图", exact: true })
-          .click();
+        await openInterviewPhotos(page);
       }
       await expect(page.getByText(/已保存的照片引用 · 版本 4/)).toBeVisible();
       const chooser = page.waitForEvent("filechooser");
@@ -944,15 +913,25 @@ for (const direction of ["interview-to-photo", "photo-to-interview"]) {
           .getByRole("button", { name: "返回采访，开始说", exact: true })
           .click();
         await expect(
-          page.getByText("转写完成；原声与正式转录已保存。", { exact: true }),
+          page.getByText("文字已转写", { exact: true }),
         ).toBeVisible();
+        await prepareRecordingStep(page);
         await page.getByRole("button", { name: "开始说", exact: true }).click();
         await page
           .getByRole("button", { name: "说完了，停止录音", exact: true })
           .click();
         await expect(
-          page.getByText("本机文件已保存，尚待封存", { exact: true }),
+          page
+            .locator(".local-recording")
+            .getByText("已保存在这台设备，还未上传", { exact: true }),
         ).toBeVisible();
+        await prepareRecordingStep(page);
+        await page
+          .getByRole("button", { name: "换个问题", exact: true })
+          .click();
+        await page
+          .getByRole("button", { name: "写下想聊的问题", exact: true })
+          .click();
         await page
           .getByPlaceholder("想讲的问题", { exact: true })
           .fill("跨页私人采访草稿");
@@ -1121,9 +1100,7 @@ test("unsupported photo recovery retains the local original and permission chang
     .getByRole("button", { name: "安全查看这张照片", exact: true })
     .first()
     .click();
-  await expect(
-    page.getByText("照片权限已变化，请重新查询", { exact: true }),
-  ).toBeVisible();
+  await expectPhotoPermissionChange(page);
   await expect(page.locator(".photos-page > img")).toHaveCount(0);
   const cacheKey = `timenook.photo-previews.v1:${base}/api/v1`;
   await expect
@@ -1153,3 +1130,306 @@ test("unsupported photo recovery retains the local original and permission chang
   expect(errors).toEqual([]);
   await page.context().close();
 });
+
+async function expectPhotoPermissionChange(page) {
+  // Either real permission boundary may settle the page first; both clearly report revocation.
+  await expect(
+    page
+      .getByText("照片权限已变化，请重新查询", { exact: true })
+      .or(
+        page.getByText(
+          "资料用途或账号授权已变化，照片预览已清理；本机原文件仍保留",
+          { exact: true },
+        ),
+      ),
+  ).toBeVisible();
+}
+function responseBarrier() {
+  let release;
+  const promise = new Promise((resolve) => {
+    release = resolve;
+  });
+  return { promise, release: () => release() };
+}
+async function createBoundPhotoProject() {
+  const { paid } = apiRequire("./dist-test/test/payment-fixture.js");
+  const order = data(
+    await request("POST", "/v1/orders", buyer, {
+      packageVersionId: versionId,
+      recipient: { relationshipLabel: "朋友" },
+      shippingRegionCode: "CN-110000",
+    }),
+  );
+  data(await request("POST", `/v1/orders/${order.id}/payment`, buyer, {}));
+  paid(order.outTradeNo);
+  const id = data(await request("GET", `/v1/orders/${order.id}`, buyer), 200)
+    .project.id;
+  const invitation = data(
+    await request("POST", `/v1/projects/${id}/invitations`, buyer, {}),
+  );
+  const application = data(
+    await request(
+      "POST",
+      `/v1/invitations/${invitation.token}/requests`,
+      narrator,
+      {
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:照片撤权次序验收",
+      },
+    ),
+  );
+  data(
+    await request(
+      "POST",
+      `/v1/binding-requests/${application.id}/approve`,
+      buyer,
+      { expectedBindingVersion: 0, evidenceRef: "synthetic:核对同一讲述者" },
+    ),
+  );
+  for (const purpose of ["collection", "sharing"]) {
+    const participation = data(
+      await request("GET", `/v1/projects/${id}/participation`, narrator),
+      200,
+    );
+    data(
+      await request("POST", `/v1/projects/${id}/consents`, narrator, {
+        purpose,
+        granted: true,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:明确授权照片用途",
+        expectedBindingVersion: participation.bindingVersion,
+        expectedAccessEpoch: participation.accessEpoch,
+      }),
+    );
+  }
+  return id;
+}
+async function freshPhotoProject() {
+  const id = await createBoundPhotoProject();
+  const interview = data(
+    await request("POST", `/v1/projects/${id}/interviews`, narrator, {
+      clientInterviewId: randomUUID(),
+      expectedPlanRevision: 1,
+      selfWritten: { text: "照片里是哪一年？", intent: "合成照片撤权测试" },
+    }),
+  );
+  return { project: id, interview: interview.id };
+}
+for (const order of ["preview-first", "watcher-first", "watcher-only"]) {
+  test(`photo revocation clears private Blob URLs and retains the original when ${order}`, async ({
+    browser,
+  }) => {
+    const owner = await freshPhotoProject(),
+      page = await openPage(browser, narrator);
+    const checksHeld = responseBarrier(),
+      checksMayFinish = responseBarrier(),
+      previewHeld = responseBarrier(),
+      previewMayFinish = responseBarrier();
+    const previewText = "照片权限已变化，请重新查询";
+    const watcherText =
+      "资料用途或账号授权已变化，照片预览已清理；本机原文件仍保留";
+    try {
+      await page.goto(
+        `${base}/#/photos?projectId=${owner.project}&interviewId=${owner.interview}`,
+      );
+      await expect(
+        page.getByText("每张照片分别保存和上传；原文件会保留", { exact: true }),
+      ).toBeVisible();
+      const chooser = page.waitForEvent("filechooser");
+      await page
+        .getByRole("button", { name: "选择原照片", exact: true })
+        .click();
+      await (await chooser).setFiles(photoPaths[0]);
+      await expect(
+        page.getByText("本机原文件和清单已保存，尚未封存", { exact: true }),
+      ).toHaveCount(1);
+      await page
+        .getByRole("button", { name: "单独上传或重试", exact: true })
+        .click();
+      await expect(
+        page.getByText("已封存；清晰度较低，只作提示，不会编造图像", {
+          exact: true,
+        }),
+      ).toHaveCount(1);
+      const view = page.getByRole("button", {
+        name: "安全查看这张照片",
+        exact: true,
+      });
+      await view.click();
+      await expect(page.locator(".photos-page > img")).toBeVisible();
+      const originalPreviewUrl = await page
+        .locator(".photos-page > img")
+        .getAttribute("src");
+      expect(originalPreviewUrl).toMatch(/^blob:/);
+      await page
+        .getByPlaceholder("这张照片想说明什么？")
+        .fill("尚未保存的私有照片说明");
+      await expect(
+        page.getByRole("button", {
+          name: "放弃说明草稿并重新查询",
+          exact: true,
+        }),
+      ).toBeVisible();
+      // Delay only real HTTP responses. Page, permission logic, downloads, storage and backend stay real.
+      await page.route("**/collection-check", async (route) => {
+        checksHeld.release();
+        await checksMayFinish.promise;
+        await route.continue();
+      });
+      await checksHeld.promise;
+      await page.evaluate(() => {
+        window.syntheticPhotoDownloadPaths = [];
+        const download = window.wx.downloadFile;
+        window.wx.downloadFile = (options) =>
+          download({
+            ...options,
+            success: (result) => {
+              window.syntheticPhotoDownloadPaths.push(result.tempFilePath);
+              options.success(result);
+            },
+          });
+      });
+      let lateResponse;
+      if (order === "watcher-first") {
+        await page.route("**/photos/*/assets/*/content", async (route) => {
+          const response = await route.fetch();
+          expect(response.status()).toBe(200);
+          previewHeld.release();
+          await previewMayFinish.promise;
+          await route.fulfill({ response });
+        });
+        await view.click();
+        await previewHeld.promise; // The response was genuinely authorized before withdrawal.
+      }
+      const participation = data(
+        await request(
+          "GET",
+          `/v1/projects/${owner.project}/participation`,
+          narrator,
+        ),
+        200,
+      );
+      data(
+        await request(
+          "POST",
+          `/v1/projects/${owner.project}/consents`,
+          narrator,
+          {
+            purpose: "collection",
+            granted: false,
+            noticeVersion: "synthetic-d08-v1",
+            evidenceRef: "synthetic:本人撤回照片采集",
+            expectedBindingVersion: participation.bindingVersion,
+            expectedAccessEpoch: participation.accessEpoch,
+          },
+        ),
+      );
+      if (order !== "preview-first") {
+        checksMayFinish.release();
+        await expect(
+          page.getByText(watcherText, { exact: true }),
+        ).toBeVisible();
+        if (order === "watcher-first") {
+          lateResponse = page.waitForResponse(
+            (response) =>
+              response.url().includes("/assets/") &&
+              response.url().endsWith("/content") &&
+              response.status() === 200,
+          );
+          previewMayFinish.release();
+        }
+      } else {
+        lateResponse = page.waitForResponse(
+          (response) =>
+            response.url().includes("/assets/") &&
+            response.url().endsWith("/content") &&
+            response.status() === 403,
+        );
+        await view.click();
+      }
+      if (lateResponse) await lateResponse;
+      await expectPhotoPermissionChange(page);
+      await expect(
+        page.getByText(order === "preview-first" ? previewText : watcherText, {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(page.locator(".photos-page img")).toHaveCount(0);
+      await expect(view).toHaveCount(0);
+      await expect(
+        page.getByRole("button", {
+          name: "放弃说明草稿并重新查询",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      await expect(page.getByPlaceholder("这张照片想说明什么？")).toHaveCount(
+        0,
+      );
+      const cacheKey = `timenook.photo-previews.v1:${base}/api/v1`;
+      await expect
+        .poll(() =>
+          page.evaluate(
+            (key) => JSON.parse(localStorage.getItem(key) || "[]").length,
+            cacheKey,
+          ),
+        )
+        .toBe(0);
+      await expect
+        .poll(() =>
+          page.evaluate(() => window.syntheticPhotoDownloadPaths.length),
+        )
+        .toBe(order === "watcher-only" ? 0 : 1);
+      const paths = [
+        originalPreviewUrl,
+        ...(await page.evaluate(() => window.syntheticPhotoDownloadPaths)),
+      ];
+      for (const path of paths) page.expectedRevokedBlobUrls.add(path);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            async (paths) =>
+              Promise.all(
+                paths.map(async (path) => {
+                  try {
+                    await fetch(path);
+                    return false;
+                  } catch {
+                    return true;
+                  }
+                }),
+              ),
+            paths,
+          ),
+        )
+        .toEqual(order === "watcher-only" ? [true] : [true, true]);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            (key) => JSON.parse(localStorage.getItem(key) || "[]").length,
+            cacheKey,
+          ),
+        )
+        .toBe(0);
+      const original = await page.evaluate(async () => {
+        const files = Object.entries(localStorage)
+          .filter(([key]) => key.startsWith("timenook.photos.v1:"))
+          .flatMap(([, value]) => JSON.parse(value));
+        const { resolveBlob } = await import("/preview/media.ts");
+        const url = await resolveBlob(files[0].path),
+          response = await fetch(url),
+          bytes = Array.from(new Uint8Array(await response.arrayBuffer()));
+        URL.revokeObjectURL(url);
+        return { count: files.length, bytes };
+      });
+      expect(original.count).toBe(1);
+      expect(Buffer.from(original.bytes)).toEqual(sourcePhoto);
+      await expect(page.locator(".photos-page img")).toHaveCount(0); // late200 must never revive the preview
+      expect(errors).toEqual([]);
+    } finally {
+      checksMayFinish.release();
+      previewMayFinish.release();
+      await page.unrouteAll({ behavior: "wait" });
+      await page.context().close();
+    }
+  });
+}

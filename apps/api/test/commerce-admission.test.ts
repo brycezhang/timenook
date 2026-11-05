@@ -85,31 +85,8 @@ test("999 yuan must be integer fen and all seven decisions need named frozen rev
 });
 
 const days = (value: number) => ({ value, unit: "calendar_days" });
-const creationDecision = () => ({
-  review: frozen,
-  duration: days(180),
-  startsAt: "subject_participation",
-  notStarted: {
-    maxWait: days(90),
-    startsAt: "payment_verified",
-    resolution: "contact_and_offer_refund",
-    noticeRef: "record:not-started-policy",
-  },
-  pause: {
-    clock: "stops",
-    maxTotal: days(30),
-    atLimit: "resume_clock",
-    policyRef: "record:pause-policy",
-  },
-  expiration: {
-    newRecording: "blocked",
-    firstCopy: "manual_review",
-    existingData: "per_d03",
-    noticeRef: "record:creation-expiry",
-  },
-});
-
-test("creation time needs a start event, not-started handling, bounded pause and separate data expiry", () => {
+const creationDecision = () => ({ review: frozen, service: "lifetime" });
+test("creation service is lifetime and configurable creation clocks are rejected", () => {
   const d02 = creationDecision();
   assert.deepEqual(
     validateSalesAdmission({ ...base(), d02 }).issues.filter((issue) =>
@@ -117,21 +94,19 @@ test("creation time needs a start event, not-started handling, bounded pause and
     ),
     [],
   );
-  const input = {
-    ...base(),
-    d02: {
-      ...d02,
-      duration: { value: "180", unit: "minutes" },
-      notStarted: "已完成",
-      pause: null,
-      expiration: { ...d02.expiration, existingData: "delete_on_expiry" },
-    },
-  };
-  assert.ok(hasIssue(input, "d02.duration.value", "INVALID_INTEGER"));
-  assert.ok(hasIssue(input, "d02.duration.unit", "INVALID_VALUE"));
-  assert.ok(hasIssue(input, "d02.notStarted.maxWait.value", "INVALID_INTEGER"));
-  assert.ok(hasIssue(input, "d02.pause.maxTotal.value", "INVALID_INTEGER"));
-  assert.ok(hasIssue(input, "d02.expiration.existingData", "INVALID_VALUE"));
+  assert.ok(
+    hasIssue(
+      { ...base(), d02: { ...d02, service: "finite" } },
+      "d02.service",
+      "INVALID_VALUE",
+    ),
+  );
+  assert.ok(
+    validateSalesAdmission({
+      ...base(),
+      d02: { ...d02, duration: days(180) },
+    }).issues.some((issue) => issue.path === "d02"),
+  );
 });
 
 const term = (value: number, startsAt = "delivery_completed") => ({
@@ -145,20 +120,24 @@ const deletion = (value: number) => ({
 });
 const dataDecision = () => ({
   review: frozen,
-  onlinePlayback: { ...term(365), expires: "stop_access" },
-  exportRequests: { ...term(365), channelRef: "record:export-intake" },
+  onlinePlayback: { service: "lifetime" },
+  exportRequests: { service: "lifetime", channelRef: "record:export-intake" },
   retention: {
-    originalAudio: term(400),
-    originalPhotos: term(400),
-    derivedAudio: term(400),
-    derivedPhotos: term(400),
-    transcripts: term(400),
-    confirmedStories: term(400),
-    bookPdf: term(400),
-    exportPackages: term(7, "export_ready"),
-    activeData: term(400),
-    historicalObjects: term(400),
-    backupCopies: term(430),
+    ...Object.fromEntries(
+      [
+        "originalAudio",
+        "originalPhotos",
+        "derivedAudio",
+        "derivedPhotos",
+        "transcripts",
+        "confirmedStories",
+        "bookPdf",
+        "exportPackages",
+        "activeData",
+        "historicalObjects",
+        "backupCopies",
+      ].map((kind) => [kind, { service: "lifetime" }]),
+    ),
     supplierCopies: term(30, "processing_completed"),
   },
   deletion: {
@@ -167,16 +146,9 @@ const dataDecision = () => ({
     backupCopies: deletion(30),
     supplierCopies: deletion(30),
   },
-  expiryNotice: {
-    advance: days(30),
-    channelRef: "record:expiry-contact",
-    policyRef: "record:expiry-policy",
-  },
   copyStatusSeparately: true,
-  restoreAppliesDeletionLedger: true,
 });
-
-test("playback, exports, source and derived retention and four copy deletion deadlines stay distinct", () => {
+test("necessary materials and downloads are lifetime while verified deletion and temporary supplier handling remain bounded", () => {
   const d03 = dataDecision();
   assert.deepEqual(
     validateSalesAdmission({ ...base(), d03 }).issues.filter((issue) =>
@@ -188,26 +160,22 @@ test("playback, exports, source and derived retention and four copy deletion dea
     ...base(),
     d03: {
       ...d03,
-      onlinePlayback: "已完成",
-      exportRequests: null,
-      retention: { ...d03.retention, originalAudio: null, derivedPhotos: null },
-      deletion: {
-        activeData: deletion(7),
-        historicalObjects: deletion(7),
-        backupCopies: "pending",
-      },
+      onlinePlayback: { service: "finite" },
+      retention: { ...d03.retention, originalAudio: term(400) },
+      deletion: { ...d03.deletion, backupCopies: null },
     },
   };
-  for (const path of [
-    "d03.onlinePlayback.duration.value",
-    "d03.exportRequests.duration.value",
-    "d03.retention.originalAudio.duration.value",
-    "d03.retention.derivedPhotos.duration.value",
-    "d03.deletion.backupCopies.within.value",
-    "d03.deletion.supplierCopies.within.value",
-  ]) {
-    assert.ok(hasIssue(input, path, "INVALID_INTEGER"), path);
-  }
+  assert.ok(hasIssue(input, "d03.onlinePlayback.service", "INVALID_VALUE"));
+  assert.ok(
+    hasIssue(input, "d03.retention.originalAudio.service", "INVALID_VALUE"),
+  );
+  assert.ok(
+    hasIssue(
+      input,
+      "d03.deletion.backupCopies.within.value",
+      "INVALID_INTEGER",
+    ),
+  );
 });
 
 const quota = (value: number, unit: string) => ({
@@ -822,8 +790,8 @@ test("the shipped decision template stays pending and never contains synthetic c
     ),
   );
   assert.equal(input.package.price.value, 99900);
-  assert.equal(input.d02.duration.value, null);
-  assert.equal(input.d03.onlinePlayback.duration.value, null);
+  assert.equal(input.d02.service, "lifetime");
+  assert.equal(input.d03.onlinePlayback.service, "lifetime");
   assert.equal(input.d04.userQuotas.recordingTotal.value, null);
   assert.equal(input.d07.notParticipated.refundAmount.value, null);
   assert.equal(input.d08.identity.appId, null);

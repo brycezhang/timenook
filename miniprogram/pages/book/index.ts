@@ -1,3 +1,10 @@
+import { NATIVE_TABS } from "../../config";
+import {
+  showProjectTab,
+  switchProjectTab,
+  tabProjectId,
+} from "../../services/navigation";
+import { recordingId } from "../../services/local-audio-recorder";
 import { participationClient } from "../../services/participation";
 import { type Project } from "../../domain/model";
 import { asset, go, home, read } from "../../services/store";
@@ -24,6 +31,7 @@ type E = {
 };
 Page({
   data: {
+    nativeTabs: NATIVE_TABS,
     live: false,
     context: null as BookContext | null,
     version: null as BookVersionView | null,
@@ -69,8 +77,8 @@ Page({
     if (dataMode() === "live") {
       this.onHide();
       ++this.generation;
-      this.projectId = q.projectId || projectOverviewClient.selected();
-      this.setData({ live: true });
+      this.projectId = tabProjectId(q.projectId);
+      this.setData({ live: true, bookImage: "/assets/book.jpg" });
     }
   },
   onHide() {
@@ -344,6 +352,12 @@ Page({
         }),
       ),
     });
+  },
+  openCover() {
+    if (!this.canDraft() || this.data.busy) return;
+    this.setData({ coverEditing: true }, () =>
+      wx.pageScrollTo({ selector: ".cover-editor", duration: 200 }),
+    );
   },
   editCover() {
     if (this.canDraft() && !this.data.busy)
@@ -691,7 +705,9 @@ Page({
     }, true);
   },
   async onShow() {
+    showProjectTab(this, "book", this.data.p?.title);
     if (dataMode() === "live") {
+      this.projectId = tabProjectId() || this.projectId;
       this.stopSessionWatch?.();
       this.stopSessionWatch = sessionClient.onInvalidated(() => {
         this.onHide();
@@ -727,6 +743,7 @@ Page({
       return;
     }
     this.setData({
+      live: false,
       p,
       bookImage: asset(p),
       stories: p.stories.filter((s) => s.included),
@@ -734,6 +751,7 @@ Page({
         (s) => s.included && s.confirmedVersion !== s.version,
       ).length,
     });
+    showProjectTab(this, "book", p.title);
   },
   manuscript() {
     if (this.data.live) {
@@ -802,27 +820,20 @@ Page({
     go("settings", this.data.live ? `projectId=${this.projectId}` : "");
   },
   record() {
-    go("interview", this.data.live ? `projectId=${this.projectId}` : "");
+    go(
+      "interview",
+      this.data.live
+        ? `projectId=${this.projectId}&draftId=${recordingId()}`
+        : "",
+    );
   },
   project() {
-    if (this.data.live) {
-      wx.reLaunch({ url: `/pages/project/index?projectId=${this.projectId}` });
-      return;
-    }
-    home("project");
+    switchProjectTab("project", this.projectId);
   },
   book() {
-    if (this.data.live) {
-      wx.reLaunch({ url: `/pages/book/index?projectId=${this.projectId}` });
-      return;
-    }
-    home("book");
+    switchProjectTab("book", this.projectId);
   },
   account() {
-    if (this.data.live) {
-      wx.reLaunch({ url: `/pages/account/index?projectId=${this.projectId}` });
-      return;
-    }
-    home("account");
+    switchProjectTab("account", this.projectId);
   },
 });

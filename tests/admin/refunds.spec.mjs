@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { waitForAdminStartup } from "./admin-startup.mjs";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { resolve, join } from "node:path";
@@ -69,6 +70,7 @@ test.beforeAll(async () => {
       "ops:read",
       "care:write",
       "audit:read",
+      "orders:read",
     ]);
     const session = async (who) =>
       fixture.data(
@@ -225,11 +227,34 @@ async function openAdmin(browser) {
   ]);
   const page = await context.newPage();
   observe(page);
-  await page.goto(`${adminOrigin}/admin/`);
-  await expect(page).toHaveTitle("时光里 · 运营管理");
-  await expect(page).toHaveURL(`${adminOrigin}/admin/`);
-  await page.getByRole("button", { name: "客服工单", exact: true }).click();
+  await waitForAdminStartup(page, async () => {
+    await page.goto(`${adminOrigin}/admin/`);
+    await expect(page).toHaveTitle("时光里 · 运营管理");
+    await expect(page).toHaveURL(`${adminOrigin}/admin/orders`, {
+      timeout: 30000,
+    });
+  });
+  await expect(
+    page.getByRole("menuitem", { name: "客服工单", exact: true }),
+  ).toHaveCount(0);
   return page;
+}
+
+async function openOrder(page, orderId) {
+  await page.goto(`${adminOrigin}/admin/orders?q=${orderId}&pending=true`);
+  const order = fixture.data(
+    await fixture.app.inject({
+      method: "GET",
+      url: `/v1/admin/orders/${orderId}`,
+      headers: adminHeaders,
+    }),
+    200,
+  );
+  await expect(page.getByText("待处理售后", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: order.outTradeNo, exact: true })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/orders/${orderId}\\?from=`));
 }
 
 async function command(page, name, suffix) {
@@ -238,6 +263,18 @@ async function command(page, name, suffix) {
       response.request().method() === "POST" && response.url().endsWith(suffix),
   );
   await page.getByRole("button", { name, exact: true }).click();
+  if (
+    page.url().startsWith(adminOrigin) &&
+    [
+      "按购买政策批准退款",
+      "结束尚未执行的申请",
+      "执行原退款",
+      "记录原生产核验结果",
+      "记录原政策核验方案",
+      "创建原订单重印尝试",
+    ].includes(name)
+  )
+    await page.getByRole("button", { name: "确认操作", exact: true }).click();
   const response = await pending;
   expect(response.status(), await response.text()).toBe(201);
   return (await response.json()).data;
@@ -272,6 +309,14 @@ test("buyer requests a refund and the shared support case approves, executes and
   // kind, keep both rights pages active, and retain the withdrawal proxy.
   for (const route of ["welcome", "assisted"]) {
     const rights = await openMini(browser, buyerSession, project, route);
+    if (route === "welcome")
+      await rights
+        .getByRole("button", { name: "调整用途与资料服务", exact: true })
+        .click();
+    if (route === "assisted")
+      await rights
+        .getByRole("button", { name: "其他操作与本人权利", exact: true })
+        .click();
     const label =
       route === "welcome"
         ? `退款工单：record:${refund.caseId}`
@@ -298,6 +343,7 @@ test("buyer requests a refund and the shared support case approves, executes and
     }
   }
   const admin = await openAdmin(browser);
+  await openOrder(admin, project.orderId);
   const caseDetails = admin.waitForResponse((r) =>
     r.url().endsWith(`/refunds/cases/${refund.caseId}`),
   );
@@ -310,10 +356,34 @@ test("buyer requests a refund and the shared support case approves, executes and
   await expect(admin.getByLabel("退款核验证据", { exact: true })).toBeVisible({
     timeout: 5000,
   });
-  await admin
-    .getByLabel("退款核验证据", { exact: true })
-    .fill("synthetic:policy-and-buyer-verified");
+  const evidence = admin.getByLabel("退款核验证据", { exact: true });
+  const approve = admin.getByRole("button", {
+    name: "按购买政策批准退款",
+    exact: true,
+  });
+  const reject = admin.getByRole("button", {
+    name: "结束尚未执行的申请",
+    exact: true,
+  });
+  await expect(approve).toBeDisabled();
+  await evidence.fill("unverified:policy");
+  await expect(approve).toBeDisabled();
+  await expect(reject).toBeDisabled();
+  await evidence.fill("synthetic:policy-and-buyer-verified");
+  await expect(approve).toBeEnabled();
+  await expect(reject).toBeEnabled();
+  await evidence.fill("internal:policy-and-buyer-verified");
+  await expect(approve).toBeEnabled();
+  await expect(reject).toBeEnabled();
+  const approvalRequest = admin.waitForRequest(
+    (request) =>
+      request.method() === "POST" && request.url().endsWith("/approve"),
+  );
   await command(admin, "按购买政策批准退款", "/approve");
+  expect((await approvalRequest).postDataJSON()).toEqual({
+    amountFen: 99900,
+    evidenceRef: "internal:policy-and-buyer-verified",
+  });
   await expect(
     admin.getByText("尚未参与 · 已批准，待执行", { exact: true }),
   ).toBeVisible();
@@ -321,6 +391,15 @@ test("buyer requests a refund and the shared support case approves, executes and
   await expect(
     admin.getByText("尚未参与 · 退款处理中", { exact: true }),
   ).toBeVisible();
+  await expect(
+    admin
+      .getByRole("row")
+      .filter({
+        has: admin.getByRole("rowheader", { name: "订单状态", exact: true }),
+      })
+      .getByRole("cell")
+      .first(),
+  ).toHaveText("已付款");
   await buyer
     .getByRole("button", { name: "重新查询退款", exact: true })
     .click();
@@ -354,6 +433,15 @@ test("buyer requests a refund and the shared support case approves, executes and
   await expect(
     admin.getByText("尚未参与 · 已退款", { exact: true }),
   ).toBeVisible();
+  await expect(
+    admin
+      .getByRole("row")
+      .filter({
+        has: admin.getByRole("rowheader", { name: "订单状态", exact: true }),
+      })
+      .getByRole("cell")
+      .first(),
+  ).toHaveText("已退款");
   await buyer
     .getByRole("button", { name: "重新查询退款", exact: true })
     .click();
@@ -396,4 +484,112 @@ test("buyer requests a refund and the shared support case approves, executes and
     ),
   ).toBe(true);
   expect(errors).toEqual([]);
+});
+
+test("an unknown refund is queried under its original number and an unexecuted request can be rejected from the order", async ({
+  browser,
+}) => {
+  test.setTimeout(60000);
+  fixture.setRefundInstant();
+  const p = await fixture.project();
+  const created = fixture.data(
+    await fixture.request(
+      "POST",
+      `/v1/orders/${p.orderId}/refunds`,
+      p.buyer.token,
+      {
+        reason: "notParticipated",
+        evidenceRef: "synthetic:合成待核实退款申请",
+      },
+    ),
+  );
+  const admin = await openAdmin(browser);
+  await openOrder(admin, p.orderId);
+  await admin
+    .getByRole("button", { name: `查看 ${created.caseId}`, exact: true })
+    .click();
+  await admin
+    .getByLabel("退款核验证据", { exact: true })
+    .fill("internal:订单和原购买政策核验");
+  await command(admin, "按购买政策批准退款", "/approve");
+  const supplier = apiRequire("./dist-test/test/payment-fixture.js");
+  const before = supplier.paymentRequests.filter(
+    (r) => r.path === "/v3/refund/domestic/refunds" && r.method === "POST",
+  ).length;
+  supplier.refundFault("timeout");
+  const unknown = await command(admin, "执行原退款", "/submit");
+  expect(unknown.state).toBe("unknown");
+  await expect(
+    admin.getByText("尚未参与 · 退款结果待核实", { exact: true }),
+  ).toBeVisible();
+  const retry = await command(admin, "执行原退款", "/submit");
+  expect(retry.outRefundNo).toBe(created.outRefundNo);
+  expect(retry.state).toBe("processing");
+  expect(
+    supplier.paymentRequests.filter(
+      (r) => r.path === "/v3/refund/domestic/refunds" && r.method === "POST",
+    ).length,
+  ).toBe(before + 1);
+  const second = await fixture.project();
+  const rejected = fixture.data(
+    await fixture.request(
+      "POST",
+      `/v1/orders/${second.orderId}/refunds`,
+      second.buyer.token,
+      { reason: "notParticipated", evidenceRef: "synthetic:合成拒绝退款申请" },
+    ),
+  );
+  await openOrder(admin, second.orderId);
+  await admin
+    .getByRole("button", { name: `查看 ${rejected.caseId}`, exact: true })
+    .click();
+  await admin
+    .getByLabel("退款核验证据", { exact: true })
+    .fill("internal:未执行申请已核实结束");
+  expect((await command(admin, "结束尚未执行的申请", "/reject")).state).toBe(
+    "rejected",
+  );
+  await expect(
+    admin.getByRole("button", { name: "执行原退款", exact: true }),
+  ).toHaveCount(0);
+  await expect(admin.getByText("拒绝退款", { exact: true })).toBeVisible();
+});
+
+test("a synthetic one-fen order displays the exact payment fact and explicit controlled acceptance marker", async ({
+  browser,
+}) => {
+  const source = await fixture.db.paymentOrder.findUniqueOrThrow({
+    where: { id: project.orderId },
+  });
+  const id = randomUUID();
+  await fixture.db.paymentOrder.create({
+    data: {
+      ...source,
+      id,
+      outTradeNo: `SYNTHETIC-ONE-FEN-${id}`,
+      idempotencyKey: id,
+      amount: 1,
+      listAmount: 99900,
+      isE2e: true,
+      mode: "wechat",
+    },
+  });
+  await fixture.db.paymentTransaction.create({
+    data: {
+      orderId: id,
+      providerTransactionId: `synthetic-one-fen-${id}`,
+      amount: 1,
+      currency: "CNY",
+      paidAt: new Date(),
+    },
+  });
+  const admin = await openAdmin(browser);
+  await admin.goto(`${adminOrigin}/admin/orders/${id}`);
+  await expect(
+    admin.getByText("受控 1 分验收订单", { exact: true }),
+  ).toBeVisible();
+  const facts = admin;
+  await expect(facts.getByText("¥999.00", { exact: true })).toHaveCount(1);
+  await expect(facts.getByText("¥0.01", { exact: true })).toHaveCount(2);
+  await expect(facts.getByText("¥0.00", { exact: true })).toHaveCount(1);
 });

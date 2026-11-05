@@ -12,6 +12,7 @@ export interface ApiErrorResponse {
 
 export interface LoginCommand {
   code: string;
+  expectedUserId?: string;
 }
 export interface Account {
   id: string;
@@ -85,7 +86,7 @@ export interface PlanPreferenceDecision {
   version: number;
   subjectId: string;
   operatorUserId: string;
-  method: "self_wechat" | "assisted";
+  method: "self_wechat" | "self_web" | "assisted";
   assistedSessionId: string | null;
   blockedTopics: string[];
   questionStates: PlanQuestionState[];
@@ -141,3 +142,5 @@ export * from "./exports";
 export * from "./refunds";
 export * from "./deletion";
 export * from "./quality-care";
+
+export * from "./account-link";

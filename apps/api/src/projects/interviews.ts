@@ -1,3 +1,4 @@
+import { recordingBudgetIn } from "../media/recording-budget";
 import { Followups, invalidateFollowupIn } from "../followups/followups";
 import { invalidateStoryRecordingIn } from "../stories/stories";
 import {
@@ -451,19 +452,19 @@ export class Interviews implements OnModuleDestroy {
         .filter((q) => q.state !== "ready")
         .map((q) => q.questionKey),
     );
-    const defaultQuestion =
-      plan.chapters
-        .flatMap((c) => c.questions)
-        .find(
-          (q) =>
-            !unavailable.has(q.key) &&
-            ![q.key, ...q.sensitivityTags].some((tag) =>
-              plan.preferences.blockedTopics.includes(tag),
-            ),
-        ) ?? null;
+    const eligibleQuestions = plan.chapters
+      .flatMap((c) => c.questions)
+      .filter(
+        (q) =>
+          !unavailable.has(q.key) &&
+          ![q.key, ...q.sensitivityTags].some((tag) =>
+            plan.preferences.blockedTopics.includes(tag),
+          ),
+      );
     return {
       revision: plan.revision,
-      defaultQuestion,
+      defaultQuestion: eligibleQuestions[0] ?? null,
+      eligibleQuestions,
       starters: plan.starters,
     };
   }
@@ -478,7 +479,7 @@ export class Interviews implements OnModuleDestroy {
   async listIn(tx: Prisma.TransactionClient, projectId: string) {
     await this.participation.requireMaterialIn(tx, projectId, "activeData");
     return {
-      canRecord: (await this.terms.read(projectId, undefined, tx)).canRecord,
+      canRecord: (await this.terms.read(projectId, tx)).canRecord,
       plan: await this.recordingPlan(projectId, tx),
       interviews: await Promise.all(
         (
@@ -500,7 +501,7 @@ export class Interviews implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx) => ({
-        canRecord: (await this.terms.read(projectId, undefined, tx)).canRecord,
+        canRecord: (await this.terms.read(projectId, tx)).canRecord,
         plan: await this.recordingPlan(projectId, tx),
         interviews: [],
       }),
@@ -567,10 +568,19 @@ export class Interviews implements OnModuleDestroy {
           (body.expectedQuestionVersion ?? 1) !== current.sequence
         )
           throw new ConflictException();
+        await this.participation.requireMaterialIn(
+          tx,
+          projectId,
+          "originalAudio",
+        );
+        const maxDurationMs = await recordingBudgetIn(tx, projectId);
+        if (maxDurationMs < 1)
+          throw new ConflictException("Recording quota exhausted");
         await invalidateFollowupIn(tx, projectId, id);
         await invalidateStoryRecordingIn(tx, projectId, id);
         return {
           allowed: true,
+          maxDurationMs,
           actualQuestionId: current.actualQuestionId,
           questionVersion: current.sequence,
         };

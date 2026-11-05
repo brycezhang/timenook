@@ -230,7 +230,7 @@ const approval = () => ({
   expectedBindingVersion: 0,
   evidenceRef: "synthetic:发起人核验申请者",
 });
-test("initiator approval binds only one applicant under concurrency, invalidates invitations and starts service terms once", async () => {
+test("initiator approval binds only one applicant under concurrency, invalidates invitations and preserves lifetime service activation", async () => {
   const p = await project();
   const a = await login();
   const b = await login();
@@ -426,6 +426,62 @@ async function choose(
     ),
   };
 }
+test("one narrator start atomically records three purposes, binds actual actor and notice, and replays without duplicate records", async () => {
+  const p = await bound();
+  const before = await state(p, p.narrator.token);
+  assert.equal(before.consent.length, 0, "visiting cannot authorize");
+  const body = {
+      ...notice(),
+      evidenceRef: `synthetic:click:purpose-start:${randomUUID()}`,
+      expectedBindingVersion: before.bindingVersion,
+      expectedAccessEpoch: before.accessEpoch,
+    },
+    key = randomUUID(),
+    url = `/v1/projects/${p.projectId}/consents/start`;
+  assert.equal(
+    (await request("POST", url, p.buyer.token, body)).statusCode,
+    403,
+  );
+  const saved = data(await request("POST", url, p.narrator.token, body, key));
+  assert.deepEqual(
+    saved.choices.map((choice: any) => [choice.purpose, choice.granted]),
+    [
+      ["collection", true],
+      ["ai", true],
+      ["sharing", true],
+    ],
+  );
+  assert.equal(saved.consent.length, 3);
+  for (const record of saved.consent) {
+    assert.equal(record.operatorUserId, p.narrator.id);
+    assert.equal(record.subjectId, p.subjectId);
+    assert.equal(record.noticeVersion, body.noticeVersion);
+    assert.equal(record.evidenceRef, body.evidenceRef);
+  }
+  assert.equal(
+    data(await request("POST", url, p.narrator.token, body, key)).consent
+      .length,
+    3,
+  );
+  assert.equal(
+    (
+      await request("POST", url, p.narrator.token, {
+        ...body,
+        noticeVersion: "internal-participation-v1",
+      })
+    ).statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await request("POST", url, p.narrator.token, {
+        ...body,
+        expectedAccessEpoch: 0,
+      })
+    ).statusCode,
+    409,
+  );
+});
 test("three purpose decisions stay separate; rejection keeps care and orders, sharing and AI require explicit consent and revocation fences old commands", async () => {
   const p = await bound();
   assert.equal(
@@ -972,7 +1028,7 @@ test("expired or superseded invitations cannot apply or approve, and D08 is fail
   assert.equal((await state(p, p.buyer.token)).bindingVersion, 0);
   assert.equal(
     data(await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token), 200)
-      .project.terms.creation.startsAt,
+      .project.terms.creation.expiresAt,
     null,
   );
   const unconfigured = await createApplication(
@@ -1185,7 +1241,7 @@ async function assist(
     target,
   );
 }
-test("assisted renewal requires new evidence, refusal invalidates prior sessions and later WeChat binding preserves the first participation clock", async () => {
+test("assisted renewal requires new evidence, refusal invalidates prior sessions and later WeChat binding preserves lifetime service activation", async () => {
   const p = await project();
   const first = data(await assist(p));
   const start = data(
@@ -1553,6 +1609,14 @@ test("unbound subject rights requests recover through Care and verified withdraw
         ...notice(),
         expectedBindingVersion: 0,
         expectedAccessEpoch: after.accessEpoch,
+        expectedAccessSequence: data(
+          await app.inject({
+            method: "GET",
+            url: `/v1/admin/care-requests/${exported.id}`,
+            headers: operator,
+          }),
+          200,
+        ).verificationScope.accessSequence,
       },
     }),
   );
@@ -1588,6 +1652,10 @@ test("assisted decisions serialize on the project and persistence faults roll ba
   assert.deepEqual(outcomes.map((r) => r.statusCode).sort(), [201, 409]);
   const q = await project();
   const initial = await state(q, q.buyer.token);
+  const initialCreation = data(
+    await request("GET", `/v1/orders/${q.orderId}`, q.buyer.token),
+    200,
+  ).project.terms.creation;
   const key = randomUUID();
   const command = { ...body, evidenceRef: `synthetic:${randomUUID()}` };
   await db.$executeRawUnsafe(
@@ -1609,10 +1677,10 @@ test("assisted decisions serialize on the project and persistence faults roll ba
       ).statusCode,
       500,
     );
-    assert.equal(
-      (await state(q, q.buyer.token)).accessEpoch,
-      initial.accessEpoch,
-    );
+    const afterFailure = await state(q, q.buyer.token);
+    assert.equal(afterFailure.accessEpoch, initial.accessEpoch);
+    assert.deepEqual(afterFailure.consent, initial.consent);
+    assert.equal(afterFailure.canCollect, false);
     assert.deepEqual(
       data(
         await request(
@@ -1624,10 +1692,10 @@ test("assisted decisions serialize on the project and persistence faults roll ba
       ).sessions,
       [],
     );
-    assert.equal(
+    assert.deepEqual(
       data(await request("GET", `/v1/orders/${q.orderId}`, q.buyer.token), 200)
-        .project.terms.creation.startsAt,
-      null,
+        .project.terms.creation,
+      initialCreation,
     );
   } finally {
     await db.$executeRawUnsafe(

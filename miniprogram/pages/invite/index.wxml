@@ -1,14 +1,14 @@
-<view wx:if="{{mode === 'live'}}" class="page">
-  <view class="title">邀请与参与管理</view>
-  <view class="soft section">隔离合成验证 · D08 本人核验及告知规则尚未正式冻结，不能用于真实资料采集。</view>
+<view wx:if="{{mode === 'live'}}" class="page live-invite">
+  <view class="title">邀请本人，<text class="line-break">{{'\n'}}</text>一起写这本书</view><view class="invitation-card section"><view class="row"><image class="icon" src="/assets/icons/leaf.svg"/><text class="serif">时光里 · 岁月成书</text></view><view class="letter-body serif">想听听你的人生故事，<text class="line-break">{{'\n'}}</text>把它写成一本书，留给我们。</view></view>
+  <view wx:if="{{participation}}" class="soft section">{{participation.policyStatus === 'internal-acceptance' ? '此项目未包含付款或实体书制作。' : '邀请和账号绑定不代替本人用途授权。'}}{{participation.noticeText}}</view>
   <view class="section note">请本人申请后，在线下核对账号再确认。付款和邀请转发都不会授予资料权限。</view>
   <view wx:if="{{status}}" class="soft section">{{status}}</view>
-  <button wx:if="{{!loggedIn}}" class="btn section" bindtap="loginLive" disabled="{{busy}}">微信登录后继续邀请</button>
-  <button class="link" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button>
+  <view class="action-stack action-section"><button wx:if="{{!loggedIn}}" class="btn section" bindtap="loginLive" disabled="{{busy}}">微信登录后继续邀请</button>
+  <button class="link" bindtap="refreshLive" disabled="{{busy}}">重新查询参与状态</button></view>
   <view wx:if="{{participation}}" class="section">
-    <view class="small muted">项目：{{participation.projectId}}</view>
-    <view>绑定版本：{{participation.bindingVersion}}</view>
-    <button class="btn section" bindtap="share" disabled="{{busy || participation.bindingVersion > 0 || participation.policyStatus !== 'synthetic-only'}}">准备本人邀请</button>
+
+    <button wx:if="{{participation.bindingVersion === 0}}" class="btn section" bindtap="share" disabled="{{busy || participation.bindingVersion > 0 || (participation.policyStatus !== 'synthetic-only' && participation.policyStatus !== 'internal-acceptance' && participation.policyStatus !== 'paid-e2e')}}">准备本人邀请</button>
+    <!-- @development:start --><button wx:if="{{inviteToken}}" class="btn secondary section" bindtap="copyInvitation">复制网页邀请链接</button><!-- @development:end -->
     <button wx:if="{{inviteToken}}" class="btn secondary section" open-type="share">发送已准备的邀请</button>
     <view wx:if="{{inviteToken}}" class="note">邀请仅用于申请参与，24小时到期；重新准备会使旧邀请失效。</view>
     <view wx:for="{{requests}}" wx:key="id" class="paper section">
@@ -19,6 +19,7 @@
   </view>
   <button class="link" bindtap="project">返回首页</button>
 </view>
+<!-- @development:start -->
 <block wx:else="">
 <view class="page"
   ><view class="center"
@@ -43,17 +44,18 @@
         ></view
       ></view
     ><view class="invitation-sign">—— 来自{{p.buyer}}的心意</view></view
-  ><view class="stack section"
+  ><view class="stack action-stack section"
     ><button class="btn" bindtap="share"
       ><image class="icon" src="/assets/icons/send-light.svg" />
       邀请{{p.recipient}}讲故事</button
     ><button class="btn secondary" bindtap="preview"
       >我陪{{p.recipient}}，一起开始</button
     ></view
-  ><button class="link" bindtap="settings"
+  ><view class="action-stack action-stack--quiet action-section"><button class="link" bindtap="settings"
     >修改书名与资料
     <image class="icon small" src="/assets/icons/chevron-right.svg" /></button
   ><button class="link" bindtap="project">回到我的项目</button
-  ><view class="demo-note">本机演示项目 · 尚未真实支付</view></view
+  ></view><view class="demo-note">本机演示项目 · 尚未真实支付</view></view
 >
 </block>
+<!-- @development:end -->

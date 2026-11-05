@@ -7,7 +7,11 @@ import {
   clearPhotoPreviews,
   privatePhotoPreview,
 } from "../../services/story-photos";
-import type { BookVersionView } from "../../../packages/contracts/src";
+import type {
+  BookVersionView,
+  BookConfirmationContext,
+} from "../../../packages/contracts/src";
+import { paymentKey } from "../../services/payments";
 type E = {
   currentTarget: { dataset: Record<string, string> };
   detail: { value: string };
@@ -20,6 +24,9 @@ Page({
     status: "",
     coverImage: "",
     coverStatus: "",
+    confirmations: null as BookConfirmationContext | null,
+    confirmChecked: false,
+    confirmationEvidence: "",
     p: null as Project | null,
     stories: [] as Project["stories"],
     pending: 0,
@@ -32,6 +39,7 @@ Page({
   generation: 0,
   file: "",
   coverFile: "",
+  confirmationRequest: null as { input: string; key: string } | null,
   expiry: undefined as ReturnType<typeof setTimeout> | undefined,
   stopSessionWatch: undefined as (() => void) | undefined,
   onLoad(q) {
@@ -56,7 +64,15 @@ Page({
     this.removeFile(this.file);
     this.file = "";
     this.clearCover();
-    this.setData({ version: null, busy: false, coverStatus: "" });
+    this.confirmationRequest = null;
+    this.setData({
+      version: null,
+      confirmations: null,
+      confirmChecked: false,
+      confirmationEvidence: "",
+      busy: false,
+      coverStatus: "",
+    });
   },
   onUnload() {
     this.onHide();
@@ -167,8 +183,28 @@ Page({
           });
         }
         try {
-          await bookClient.readVersion(this.projectId, this.versionId);
+          const fresh = await bookClient.readVersion(
+            this.projectId,
+            this.versionId,
+          );
           if (generation !== this.generation) return;
+          if (fresh.state !== "ready") {
+            this.setData({
+              version: fresh,
+              confirmations: null,
+              confirmChecked: false,
+              status: "书稿内容已变化，请返回成书总览，生成并核对新版本。",
+            });
+          } else if (this.data.confirmations) {
+            const confirmations = await bookClient.confirmations(
+              this.projectId,
+            );
+            if (!this.current(generation, owner)) return;
+            this.setData({
+              confirmations:
+                confirmations.bookVersionId === fresh.id ? confirmations : null,
+            });
+          }
         } catch {
           if (generation !== this.generation) return;
           this.onHide();
@@ -296,6 +332,54 @@ Page({
   book() {
     go("book", `projectId=${this.projectId}`);
   },
+  chooseContentConfirmation() {
+    if (!this.data.busy && this.data.confirmations?.canConfirm)
+      this.setData({ confirmChecked: !this.data.confirmChecked });
+  },
+  contentEvidence(e: E) {
+    if (!this.data.busy) this.setData({ confirmationEvidence: e.detail.value });
+  },
+  async confirmContent() {
+    const context = this.data.confirmations,
+      evidenceRef = this.data.confirmationEvidence.trim();
+    if (
+      !context?.canConfirm ||
+      this.data.version?.state !== "ready" ||
+      context.bookVersionId !== this.data.version.id ||
+      !this.data.confirmChecked ||
+      !context.bookVersionId ||
+      !context.snapshotHash ||
+      !context.pdfHash
+    )
+      return;
+    if (!/^[^\r\n]{3,160}$/.test(evidenceRef)) {
+      this.setData({ status: "请填写 3 至 160 字的本次核对说明（单行）。" });
+      return;
+    }
+    const input = {
+        role: context.role,
+        bookVersionId: context.bookVersionId,
+        snapshotHash: context.snapshotHash,
+        pdfHash: context.pdfHash,
+        noticeVersion: context.noticeVersion,
+        evidenceRef,
+      },
+      serialized = JSON.stringify(input);
+    if (this.confirmationRequest?.input !== serialized)
+      this.confirmationRequest = { input: serialized, key: paymentKey() };
+    const key = this.confirmationRequest.key;
+    return this.perform(async (generation: number, owner: string) => {
+      const value = await bookClient.confirmContent(this.projectId, input, key);
+      if (!this.current(generation, owner)) return;
+      this.confirmationRequest = null;
+      this.setData({
+        confirmations: value,
+        confirmChecked: false,
+        confirmationEvidence: "",
+        status: "已确认本版完整 PDF。改稿后需要重新核对确认。",
+      });
+    });
+  },
   print() {
     if (!this.data.live) return go("print");
     if (this.accessExpired()) {
@@ -312,7 +396,13 @@ Page({
   async onShow() {
     if (dataMode() === "live") {
       this.clearCover();
-      this.setData({ live: true, version: null });
+      this.setData({
+        live: true,
+        version: null,
+        confirmations: null,
+        confirmChecked: false,
+        confirmationEvidence: "",
+      });
       this.stopSessionWatch?.();
       this.stopSessionWatch = sessionClient.onInvalidated(() => {
         this.onHide();
@@ -338,6 +428,20 @@ Page({
                 ? "书稿尚未生成完成，请返回查看状态"
                 : "",
         });
+        if (
+          value.state === "ready" &&
+          value.snapshot.specification.status ===
+            "internal-acceptance-candidate"
+        ) {
+          const confirmations = await bookClient.confirmations(this.projectId);
+          if (!this.current(generation, owner)) return;
+          this.setData({
+            confirmations:
+              confirmations.bookVersionId === value.id ? confirmations : null,
+            confirmChecked: false,
+            confirmationEvidence: "",
+          });
+        }
         this.watch(owner);
         await this.loadCover(generation, owner);
       });

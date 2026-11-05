@@ -1,6 +1,8 @@
 import { demo, go, home, read } from "../../services/store";
 import { dataMode } from "../../services/mode";
 import { sessionClient } from "../../services/session";
+import { projectOverviewClient } from "../../services/project-overview";
+import { switchProjectTab } from "../../services/navigation";
 type E = {
   currentTarget: { dataset: Record<string, string> };
   detail: { value: string };
@@ -14,8 +16,15 @@ Page({
     busy: false,
   },
   identityVersion: 0,
+  autoEnter: false,
+  onHide() {
+    if (!this.data.busy) ++this.identityVersion;
+  },
   onLoad(q) {
-    if (dataMode() === "live") return;
+    if (dataMode() === "live") {
+      this.autoEnter = q.browse !== "1";
+      return;
+    }
     if (read()?.purchased && q.browse !== "1") home();
   },
   async onShow() {
@@ -36,6 +45,15 @@ Page({
           userId: user?.id ?? "",
           status: user ? "已连接服务端账号" : "请使用微信登录",
         });
+      if (user && this.autoEnter && version === this.identityVersion) {
+        const { projects } = await projectOverviewClient.memberships();
+        if (version !== this.identityVersion) return;
+        const selected = projectOverviewClient.selected();
+        const available = projects.filter((item) => item.state !== "pending");
+        const project =
+          available.find((item) => item.projectId === selected) ?? available[0];
+        if (project) switchProjectTab("project", project.projectId);
+      }
     } catch (error) {
       if (version === this.identityVersion)
         this.setData({
@@ -82,6 +100,11 @@ Page({
     }
     home("home");
   },
+  // @web-only:start
+  accountLink() {
+    go("account-link");
+  },
+  // @web-only:end
   orders() {
     go("order");
   },
@@ -93,6 +116,9 @@ Page({
   },
   project() {
     home();
+  },
+  account() {
+    switchProjectTab("account");
   },
   choose(e: E) {
     go(

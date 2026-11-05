@@ -1,0 +1,81 @@
+# 原生自动化启动、路由与真实登录
+
+2026-11-01，关联 [#130](https://github.com/brycezhang/timenook/issues/130)。工程起点为 `81fb6a4`（已合并 #127）；脚本与组件声明现由 #132/#134 合并。命令、前提和安全边界见[原生自动化说明](../../development-native-automation.md)。
+
+**最终结果：官方 Stable `2.02.2609240` 上，完整原生演示 `MAtA8L` 与严格真实登录 `3mq4fR` 均通过。** 两次使用普通 Node 命令和系统默认锁屏策略，基础库请求/解析均为 `3.17.5`，全部清理成功；真实订单返回 200、`required=true`。具体范围见[最终新版运行](#最终新版运行)。
+
+## 已定位的问题与修复
+
+1. 官方 CLI `auto` 返回后，`Tool.getInfo` 只有配置版本信息，不能证明实际页面已经渲染。曾实测 SDK 可响应而 `App.getCurrentPage` 五秒无响应，模拟器欢迎页与空页面路径仍在；原实现随后可能卡住截图或命令。
+2. 源配置的 `3.10.0` 不在本机已安装/可选基础库中，工具曾无声采用 `3.17.6` 灰度版本（本机官方注册表 status=0）。该版本出现 `frame loaded without instanceInfo`、`unexpected current frame status timedout`，一次清理退出后还出现夏季编译器遗漏 `custom-tab-bar/index` 配置。自动编译偏好原本已开启，不能把问题归因于用户关闭自动编译。单次干净重启未单独解决。
+3. 仅测试副本明确采用本机已安装的稳定库 `3.17.5`（status=1），并核对实际解析版本；根上传配置保持原状。初期文件追加触发编译、仅凭 SDK 或 Page.onReady 等待的方案均未计为成功，也未保留为自动重试/编译兜底。
+4. 已复现的邀请页卡死还涉及路由完成边界：上一页虽有数据并可见，原生路由动画尚未结束，立刻调用业务方法再次 reLaunch 会使工具活动 AppService 帧失效。现在通过公开 SDK CDP 的 `MPPage.waitForReady` 和被动 `wx.onAppRouteDone` 监听等待真实渲染及动画结束，然后检查原生可见布局与业务状态。移除固定延迟，不拦截 Page 定义，不替换登录/网络。
+
+## 升级前验证（历史轮次）
+
+8 项确定性回归覆盖 SDK-only 欢迎状态不能放行、路由不匹配、原生 onReady 等待、路由动画尚未完成、可见布局与业务加载状态、成书页实际 `book-page` 根节点，以及有界失败后停止轮询和仅保存安全观察字段。已纳入 `test:frontend`，可单独运行 `pnpm test:native-automation`。相关前端类型检查及脚本格式/语法检查通过；没有重复运行全仓回归。
+
+审查补充修复：SDK 探测对无法解析的 JSON 和合法 JSON `null` 以前会从 WebSocket 消息回调抛出未捕获异常，绕过失败保存及项目清理。新增真实本机 WebSocket 的确定性回归，分别先复现这两种异常，再验证固定文本的 `NativeProtocolError` 经 `startup:sdk` 拒绝并关闭探测连接，后续合法响应不能覆盖失败；顶层响应要求为非数组的非空对象。现有 8 项与新增 2 项共 10 项 helper 测试、相关脚本语法和格式检查通过；连接失败继续轮询及整套不盲重试的行为保留。本次仅改错误路径，未重跑原生 GUI，下面完整运行证据沿用既有结果。
+
+官方 Mac 开发者工具 `2.01.2510290`，测试请求和实际解析基础库均为 `3.17.5`。下面两次运行均从全新临时项目自动启动，无人工重新编译或运行内整套重试。
+
+| 独立运行                 | 结果与范围                                                                                                                                                                                                                                              | 完整机器证据                                                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm test:native-e2e`   | 全部通过：妈妈模拟购买/邀请、参与及换题、合成 MP3 输入与非空原生持久文件、同一购买项目故事确认/书稿确认/地址阻断/演示订单、Tab Page/筛选保留、修改失效与重确认、爸爸重复购买及原项目保留；音频服务、SDK、临时窗口清理通过                               | `/var/folders/7t/xgv_t04j7k74jfdhdh1p41tr0000gn/T/timenook-native-demo-Hbm1yX/evidence/result.json`；同目录 8 张合成演示截图 |
+| `pnpm test:native-login` | 核心真实登录检查全部通过：`urlCheck=true` 且未配置域名实际被拒绝；真实 `wx.login`、`/users/me` 当前账号、无会话 401、首页持久会话恢复、退出后旧会话 401、重登同一账号/不同会话、参与 HTTP/页面；本次缓存及旧测试会话撤销、本机清除、SDK及窗口关闭均通过 | `/var/folders/7t/xgv_t04j7k74jfdhdh1p41tr0000gn/T/timenook-native-live-N9Xj3x/evidence/result.json`                          |
+
+上述部署前运行的内部验收装配 `/orders` 为 404，订单页面已结束 loading 并显示服务不可用。机器结果明确记录 `orders.available=false`、`required=false`；该项只是装配可用性观察，**不计作订单模块 200 或真实收付款通过**。#129 部署后的本人订单 200 由其运行记录补验，也可用 `--orders-required` 强制要求。真实模式没有替换 `wx.login` / `wx.request`，未调用支付或麦克风，未保存账号界面截图。
+
+## 支付部署后复测与启动诊断
+
+17:18 起以 `3719910`（含协议错误处理修复）执行 `node scripts/test-native-login.cjs --orders-required`，结果为失败，保存在 `timenook-native-live-QGfHql/evidence/result.json`。请求与解析基础库均为 3.17.5，但 `page:home:render` 在 `route:null`、`rendered:false` 阶段超时，尚未调用真实登录；缓存会话清理因运行时不可访问而超时，SDK 断开与临时项目关闭成功。不能将此前真实登录成功记录复用为本次部署后订单 200。
+
+随后仅诊断启动，不重跑完整登录或演示：
+
+- `timenook-native-live-bsGRfs` 与 `timenook-native-live-2rAaVj` 启动通过；后者还验证第二个公开 SDK 连接在第一个连接断开后仍能读取真实页面。两次均完成断开及项目关闭。
+- `timenook-native-live-vPjnCA` 在项目内持续写入合成证据 JSON 时复现相同渲染超时；仅将这些写入移到项目外的对照 `timenook-native-live-Qq9OcC` 也失败，故不能将失败归因于证据写入，未据此修改目录结构。
+- 移除 SDK 就绪探测的单连接试验分别在 CLI 返回后遇到连接拒绝、仅等待 TCP 监听后遇到未初始化的 SDK 响应。两者只证明 CLI/TCP 就绪不足，未据此替换现有协议就绪检查。
+
+只记录 SDK 方法名与完成时间的启动探针保存在 `/tmp/timenook-native-startup-probe.json`，未记录协议参数或响应内容。诊断期间 CUA 报告 Mac 已锁定且无法自动解锁，系统只读锁定标志也为真；其中一次启动仍成功，因此锁定与本次间歇性渲染失败的因果关系尚未确定。当时需在可观察的开发者工具桌面继续核实，未新增猜测性等待、重试或预检。此前完整演示及真实登录证据保留原范围；该阶段的严格订单检查尚未完成，后续独立结果见下文。
+
+## 组件声明与工具链修复
+
+补齐原生 `app.json` 的全局 `usingComponents: {}`，按实际构建产物验证全局或各 Tab 页的组件声明；构建回归 4 项及原生 helper 10 项通过。旧工具上另有严格运行 `VSplEt` 完整通过：真实微信登录、本人订单 200/`required=true` 与所有清理，支撑 #129 的服务端工程验收关闭。后续演示仍出现冷启动失败，因此不据单次通过声称自动化稳定性修复完成。
+
+用户解锁后，实际界面还观察到 SummerCompiler 遗漏自定义 Tab JSON、读取到空的 `project.config.json`，以及编译器 `path.join` 收到 undefined。一次手工编译仅作诊断，不能算自动化通过。AppService 等待、证据移到项目外、额外编译标志及先 open 后 auto 的对照未充分解决问题，未保留为启动补丁。此前项目外写入对照仅移动合成探针写入，仍保留 helper 的结果写入；后续全部移出项目的对照也失败，不能将早先对照描述为排除全部写入影响。
+
+已根据[官方版本配置](https://devtools.wxqcloud.qq.com.cn/WechatWebDev/nightly/versions/config.json)与[稳定版历史](https://devtools.wxqcloud.qq.com.cn/WechatWebDev/nightly/versions/history_stable.json)，从 `2.01.2510290` 更新到官方最新 Stable `2.02.2609240`（2026-10-26）。[该版更新记录](https://devtools.wxqcloud.qq.com.cn/WechatWebDev/nightly/versions/logs/stable_v2.02.2609240.json)含 CLI 冷启动、首屏超时白屏及连续写入触发模拟器重编译的修复，与本次观察相关；本次在该版本上完成下面两套独立运行。
+
+当前安装路径为 `/Applications/wechatwebdevtools.app`，CLI 仍为其 `Contents/MacOS/cli`。使用官方 ARM64 安装包，腾讯签名、完整代码签名及 macOS 公证核验通过。版本读取应用自身 package 元数据；Electron 的 CFBundle 版本不是开发工具版本。原工具二进制私下保留，未清除原项目或登录配置。
+
+新版使用独立初始资料目录，没有自动继承旧版登录或已启用的 CLI 服务。准备阶段只读 `cli islogin` 返回 246、服务端口未启用；中间版本的 `timenook-native-demo-v4J9aM` 因此在 `startup:official-cli` 失败，未执行登录或业务操作。随后 Mac 再次锁定，CUA 自动解锁失败。用户已完成解锁及新版正常扫码登录，原有同范围的本机 CLI 能力恢复，实际 `cli islogin` 成功；这些准备条件现已完成。没有复制旧登录资料、修改原项目配置或保留安装路径变量。
+
+## 最终新版运行
+
+工程代码复用已合并 PR #132/#134 及其最终 CI；构建 4/4、helper 10/10 的定向回归证据沿用本轮既有结果，不为文档更新重复运行。以下两次均由官方 CLI 自动打开全新临时项目，使用 Node `22.23.4`、DevTools `2.02.2609240` 和请求/实际解析均为 `3.17.5` 的稳定基础库；无人工 Compile，脚本未加入整套自动重跑。
+
+| 最终命令                                               | 单项结果与清理                                                                                                                                                       | 机器结果                                           |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `node scripts/test-native-e2e.cjs`                     | 9/9：启动、妈妈购买/邀请、参与/换题、合成录音原生保存、同项目故事/书稿确认及演示订单、Tab 状态保留、修改后重确认、爸爸重复购买、项目保留；5/5 清理通过，8 张合成截图 | `timenook-native-demo-MAtA8L/evidence/result.json` |
+| `node scripts/test-native-login.cjs --orders-required` | 9/9：公网 API 构建、启动、域名拒绝、真实微信当前账号登录、会话恢复、退出后旧会话拒绝、同账号新会话重登、参与页面、本人订单；3/3 清理通过，账号截图 0 张              | `timenook-native-live-3mq4fR/evidence/result.json` |
+
+真实模式 `urlCheck=true`，未配置域名实际被原生运行时拒绝（`domainEnforcement=true`）；公网本人订单 `status=200`、`available=true`、`required=true`。演示清理包含演示页、模态替身、合成音频服务、SDK 断开和临时项目关闭；真实清理包含撤销测试会话及清除本机缓存、SDK 断开和临时项目关闭，全部成功。两个 `result.json` 均为 `passed=true`，没有输出或提交登录 code、会话 token、OpenID 或账号界面。
+
+较早补充运行 `timenook-native-demo-gLkQGo` 与 `timenook-native-live-mb8hsL` 也通过，但使用过临时保持唤醒的命令包装，只作补充。该临时保持已随进程退出释放，本轮无残留保持唤醒进程；最终验收采用上表在系统默认锁屏策略下的两次普通 Node 运行。四次新版机器结果及全部历史失败分别保留，不拼接不同轮次的结果。
+
+结果原件仍位于下述系统临时目录；四份新版脱敏 JSON 另以 600 权限保存在操作者原工作目录的 `.probe-local/wechat-engineering-20261101/`，不进入 Git。#130 的公开运行条件已满足，由最终记录合并后更新票据状态；T06/T29/T30 的双账号、双端真机、真实资金与实物条件继续由各责任票验收。
+
+## 失败证据
+
+所有路径均为操作者本机系统临时目录下，结果不进入 Git。
+
+- `timenook-native-e2e-codY4B/evidence/cold-start-repro.json`：原始脚本 SDK-ready/欢迎页与五秒无响应的脱敏诊断；一次外部文件变更后可继续，但这不足以证明可靠编译触发。
+- `timenook-native-demo-hXboP8/evidence/result.json`、`timenook-native-demo-tKjA34/evidence/result.json`：初期编译/就绪探针失败及有界清理。
+- `timenook-native-demo-Hj4Gx3/evidence/result.json`：单次官方退出/重启后的失败，实际灰度库为 3.17.6。
+- `timenook-native-demo-459Tc1/evidence/result.json`：稳定库 + 原生 onReady 已通过启动，但未等待路由动画完成，邀请页阶段超时；清理完成。
+
+这些目录的共同父目录为 `/var/folders/7t/xgv_t04j7k74jfdhdh1p41tr0000gn/T/`。它们只说明相应轮次的观察，不能与当前最终运行拼接为完整通过。
+
+## 验收边界
+
+演示使用合成静音输入和示例故事，不代表 ASR/AI 或真人采集。真实登录模式只验证开发者工具当前登录的一个真实微信账号；不替代双账号、双端真机、真实录音/上传/回听、中断、付款/退款、印制或实物结果。本轮不上传、切换体验版或提审。

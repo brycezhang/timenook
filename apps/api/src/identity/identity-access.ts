@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   HttpException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -17,6 +18,39 @@ import { exchangeCode } from "./wechat";
 export const WECHAT_FETCH = Symbol("WECHAT_FETCH");
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+
+export async function readSessionContextIn(
+  tx: Prisma.TransactionClient,
+  authorization?: string,
+) {
+  const match = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(authorization ?? "");
+  if (!match) throw new UnauthorizedException();
+  const tokenHash = digest(match[1]);
+  await tx.$queryRaw`SELECT id FROM sessions WHERE token_hash=${tokenHash} FOR SHARE`;
+  const session = await tx.session.findUnique({
+    where: { tokenHash },
+    include: { webSession: true },
+  });
+  if (
+    !session ||
+    session.revokedAt ||
+    session.expiresAt.getTime() <= Date.now()
+  )
+    throw new UnauthorizedException();
+  return {
+    id: session.userId,
+    sessionId: session.id,
+    method: session.webSession
+      ? ("self_web" as const)
+      : ("self_wechat" as const),
+  };
+}
+export async function readSelfMethodIn(
+  tx: Prisma.TransactionClient,
+  authorization?: string,
+) {
+  return (await readSessionContextIn(tx, authorization)).method;
+}
 
 @Injectable()
 export class IdentityAccess implements OnModuleDestroy {
@@ -40,7 +74,7 @@ export class IdentityAccess implements OnModuleDestroy {
     this.redis.on("error", () => {});
   }
 
-  async login(code: string, source: string): Promise<LoginResult> {
+  async proveWechat(code: string, source: string) {
     const credentials = this.config.wechat;
     if (!credentials) throw new ServiceUnavailableException();
     let count: unknown;
@@ -81,19 +115,41 @@ export class IdentityAccess implements OnModuleDestroy {
       throw error;
     }
     const openId = await exchangeCode(credentials, code, this.wechatFetch);
+    return { appId: credentials.appId, openId };
+  }
+
+  async login(
+    code: string,
+    source: string,
+    expectedUserId?: string,
+  ): Promise<LoginResult> {
+    const { appId, openId } = await this.proveWechat(code, source);
     const token = randomBytes(32).toString("base64url");
     const session = await this.database.$transaction(async (transaction) => {
       // Serialize first-account creation for the same WeChat identity across processes.
-      await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify([credentials.appId, openId])}, 0))`;
+      await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify([appId, openId])}, 0))`;
       let stored = await transaction.wechatIdentity.findUnique({
-        where: { appId_openId: { appId: credentials.appId, openId: openId } },
+        where: { appId_openId: { appId, openId } },
       });
+      if (expectedUserId && stored?.userId !== expectedUserId)
+        throw new ConflictException();
       if (!stored) {
+        // An explicit pairing must finish or expire before ordinary first login.
+        const pairing = await transaction.wechatLink.findFirst({
+          where: {
+            appId,
+            openId,
+            state: "paired",
+            expiresAt: { gt: new Date() },
+            session: { revokedAt: null, expiresAt: { gt: new Date() } },
+          },
+        });
+        if (pairing) throw new ConflictException();
         const user = await transaction.user.create({
           data: { id: randomUUID() },
         });
         stored = await transaction.wechatIdentity.create({
-          data: { appId: credentials.appId, openId, userId: user.id },
+          data: { appId, openId, userId: user.id },
         });
       }
       return transaction.session.create({

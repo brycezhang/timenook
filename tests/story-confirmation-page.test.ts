@@ -109,6 +109,7 @@ function harness(name: string, options: { clock?: { now: number } } = {}) {
       login: (o: any) => o.success({ code: "synthetic-new-account" }),
       downloadFile: (download: any) => downloads.push(download),
       navigateTo: ({ url }: any) => routes.push(url),
+      switchTab: ({ url }: { url: string }) => routes.push(url),
       reLaunch: ({ url }: any) => routes.push(url),
       navigateBack: () => routes.push("back"),
       showToast() {},
@@ -171,6 +172,12 @@ const participation = {
 };
 function story() {
   return {
+    confirmation: {
+      canDecide: true,
+      allowInBook: false,
+      noticeVersion: "synthetic-d08-v1",
+      evidencePrefix: "synthetic:",
+    },
     id: storyId,
     projectId,
     interviewId,
@@ -201,6 +208,36 @@ function story() {
     },
   };
 }
+test("reading never confirms; one actual click confirms the pinned revision with actual click evidence", async () => {
+  const h = harness("story");
+  h.page.onLoad({ projectId, storyId });
+  const showing = h.page.onShow();
+  await tick();
+  const value = story();
+  value.confirmation.allowInBook = true;
+  h.respond(0, value);
+  await showing;
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.page.data.canDecide, true);
+  const deciding = h.page.decideLive();
+  const sent = h.requests[1]?.data;
+  assert.ok(sent, "one confirm click sends its actual action");
+  assert.equal(sent.confirmed, true);
+  assert.equal(sent.allowInBook, true);
+  assert.equal(sent.revisionId, revisionId);
+  assert.equal(sent.contentHash, "f".repeat(64));
+  assert.equal(sent.noticeVersion, "synthetic-d08-v1");
+  assert.match(sent.evidenceRef, /^synthetic:click:story-confirm:/);
+  await h.page.decideLive();
+  assert.equal(h.requests.length, 2);
+  h.respond(1, {
+    ...value,
+    decision: { revisionId, confirmed: true, allowInBook: true },
+  });
+  await deciding;
+  assert.match(h.page.data.decisionStatus, /允许这版入书/);
+  h.page.onUnload();
+});
 function overview() {
   const initialQuestion = {
     id: "99999999-9999-4999-8999-999999999991",
@@ -580,9 +617,11 @@ test("project page distinguishes real optional-followup, transcription, story an
     `/pages/interview/index?projectId=${projectId}&interviewId=${interviewId}`,
   );
   h.page.record();
-  assert.equal(
+  assert.match(
     h.routes[h.routes.length - 1],
-    `/pages/interview/index?projectId=${projectId}`,
+    new RegExp(
+      `/pages/interview/index\\?projectId=${projectId}&draftId=[a-f0-9-]{36}$`,
+    ),
   );
   h.page.onUnload();
 });
@@ -610,60 +649,90 @@ test("project page displays real overview and preserves project/interview when o
     `/pages/interview/index?projectId=${projectId}&interviewId=${interviewId}`,
   );
   h.page.book();
-  assert.equal(
-    h.routes[h.routes.length - 1],
-    `/pages/book/index?projectId=${projectId}`,
-  );
+  assert.equal(h.routes[h.routes.length - 1], `/pages/book/index`);
   h.page.onUnload();
 });
 
-test("story opens by story id and saves confirmation separately from refusal to include this exact version", async () => {
-  const h = harness("story");
-  h.page.onLoad({ projectId, storyId });
-  const showing = h.page.onShow();
+test("a cached live project tab follows the session's changed project selection", async () => {
+  const h = harness("project");
+  h.page.onLoad({ projectId, assistedSessionId: "previous-assistance" });
+  const first = h.page.onShow();
+  h.respond(0, participation);
   await tick();
-  assert.equal(
-    h.requests[0]?.url,
-    `${base}/projects/${projectId}/stories/${storyId}`,
-  );
-  h.respond(0, story());
-  await showing;
-  assert.equal(
-    h.page.data.liveParagraphs[0].text,
-    story().revision.paragraphs[0].text,
-  );
-  const preparing = h.page.prepareDecision();
   h.respond(1, overview());
-  await preparing;
-  assert.equal(h.page.data.confirmedChoice, null);
-  assert.equal(h.page.data.includeChoice, null);
-  h.page.chooseConfirmation({ currentTarget: { dataset: { value: "true" } } });
-  h.page.chooseInclusion({ currentTarget: { dataset: { value: "false" } } });
-  h.page.decisionEvidence({
-    detail: { value: "本人逐段核对，确认内容，暂不入书。" },
-  });
-  const deciding = h.page.decideLive();
-  assert.equal(
-    h.requests[2].url,
-    `${base}/projects/${projectId}/stories/${storyId}/decisions`,
+  await first;
+  h.page.onHide();
+  const otherId = "abababab-abab-4bab-8bab-abababababab";
+  const selection = [...h.storage.keys()].find((key) =>
+    key.startsWith("timenook.live-project.v1:"),
   );
-  const sent = h.requests[2].data;
-  assert.equal(sent.revisionId, revisionId);
-  assert.equal(sent.contentHash, "f".repeat(64));
-  assert.equal(sent.expectedVersion, 1);
-  assert.equal(sent.confirmed, true);
-  assert.equal(sent.allowInBook, false);
-  assert.equal(sent.noticeVersion, "synthetic-d08-v1");
-  assert.match(sent.evidenceRef, /^synthetic:/);
-  h.respond(2, {
-    ...story(),
-    decision: { revisionId, confirmed: true, allowInBook: false },
-  });
-  await deciding;
-  assert.equal(h.page.data.story.decision.allowInBook, false);
-  assert.match(h.page.data.decisionStatus, /暂不入书/);
+  assert.ok(selection);
+  h.storage.set(selection, otherId);
+  const second = h.page.onShow();
+  assert.equal(h.requests[2].url, `${base}/projects/${otherId}/participation`);
+  assert.equal(h.page.assistedSessionId, "");
+  h.respond(2, { ...participation, projectId: otherId });
+  await tick();
+  h.respond(3, { ...overview(), projectId: otherId });
+  await second;
+  assert.equal(h.page.data.overview.projectId, otherId);
   h.page.onUnload();
 });
+
+for (const policy of [
+  {
+    noticeVersion: "synthetic-d08-v1",
+    evidencePrefix: "synthetic:",
+    noticeText: "合成政策验证",
+  },
+  {
+    noticeVersion: "internal-participation-v1",
+    evidencePrefix: "internal:",
+    noticeText: "内部验收，由本人选择",
+  },
+]) {
+  test(`story confirms the exact version with the existing inclusion decision under ${policy.noticeVersion}`, async () => {
+    const h = harness("story");
+    h.page.onLoad({ projectId, storyId });
+    const showing = h.page.onShow();
+    await tick();
+    assert.equal(
+      h.requests[0]?.url,
+      `${base}/projects/${projectId}/stories/${storyId}`,
+    );
+    h.respond(0, story());
+    await showing;
+    assert.equal(
+      h.page.data.liveParagraphs[0].text,
+      story().revision.paragraphs[0].text,
+    );
+    const preparing = h.page.prepareDecision();
+    h.respond(1, { ...overview(), ...policy });
+    await preparing;
+    const deciding = h.page.decideLive();
+    assert.equal(
+      h.requests[2].url,
+      `${base}/projects/${projectId}/stories/${storyId}/decisions`,
+    );
+    const sent = h.requests[2].data;
+    assert.equal(sent.revisionId, revisionId);
+    assert.equal(sent.contentHash, "f".repeat(64));
+    assert.equal(sent.expectedVersion, 1);
+    assert.equal(sent.confirmed, true);
+    assert.equal(sent.allowInBook, false);
+    assert.equal(sent.noticeVersion, policy.noticeVersion);
+    assert.ok(sent.evidenceRef.startsWith(policy.evidencePrefix));
+    assert.equal(h.page.data.noticeText, policy.noticeText);
+    h.respond(2, {
+      ...story(),
+      decision: { revisionId, confirmed: true, allowInBook: false },
+    });
+    await deciding;
+    assert.equal(h.page.data.story.decision.allowInBook, false);
+    assert.match(h.page.data.decisionStatus, /暂不入书/);
+    h.page.onUnload();
+  });
+}
 
 test("correction page preserves paragraph sources, records reasons and notes, and appends a revision through HTTP", async () => {
   const h = harness("edit-story");
@@ -761,10 +830,7 @@ test("renamed live project title is fresh in account while book waits for a gene
   assert.equal(book.page.data.version, null);
   assert.match(book.page.data.stateLabel, /生成书稿/);
   book.page.account();
-  assert.equal(
-    book.routes[book.routes.length - 1],
-    `/pages/account/index?projectId=${projectId}`,
-  );
+  assert.equal(book.routes[book.routes.length - 1], `/pages/account/index`);
   book.page.onUnload();
   const account = harness("account");
   account.page.onLoad({ projectId });
@@ -777,7 +843,7 @@ test("renamed live project title is fresh in account while book waits for a gene
   account.page.project();
   assert.equal(
     account.routes[account.routes.length - 1],
-    `/pages/project/index?projectId=${projectId}`,
+    `/pages/project/index`,
   );
   account.page.onUnload();
 });
@@ -795,9 +861,11 @@ test("denied story sharing keeps the authorized collection path available withou
   assert.equal(h.page.data.participation.canCollect, true);
   assert.match(h.page.data.status, /共享|授权/);
   h.page.record();
-  assert.equal(
+  assert.match(
     h.routes[h.routes.length - 1],
-    `/pages/interview/index?projectId=${projectId}`,
+    new RegExp(
+      `/pages/interview/index\\?projectId=${projectId}&draftId=[a-f0-9-]{36}$`,
+    ),
   );
   h.page.assisted();
   assert.equal(
@@ -1033,9 +1101,6 @@ test("a decision response after account replacement purges the previous private 
   const preparing = h.page.prepareDecision();
   h.respond(1, overview());
   await preparing;
-  h.page.chooseConfirmation({ currentTarget: { dataset: { value: "true" } } });
-  h.page.chooseInclusion({ currentTarget: { dataset: { value: "false" } } });
-  h.page.decisionEvidence({ detail: { value: "本人确认后暂不入书" } });
   const saving = h.page.decideLive();
   h.storage.set(`timenook.session.v1:${base}`, {
     ...login,
@@ -1053,7 +1118,6 @@ test("a decision response after account replacement purges the previous private 
   await saving;
   assert.equal(h.page.data.story, null);
   assert.equal(h.page.data.liveParagraphs.length, 0);
-  assert.equal(h.page.data.evidence, "");
   assert.equal(h.page.data.busy, false);
   assert.match(h.page.data.stage, /账号|访问/);
   h.page.onUnload();
@@ -1145,6 +1209,52 @@ test("switching accounts while a project overview is in flight removes the previ
   h.page.onUnload();
 });
 
+test("an assisted story applies the shared photo snapshot to its correction without using collection-only context", async () => {
+  const source = harness("story"),
+    assistedSessionId = "88888888-8888-4888-8888-888888888888";
+  source.page.onLoad({ projectId, interviewId, assistedSessionId });
+  const showingStory = source.page.onShow();
+  await tick();
+  source.respond(0, {
+    interviewId,
+    cloudSaved: true,
+    clipCount: 1,
+    story: story(),
+  });
+  await tick();
+  source.respond(1, story());
+  await showingStory;
+  source.page.edit();
+  source.page.onHide();
+  const route = new URL(source.routes[0], "https://example.test"),
+    h = harness("edit-story");
+  h.page.onLoad(Object.fromEntries(route.searchParams));
+  const showing = h.page.onShow();
+  h.respond(0, story());
+  await showing;
+  const applying = h.page.applyPhotos();
+  assert.equal(
+    h.requests[1].url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/photos`,
+  );
+  assert.equal(h.requests[1].method, "GET");
+  const snapshot = {
+    id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    projectId,
+    interviewId,
+    revision: 1,
+    hash: "c".repeat(64),
+    entries: [],
+  };
+  h.respond(1, { photos: [], snapshot });
+  await applying;
+  const saving = h.page.save();
+  assert.equal(h.requests[2].data.photoSnapshotId, snapshot.id);
+  h.respond(2, { ...story(), version: 2 });
+  await saving;
+  h.page.onUnload();
+});
+
 test("correction explicitly applies the latest photo snapshot and selected audio order, while an unknown save result retains the draft and command key", async () => {
   const h = harness("edit-story");
   h.page.onLoad({ projectId, storyId });
@@ -1209,7 +1319,7 @@ test("correction explicitly applies the latest photo snapshot and selected audio
   h.page.onUnload();
 });
 
-test("refreshing to a new story revision requires fresh independent choices and evidence", async () => {
+test("refreshing to a new revision requires an actual new click pinned to its current content", async () => {
   const h = harness("story");
   h.page.onLoad({ projectId, storyId });
   const showing = h.page.onShow();
@@ -1219,9 +1329,6 @@ test("refreshing to a new story revision requires fresh independent choices and 
   const preparing = h.page.prepareDecision();
   h.respond(1, overview());
   await preparing;
-  h.page.chooseConfirmation({ currentTarget: { dataset: { value: "true" } } });
-  h.page.chooseInclusion({ currentTarget: { dataset: { value: "true" } } });
-  h.page.decisionEvidence({ detail: { value: "只核对过第一版" } });
   const refreshing = h.page.refreshLive(),
     revised = story();
   revised.version = 2;
@@ -1230,10 +1337,14 @@ test("refreshing to a new story revision requires fresh independent choices and 
   revised.revision.contentHash = "a".repeat(64);
   h.respond(2, revised);
   await refreshing;
-  assert.equal(h.page.data.confirmedChoice, null);
-  assert.equal(h.page.data.includeChoice, null);
-  assert.equal(h.page.data.evidence, "");
-  assert.equal(h.page.data.decisionReady, false);
+  assert.equal(h.page.data.decisionReady, true);
+  assert.equal(h.requests.length, 3, "refresh cannot confirm the new version");
+  const saving = h.page.decideLive();
+  assert.equal(h.requests[3].data.revisionId, revised.revision.id);
+  assert.equal(h.requests[3].data.contentHash, "a".repeat(64));
+  assert.equal(h.requests[3].data.expectedVersion, 2);
+  h.respond(3, revised);
+  await saving;
   h.page.onUnload();
 });
 
@@ -1258,15 +1369,20 @@ test("opening an existing story with story-confirmation assistance never submits
   const preparing = h.page.prepareDecision();
   h.respond(1, { ...overview(), canDecide: false, role: "initiator" });
   await preparing;
-  h.page.chooseConfirmation({ currentTarget: { dataset: { value: "true" } } });
-  h.page.chooseInclusion({ currentTarget: { dataset: { value: "false" } } });
-  h.page.decisionEvidence({
-    detail: { value: "本人逐段核对本版内容，单独选择不入书" },
-  });
   const saving = h.page.decideLive();
   assert.equal(h.requests[2].data.assistedSessionId, confirmationSessionId);
   h.respond(2, story());
   await saving;
+  h.page.editLivePhotos();
+  assert.equal(
+    h.routes[h.routes.length - 1],
+    `/pages/photos/index?projectId=${projectId}&interviewId=${interviewId}`,
+  );
+  h.page.edit();
+  assert.equal(
+    h.routes[h.routes.length - 1],
+    `/pages/edit-story/index?projectId=${projectId}&storyId=${storyId}`,
+  );
   h.page.recoverInterview();
   assert.equal(
     h.routes[h.routes.length - 1],
@@ -1289,11 +1405,6 @@ for (const outcome of ["success", "network"] as const) {
     const preparing = h.page.prepareDecision();
     h.respond(1, overview());
     await preparing;
-    h.page.chooseConfirmation({
-      currentTarget: { dataset: { value: "true" } },
-    });
-    h.page.chooseInclusion({ currentTarget: { dataset: { value: "false" } } });
-    h.page.decisionEvidence({ detail: { value: "本人这次核对后暂不入书" } });
     const deciding = h.page.decideLive();
     h.expireSession();
     if (outcome === "success")
@@ -1305,7 +1416,6 @@ for (const outcome of ["success", "network"] as const) {
     await deciding;
     assert.equal(h.page.data.story, null);
     assert.equal(h.page.data.liveParagraphs.length, 0);
-    assert.equal(h.page.data.evidence, "");
     assert.equal(h.page.data.canDecide, false);
     assert.equal(h.page.data.busy, false);
     assert.equal(h.page.data.decisionStatus, "");

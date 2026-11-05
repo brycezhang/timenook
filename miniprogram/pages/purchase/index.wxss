@@ -48,6 +48,18 @@
   min-height: 48rpx;
   font-size: 28rpx;
 }
+.recipient-input {
+  margin-top: 24rpx;
+  height: 88rpx;
+  min-height: 0;
+  padding: 0 24rpx;
+  font-size: 34rpx;
+  line-height: normal;
+}
+.recipient-placeholder {
+  color: var(--muted);
+  font-size: 30rpx;
+}
 .catalog-term {
   padding: 24rpx 0;
   border-bottom: 1rpx solid var(--line);
