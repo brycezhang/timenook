@@ -1,0 +1,7 @@
+# Local Baoyu Canvas server state and revision history.
+.artifact-server.json
+.artifact-server.log
+.sharing.json
+history/
+.*.tmp
+.DS_Store
