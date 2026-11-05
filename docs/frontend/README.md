@@ -25,7 +25,7 @@ npm run check:native
 
 项目主页顶部显示品牌“时光里”；项目、成书、我的页面的底部首项统一显示当前书名，随项目切换和书名修改更新，过长名称省略显示。项目管理入口使用“我的项目”“项目资料”，成书介绍使用“故事书”。
 
-原生端先执行 `npm run build`，在微信开发者工具导入项目根目录。`project.config.json` 指向 `dist/miniprogram/`；游客AppID用于本地开发，真机预览需替换成有权限的小程序AppID。修改源文件后重新构建。不要直接修改 dist。
+原生端先执行 `npm run build`，在微信开发者工具导入项目根目录。`project.config.json` 指向 `dist/miniprogram/`，已于 2026-10-30 绑定用户提供的 TimeNook 独立小程序 AppID `wxa54f81265fba2439`；真机预览仍需当前微信账号拥有该小程序的开发/体验权限。AppSecret 已于 2026-11-01 安全交接并配置在服务端受限文件中，不进入小程序包；登录、会话及设备验证结果见[本轮记录](../delivery/2026-11-01/wechat-login.md)。修改源文件后重新构建。不要直接修改 dist。
 
 `check:native` 默认查找 macOS 官方微信开发者工具的 `wcc-exec` 目录，其他安装位置通过 `WECHAT_COMPILER_DIR` 指定。这个命令仅本地编译，不上传代码。
 

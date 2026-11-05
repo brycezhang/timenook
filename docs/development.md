@@ -102,7 +102,7 @@ FFmpeg 保持 8.1.1 和原最小编译参数。`scripts/setup-audio-tools.sh` �
 
 API 内部路径为 `POST /v1/sessions/wechat`（只接受 `{ code }`）、`GET /v1/users/me` 和 `DELETE /v1/sessions/:sessionId`。登录返回 `user.id` 和 `session.id/token/expiresAt`；后两者需 `Authorization: Bearer <token>`，撤销仅允许本人会话，跨账号和未知会话均返回 404。成功撤销为 204；其余成功/错误沿用统一 envelope 和 requestId。账号恢复是重新 `wx.login` 回到同一 `(AppID, openid)` 账号，不含手机号、项目或支付权限。
 
-正式微信配置只用 `TIMENOOK_WECHAT_APP_ID` 与 `TIMENOOK_WECHAT_APP_SECRET`，必须属于 TimeNook 独立小程序，不复用 legal-agent 或 wutong 身份。开发未配置时登录为 503；生产缺失、只配置一项或占位内容均拒绝启动。代码没有可启用模拟身份的环境开关；外部网络替身仅能在 `environment=test` 的测试构造入口传入，生产和开发均拒绝该入口。正式凭据尚未提供，本地测试不是双账号微信验收。
+正式微信配置只用 `TIMENOOK_WECHAT_APP_ID` 与 `TIMENOOK_WECHAT_APP_SECRET`，必须属于 TimeNook 独立小程序，不复用 legal-agent 或 wutong 身份。AppID `wxa54f81265fba2439` 已绑定根目录 `project.config.json`；2026-11-01 已通过 Git 忽略且权限 600 的 `.env.wechat-local` 交接 AppSecret，成对同步到服务器 `/data/server/timenook/shared/.env`（root:timenook、640），并重启 `timenook-api.service`。本机交接文件不会自动被服务加载或同步，后续修改须单独更新服务端受限配置。实际验证见[微信登录记录](delivery/2026-11-01/wechat-login.md)。开发未配置时登录为 503；任意环境只配置一项均拒绝启动，生产缺失或含占位内容也拒绝启动。代码没有可启用模拟身份的环境开关；外部网络替身仅能在 `environment=test` 的测试构造入口传入，生产和开发均拒绝该入口。本地测试不是双账号微信验收。
 
 会话由 32 随机字节生成，仅在签发时返回明文；服务端保存 SHA-256 摘要、失效时间及撤销时间，默认有效期 7 天，可用 `SESSION_TTL_SECONDS` 配置 1–2592000 秒。微信 code 先在 PostgreSQL 以 AppID+摘要唯一预占，10 分钟后可清理，覆盖微信文档的 5 分钟有效期；包括供应商超时在内的未知结果不重新使用同一 code，客户端下一次登录重新调用 `wx.login`。不持久化或返回 `session_key`/`unionid`。
 
