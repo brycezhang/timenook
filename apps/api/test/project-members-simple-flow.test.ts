@@ -20,6 +20,55 @@ import { TERMS_VERSION } from "../src/identity/project-members";
 
 before(startBookFixture);
 after(stopBookFixture);
+test("project lists show the purchase title for owners and members, then prefer the renamed title", async () => {
+  const p = await project(),
+    member = await login(),
+    outsider = await login();
+  const base = `/v1/projects/${p.projectId}`;
+  const invite = data(
+    await request("POST", `${base}/invitations`, p.buyer.token),
+  );
+  data(
+    await request(
+      "POST",
+      `/v1/invitations/${invite.token}/accept`,
+      member.token,
+      {
+        termsVersion: TERMS_VERSION,
+      },
+    ),
+  );
+  const list = async (token: string) =>
+    data(await request("GET", "/v1/participations", token), 200).projects;
+  for (const [user, origin] of [
+    [p.buyer, "purchased"],
+    [member, "invited"],
+  ] as const) {
+    assert.deepEqual(await list(user.token), [
+      {
+        projectId: p.projectId,
+        bookTitle: "私人标题不能泄露",
+        state: "active",
+        origin,
+      },
+    ]);
+  }
+  assert.deepEqual(await list(outsider.token), []);
+  const renamed = data(
+    await request("POST", `${base}/metadata`, member.token, {
+      expectedVersion: 0,
+      bookTitle: "妈妈亲手写下的时光故事",
+    }),
+  );
+  for (const user of [p.buyer, member]) {
+    assert.equal((await list(user.token))[0].bookTitle, renamed.bookTitle);
+  }
+  assert.equal(
+    (await db.paymentOrder.findUniqueOrThrow({ where: { id: p.orderId } }))
+      .bookTitle,
+    "私人标题不能泄露",
+  );
+});
 test("payer and multiple invited members can create, edit, preview and submit without old confirmations", async () => {
   const snapshot = JSON.parse(
     readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),

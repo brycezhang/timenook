@@ -1,0 +1,36 @@
+.projects-page {
+  padding-bottom: calc(220rpx + env(safe-area-inset-bottom));
+}
+.projects-page .s-title {
+  margin-bottom: 20rpx;
+}
+.projects-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  margin-top: 36rpx;
+}
+.project-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  width: 100%;
+  min-height: 156rpx;
+  padding: 30rpx 32rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 26rpx;
+  background: #f1ece3;
+  text-align: left;
+}
+.project-card__title {
+  font-size: 42rpx;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.project-card__meta {
+  margin-top: 8rpx;
+  color: var(--muted);
+  font-size: 32rpx;
+  line-height: 1.6;
+}

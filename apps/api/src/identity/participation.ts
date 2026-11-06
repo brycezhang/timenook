@@ -379,12 +379,19 @@ export class Participation
         ],
       },
       orderBy: { id: "asc" },
-      select: { id: true, bookTitle: true, createdBy: true },
+      select: { id: true, bookTitle: true, createdBy: true, orderId: true },
     });
+    const orders = await this.db.paymentOrder.findMany({
+      where: {
+        id: { in: projects.flatMap((p) => (p.orderId ? [p.orderId] : [])) },
+      },
+      select: { id: true, bookTitle: true },
+    });
+    const titles = new Map(orders.map((order) => [order.id, order.bookTitle]));
     return {
       projects: projects.map((p) => ({
         projectId: p.id,
-        bookTitle: p.bookTitle ?? "人生故事书",
+        bookTitle: p.bookTitle ?? titles.get(p.orderId ?? "") ?? "人生故事书",
         state: "active",
         origin: p.createdBy === user.id ? "purchased" : "invited",
       })),

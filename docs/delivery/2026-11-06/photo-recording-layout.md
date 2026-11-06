@@ -34,3 +34,7 @@
 - `pendingTask.taskId`：`confirmation_upload_4e5ddd44-e9e5-4df7-8946-fa6eb4e3cdd5`。
 - `pendingTask.tool`：`upload`；最后状态：`pending`，等待用户在开发者工具内确认，尚无上传成功回执。
 - 未主动轮询、未重复上传。后续用户继续时先查询该任务，不能把已发起视为上传成功。
+
+### 0.3.4 上传回执
+
+用户随后要求上传下一版本，本轮先查询上述原任务，返回 `status=success`、`detail=execution_success`、`result.success=true`；0.3.4 包大小 770,058 字节。未重复发起该版本上传。下一版项目列表和菜单修复按 [0.3.5 记录](project-list.md) 单独处理。

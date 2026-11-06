@@ -1,5 +1,27 @@
 <app-loading wx:if="{{pageLoading}}" variant="list" />
 <block wx:else>
-<view class="s-page"><view class="s-title">{{switching ? '切换项目' : '我的项目'}}</view><view class="s-muted">购买与参与的故事书，都在这里。</view><view class="s-space"><button wx:for="{{rows}}" wx:key="projectId" class="s-card s-row" data-id="{{item.projectId}}" bindtap="choose"><view class="s-grow"><view>{{item.bookTitle}}</view><view class="s-muted">{{item.projectId === selected ? '当前项目' : item.origin === 'invited' ? '参与的项目' : '购买的项目'}}</view></view><text class="s-arrow">›</text></button></view><button wx:for="{{pending}}" wx:key="id" class="s-card s-row" data-id="{{item.id}}" bindtap="payment"><view><view>{{item.bookTitle}}</view><view class="s-muted">购买待完成</view></view><text>›</text></button><view wx:if="{{busy}}" class="s-muted">正在读取项目…</view><view wx:elif="{{status}}" class="s-error">{{status}}<button class="s-link" bindtap="refresh">重新读取</button></view><view wx:elif="{{!rows.length && !pending.length}}" class="s-empty">还没有项目，可以新购一本书，或接受家人的邀请。</view><button wx:if="{{!loggedIn && !busy}}" class="s-button" bindtap="login">微信登录</button></view><view class="s-dock"><button class="s-button secondary" bindtap="purchase">新购一本书</button></view>
-
+  <view class="s-page projects-page">
+    <view class="s-title">{{switching ? '切换项目' : '我的项目'}}</view>
+    <view class="s-muted">购买与参与的故事书，都在这里。</view>
+    <view class="projects-list">
+      <button wx:for="{{rows}}" wx:key="projectId" class="project-card" data-id="{{item.projectId}}" bindtap="choose">
+        <view class="s-grow">
+          <view class="project-card__title">{{item.bookTitle}}</view>
+          <view class="project-card__meta">{{item.projectId === selected ? '当前项目' : item.origin === 'invited' ? '参与的项目' : '购买的项目'}}</view>
+        </view>
+        <text class="s-arrow">›</text>
+      </button>
+      <button wx:for="{{pending}}" wx:key="id" class="project-card" data-id="{{item.id}}" bindtap="payment">
+        <view class="s-grow">
+          <view class="project-card__title">{{item.bookTitle}}</view>
+          <view class="project-card__meta">购买待完成</view>
+        </view>
+        <text class="s-arrow">›</text>
+      </button>
+    </view>
+    <view wx:if="{{status}}" class="s-error">{{status}}<button class="s-link" bindtap="refresh">重新读取</button></view>
+    <view wx:elif="{{!rows.length && !pending.length}}" class="s-empty">还没有项目，可以新购一本书，或接受家人的邀请。</view>
+    <button wx:if="{{!loggedIn && !busy}}" class="s-button" bindtap="login">微信登录</button>
+  </view>
+  <view class="s-dock"><button class="s-button secondary" bindtap="purchase">新购一本书</button></view>
 </block>
