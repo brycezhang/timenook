@@ -1,3 +1,4 @@
+import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
 import { TERMS_VERSION } from "../src/identity/project-members";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import sharp from "sharp";
@@ -63,7 +64,7 @@ class AsrObjects extends LocalProbeObjects {
   }
 }
 const fixtureOptions = () => ({
-  wechatFetch,
+  wechatFetch: withWechatProfile(wechatFetch),
   paymentFetch,
   aiFetch,
   recordingObjects: new AsrObjects(root),
@@ -188,7 +189,7 @@ async function login(who = randomUUID(), target = app) {
   const r = await target.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code: `${who}:${randomUUID()}` },
+    payload: { ...phoneLogin(), code: `${who}:${randomUUID()}` },
   });
   assert.equal(r.statusCode, 201, r.body);
   return {

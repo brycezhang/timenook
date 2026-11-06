@@ -185,28 +185,9 @@ Page({
       if (generation === this.generation) this.setData({ busy: false });
     }
   },
-  async login() {
-    if (this.data.busy || !this.entryId) return;
-    const generation = ++this.generation;
-    if (this.expiry) clearTimeout(this.expiry);
-    this.setData({
-      entry: null,
-      busy: true,
-      loggedIn: false,
-      status: "正在登录",
-    });
-    try {
-      await this.clearPlayback();
-      await clearStoryAudio();
-      await sessionClient.login();
-      if (generation === this.generation && this.active) await this.refresh();
-    } catch (error) {
-      if (generation === this.generation)
-        this.setData({
-          busy: false,
-          status: error instanceof Error ? error.message : "登录失败，请重试",
-        });
-    }
+  login() {
+    if (!this.data.busy && this.entryId)
+      wx.navigateTo({ url: "/pages/login/index?next=back" });
   },
   async logout() {
     this.deny("正在退出登录");

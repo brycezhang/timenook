@@ -3,6 +3,9 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { build } from "esbuild";
 
+const phoneEvent = {
+  detail: { code: "synthetic-phone-code", errMsg: "getPhoneNumber:ok" },
+};
 const base = "https://example.test/api/v1";
 const projectId = "33333333-3333-4333-8333-333333333333";
 const session = {
@@ -52,6 +55,10 @@ async function harness(
       redirectTo: ({ url }: { url: string }) => routes.push(url),
       reLaunch: ({ url }: { url: string }) => routes.push(url),
       pageScrollTo: () => {},
+      onNeedPrivacyAuthorization: () => {},
+      offNeedPrivacyAuthorization: () => {},
+      requirePrivacyAuthorize: () => {},
+      openPrivacyContract: () => {},
       login: (options: any) =>
         options.success({ code: "synthetic-device-code" }),
       request(options: any) {
@@ -176,7 +183,10 @@ test("home offers standalone login without opening checkout", async () => {
 test("standalone login returns home without orders or payment", async () => {
   const h = await harness("login", [], false, true);
   h.page.onLoad({});
-  const pending = h.page.login();
+  h.page.showAgreement();
+  h.page.toggleAgreed();
+  h.page.agree();
+  const pending = h.page.login(phoneEvent);
   h.page.onHide();
   await Promise.resolve();
   h.finishLogin();
@@ -193,7 +203,10 @@ test("new purchase authenticates on its own page and preserves the draft", async
   assert.equal(route.pathname, "/pages/login/index");
   const login = await harness("login", [], false);
   login.page.onLoad(Object.fromEntries(route.searchParams));
-  await login.page.login();
+  login.page.showAgreement();
+  login.page.toggleAgreed();
+  login.page.agree();
+  await login.page.login(phoneEvent);
   const destination = new URL(login.routes[0], "https://example.test");
   assert.equal(destination.pathname, "/pages/purchase/index");
   assert.equal(destination.searchParams.get("bookTitle"), "妈妈 & 回忆");
@@ -234,8 +247,9 @@ test("My provides project, new purchase and terms entries without loading privat
   const h = await harness("account", [], false);
   await h.page.onShow();
   assert.equal(h.page.data.loggedIn, false);
-  await h.page.login();
-  assert.equal(h.page.data.loggedIn, true);
+  h.page.login();
+  assert.deepEqual(h.routes, ["/pages/login/index?next=account"]);
+  h.routes.length = 0;
   h.page.projects();
   h.page.purchase();
   h.page.terms();
@@ -247,12 +261,46 @@ test("My provides project, new purchase and terms entries without loading privat
   assert.ok(!h.requests.includes("/participations"));
 });
 test("native login completes through background and foreground without a second click", async () => {
-  const h = await harness("account", [], false, true);
-  const pending = h.page.login();
+  const h = await harness("login", [], false, true);
+  h.page.onLoad({ next: "account" });
+  h.page.showAgreement();
+  h.page.toggleAgreed();
+  h.page.agree();
+  const pending = h.page.login(phoneEvent);
   h.page.onHide();
-  await h.page.onShow();
+  await Promise.resolve();
   h.finishLogin();
   await pending;
-  assert.equal(h.page.data.loggedIn, true);
+  assert.deepEqual(h.routes, ["/pages/account/index"]);
   assert.equal(h.page.data.busy, false);
+});
+
+test("phone login is blocked until the user explicitly accepts the agreement popup", async () => {
+  const h = await harness("login", [], false);
+  h.page.onLoad({});
+  await h.page.login(phoneEvent);
+  assert.equal(h.page.data.agreementVisible, true);
+  assert.equal(h.page.data.agreed, false);
+  h.page.agree();
+  assert.equal(h.page.data.termsAccepted, false);
+  assert.deepEqual(h.requests, []);
+  h.page.toggleAgreed();
+  h.page.agree();
+  assert.equal(h.page.data.termsAccepted, true);
+  await h.page.login({ detail: { errMsg: "getPhoneNumber:fail user deny" } });
+  assert.deepEqual(h.requests, []);
+  assert.match(h.page.data.status, /需要授权手机号/);
+  await h.page.login(phoneEvent);
+  assert.deepEqual(h.requests, ["/sessions/wechat"]);
+});
+
+test("declining the agreement leaves the user logged out and never requests a phone number", async () => {
+  const h = await harness("login", [], false);
+  h.page.onLoad({});
+  h.page.showAgreement();
+  h.page.toggleAgreed();
+  h.page.decline();
+  assert.equal(h.page.data.termsAccepted, false);
+  assert.equal(h.page.data.agreed, false);
+  assert.deepEqual(h.requests, []);
 });

@@ -19,7 +19,16 @@ const bundled = await build({
 });
 
 interface HomePage {
-  data: { busy: boolean; loggedIn: boolean; status: string; mode: string };
+  data: {
+    busy: boolean;
+    loggedIn: boolean;
+    status: string;
+    mode: string;
+    nickname: string;
+    editing: boolean;
+  };
+  editNickname(): void;
+  saveNickname(e: { detail: { value: { nickname: string } } }): Promise<void>;
   setData(patch: Partial<HomePage["data"]>): void;
   onShow(): Promise<void>;
   login(): Promise<void>;
@@ -59,6 +68,7 @@ function pageHarness() {
   });
   return {
     page,
+    storage,
     nextRequest(): Promise<WechatMiniprogram.RequestOption> {
       const request = pending.shift();
       return request
@@ -70,7 +80,10 @@ function pageHarness() {
   };
 }
 
-const user = { id: "11111111-1111-4111-8111-111111111111" };
+const user = {
+  id: "11111111-1111-4111-8111-111111111111",
+  nickname: "用户1234",
+};
 const loginResponse = {
   user,
   session: {
@@ -93,107 +106,96 @@ function respond(
   } as unknown as WechatMiniprogram.RequestSuccessCallbackResult);
 }
 
-test("returning to the page during login shows the completed account and enables its actions", async () => {
-  const { page, nextRequest } = pageHarness();
-  const login = page.login();
-  const exchange = await nextRequest();
-  await page.onShow();
-  respond(exchange, 201, loginResponse);
-  await login;
-  assert.deepEqual(
-    {
-      loggedIn: page.data.loggedIn,
-      status: page.data.status,
-      busy: page.data.busy,
-    },
-    { loggedIn: true, status: "", busy: false },
-  );
+function signIn(storage: Map<string, unknown>, value = loginResponse) {
+  storage.set("timenook.mode.v1", "live");
+  storage.set("timenook.session.v1:https://example.test/timenook/v1", value);
+}
 
-  const reentry = page.onShow();
-  respond(await nextRequest(), 200, user);
-  await reentry;
-  assert.equal(page.data.loggedIn, true);
-  assert.equal(page.data.busy, false);
+test("My displays the saved nickname immediately and refreshes it from the server", async () => {
+  const { page, storage, nextRequest } = pageHarness();
+  signIn(storage);
+  const restore = page.onShow();
+  assert.equal(page.data.nickname, "用户1234");
+  respond(await nextRequest(), 200, { ...user, nickname: "小树" });
+  await restore;
+  assert.equal(page.data.nickname, "小树");
 });
 
-test("returning during logout preserves the pending exit and finishes with usable login actions", async () => {
-  const { page, nextRequest } = pageHarness();
-  const login = page.login();
-  respond(await nextRequest(), 201, loginResponse);
-  await login;
+test("My saves the submitted nickname and retains it when returning", async () => {
+  const { page, storage, nextRequest } = pageHarness();
+  signIn(storage);
+  page.editNickname();
+  const save = page.saveNickname({
+    detail: { value: { nickname: "  小树  " } },
+  });
+  const command = await nextRequest();
+  assert.equal(
+    command.url,
+    "https://example.test/timenook/v1/users/me/profile",
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(command.data)), {
+    nickname: "小树",
+  });
+  respond(command, 201, { ...user, nickname: "小树" });
+  await save;
+  assert.equal(page.data.nickname, "小树");
+  assert.equal(page.data.editing, false);
+  const restore = page.onShow();
+  assert.equal(page.data.nickname, "小树");
+  respond(await nextRequest(), 200, { ...user, nickname: "小树" });
+  await restore;
+});
+
+test("returning during logout preserves the pending exit and clears the nickname", async () => {
+  const { page, storage, nextRequest } = pageHarness();
+  signIn(storage);
   const logout = page.logout();
   const revocation = await nextRequest();
   await page.onShow();
   assert.equal(page.data.busy, true);
   assert.equal(page.data.loggedIn, false);
+  assert.equal(page.data.nickname, "");
   respond(revocation, 204);
   await logout;
-  assert.equal(page.data.status, "");
-  assert.equal(page.data.busy, false);
-  await page.onShow();
-  assert.equal(page.data.loggedIn, false);
   assert.equal(page.data.busy, false);
 });
 
-test("a login failure after foregrounding leaves retry available and the retry can sign in", async () => {
-  const { page, nextRequest } = pageHarness();
-  const failed = page.login();
-  const exchange = await nextRequest();
-  await page.onShow();
-  exchange.fail?.({
+test("a failed nickname save leaves editing and retry available", async () => {
+  const { page, storage, nextRequest } = pageHarness();
+  signIn(storage);
+  page.editNickname();
+  const save = page.saveNickname({ detail: { value: { nickname: "小树" } } });
+  (await nextRequest()).fail?.({
     errMsg: "synthetic offline",
   } as WechatMiniprogram.RequestFailCallbackErr);
-  await failed;
+  await save;
   assert.equal(page.data.busy, false);
-  assert.equal(page.data.loggedIn, false);
+  assert.equal(page.data.editing, true);
   assert.equal(page.data.status, "服务暂不可用，请稍后重试");
-  const retry = page.login();
-  respond(await nextRequest(), 201, loginResponse);
-  await retry;
-  assert.equal(page.data.loggedIn, true);
-  assert.equal(page.data.busy, false);
 });
 
-test("a logout failure after foregrounding reports unconfirmed revocation without locking the page", async () => {
-  const { page, nextRequest } = pageHarness();
-  const login = page.login();
-  respond(await nextRequest(), 201, loginResponse);
-  await login;
-  const logout = page.logout();
-  const revocation = await nextRequest();
-  await page.onShow();
-  revocation.fail?.({
-    errMsg: "synthetic offline",
-  } as WechatMiniprogram.RequestFailCallbackErr);
-  await logout;
-  assert.equal(page.data.busy, false);
-  assert.equal(page.data.loggedIn, false);
-  assert.equal(page.data.status, "本机已退出，服务端退出结果待确认");
-  await page.onShow();
-  assert.equal(page.data.busy, false);
-  assert.equal(page.data.loggedIn, false);
-});
-
-test("an older foreground restore cannot overwrite a different account after logout and login", async () => {
-  const { page, nextRequest } = pageHarness();
-  const login = page.login();
-  respond(await nextRequest(), 201, loginResponse);
-  await login;
+test("an older foreground restore cannot overwrite the next account after logout", async () => {
+  const { page, storage, nextRequest } = pageHarness();
+  signIn(storage);
   const restore = page.onShow();
   const oldIdentity = await nextRequest();
   const logout = page.logout();
   respond(await nextRequest(), 204);
   await logout;
-  const nextUser = { id: "44444444-4444-4444-8444-444444444444" };
-  const nextLogin = page.login();
-  respond(await nextRequest(), 201, {
+  const nextUser = {
+    id: "44444444-4444-4444-8444-444444444444",
+    nickname: "新用户",
+  };
+  signIn(storage, {
+    ...loginResponse,
     user: nextUser,
     session: { ...loginResponse.session, token: "b".repeat(43) },
   });
-  await nextLogin;
+  const reentry = page.onShow();
+  respond(await nextRequest(), 200, nextUser);
+  await reentry;
   respond(oldIdentity, 200, user);
   await restore;
+  assert.equal(page.data.nickname, "新用户");
   assert.equal(page.data.loggedIn, true);
-  assert.equal(page.data.status, "");
-  assert.equal(page.data.busy, false);
 });

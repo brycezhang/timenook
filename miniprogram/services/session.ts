@@ -3,6 +3,7 @@ import type {
   ApiErrorResponse,
   ApiResponse,
   LoginResult,
+  WechatLoginProfile,
 } from "../../packages/contracts/src";
 import { dataMode, setDataMode } from "./mode";
 import { API_BASE_URL } from "../config";
@@ -114,6 +115,9 @@ export class SessionClient {
     const result = await this.request<Account>("/users/me");
     if (!account(result) || result.id !== stored.user.id)
       throw new ApiFailure("INVALID_RESPONSE");
+    if (this.stored()?.session.token !== stored.session.token)
+      throw new ApiFailure("STALE_RESPONSE");
+    wx.setStorageSync(this.storageKey, { ...stored, user: result });
     return result;
   }
   async logout(): Promise<void> {
@@ -398,7 +402,10 @@ export class SessionClient {
       throw new ApiFailure("STALE_RESPONSE");
   }
 
-  async login(expectedUserId?: string): Promise<LoginResult> {
+  async login(
+    profile: WechatLoginProfile,
+    expectedUserId?: string,
+  ): Promise<LoginResult> {
     if (this.cookie) throw new ApiFailure("WEB_LOGIN_REQUIRED", 401);
     const generation = ++this.generation;
     setDataMode("live");
@@ -417,6 +424,8 @@ export class SessionClient {
     this.assertCurrent(generation);
     const result = await this.send<LoginResult>("/sessions/wechat", "POST", {
       code,
+      termsVersion: profile.termsVersion,
+      phoneCode: profile.phoneCode,
       ...(expectedUserId ? { expectedUserId } : {}),
     });
     if (
@@ -440,6 +449,27 @@ export class SessionClient {
     wx.setStorageSync(this.storageKey, result);
     this.invalidatedToken = null;
     return result;
+  }
+
+  async updateNickname(nickname: string): Promise<Account> {
+    const owner = this.stored();
+    const result = await this.request<Account>("/users/me/profile", {
+      data: { nickname },
+      key: "profile",
+    });
+    if (!account(result)) throw new ApiFailure("INVALID_RESPONSE");
+    const stored = this.stored();
+    if (
+      stored &&
+      stored.session.token === owner?.session.token &&
+      stored.user.id === result.id
+    )
+      wx.setStorageSync(this.storageKey, { ...stored, user: result });
+    return result;
+  }
+
+  nickname(): string {
+    return this.stored()?.user.nickname ?? "";
   }
 
   private send<T>(

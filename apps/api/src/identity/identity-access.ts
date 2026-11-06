@@ -11,9 +11,13 @@ import {
 } from "@nestjs/common";
 import { Prisma, PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
-import type { Account, LoginResult } from "@timenook/contracts";
+import type {
+  Account,
+  LoginResult,
+  WechatLoginProfile,
+} from "@timenook/contracts";
 import { API_CONFIG, ApiConfig } from "../config";
-import { exchangeCode } from "./wechat";
+import { exchangeCode, exchangePhoneCode, wechatAccessToken } from "./wechat";
 import { acceptTermsIn } from "./project-members";
 
 export const WECHAT_FETCH = Symbol("WECHAT_FETCH");
@@ -58,6 +62,7 @@ export class IdentityAccess implements OnModuleDestroy {
   private readonly database: PrismaClient;
   private readonly redis: Redis;
   private connection?: Promise<void>;
+  private accessToken?: Promise<{ token: string; expiresAt: number }>;
 
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
@@ -122,9 +127,27 @@ export class IdentityAccess implements OnModuleDestroy {
   async login(
     code: string,
     source: string,
+    profile: WechatLoginProfile,
     expectedUserId?: string,
   ): Promise<LoginResult> {
     const { appId, openId } = await this.proveWechat(code, source);
+    if (this.accessToken && (await this.accessToken).expiresAt <= Date.now())
+      this.accessToken = undefined;
+    this.accessToken ??= wechatAccessToken(
+      this.config.wechat!,
+      this.wechatFetch,
+    ).catch((error) => {
+      this.accessToken = undefined;
+      throw error;
+    });
+    const { token: accessToken } = await this.accessToken;
+    const phoneNumber = await exchangePhoneCode(
+      accessToken,
+      profile.phoneCode,
+      openId,
+      appId,
+      this.wechatFetch,
+    );
     const token = randomBytes(32).toString("base64url");
     const session = await this.database.$transaction(async (transaction) => {
       // Serialize first-account creation for the same WeChat identity across processes.
@@ -147,14 +170,17 @@ export class IdentityAccess implements OnModuleDestroy {
         });
         if (pairing) throw new ConflictException();
         const user = await transaction.user.create({
-          data: { id: randomUUID() },
+          data: { id: randomUUID(), nickname: `用户${phoneNumber.slice(-4)}` },
         });
         stored = await transaction.wechatIdentity.create({
           data: { appId, openId, userId: user.id },
         });
       }
+      // Preserve a nickname edited concurrently by another owned session.
+      await transaction.$executeRaw`UPDATE users SET phone_number=${phoneNumber}, nickname=COALESCE(nickname, ${`用户${phoneNumber.slice(-4)}`}) WHERE id=${stored.userId}::uuid`;
       await acceptTermsIn(transaction, stored.userId, "wechat_login");
       return transaction.session.create({
+        include: { user: { select: { nickname: true } } },
         data: {
           id: randomUUID(),
           userId: stored.userId,
@@ -166,7 +192,7 @@ export class IdentityAccess implements OnModuleDestroy {
       });
     });
     return {
-      user: { id: session.userId },
+      user: { id: session.userId, nickname: session.user.nickname },
       session: {
         id: session.id,
         token,
@@ -187,6 +213,7 @@ export class IdentityAccess implements OnModuleDestroy {
       await transaction.$queryRaw`SELECT id FROM sessions WHERE token_hash=${tokenHash} FOR SHARE`;
     const session = await (transaction ?? this.database).session.findUnique({
       where: { tokenHash },
+      include: { user: { select: { nickname: true } } },
     });
     if (
       !session ||
@@ -194,7 +221,21 @@ export class IdentityAccess implements OnModuleDestroy {
       session.expiresAt.getTime() <= Date.now()
     )
       throw new UnauthorizedException();
-    return { id: session.userId };
+    return { id: session.userId, nickname: session.user.nickname };
+  }
+
+  async updateNickname(
+    nickname: string,
+    authorization?: string,
+  ): Promise<Account> {
+    return this.database.$transaction(async (tx) => {
+      const account = await this.current(authorization, tx);
+      return tx.user.update({
+        where: { id: account.id },
+        data: { nickname },
+        select: { id: true, nickname: true },
+      });
+    });
   }
 
   async revoke(sessionId: string, authorization?: string): Promise<void> {

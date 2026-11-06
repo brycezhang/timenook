@@ -1,3 +1,4 @@
+import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
 import { TERMS_VERSION } from "../src/identity/project-members";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { installPrivacyFailureDiagnostic } from "./privacy-failure-diagnostic";
@@ -285,7 +286,7 @@ export async function startBookFixture() {
   }
   const aiFetch: typeof fetch = (...args) => providerTransport(...args);
   fixtureOptions = {
-    wechatFetch,
+    wechatFetch: withWechatProfile(wechatFetch),
     paymentFetch,
     aiFetch,
     recordingObjects: new Objects(root),
@@ -330,7 +331,7 @@ export async function login(who = randomUUID(), target = app) {
   const r = await target.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code: `${who}:${randomUUID()}` },
+    payload: { ...phoneLogin(), code: `${who}:${randomUUID()}` },
   });
   assert.equal(r.statusCode, 201, r.body);
   return {

@@ -1,3 +1,4 @@
+import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
 import { TERMS_VERSION } from "../src/identity/project-members";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
@@ -429,7 +430,10 @@ test("ordinary merchant signed notifications and active queries share durable pa
   };
   let app: Awaited<ReturnType<typeof createApplication>> | undefined;
   try {
-    app = await createAdminApplication(cfg, { paymentFetch, wechatFetch });
+    app = await createAdminApplication(cfg, {
+      paymentFetch,
+      wechatFetch: withWechatProfile(wechatFetch),
+    });
     const origin = { origin: cfg.web!.origin, "x-timenook-web": "1" };
     const webLogin = await app.inject({
       method: "POST",
@@ -484,14 +488,14 @@ test("ordinary merchant signed notifications and active queries share durable pa
       const response = await app!.inject({
         method: "POST",
         url: "/v1/sessions/wechat",
-        payload: { code: code(openId) },
+        payload: { ...phoneLogin(), code: code(openId) },
       });
       assert.equal(response.statusCode, 201, response.body);
       return response.json().data;
     };
     const buyer = await login("isolated-buyer"),
       stranger = await login("isolated-stranger");
-    assert.deepEqual(buyer.user, webActor.user);
+    assert.deepEqual(buyer.user, { ...webActor.user, nickname: "用户1234" });
     const auth = { authorization: `Bearer ${buyer.session.token}` };
     const snapshot = JSON.parse(
       readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
@@ -791,7 +795,10 @@ test("ordinary merchant signed notifications and active queries share durable pa
     );
     assert.equal(await db.refundInbox.count(), 1);
     await app.close();
-    app = await createAdminApplication(cfg, { paymentFetch, wechatFetch });
+    app = await createAdminApplication(cfg, {
+      paymentFetch,
+      wechatFetch: withWechatProfile(wechatFetch),
+    });
     assert.equal(
       (await notify("payments", transaction, "ordinary-payment")).statusCode,
       204,

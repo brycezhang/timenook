@@ -15,12 +15,17 @@ Page({
   token: "",
   generation: 0,
   joining: false,
+  resumeJoin: false,
   onLoad(q) {
     this.token = q.token ?? "";
     setDataMode("live");
   },
   async onShow() {
     if (this.joining) return;
+    if (this.resumeJoin) {
+      this.resumeJoin = false;
+      if (sessionClient.context()) return this.accept();
+    }
     const n = ++this.generation;
     this.setData({
       busy: true,
@@ -46,10 +51,14 @@ Page({
   },
   async accept() {
     if (this.data.busy || !this.data.invitation) return;
+    if (!sessionClient.context()) {
+      this.resumeJoin = true;
+      go("login", "next=back");
+      return;
+    }
     this.joining = true;
     this.setData({ busy: true, status: "" });
     try {
-      if (!sessionClient.context()) await sessionClient.login();
       const joined = await participationClient.apply(
         this.token,
         this.data.invitation.noticeVersion,

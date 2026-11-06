@@ -1,3 +1,4 @@
+import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -71,13 +72,15 @@ before(async () => {
   await bootPrivacyFixture(config);
   app = await createAdminApplication(config, {
     paymentFetch,
-    wechatFetch: async (input) =>
-      new Response(
-        JSON.stringify({
-          openid: new URL(String(input)).searchParams.get("js_code"),
-          session_key: "synthetic",
-        }),
-      ),
+    wechatFetch: withWechatProfile(
+      async (input) =>
+        new Response(
+          JSON.stringify({
+            openid: new URL(String(input)).searchParams.get("js_code"),
+            session_key: "synthetic",
+          }),
+        ),
+    ),
   });
   operator = await paymentAdmin(config, app, [
     "catalog:read",
@@ -101,7 +104,7 @@ async function login() {
   const response = await app.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code: randomUUID() },
+    payload: { ...phoneLogin(), code: randomUUID() },
   });
   assert.equal(response.statusCode, 201, response.body);
   return response.json().data;
@@ -227,7 +230,10 @@ test("one-fen checkout is server-priced and cannot be obtained by another buyer 
   );
   const disabled = await createAdminApplication(
     { ...config, checkoutE2e: undefined } as ApiConfig,
-    { paymentFetch, wechatFetch: async () => new Response("{}") },
+    {
+      paymentFetch,
+      wechatFetch: withWechatProfile(async () => new Response("{}")),
+    },
   );
   try {
     assert.equal(

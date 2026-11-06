@@ -1,2 +1,24 @@
-<view class="s-page"><image class="login-photo" src="/assets/home-family.jpg" mode="aspectFill"/><view class="s-title s-space">让故事有个家</view><view class="s-muted s-space">登录后，接着记录和制作。</view><view wx:if="{{status}}" class="s-error s-space">{{status}}</view></view>
-<view class="s-dock"><view class="s-term">点击微信登录，即表示同意<text bindtap="terms">《使用条款》</text></view><button class="s-button" bindtap="login" loading="{{busy}}" disabled="{{busy}}">微信登录</button><button class="s-link" bindtap="cancel" disabled="{{busy}}">暂不登录</button></view>
+<view class="s-page login-page">
+ <image class="login-photo" src="/assets/home-family.jpg" mode="aspectFill"/>
+ <view class="s-title s-space">让故事有个家</view>
+ <view class="s-muted s-space">登录后，接着记录和制作。</view>
+ <view class="s-muted s-space">使用微信绑定的手机号快捷登录，昵称自动生成，之后可在「我的」里修改。</view>
+ <view wx:if="{{status}}" class="s-error s-space">{{status}}</view>
+</view>
+<view class="s-dock">
+ <button wx:if="{{termsAccepted}}" class="s-button" open-type="getPhoneNumber|agreePrivacyAuthorization" bindgetphonenumber="login" loading="{{busy}}" disabled="{{busy}}">微信手机号快捷登录</button>
+ <button wx:else class="s-button" bindtap="showAgreement">微信手机号快捷登录</button>
+ <view class="s-term">登录前请阅读并同意<text bindtap="terms">《使用条款》</text>和<text bindtap="privacy">《隐私保护指引》</text></view>
+ <button class="s-link" bindtap="cancel" disabled="{{busy}}">暂不登录</button>
+</view>
+<view wx:if="{{agreementVisible}}" class="agreement-mask" catchtouchmove="preventMove">
+ <view class="agreement-sheet" role="dialog" aria-modal="true" aria-label="登录协议与隐私保护">
+  <view class="s-subtitle">登录协议与隐私保护</view>
+  <view class="s-muted s-space">为提供账号与项目服务，我们需要获取您的微信身份和手机号。手机号不公开展示。</view>
+  <view class="s-term s-space">请阅读<text bindtap="terms">《使用条款》</text>和<text bindtap="privacy">《隐私保护指引》</text></view>
+  <button class="agreement-check" bindtap="toggleAgreed" aria-role="checkbox" aria-checked="{{agreed}}"><text class="check-box {{agreed ? 'checked' : ''}}">{{agreed ? '✓' : ''}}</text><text>我已阅读并同意上述协议</text></button>
+  <button id="login-agree" class="s-button" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="agree" disabled="{{!agreed}}">同意并继续</button>
+  <button class="s-link" bindtap="decline">暂不同意</button>
+  <view wx:if="{{status}}" class="s-error">{{status}}</view>
+ </view>
+</view>

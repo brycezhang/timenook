@@ -1,3 +1,8 @@
+import { USER_TERMS_VERSION } from "../packages/contracts/src";
+const phoneProfile = {
+  phoneCode: "synthetic-phone-code",
+  termsVersion: USER_TERMS_VERSION,
+};
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { createRequire } from "node:module";
@@ -87,9 +92,12 @@ beforeEach(() => {
 
 test("mini program exchanges wx.login code using the prefixed API and stores identity separately", async () => {
   const client = new SessionClient(api);
-  assert.deepEqual(await client.login(), identity);
+  assert.deepEqual(await client.login(phoneProfile), identity);
   assert.equal(requests[0].url, `${api}/sessions/wechat`);
-  assert.deepEqual(requests[0].data, { code: "synthetic-device-code" });
+  assert.deepEqual(requests[0].data, {
+    code: "synthetic-device-code",
+    ...phoneProfile,
+  });
   assert.equal(requests[0].header?.authorization, undefined);
   assert.deepEqual(storage.get("timenook.frontend.v1"), {
     privateDemo: "unchanged",
@@ -99,7 +107,7 @@ test("mini program exchanges wx.login code using the prefixed API and stores ide
 
 test("stored sessions restore through the server and logout invalidates local identity", async () => {
   const client = new SessionClient(api);
-  await client.login();
+  await client.login(phoneProfile);
   reply = (request) =>
     success(
       request,
@@ -132,14 +140,14 @@ test("a late login cannot resurrect a logged out user and an old 401 cannot clea
   reply = (request) => {
     held = request;
   };
-  const pending = client.login();
+  const pending = client.login(phoneProfile);
   await Promise.resolve();
   await client.logout();
   success(held, 201, envelope(identity));
   await assert.rejects(pending, { code: "STALE_RESPONSE" });
   assert.equal(await client.restore(), null);
   reply = (request) => success(request, 201, envelope(identity));
-  await client.login();
+  await client.login(phoneProfile);
   reply = (request) => {
     held = request;
   };
@@ -151,7 +159,7 @@ test("a late login cannot resurrect a logged out user and an old 401 cannot clea
     session: { ...identity.session, token: "b".repeat(43) },
   };
   reply = (request) => success(request, 201, envelope(other));
-  await client.login();
+  await client.login(phoneProfile);
   success(old, 401, {
     error: { code: "UNAUTHENTICATED", message: "expired", retryable: false },
     meta: envelope(null).meta,
@@ -172,7 +180,7 @@ test("live mode blocks demo reads and simulated purchase even after network fail
     request.fail?.({
       errMsg: "synthetic offline",
     } as WechatMiniprogram.RequestFailCallbackErr);
-  await assert.rejects(client.login(), { code: "NETWORK_ERROR" });
+  await assert.rejects(client.login(phoneProfile), { code: "NETWORK_ERROR" });
   assert.equal(storage.get("timenook.mode.v1"), "live");
   assert.throws(() => start("妈妈"), /演示/);
   assert.throws(() => list(), /演示/);
@@ -189,7 +197,7 @@ test("unconfigured, insecure and malformed replies cannot persist a session", as
     "http://example.test/v1",
     "https://example.test/v1?secret=bad",
   ]) {
-    await assert.rejects(new SessionClient(base).login(), {
+    await assert.rejects(new SessionClient(base).login(phoneProfile), {
       code: "NOT_CONFIGURED",
     });
   }
@@ -201,7 +209,9 @@ test("unconfigured, insecure and malformed replies cannot persist a session", as
   ]) {
     reply = (request) => success(request, 201, envelope(data));
     const client = new SessionClient(api);
-    await assert.rejects(client.login(), { code: "INVALID_RESPONSE" });
+    await assert.rejects(client.login(phoneProfile), {
+      code: "INVALID_RESPONSE",
+    });
     assert.equal(await client.restore(), null);
   }
 });
@@ -213,9 +223,9 @@ test("latest concurrent login wins and responses from an old account cannot be c
     if (request.method === "DELETE") success(request, 204, null);
     else held.push(request);
   };
-  const first = client.login();
+  const first = client.login(phoneProfile);
   await Promise.resolve();
-  const second = client.login();
+  const second = client.login(phoneProfile);
   await Promise.resolve();
   const other = {
     ...identity,
@@ -237,7 +247,7 @@ test("latest concurrent login wins and responses from an old account cannot be c
 
 test("401 clears the current session while network errors preserve it and never fake success", async () => {
   const client = new SessionClient(api);
-  await client.login();
+  await client.login(phoneProfile);
   reply = (request) =>
     request.fail?.({
       errMsg: "synthetic offline",
@@ -262,7 +272,7 @@ test("an unauthorized private photo download crossing local expiresAt clears the
   let now = Date.parse(identity.session.expiresAt) - 1;
   t.mock.method(Date, "now", () => now);
   const client = new SessionClient(api);
-  await client.login();
+  await client.login(phoneProfile);
   const photoId = "55555555-5555-4555-8555-555555555555";
   const pending = client.downloadPhoto(
     identity.user.id,
@@ -305,7 +315,7 @@ test("an in-flight upload 401 at local expiresAt invalidates its owned identity 
   t.mock.method(Date, "now", () => now);
   const client = new SessionClient(api),
     events: string[] = [];
-  await client.login();
+  await client.login(phoneProfile);
   client.onInvalidated((context) => events.push(context));
   const pending = client.uploadPhoto(uploadForm, "pending-original");
   assert.equal(uploads.length, 1);
@@ -345,7 +355,7 @@ for (const transport of ["request", "download", "upload"] as const) {
     t.mock.method(Date, "now", () => now);
     const client = new SessionClient(api),
       events: string[] = [];
-    await client.login();
+    await client.login(phoneProfile);
     client.onInvalidated((context) => events.push(context));
     reply = () => {};
     const pending =
@@ -369,7 +379,7 @@ for (const transport of ["request", "download", "upload"] as const) {
       },
     };
     reply = (request) => success(request, 201, envelope(other));
-    await client.login();
+    await client.login(phoneProfile);
     now = Date.parse(identity.session.expiresAt);
     if (transport === "request") {
       success(held, 401, {
@@ -406,7 +416,7 @@ test("a previous account's delayed photo-download 401 cannot clear the newer log
   const client = new SessionClient(api);
   const invalidations: string[] = [];
   client.onInvalidated((context) => invalidations.push(context));
-  await client.login();
+  await client.login(phoneProfile);
   const pending = client.downloadPhoto(
     identity.user.id,
     identity.session.id,
@@ -422,7 +432,7 @@ test("a previous account's delayed photo-download 401 cannot clear the newer log
     },
   };
   reply = (request) => success(request, 201, envelope(other));
-  await client.login();
+  await client.login(phoneProfile);
   failSessionRemoval = true;
   downloadSuccess(downloads[0], {
     statusCode: 401,
@@ -439,7 +449,7 @@ test("a previous account's delayed photo-download 401 cannot clear the newer log
 test("session invalidation delivers the download result despite a failed view listener and unsubscribe is idempotent", async () => {
   const client = new SessionClient(api),
     events: string[] = [];
-  await client.login();
+  await client.login(phoneProfile);
   const stop = client.onInvalidated(() => events.push("detached"));
   stop();
   stop();
@@ -467,7 +477,7 @@ test("a failed device session removal cannot reuse the rejected token and a succ
   const client = new SessionClient(api),
     photo = "55555555-5555-4555-8555-555555555555",
     asset = "66666666-6666-4666-8666-666666666666";
-  await client.login();
+  await client.login(phoneProfile);
   const pending = client.downloadPhoto(
     identity.user.id,
     identity.session.id,
@@ -508,7 +518,10 @@ test("a failed device session removal cannot reuse the rejected token and a succ
   );
   assert.equal(requests.length, count);
   assert.equal(downloads.length, 1);
-  await assert.rejects(client.login(), /device session storage unavailable/);
+  await assert.rejects(
+    client.login(phoneProfile),
+    /device session storage unavailable/,
+  );
   assert.equal(client.context(), "");
   assert.equal(client.sessionCleanupPending(), true);
   assert.equal(requests.length, count);
@@ -522,7 +535,7 @@ test("a failed device session removal cannot reuse the rejected token and a succ
   assert.equal(client.context(), "");
   assert.equal(storage.has(`timenook.session.v1:${api}`), false);
   reply = (request) => success(request, 201, envelope(other));
-  await client.login();
+  await client.login(phoneProfile);
   assert.equal(client.sessionCleanupPending(), false);
   assert.deepEqual(storage.get(`timenook.session.v1:${api}`), other);
   reply = (request) => success(request, 200, envelope(other.user));
@@ -539,7 +552,7 @@ for (const outcome of [
     t.mock.method(Date, "now", () => now);
     const client = new SessionClient(api),
       events: string[] = [];
-    await client.login();
+    await client.login(phoneProfile);
     client.onInvalidated((owner) => events.push(owner));
     reply = () => {};
     const pending = client.request("/users/me"),
@@ -588,7 +601,7 @@ test("bodyless logout revokes the session through a real HTTP JSON parser", asyn
   await server.ready();
   try {
     const client = new SessionClient(api);
-    await client.login();
+    await client.login(phoneProfile);
     reply = (request) => {
       void server
         .inject({
@@ -621,7 +634,7 @@ test("bodyless logout revokes the session through a real HTTP JSON parser", asyn
 
 test("private downloads use an owned writable file and normalize the native filePath result", async () => {
   const c = new SessionClient(api);
-  await c.login();
+  await c.login(phoneProfile);
   const pending = c.downloadBook(identity.user.id, identity.session.id);
   const request = downloads[0];
   assert.ok(request.filePath?.startsWith("/user-data/timenook-private-"));

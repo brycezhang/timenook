@@ -1,3 +1,4 @@
+import { withWechatProfile } from "./wechat-profile-fixture";
 import { readFile } from "node:fs/promises";
 import { createApplication } from "../src/application";
 import { launchProductionWorker } from "../src/tasks/worker";
@@ -17,7 +18,7 @@ async function main() {
   }
   const options = {
     paymentFetch,
-    wechatFetch: async () => new Response("{}"),
+    wechatFetch: withWechatProfile(async () => new Response("{}")),
     recordingObjects: new Objects(config.recording!.storageRoot),
     aiFetch: async (input: string | URL | Request, init?: RequestInit) =>
       new Response(

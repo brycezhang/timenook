@@ -18,3 +18,15 @@
   width: 66rpx;
   height: 66rpx;
 }
+
+.nickname-input {
+  background: #fff;
+  border: 1rpx solid #d8d1c3;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  min-height: 64rpx;
+  font-size: 36rpx;
+}
+.profile .s-subtitle {
+  overflow-wrap: anywhere;
+}
