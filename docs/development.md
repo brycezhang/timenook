@@ -79,7 +79,7 @@ node scripts/ci/check.mjs docs BASE_COMMIT HEAD_COMMIT
 
 - `build`：完整类型检查、364 条前端行为测试、print/release 测试、所有生产构建、OpenAPI 导出、Linux Prisma 运行时检查和候选打包/验证；安装依赖后另验证耗时报告工具。
 - `api`：四个独立 runner 执行全部 API 测试文件。按固定历史耗时分组，新文件自动纳入；四组完整导出场景分散执行，其原有 35 条用例及真实 fixture 保留。全部 API runner 保留完整 Git 历史供真实恢复演练使用。
-- `browser`：两个独立 runner 执行全部管理端浏览器测试文件，各自编译 API 与 fixture；`workers: 1`、trace/screenshot/video 关闭保持。
+- `browser`：两个独立 runner 执行 `tests/admin/console/` 的独立管理后台测试（飞书登录、订单和用户管理），各自编译 API 与 fixture；`workers: 1`、trace/screenshot/video 关闭保持。2026-11-06 按用户要求移除产品网页端 CI 验收：`tests/admin/` 根目录的旧产品网页、浏览器模拟小程序以及与这些旧流程耦合的跨端场景不再由 CI 收集。它们通过 `playwright.product.config.mjs` 单独保留，未修复、未记为通过；营销官网 `website` 检查继续执行。
 - `website`：在 `full` 与 `website` 路径中复用，独立完成文档、官网类型、生产构建、全部三种视口测试、预览打包和清单校验。以官方发现结果重新核对每个 project/case，不启动数据库或 API。官网类型与生产构建还在 `build` 中验证。
 
 每个 API/浏览器 runner 有独立 PostgreSQL/Redis 服务和临时目录，文件内部沿用原 schema/key prefix 与资源隔离。固定 Node/pnpm、镜像 digest、真实数据库唯一性/锁/恢复、固定音频工具和字体均保持。Linux 自动检查不替代微信原生编译或其他人工验收。

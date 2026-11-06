@@ -3,7 +3,7 @@ import {
   feishuLogin,
   installFeishuAuthorization,
   syntheticFeishuEnv,
-} from "./feishu-fixture.mjs";
+} from "../feishu-fixture.mjs";
 import { test, expect } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
@@ -16,7 +16,7 @@ import http from "node:http";
 const apiRequire = createRequire(resolve("apps/api/package.json"));
 const { PrismaClient } = apiRequire("@prisma/client");
 const Redis = apiRequire("ioredis");
-const schema = `users_browser_${randomUUID().replaceAll("-", "")}`;
+const schema = `t07_browser_${randomUUID().replaceAll("-", "")}`;
 let privateDir;
 const apiCwd = resolve("apps/api");
 let api, vite, databaseUrl, account;
@@ -58,12 +58,9 @@ async function waitFor(url) {
 let env;
 const buyerId = randomUUID(),
   packageId = randomUUID(),
-  userIds = Array.from({ length: 121 }, () => randomUUID()),
-  projectId = randomUUID(),
-  subjectId = randomUUID(),
-  caseId = randomUUID(),
   orderIds = Array.from({ length: 121 }, () => randomUUID());
 test.beforeAll(async () => {
+  test.setTimeout(120000);
   privateDir = mkdtempSync(join(tmpdir(), "t07-browser-"));
   if (existsSync(".env")) process.loadEnvFile(".env");
   const url = new URL(process.env.DATABASE_URL);
@@ -73,7 +70,7 @@ test.beforeAll(async () => {
     ...process.env,
     NODE_ENV: "test",
     DATABASE_URL: databaseUrl,
-    API_PORT: "3458",
+    API_PORT: "3418",
     ADMIN_ORIGIN: "https://localhost:3443",
     ADMIN_SESSION_KEY: randomBytes(32).toString("base64"),
     ...syntheticFeishuEnv,
@@ -134,48 +131,6 @@ test.beforeAll(async () => {
       data: {
         id: buyerId,
         identities: { create: { appId: "synthetic-browser", openId: "buyer" } },
-      },
-    });
-    await db.user.createMany({
-      data: userIds.map((id, i) => ({
-        id,
-        createdAt: new Date(1700000000000 + i * 1000),
-      })),
-    });
-    const { ProjectPlans } = apiRequire("./dist/projects/project-plans.js");
-    const plans = new ProjectPlans(databaseUrl);
-    await plans.createProject({ projectId, createdBy: userIds[0] });
-    await plans.close();
-    const { internalSnapshot, INTERNAL_PROFILE_VERSION } = apiRequire(
-      "./dist/projects/internal-profile.js",
-    );
-    await db.internalProjectAdmission.create({
-      data: {
-        id: randomUUID(),
-        projectId,
-        initiatorUserId: userIds[0],
-        provisionKey: randomUUID(),
-        requestHash: "a".repeat(64),
-        profileVersion: INTERNAL_PROFILE_VERSION,
-        snapshot: internalSnapshot(INTERNAL_PROFILE_VERSION),
-      },
-    });
-    await db.projectSubject.create({
-      data: { id: subjectId, projectId, name: "无账号浏览器讲述者" },
-    });
-    await db.careRequest.create({
-      data: {
-        id: caseId,
-        projectId,
-        requesterSubjectId: subjectId,
-        operatorId: userIds[0],
-        operatorRealm: "product",
-        sourceBindingVersion: 0,
-        sourceAccessEpoch: 0,
-        idempotencyKey: caseId,
-        requestHash: "b".repeat(64),
-        kind: "delete",
-        state: "open",
       },
     });
     const draftId = randomUUID();
@@ -242,20 +197,33 @@ test.beforeAll(async () => {
     [resolve("tests/admin/feishu-api-runner.mjs")],
     { cwd: apiCwd, env },
   );
+  const build = spawnSync(
+    process.execPath,
+    ["node_modules/vite/bin/vite.js", "build"],
+    { cwd: resolve("apps/admin"), env: process.env, encoding: "utf8" },
+  );
+  expect(build.status, build.stdout + build.stderr).toBe(0);
   vite = start(
     process.execPath,
-    ["node_modules/vite/bin/vite.js", "--host", "localhost"],
+    [
+      "node_modules/vite/bin/vite.js",
+      "preview",
+      "--host",
+      "localhost",
+      "--port",
+      "3443",
+    ],
     {
       cwd: resolve("apps/admin"),
       env: {
         ...process.env,
-        ADMIN_API_TARGET: "http://127.0.0.1:3458",
+        ADMIN_API_TARGET: "http://127.0.0.1:3418",
         ADMIN_TLS_CERT: cert,
         ADMIN_TLS_KEY: key,
       },
     },
   );
-  await waitFor("http://127.0.0.1:3458/health/live");
+  await waitFor("http://127.0.0.1:3418/health/live");
   await waitFor("https://localhost:3443/admin/");
 });
 test.afterAll(async () => {
@@ -282,124 +250,153 @@ test.afterEach(async ({ page }, info) => {
     console.error((await page.locator("body").innerText()).slice(0, 3000));
     console.error(logs.slice(-10).join("\n"));
     await page.screenshot({
-      path: "/tmp/timenook-admin-implementation/152-failure.png",
+      path: "/tmp/timenook-admin-implementation/151-failure.png",
       fullPage: true,
     });
   }
 });
-test("HTTPS operator discovers pending orderless narrators, opens linked account and project, adds notes and preserves list query", async ({
+test("HTTPS operator searches historical orders, navigates actual Vben tabs/detail, appends notes and preserves query location", async ({
   page,
+  context,
 }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("./users?page=7&pageSize=20");
+  await page.goto("./orders?page=7&pageSize=20");
+  await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
+  await page.screenshot({
+    path: "/tmp/timenook-admin-implementation/151-login.png",
+    fullPage: true,
+  });
   await feishuLogin(page, account);
   await expect(
-    page.getByRole("heading", { name: "用户管理", exact: true }),
+    page.getByRole("heading", { name: "订单管理", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("共 123 条用户或讲述者", { exact: true }),
+    page.getByText("BROWSER-ORDER-000", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("2023-11-15 06:13:20", { exact: true }),
   ).toBeVisible();
   await page
-    .getByRole("textbox", { name: "搜索用户" })
-    .fill("无账号浏览器讲述者");
+    .getByRole("textbox", { name: "搜索订单" })
+    .fill("BROWSER-ORDER-000");
   await page.getByRole("button", { name: "查询", exact: true }).click();
-  await expect(
-    page.getByText("共 2 条用户或讲述者", { exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: userIds[0], exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "用户详情", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("内部验收项目 · 无付款、无生产权益", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("共 1 条订单", { exact: true })).toBeVisible();
   await page
-    .getByRole("textbox", { name: "用户内部备注", exact: true })
-    .fill("浏览器合成用户备注");
-  await page.getByRole("button", { name: "追加用户备注", exact: true }).click();
+    .getByRole("button", { name: "BROWSER-ORDER-000", exact: true })
+    .click();
+  await expect(
+    page.getByText("2026-11-02 09:00:00", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "订单详情", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("受控 1 分验收订单", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("¥999.00", { exact: true })).toBeVisible();
+  await expect(page.getByText("¥0.01", { exact: true })).toHaveCount(2);
+  await page
+    .getByRole("textbox", { name: "内部备注", exact: true })
+    .fill("合成浏览器沟通备注");
+  await page.getByRole("button", { name: "追加备注", exact: true }).click();
   await expect(page.getByText("备注已保存。", { exact: true })).toBeVisible();
   await page.reload();
   await expect(
-    page.getByText("浏览器合成用户备注", { exact: true }),
+    page.getByText("合成浏览器沟通备注", { exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("link", { name: "无账号浏览器讲述者", exact: true })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "项目详情", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: `查看 ${caseId}`, exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("textbox", { name: "代录项目编号", exact: true }),
-  ).toHaveCount(0);
-  await page.reload();
-  await expect(
-    page.getByRole("heading", { name: "项目详情", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "返回关联列表", exact: true }).click();
+  await page.getByRole("link", { name: buyerId, exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "用户详情", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "返回用户列表", exact: true }).click();
-  await expect(page).toHaveURL(/q=/);
+  await page.goBack();
   await expect(
-    page.getByText("共 2 条用户或讲述者", { exact: true }),
+    page.getByRole("heading", { name: "订单详情", exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "无账号浏览器讲述者", exact: true })
-    .click();
+  await page.getByRole("button", { name: "返回订单列表", exact: true }).click();
+  await expect(page).toHaveURL(/q=BROWSER-ORDER-000/);
+  await expect(page.getByText("共 1 条订单", { exact: true })).toBeVisible();
+  await page.goto("./missing-route");
   await expect(
-    page.getByRole("heading", { name: "项目详情", exact: true }),
+    page.getByText("页面不存在", { exact: true }).last(),
   ).toBeVisible();
+  await page.goto(`./orders/${orderIds[0]}`);
+  await expect(
+    page.getByText("合成浏览器沟通备注", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "/tmp/timenook-admin-implementation/151-desktop.png",
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    page.getByRole("heading", { name: "订单详情", exact: true }),
+  ).toBeVisible();
   expect(
     await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
+      () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
   await page.screenshot({
-    path: "/tmp/timenook-admin-implementation/152-mobile.png",
+    path: "/tmp/timenook-admin-implementation/151-mobile.png",
     fullPage: true,
   });
+  const cookies = await context.cookies(
+    "https://localhost:3443/api/v1/admin/orders",
+  );
+  const cookie = cookies.find((c) => c.name === "__Secure-timenook_admin");
+  expect(cookie.secure && cookie.httpOnly && cookie.sameSite === "Strict").toBe(
+    true,
+  );
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "运营登录", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("无账号浏览器讲述者", { exact: true }),
+    page.getByText("合成浏览器沟通备注", { exact: true }),
   ).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
-test("account permission revocation clears detail and denies user queries", async ({
+test("read-only admin cannot write notes or open protected user routes and revoked authority clears private details", async ({
   page,
 }) => {
-  await page.goto(`./users/${userIds[0]}`);
-  await feishuLogin(page, account);
+  const restricted = {
+    ...account,
+    ...feishuIdentity(),
+    username: `reader-${randomUUID()}`,
+    permissions: ["orders:read"],
+  };
+  const input = join(privateDir, "reader.json");
+  writeFileSync(input, JSON.stringify(restricted), { mode: 0o600 });
+  const created = spawnSync(
+    process.execPath,
+    ["dist/admin/admin-cli.js", "create", "--input-file", input],
+    { cwd: apiCwd, env, encoding: "utf8" },
+  );
+  expect(created.status).toBe(0);
+  const adminId = JSON.parse(created.stdout).id;
+  await page.goto(`./orders/${orderIds[0]}`);
+  await feishuLogin(page, restricted);
   await expect(
-    page.getByRole("heading", { name: "用户详情", exact: true }),
+    page.getByRole("heading", { name: "订单详情", exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("textbox", { name: "用户内部备注", exact: true })
-    .fill("本次失权测试备注");
-  await page.getByRole("button", { name: "追加用户备注", exact: true }).click();
   await expect(
-    page.getByText("本次失权测试备注", { exact: true }),
+    page.getByRole("button", { name: "追加备注", exact: true }),
+  ).toHaveCount(0);
+  await page.goto(`./users/${buyerId}`);
+  await expect(page).toHaveURL(/\/403$/);
+  await page.goto(`./orders/${orderIds[0]}`);
+  await expect(
+    page.getByText("BROWSER-ORDER-000", { exact: true }),
   ).toBeVisible();
   const db = new PrismaClient({ datasourceUrl: databaseUrl });
-  await db.adminAccount.updateMany({
-    where: { username: account.username },
-    data: { permissions: ["orders:read"] },
+  await db.adminAccount.update({
+    where: { id: adminId },
+    data: { disabled: true },
   });
   await db.$disconnect();
   await page.getByRole("button", { name: "刷新", exact: true }).click();
-  await expect(page).toHaveURL(/\/403$/);
-  await expect(page.getByText("本次失权测试备注", { exact: true })).toHaveCount(
-    0,
-  );
-  const result = await page.request.get("/api/v1/admin/users");
-  expect(result.status()).toBe(403);
+  await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
+  await expect(
+    page.getByText("合成浏览器沟通备注", { exact: true }),
+  ).toHaveCount(0);
 });

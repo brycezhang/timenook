@@ -2,7 +2,8 @@ import { defineConfig } from "@playwright/test";
 // Automatic snapshots and traces can capture transient OAuth codes or cookies.
 process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1";
 export default defineConfig({
-  testDir: "./tests/admin",
+  // CI covers the standalone management console. Product browser acceptance is paused.
+  testDir: "./tests/admin/console",
   timeout: 60000,
   workers: 1,
   fullyParallel: false,

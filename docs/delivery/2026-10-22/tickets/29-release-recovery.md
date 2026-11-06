@@ -36,7 +36,7 @@ GitHub：[#30](https://github.com/brycezhang/timenook/issues/30) · 状态以 Gi
 
 - 覆盖模块：部署、调度、IdentityAccess 正式管理、恢复。
 - 主入口：真实进程/公网路由/云资源及当前版本重启。通用约定见[父规格测试决策](../spec.md#测试决策)。
-- 现有范例：[health.test.ts](../../../../apps/api/test/health.test.ts)、[startup.test.ts](../../../../apps/api/test/startup.test.ts)、[access.spec.mjs](../../../../tests/admin/access.spec.mjs)；仅作测试方式参考。
+- 现有范例：[health.test.ts](../../../../apps/api/test/health.test.ts)、[startup.test.ts](../../../../apps/api/test/startup.test.ts)、[access.spec.mjs](../../../../tests/admin/console/access.spec.mjs)；仅作测试方式参考。
 
 ## 阻塞依赖
 

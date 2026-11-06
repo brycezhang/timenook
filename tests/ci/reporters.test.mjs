@@ -292,6 +292,21 @@ test("Playwright reporter exposes an empty plan and process failure without coll
   assert.equal(report.at(-1).counts.tests, 0);
 });
 
+test("admin CI discovers only standalone console cases and preserves their complete shard union", () => {
+  const collected = browserInventory(root, "admin");
+  assert.deepEqual(collected.files, [
+    "tests/admin/console/access.spec.mjs",
+    "tests/admin/console/orders.spec.mjs",
+    "tests/admin/console/users.spec.mjs",
+  ]);
+  assert.ok(collected.cases.length > 0);
+  const cases = [plan(root, "admin", 1), plan(root, "admin", 2)]
+    .flatMap((shard) => shard.cases)
+    .map((test) => test.id);
+  assert.deepEqual(cases.sort(), collected.cases.map((test) => test.id).sort());
+  assert.equal(new Set(cases).size, cases.length);
+});
+
 test("official browser inventory follows recursive discovery, multiple suffixes and custom testMatch with reporter-identical case IDs", (t) => {
   const f = fixture(t);
   writeFileSync(join(f.dir, "package.json"), '{"type":"module"}\n');

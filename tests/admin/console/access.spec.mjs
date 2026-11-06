@@ -3,7 +3,7 @@ import {
   feishuLogin,
   installFeishuAuthorization,
   syntheticFeishuEnv,
-} from "./feishu-fixture.mjs";
+} from "../feishu-fixture.mjs";
 import { test, expect } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";

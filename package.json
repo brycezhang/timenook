@@ -37,7 +37,7 @@
     "dev:web": "pnpm --filter @timenook/web dev",
     "build:web": "pnpm --filter @timenook/web build",
     "typecheck:web": "pnpm --filter @timenook/web typecheck",
-    "test:web": "pnpm exec playwright test tests/admin/web-entry.spec.mjs tests/admin/web-session.spec.mjs tests/admin/web-product-session.spec.mjs tests/admin/web-checkout.spec.mjs -c playwright.admin.config.mjs",
+    "test:web": "pnpm exec playwright test tests/admin/web-entry.spec.mjs tests/admin/web-session.spec.mjs tests/admin/web-product-session.spec.mjs tests/admin/web-checkout.spec.mjs -c playwright.product.config.mjs",
     "test:native-e2e": "node scripts/test-native-design.cjs",
     "test:native-login": "pnpm build:miniprogram && node scripts/test-native-online.cjs",
     "test:native-automation": "node --test tests/native-automation.test.cjs",

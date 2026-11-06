@@ -2,6 +2,8 @@
 
 手机优先的内部验收入口，部署目标为 `https://sgl.wootoon.cn/app/`，营销落地页继续位于根路径。范围与六票进度见[统一流程规格](../../docs/delivery/2026-10-29/mobile-web-spec.md)和[实施票据](../../docs/delivery/2026-10-29/mobile-web-tickets.md)。
 
+2026-11-06：产品网页端继续暂停对齐，旧网页及浏览器预览业务用例已移出 CI 验收，以下内测体验是历史实现说明。`pnpm test:web` 仅手动使用 `playwright.product.config.mjs`，旧套件仍含已退出产品的流程，不能作为当前小程序验收结果。独立管理后台及营销官网继续执行各自 CI。
+
 ## 当前内测体验
 
 从 `/app/` 点击“微信登录”进入当前浏览器独立的内测账号，选择赠礼称呼、勾选说明、确认模拟支付，再填写主人公和书名创建真实内测项目。原有私发登录链接继续可用。重复登录可恢复相同 mock 账号；清除浏览器 Cookie 后会建立新的独立账号。
@@ -14,7 +16,7 @@
 
 接口使用同源 `/api/v1`，开发及预览通过 `TIMENOOK_WEB_API_TARGET` 指定回环后端，例如 `http://127.0.0.1:3417`。代理剥离一次 `/api`，不代理到其他项目。网页 Cookie 要求 HTTPS；本地可用 `TIMENOOK_WEB_TLS_CERT`、`TIMENOOK_WEB_TLS_KEY` 指向工作区外的测试证书文件。未配置后端时仍可检查公开入口与失败提示，不会在服务端未启用内测模式时提供模拟登录。
 
-`pnpm test:web` 复用仓库浏览器测试配置。测试自动创建隔离 PostgreSQL schema、Redis 前缀、隐私台账及临时 HTTPS，使用受控 CLI 预建账号、签发票据，再由真实浏览器点击兑换、恢复和退出。先生成 Prisma、构建 contracts/API，并编译 API 测试；固定运行时与本地服务沿用[开发说明](../../docs/development.md)。测试不读取微信、商户或 AI 凭据，自动截图／trace／录屏关闭。
+`pnpm test:web` 使用独立的历史产品浏览器测试配置。测试自动创建隔离 PostgreSQL schema、Redis 前缀、隐私台账及临时 HTTPS，使用受控 CLI 预建账号、签发票据，再由真实浏览器点击兑换、恢复和退出。先生成 Prisma、构建 contracts/API，并编译 API 测试；固定运行时与本地服务沿用[开发说明](../../docs/development.md)。测试不读取微信、商户或 AI 凭据，自动截图／trace／录屏关闭。
 
 ## 登录与资料边界
 

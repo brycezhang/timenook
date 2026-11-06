@@ -33,7 +33,7 @@ GitHub：[#31](https://github.com/brycezhang/timenook/issues/31) · 状态以 Gi
 
 - 覆盖模块：完整业务链、目标用户与实物。
 - 主入口：真实项目端到端 + 双端用户试用 + 纸书/资料核验；本票真实验收不使用供应商替身。既有自动测试用于准备及回归，不代替本票证据。
-- 现有范例：[book.test.mjs](../../../../tests/print-probe/book.test.mjs)、[access.spec.mjs](../../../../tests/admin/access.spec.mjs)、[recorder.test.ts](../../../../tests/recorder.test.ts)；仅作测试方式参考。
+- 现有范例：[book.test.mjs](../../../../tests/print-probe/book.test.mjs)、[access.spec.mjs](../../../../tests/admin/console/access.spec.mjs)、[recorder.test.ts](../../../../tests/recorder.test.ts)；仅作测试方式参考。
 
 ## 阻塞依赖
 

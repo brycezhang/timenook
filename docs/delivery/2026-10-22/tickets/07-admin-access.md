@@ -31,7 +31,7 @@ GitHub：[#8](https://github.com/brycezhang/timenook/issues/8) · 状态以 GitH
 
 - 覆盖模块：IdentityAccess、运营会话与审计。
 - 主入口：管理 HTTP + HTTPS 浏览器登录流程。通用约定见[父规格测试决策](../spec.md#测试决策)。
-- 现有范例：[admin.test.ts](../../../../apps/api/test/admin.test.ts)、[access.spec.mjs](../../../../tests/admin/access.spec.mjs)；仅作测试方式参考。
+- 现有范例：[admin.test.ts](../../../../apps/api/test/admin.test.ts)、[access.spec.mjs](../../../../tests/admin/console/access.spec.mjs)；仅作测试方式参考。
 
 ## 阻塞依赖
 
