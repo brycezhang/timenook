@@ -181,10 +181,8 @@ Page({
       } catch (error) {
         if (this.currentLive(generation, context, true))
           this.setData({
-            stage: "原声临时文件尚未清理，请重试",
-            error: error instanceof Error ? error.message : "清理失败",
+            audioError: error instanceof Error ? error.message : "清理失败",
           });
-        return;
       }
       if (!this.currentLive(generation, context)) return;
       if (!context || !this.projectId || (!this.interviewId && !this.storyId)) {
