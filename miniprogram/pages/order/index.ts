@@ -19,7 +19,7 @@ Page({
     mode: dataMode(),
     orders: [] as PaymentOrderView[],
     activeOrder: null as PaymentOrderView | null,
-    actualPrice: "",
+    packagePrice: "",
     paymentStatus: "",
     paymentError: "",
     loading: false,
@@ -84,7 +84,7 @@ Page({
         this.setData({
           activeOrder,
           paymentStatus: paymentStatus(activeOrder),
-          actualPrice: (activeOrder.amount / 100).toFixed(2),
+          packagePrice: (activeOrder.listAmount / 100).toFixed(2),
         });
       }
     } catch (error) {
@@ -119,7 +119,7 @@ Page({
         this.setData({
           activeOrder,
           paymentStatus: paymentStatus(activeOrder),
-          actualPrice: (activeOrder.amount / 100).toFixed(2),
+          packagePrice: (activeOrder.listAmount / 100).toFixed(2),
         });
     } catch (error) {
       if (current())
@@ -145,7 +145,7 @@ Page({
         this.setData({
           activeOrder,
           paymentStatus: paymentStatus(activeOrder),
-          actualPrice: (activeOrder.amount / 100).toFixed(2),
+          packagePrice: (activeOrder.listAmount / 100).toFixed(2),
         });
     } catch (error) {
       if (

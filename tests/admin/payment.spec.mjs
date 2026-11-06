@@ -214,7 +214,6 @@ test.beforeAll(async () => {
       payload: {
         packageVersionId: versionId,
         recipient: { relationshipLabel: "恩师" },
-        shippingRegionCode: "CN-110000",
       },
     })
   ).json().data;

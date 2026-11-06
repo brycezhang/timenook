@@ -22,7 +22,6 @@ let config: ApiConfig;
 let app: Awaited<ReturnType<typeof createAdminApplication>>;
 let db: PrismaClient;
 let operator: Awaited<ReturnType<typeof paymentAdmin>>;
-const allowed: string[] = [];
 before(async () => {
   Object.assign(paymentConfig, {
     appId: "wx0123456789abcdef",
@@ -57,7 +56,7 @@ before(async () => {
       profileVersion: "internal-acceptance-v1",
     },
     payments: { ...paymentConfig, mode: "ordinary-merchant" },
-    ...{ checkoutE2e: { enabled: true, userIds: allowed } },
+    ...{ checkoutE2e: { enabled: true } },
   };
   const migration = spawnSync(
     process.execPath,
@@ -116,7 +115,7 @@ function current(token?: string) {
     headers: token ? { authorization: `Bearer ${token}` } : {},
   });
 }
-test("operator publishes the fixed E2E version, while only server-allowed buyers see the one-fen checkout", async () => {
+test("operator publishes the temporary one-fen package with normal public terms for all buyers", async () => {
   const published = await app.inject({
     method: "POST",
     url: "/v1/admin/catalog/e2e-versions",
@@ -127,20 +126,20 @@ test("operator publishes the fixed E2E version, while only server-allowed buyers
   const version = published.json().data;
   assert.equal(version.purpose, "e2e");
   assert.equal(version.price.value, 99900);
-  assert.ok(
-    version.terms.some((t: { text: string }) => t.text.includes("0.01")),
+  assert.doesNotMatch(
+    JSON.stringify(version.terms),
+    /0\.01|受控|验收|商业待定/,
   );
   const anonymous = (await current()).json().data;
-  assert.equal(anonymous.version, null);
+  assert.equal(anonymous.version.id, version.id);
   assert.ok(!JSON.stringify(anonymous).includes("受控"));
-  assert.equal(anonymous.purchasable, false);
-  assert.equal(anonymous.checkout, null);
+  assert.equal(anonymous.purchasable, true);
+  assert.equal(anonymous.checkout.amount, 1);
   const buyer = await login();
   assert.equal(
     (await current(buyer.session.token)).json().data.purchasable,
-    false,
+    true,
   );
-  allowed.push(buyer.user.id);
   const offer = (await current(buyer.session.token)).json().data;
   assert.equal(offer.purchasable, true);
   assert.deepEqual(offer.checkout, {
@@ -161,14 +160,12 @@ test("operator publishes the fixed E2E version, while only server-allowed buyers
   });
   assert.equal(replay.json().data.id, version.id);
 });
-test("one-fen checkout is server-priced and cannot be obtained by another buyer or client price fields", async () => {
+test("one-fen checkout is open to every buyer without an address and still rejects client price fields", async () => {
   const buyer = await login();
-  allowed.push(buyer.user.id);
   const offer = (await current(buyer.session.token)).json().data;
   const body = {
     packageVersionId: offer.version.id,
     recipient: { relationshipLabel: "本人" },
-    shippingRegionCode: "CN-110000",
   };
   const key = randomUUID();
   const headers = {
@@ -214,20 +211,18 @@ test("one-fen checkout is server-priced and cannot be obtained by another buyer 
     );
   }
   const stranger = await login();
-  assert.equal(
-    (
-      await app.inject({
-        method: "POST",
-        url: "/v1/orders",
-        headers: {
-          authorization: `Bearer ${stranger.session.token}`,
-          "idempotency-key": randomUUID(),
-        },
-        payload: body,
-      })
-    ).statusCode,
-    403,
-  );
+  const secondBuyer = await app.inject({
+    method: "POST",
+    url: "/v1/orders",
+    headers: {
+      authorization: `Bearer ${stranger.session.token}`,
+      "idempotency-key": randomUUID(),
+    },
+    payload: body,
+  });
+  assert.equal(secondBuyer.statusCode, 201, secondBuyer.body);
+  assert.equal(secondBuyer.json().data.amount, 1);
+  assert.equal(secondBuyer.json().data.listAmount, 99900);
   const disabled = await createAdminApplication(
     { ...config, checkoutE2e: undefined } as ApiConfig,
     {
@@ -265,7 +260,6 @@ test("one-fen checkout is server-priced and cannot be obtained by another buyer 
 
 async function paidE2eProject() {
   const buyer = await login();
-  allowed.push(buyer.user.id);
   const offer = (await current(buyer.session.token)).json().data;
   const headers = {
     authorization: `Bearer ${buyer.session.token}`,
@@ -278,7 +272,6 @@ async function paidE2eProject() {
     payload: {
       packageVersionId: offer.version.id,
       recipient: { relationshipLabel: "本人" },
-      shippingRegionCode: "CN-110000",
     },
   });
   assert.equal(created.statusCode, 201, created.body);
@@ -439,6 +432,7 @@ test("ordinary publication requires complete parameters and explicit operator co
   });
   assert.equal(published.statusCode, 201, published.body);
   assert.equal(published.json().data.purpose, "production");
+  config.checkoutE2e = undefined;
   const ordinary = await login();
   const offer = (await current(ordinary.session.token)).json().data;
   assert.equal(offer.version.id, published.json().data.id);
@@ -458,16 +452,15 @@ test("ordinary publication requires complete parameters and explicit operator co
     payload: {
       packageVersionId: offer.version.id,
       recipient: { relationshipLabel: "恩师" },
-      shippingRegionCode: "CN-110000",
     },
   });
   assert.equal(created.statusCode, 201, created.body);
   assert.equal(created.json().data.amount, 99900);
   assert.equal(created.json().data.isE2e, false);
-  const allowedBuyer = await login();
-  allowed.push(allowedBuyer.user.id);
+  config.checkoutE2e = { enabled: true };
+  const temporaryBuyer = await login();
   assert.equal(
-    (await current(allowedBuyer.session.token)).json().data.version.purpose,
+    (await current(temporaryBuyer.session.token)).json().data.version.purpose,
     "e2e",
   );
 });

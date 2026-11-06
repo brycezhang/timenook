@@ -127,7 +127,6 @@ async function login(who = "buyer", target = app) {
 const command = () => ({
   packageVersionId: packageId,
   recipient: { typeCode: "mentor", relationshipLabel: "恩师" },
-  shippingRegionCode: "CN-110000",
 });
 function create(
   token: string,

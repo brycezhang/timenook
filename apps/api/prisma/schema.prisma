@@ -427,7 +427,6 @@ model PaymentOrder {
   packageSnapshot Json @map("package_snapshot")
   recipient Json?
   template Json
-  shippingRegionCode String @map("shipping_region_code")
   subjectName String? @map("subject_name")
   bookTitle String? @map("book_title")
   state String @default("pending")

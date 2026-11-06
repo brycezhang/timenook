@@ -34,7 +34,6 @@ export interface PaymentOrderView {
 export interface CreateOrderCommand {
   packageVersionId: string;
   recipient: { typeCode?: string; relationshipLabel?: string };
-  shippingRegionCode: string;
   subjectName?: string;
   bookTitle?: string;
 }

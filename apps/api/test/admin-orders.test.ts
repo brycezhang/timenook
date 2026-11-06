@@ -107,7 +107,6 @@ before(async () => {
       packageSnapshot: {},
       recipient: {},
       template: {},
-      shippingRegionCode: "CN",
       subjectName: "合成讲述者",
       bookTitle: "合成书名",
       state: i === 0 ? "paid" : "pending",

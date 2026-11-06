@@ -165,7 +165,8 @@ test("pending merchant orders can reopen native payment and paid orders open the
     isE2e: true,
   });
   await payment;
-  assert.equal(page.data.actualPrice, "0.01");
+  assert.equal(page.data.packagePrice, "999.00");
+  assert.equal(page.data.activeOrder.amount, 1);
   assert.equal(page.data.activeOrder.project.id, paidOrder.project.id);
   page.project();
   assert.equal(routes[0], "/pages/home/index");

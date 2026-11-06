@@ -163,7 +163,6 @@ async function project() {
     await request("POST", "/v1/orders", buyer.token, {
       packageVersionId: packageId,
       recipient: { typeCode: "mentor", relationshipLabel: "恩师" },
-      shippingRegionCode: "CN-110000",
       bookTitle: "私人标题不能泄露",
     }),
   );

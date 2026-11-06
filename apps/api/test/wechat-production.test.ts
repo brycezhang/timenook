@@ -281,7 +281,6 @@ test("ordinary merchant and controlled acceptance retain internal projects and n
       payload: {
         packageVersionId: randomUUID(),
         recipient: {},
-        shippingRegionCode: "CN-SH",
       },
     });
     assert.equal(
@@ -538,7 +537,6 @@ test("ordinary merchant signed notifications and active queries share durable pa
           packageSnapshot: snapshot,
           recipient: { typeCode: null, relationshipLabel: "讲述者" },
           template: JSON.parse(JSON.stringify(BUILTIN_TEMPLATE)),
-          shippingRegionCode: "CN-110000",
           bookTitle: "隔离协议验证",
         },
       });
@@ -836,23 +834,17 @@ test("ordinary merchant signed notifications and active queries share durable pa
   }
 });
 
-test("one-fen checkout requires an explicit switch, ordinary merchant and product user UUID allowlist", () => {
-  const userId = randomUUID();
+test("one-fen checkout requires an explicit switch and ordinary merchant, with no user allowlist", () => {
   const enabled = {
     ...ordinary,
     INTERNAL_ACCEPTANCE_ENABLED: "1",
     TIMENOOK_CHECKOUT_E2E_ENABLED: "1",
-    TIMENOOK_CHECKOUT_E2E_USER_IDS: userId,
   };
   assert.deepEqual(readConfig(enabled).checkoutE2e, {
     enabled: true,
-    userIds: [userId],
   });
   for (const override of [
-    { TIMENOOK_CHECKOUT_E2E_ENABLED: undefined },
     { TIMENOOK_CHECKOUT_E2E_ENABLED: "true" },
-    { TIMENOOK_CHECKOUT_E2E_USER_IDS: "" },
-    { TIMENOOK_CHECKOUT_E2E_USER_IDS: "openid-is-not-user-id" },
     { INTERNAL_ACCEPTANCE_ENABLED: undefined },
     { TIMENOOK_WECHAT_PAY_MODE: "" },
   ])
@@ -861,4 +853,8 @@ test("one-fen checkout requires an explicit switch, ordinary merchant and produc
       /E2E|payment/i,
     );
   assert.equal(readConfig(ordinary).checkoutE2e, undefined);
+  assert.equal(
+    readConfig({ ...enabled, TIMENOOK_CHECKOUT_E2E_ENABLED: "" }).checkoutE2e,
+    undefined,
+  );
 });

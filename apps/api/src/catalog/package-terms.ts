@@ -171,7 +171,7 @@ export function publicTerms(
     {
       key: "shipping",
       label: "配送范围",
-      text: `约定运费已包含。支持地区：${(read("d05.includedRegionCodes") as string[]).map((code) => at(shippingRegionLabels, code)).join("、")}；不支持地区：${(read("d05.excludedRegionCodes") as string[]).map((code) => at(shippingRegionLabels, code)).join("、")}。未列地区不开放付款，付款前核验收货地址。`,
+      text: `约定运费已包含。支持地区：${(read("d05.includedRegionCodes") as string[]).map((code) => at(shippingRegionLabels, code)).join("、")}；不支持地区：${(read("d05.excludedRegionCodes") as string[]).map((code) => at(shippingRegionLabels, code)).join("、")}。成书后提交印刷时填写并核验收货地址，仅支持范围内的地址可提交配送。`,
     },
     {
       label: "原声回听",

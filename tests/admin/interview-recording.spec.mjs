@@ -136,7 +136,6 @@ test.beforeAll(async () => {
     await request("POST", "/v1/orders", buyer, {
       packageVersionId: versionId,
       recipient: { relationshipLabel: "朋友" },
-      shippingRegionCode: "CN-110000",
     }),
   );
   data(await request("POST", `/v1/orders/${order.id}/payment`, buyer, {}));
@@ -564,7 +563,6 @@ test("a collection-only assisted participant starts and resumes its own pending 
     await request("POST", "/v1/orders", buyer, {
       packageVersionId: versionId,
       recipient: { relationshipLabel: "朋友" },
-      shippingRegionCode: "CN-110000",
     }),
   );
   data(await request("POST", `/v1/orders/${order.id}/payment`, buyer, {}));
