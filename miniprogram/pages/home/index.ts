@@ -1,6 +1,7 @@
 import { NATIVE_TABS } from "../../config";
 import { ApiFailure, sessionClient } from "../../services/session";
 import { projectOverviewClient } from "../../services/project-overview";
+import { recordingId } from "../../services/local-audio-recorder";
 import { showProjectTab, switchProjectTab } from "../../services/navigation";
 import { go } from "../../services/store";
 import type { ProjectOverview } from "../../../packages/contracts/src";
@@ -114,7 +115,8 @@ Page({
   },
   record() {
     const p = this.data.overview;
-    if (p?.canRecord) go("interview", `projectId=${p.projectId}`);
+    if (p?.canRecord)
+      go("interview", `projectId=${p.projectId}&draftId=${recordingId()}`);
   },
   stories() {
     const p = this.data.overview;

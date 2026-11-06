@@ -1,5 +1,6 @@
 import type { StoryView } from "../../../packages/contracts/src";
 import { projectOverviewClient } from "../../services/project-overview";
+import { recordingId } from "../../services/local-audio-recorder";
 import { sessionClient } from "../../services/session";
 import { go } from "../../services/store";
 Page({
@@ -60,6 +61,6 @@ Page({
     );
   },
   record() {
-    go("interview", `projectId=${this.projectId}`);
+    go("interview", `projectId=${this.projectId}&draftId=${recordingId()}`);
   },
 });

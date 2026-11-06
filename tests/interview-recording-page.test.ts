@@ -21,6 +21,21 @@ const compiled = await build({
   platform: "neutral",
   define: { __TIMENOOK_API_BASE_URL__: JSON.stringify(base) },
 });
+const newStoryEntries = await Promise.all(
+  ["home", "stories"].map(async (name) => ({
+    name,
+    code: (
+      await build({
+        entryPoints: [`miniprogram/pages/${name}/index.ts`],
+        bundle: true,
+        write: false,
+        format: "cjs",
+        platform: "neutral",
+        define: { __TIMENOOK_API_BASE_URL__: JSON.stringify(base) },
+      })
+    ).outputFiles[0].text,
+  })),
+);
 function harness(
   options: {
     autoUpload?: boolean;
@@ -2315,6 +2330,76 @@ test("the page passes the remaining server budget to the native recording bounda
     h.page.onUnload();
   }
 });
+
+for (const entry of newStoryEntries) {
+  test(`${entry.name} starts a new story instead of restoring the previous upload success`, async (t) => {
+    const h = harness();
+    t.after(() => h.page.onUnload());
+    let source: any;
+    const routes: string[] = [];
+    runInNewContext(entry.code, {
+      Page: (value: any) => {
+        source = value;
+        source.setData = (patch: object) => Object.assign(source.data, patch);
+      },
+      wx: {
+        getStorageSync: (key: string) => structuredClone(h.storage.get(key)),
+        navigateTo: ({ url }: { url: string }) => routes.push(url),
+      },
+    });
+    source.projectId = projectId;
+    source.data.overview = { projectId, canRecord: true };
+    source.record();
+    const query = Object.fromEntries(
+      new URLSearchParams(routes[0].split("?")[1]),
+    );
+    const partition = `timenook.recording.v1:${base}:synthetic-app:${login.user.id}:${projectId}`;
+    h.storage.set(`${partition}:active`, interviewId);
+    h.page.onLoad(query);
+    const showing = h.page.onShow();
+    respond(h.requests.shift(), {
+      ...context,
+      interviews: [
+        {
+          ...interview,
+          clips: [
+            { id: "88888888-8888-4888-8888-888888888888", state: "sealed" },
+          ],
+        },
+      ],
+    });
+    await showing;
+    assert.equal(
+      h.page.data.flowStep,
+      "choose",
+      "new story must show topic selection",
+    );
+    assert.equal(h.page.data.uploadSucceeded, false);
+    assert.equal(h.page.data.interview, null);
+    assert.equal(
+      h.requests.length,
+      0,
+      "new story must not query old recording tasks",
+    );
+    assert.match(query.draftId, /^[a-f0-9-]{36}$/);
+    source.record();
+    assert.notEqual(
+      new URLSearchParams(routes[1].split("?")[1]).get("draftId"),
+      query.draftId,
+      "each new story gets a separate draft",
+    );
+    const selecting = h.page.selectQuestion();
+    assert.equal(h.requests[0].data.clientInterviewId, query.draftId);
+    respond(h.requests.shift(), interview, 201);
+    await selecting;
+    assert.equal(h.page.data.flowStep, "prepare");
+    assert.equal(
+      h.starts,
+      0,
+      "opening a new story must wait for a microphone tap",
+    );
+  });
+}
 
 test("a new draft ignores an old sealed interview and the microphone starts without a separate setup action", async (t) => {
   const h = harness();
