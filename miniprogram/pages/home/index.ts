@@ -12,9 +12,11 @@ Page({
     overview: null as ProjectOverview | null,
     count: 0,
     loggedIn: false,
+    loginVisible: false,
   },
   generation: 0,
   ownerContext: "",
+  loginDestination: "home",
   onLoad() {},
   async onShow() {
     showProjectTab(this, "home");
@@ -88,10 +90,24 @@ Page({
     void this.onShow();
   },
   purchase() {
-    go("new-book");
+    if (sessionClient.context()) go("new-book");
+    else {
+      this.loginDestination = "new-book";
+      this.setData({ loginVisible: true });
+    }
   },
   login() {
-    go("login");
+    this.loginDestination = "home";
+    this.setData({ loginVisible: true });
+  },
+  loginSucceeded() {
+    this.setData({ loginVisible: false, loggedIn: true, status: "" });
+    if (this.loginDestination === "new-book") go("new-book");
+    else void this.onShow();
+  },
+  closeLogin() {
+    this.loginDestination = "home";
+    this.setData({ loginVisible: false });
   },
   switchProject() {
     go("projects", "switch=1");

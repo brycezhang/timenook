@@ -1,1 +1,6 @@
-{ "navigationBarTitleText": "岁月成书" }
+{
+  "navigationBarTitleText": "岁月成书",
+  "usingComponents": {
+    "quick-login": "../../components/quick-login/index"
+  }
+}

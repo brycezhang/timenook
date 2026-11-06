@@ -1,1 +1,6 @@
-{ "navigationBarTitleText": "微信登录" }
+{
+  "navigationBarTitleText": "微信登录",
+  "usingComponents": {
+    "quick-login": "../../components/quick-login/index"
+  }
+}

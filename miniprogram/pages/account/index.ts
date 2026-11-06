@@ -10,8 +10,10 @@ Page({
     status: "",
     nickname: "",
     editing: false,
+    loginVisible: false,
   },
   generation: 0,
+  loginDestination: "account",
   async onShow() {
     showProjectTab(this, "account");
     if (this.data.busy) return;
@@ -41,7 +43,10 @@ Page({
     if (!this.data.busy) ++this.generation;
   },
   login() {
-    if (!this.data.busy) go("login", "next=account");
+    if (!this.data.busy) {
+      this.loginDestination = "account";
+      this.setData({ loginVisible: true });
+    }
   },
   editNickname() {
     if (!this.data.busy) this.setData({ editing: true, status: "" });
@@ -93,7 +98,24 @@ Page({
     go("projects");
   },
   purchase() {
-    go("new-book");
+    if (sessionClient.context()) go("new-book");
+    else {
+      this.loginDestination = "new-book";
+      this.setData({ loginVisible: true });
+    }
+  },
+  loginSucceeded(e: { detail: { user: { nickname?: string | null } } }) {
+    this.setData({
+      loginVisible: false,
+      loggedIn: true,
+      nickname: e.detail.user.nickname ?? "",
+      status: "",
+    });
+    if (this.loginDestination === "new-book") go("new-book");
+  },
+  closeLogin() {
+    this.loginDestination = "account";
+    this.setData({ loginVisible: false });
   },
   terms() {
     go("terms");

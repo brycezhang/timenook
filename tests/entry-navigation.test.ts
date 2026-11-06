@@ -174,28 +174,21 @@ test("home clears the retained book immediately when returning after logout", as
   assert.equal(h.page.data.loggedIn, false);
   await returning;
 });
-test("home offers standalone login without opening checkout", async () => {
+test("home opens the shared quick login without starting checkout", async () => {
   const h = await harness("home", [], false);
   await h.page.onShow();
   h.page.login();
-  assert.deepEqual(h.routes, ["/pages/login/index"]);
+  assert.deepEqual(h.routes, []);
+  assert.equal(h.page.data.loginVisible, true);
 });
-test("standalone login returns home without orders or payment", async () => {
-  const h = await harness("login", [], false, true);
+test("a standalone login adapter returns home without orders or payment", async () => {
+  const h = await harness("login", [], false);
   h.page.onLoad({});
-  h.page.showAgreement();
-  h.page.toggleAgreed();
-  h.page.agree();
-  const pending = h.page.login(phoneEvent);
-  h.page.onHide();
-  await Promise.resolve();
-  h.finishLogin();
-  await pending;
-  assert.equal(h.page.data.busy, false);
+  h.page.loginSucceeded();
   assert.deepEqual(h.routes, ["/pages/home/index"]);
-  assert.deepEqual(h.requests, ["/sessions/wechat"]);
+  assert.deepEqual(h.requests, []);
 });
-test("new purchase authenticates on its own page and preserves the draft", async () => {
+test("a direct new-book entry preserves its draft through the shared login adapter", async () => {
   const h = await harness("new-book", [], false);
   h.page.setData({ name: "妈妈 & 回忆", salutation: "妈妈" });
   h.page.next();
@@ -203,15 +196,11 @@ test("new purchase authenticates on its own page and preserves the draft", async
   assert.equal(route.pathname, "/pages/login/index");
   const login = await harness("login", [], false);
   login.page.onLoad(Object.fromEntries(route.searchParams));
-  login.page.showAgreement();
-  login.page.toggleAgreed();
-  login.page.agree();
-  await login.page.login(phoneEvent);
+  login.page.loginSucceeded();
   const destination = new URL(login.routes[0], "https://example.test");
   assert.equal(destination.pathname, "/pages/purchase/index");
   assert.equal(destination.searchParams.get("bookTitle"), "妈妈 & 回忆");
   assert.equal(destination.searchParams.get("salutation"), "妈妈");
-  assert.deepEqual(login.requests, ["/sessions/wechat"]);
 });
 test("My shows an existing local session while validating it", async () => {
   const h = await harness("account", []);
@@ -248,8 +237,11 @@ test("My provides project, new purchase and terms entries without loading privat
   await h.page.onShow();
   assert.equal(h.page.data.loggedIn, false);
   h.page.login();
-  assert.deepEqual(h.routes, ["/pages/login/index?next=account"]);
-  h.routes.length = 0;
+  assert.deepEqual(h.routes, []);
+  assert.equal(h.page.data.loginVisible, true);
+  h.storage.set(`timenook.session.v1:${base}`, session);
+  h.page.loginSucceeded({ detail: { user: { nickname: "用户1234" } } });
+  assert.equal(h.page.data.nickname, "用户1234");
   h.page.projects();
   h.page.purchase();
   h.page.terms();
@@ -260,47 +252,28 @@ test("My provides project, new purchase and terms entries without loading privat
   ]);
   assert.ok(!h.requests.includes("/participations"));
 });
-test("native login completes through background and foreground without a second click", async () => {
-  const h = await harness("login", [], false, true);
+test("the standalone adapter returns to My after shared login succeeds", async () => {
+  const h = await harness("login", [], false);
   h.page.onLoad({ next: "account" });
-  h.page.showAgreement();
-  h.page.toggleAgreed();
-  h.page.agree();
-  const pending = h.page.login(phoneEvent);
-  h.page.onHide();
-  await Promise.resolve();
-  h.finishLogin();
-  await pending;
+  h.page.loginSucceeded();
   assert.deepEqual(h.routes, ["/pages/account/index"]);
-  assert.equal(h.page.data.busy, false);
 });
 
-test("phone login is blocked until the user explicitly accepts the agreement popup", async () => {
-  const h = await harness("login", [], false);
-  h.page.onLoad({});
-  await h.page.login(phoneEvent);
-  assert.equal(h.page.data.agreementVisible, true);
-  assert.equal(h.page.data.agreed, false);
-  h.page.agree();
-  assert.equal(h.page.data.termsAccepted, false);
-  assert.deepEqual(h.requests, []);
-  h.page.toggleAgreed();
-  h.page.agree();
-  assert.equal(h.page.data.termsAccepted, true);
-  await h.page.login({ detail: { errMsg: "getPhoneNumber:fail user deny" } });
-  assert.deepEqual(h.requests, []);
-  assert.match(h.page.data.status, /需要授权手机号/);
-  await h.page.login(phoneEvent);
-  assert.deepEqual(h.requests, ["/sessions/wechat"]);
+test("an unsigned home purchase opens quick login before entering the new-book form", async () => {
+  const h = await harness("home", [], false);
+  await h.page.onShow();
+  h.page.purchase();
+  assert.deepEqual(h.routes, []);
+  assert.equal(h.page.data.loginVisible, true);
 });
 
-test("declining the agreement leaves the user logged out and never requests a phone number", async () => {
-  const h = await harness("login", [], false);
-  h.page.onLoad({});
-  h.page.showAgreement();
-  h.page.toggleAgreed();
-  h.page.decline();
-  assert.equal(h.page.data.termsAccepted, false);
-  assert.equal(h.page.data.agreed, false);
-  assert.deepEqual(h.requests, []);
+test("cancelled purchase login stays on home and does not retain the purchase destination", async () => {
+  const h = await harness("home", [], false);
+  await h.page.onShow();
+  h.page.purchase();
+  h.page.closeLogin();
+  assert.equal(h.page.data.loginVisible, false);
+  assert.deepEqual(h.routes, []);
+  h.page.login();
+  assert.equal(h.page.loginDestination, "home");
 });

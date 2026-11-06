@@ -21,3 +21,7 @@
 - `pendingTask.tool`：`upload`；工程 `/Users/bryce/projects/timenook`。
 - 当前状态：`pending`，等待用户在微信开发者工具内确认。尚未主动轮询，也没有重复上传；用户确认后须查询此原任务取得最终回执。
 - 未提审或正式发布，未推送远端。
+
+## 2026-11-06 原 0.3.2 上传任务最终回执
+
+本轮只查询原 `confirmation_upload_163ba7e7-34fb-42b3-bd65-d3df3d65c5d5`，返回 `status: success`、`detail: execution_success`、`result.success: true`，包大小 588,455 字节。上述 pending 为当时状态，现已取得成功回执；未重新调用 upload、未提审。该包早于手机号登录及首页快捷登录改动，新逻辑的手机预览另见[本轮记录](home-quick-login.md)。

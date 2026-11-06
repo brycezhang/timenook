@@ -4,3 +4,5 @@
  <view class="s-space"><button wx:if="{{loggedIn}}" class="s-row" bindtap="projects"><text>项目</text><text class="s-arrow">›</text></button><button class="s-row" bindtap="purchase"><text>新购一本书</text><text class="s-arrow">›</text></button><button class="s-row" bindtap="terms"><text>使用条款</text><text class="s-arrow">›</text></button></view>
  <view wx:if="{{status}}" class="s-error">{{status}}</view><button wx:if="{{loggedIn}}" class="s-link s-space" bindtap="logout" disabled="{{busy}}">退出登录</button><view class="s-term s-space">时光故事 · 岁月成书</view></view>
  <view wx:if="{{!nativeTabs}}" class="tabs"><button class="tab" bindtap="home"><image class="icon" src="/assets/icons/book-open.svg"/>岁月成书</button><button class="tab active"><image class="icon" src="/assets/icons/user.svg"/>我的</button></view>
+
+<quick-login visible="{{loginVisible}}" bindsuccess="loginSucceeded" bindclose="closeLogin"/>
