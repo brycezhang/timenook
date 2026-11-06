@@ -1,3 +1,4 @@
+import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -56,7 +57,7 @@ before(async () => {
   assert.equal(migrated.status, 0, "isolated migrations");
   await bootPrivacyFixture(config);
   app = await createApplication(config, {
-    wechatFetch: async (input) => {
+    wechatFetch: withWechatProfile(async (input) => {
       const identity = codeIdentities.get(
         new URL(String(input)).searchParams.get("js_code") ?? "",
       );
@@ -67,7 +68,7 @@ before(async () => {
             : { errcode: 40029 },
         ),
       );
-    },
+    }),
   });
   disabled = await createApplication({ ...config, wechat: undefined });
 });
@@ -228,10 +229,10 @@ test("CLI account and two explicit confirmations attach a new WeChat identity to
   const login = await app.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code: code("first-pair") },
+    payload: { ...phoneLogin(), code: code("first-pair") },
   });
   assert.equal(login.statusCode, 201);
-  assert.deepEqual(login.json().data.user, w.user);
+  assert.deepEqual(login.json().data.user, { ...w.user, nickname: "用户1234" });
   assert.equal(
     (
       await app.inject({
@@ -284,7 +285,7 @@ test("claim is exclusive, never signs in early, and all WeChat codes are single-
       await app.inject({
         method: "POST",
         url: "/v1/sessions/wechat",
-        payload: { code: winnerCode },
+        payload: { ...phoneLogin(), code: winnerCode },
       })
     ).statusCode,
     401,
@@ -294,7 +295,7 @@ test("claim is exclusive, never signs in early, and all WeChat codes are single-
       await app.inject({
         method: "POST",
         url: "/v1/sessions/wechat",
-        payload: { code: code(winnerIdentity) },
+        payload: { ...phoneLogin(), code: code(winnerIdentity) },
       })
     ).statusCode,
     409,
@@ -332,16 +333,16 @@ test("claim is exclusive, never signs in early, and all WeChat codes are single-
   const login = await app.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code: code(winnerIdentity) },
+    payload: { ...phoneLogin(), code: code(winnerIdentity) },
   });
-  assert.deepEqual(login.json().data.user, w.user);
+  assert.deepEqual(login.json().data.user, { ...w.user, nickname: "用户1234" });
 });
 test("an identity owned by another User conflicts without merging either account", async () => {
   const identity = randomUUID();
   const existing = await app.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code: code(identity) },
+    payload: { ...phoneLogin(), code: code(identity) },
   });
   const w = await signedIn(),
     challenge = await create(w);
@@ -353,7 +354,7 @@ test("an identity owned by another User conflicts without merging either account
   const recovered = await app.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code: code(identity) },
+    payload: { ...phoneLogin(), code: code(identity) },
   });
   assert.deepEqual(recovered.json().data.user, existing.json().data.user);
   assert.notEqual(recovered.json().data.user.id, w.user.id);
@@ -603,9 +604,12 @@ test("two accounts racing to attach one proven identity have exactly one owner",
   const restored = await app.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code: code(identity) },
+    payload: { ...phoneLogin(), code: code(identity) },
   });
-  assert.deepEqual(restored.json().data.user, winner.w.user);
+  assert.deepEqual(restored.json().data.user, {
+    ...winner.w.user,
+    nickname: "用户1234",
+  });
 });
 test("short-code enumeration and state polling use shared Redis rate limits", async () => {
   const attempts = await Promise.all(
@@ -625,7 +629,11 @@ test("post-association login requires the intended User and cannot create an acc
   const rejected = await app.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code: code("switched-before-login"), expectedUserId: w.user.id },
+    payload: {
+      ...phoneLogin(),
+      code: code("switched-before-login"),
+      expectedUserId: w.user.id,
+    },
   });
   assert.equal(rejected.statusCode, 409);
 });

@@ -1,0 +1,43 @@
+.quick-login-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.quick-login-sheet {
+  width: 100%;
+  max-width: 750rpx;
+  padding: 48rpx 36rpx calc(24rpx + env(safe-area-inset-bottom));
+  background: var(--paper, #faf8f3);
+  border-radius: 32rpx 32rpx 0 0;
+}
+.quick-login-check {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  background: transparent;
+  text-align: left;
+  padding: 24rpx 0;
+  font-size: 30rpx;
+  line-height: 1.6;
+}
+.quick-login-check::after {
+  border: 0;
+}
+.quick-login-box {
+  width: 40rpx;
+  height: 40rpx;
+  flex-shrink: 0;
+  line-height: 40rpx;
+  text-align: center;
+  border: 2rpx solid #8a826f;
+  border-radius: 8rpx;
+}
+.quick-login-box.checked {
+  background: #526d59;
+  color: white;
+  border-color: #526d59;
+}

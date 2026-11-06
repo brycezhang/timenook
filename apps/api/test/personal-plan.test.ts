@@ -1,3 +1,4 @@
+import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
 import { TERMS_VERSION } from "../src/identity/project-members";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import assert from "node:assert/strict";
@@ -92,7 +93,10 @@ before(async () => {
     },
   });
   await bootPrivacyFixture(config);
-  app = await createApplication(config, { wechatFetch, paymentFetch });
+  app = await createApplication(config, {
+    wechatFetch: withWechatProfile(wechatFetch),
+    paymentFetch,
+  });
 });
 after(async () => {
   await app?.close();
@@ -118,7 +122,7 @@ async function login(who = randomUUID(), target = app) {
   const r = await target.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code: `${who}:${randomUUID()}` },
+    payload: { ...phoneLogin(), code: `${who}:${randomUUID()}` },
   });
   assert.equal(r.statusCode, 201, r.body);
   return {
@@ -159,7 +163,6 @@ async function project() {
     await request("POST", "/v1/orders", buyer.token, {
       packageVersionId: packageId,
       recipient: { typeCode: "mentor", relationshipLabel: "恩师" },
-      shippingRegionCode: "CN-110000",
       bookTitle: "私人标题不能泄露",
     }),
   );
@@ -467,7 +470,7 @@ test("actual questions and answered associations survive later wording, chapter 
       }),
     );
     const restarted = await createApplication(config, {
-      wechatFetch,
+      wechatFetch: withWechatProfile(wechatFetch),
       paymentFetch,
     });
     try {

@@ -56,7 +56,8 @@ function harness(authenticated = true) {
     removed: string[] = [],
     players: any[] = [],
     timers: any[] = [],
-    loginCalls: any[] = [];
+    loginCalls: any[] = [],
+    routes: string[] = [];
   const clock = { now: Date.now() };
   const faults = {
     unlink: false,
@@ -84,6 +85,7 @@ function harness(authenticated = true) {
       page.setData = (patch: any) => Object.assign(page.data, patch);
     },
     wx: {
+      navigateTo: ({ url }: { url: string }) => routes.push(url),
       env: { USER_DATA_PATH: "/user-data" },
       getStorageSync(key: string) {
         assert.notEqual(key, "timenook.frontend.v1");
@@ -159,6 +161,7 @@ function harness(authenticated = true) {
     players,
     timers,
     loginCalls,
+    routes,
     clock,
     faults,
     respond(index: number, data: any, statusCode = 200) {
@@ -248,23 +251,20 @@ test("playback verifies gateway bytes and current authorization before playing; 
   h.page.onHide();
 });
 
-test("login preserves scanned ID through a native foreground event and resolves only after the account is restored", async () => {
+test("scanned audio returns from the shared phone login without losing its entry", async () => {
   const h = harness(false);
-  h.page.onLoad({
-    q: encodeURIComponent(`https://example.test/timenook/audio/${entryId}`),
-  });
+  h.page.onLoad({ entryId });
   await h.page.onShow();
-  const pending = h.page.login();
+  h.page.login();
+  assert.deepEqual(h.routes, ["/pages/login/index?next=back"]);
+  assert.equal(h.loginCalls.length, 0);
+  h.page.onHide();
+  h.storage.set(`timenook.session.v1:${base}`, structuredClone(login));
+  const returning = h.page.onShow();
   await tick();
-  h.loginCalls[0].success({ code: "synthetic-login-code" });
-  await tick();
-  await h.page.onShow();
-  assert.equal(h.page.data.entry, null);
-  h.respond(0, login);
-  await tick();
-  assert.equal(h.requests[1].url, `${base}/book-audio/${entryId}`);
-  h.respond(1, view());
-  await pending;
+  assert.equal(h.requests[0].url, `${base}/book-audio/${entryId}`);
+  h.respond(0, view());
+  await returning;
   assert.equal(h.page.data.entry.id, entryId);
   h.page.onHide();
 });

@@ -1,3 +1,4 @@
+import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import { WechatPay } from "../src/payments/wechat-pay";
 import { paymentAdmin } from "./payment-admin-fixture";
@@ -99,7 +100,10 @@ before(async () => {
     },
   });
   await bootPrivacyFixture(config);
-  app = await createApplication(config, { wechatFetch, ...{ paymentFetch } });
+  app = await createApplication(config, {
+    wechatFetch: withWechatProfile(wechatFetch),
+    ...{ paymentFetch },
+  });
 });
 after(async () => {
   await app?.close();
@@ -115,7 +119,7 @@ async function login(who = "buyer", target = app) {
   const r = await target.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code: `${who}:${randomUUID()}` },
+    payload: { ...phoneLogin(), code: `${who}:${randomUUID()}` },
   });
   assert.equal(r.statusCode, 201);
   return r.json().data.session.token as string;
@@ -123,7 +127,6 @@ async function login(who = "buyer", target = app) {
 const command = () => ({
   packageVersionId: packageId,
   recipient: { typeCode: "mentor", relationshipLabel: "恩师" },
-  shippingRegionCode: "CN-110000",
 });
 function create(
   token: string,
@@ -184,7 +187,7 @@ test("buyer creates one frozen local order, replays it across restart, and canno
     404,
   );
   const restarted = await createApplication(config, {
-    wechatFetch,
+    wechatFetch: withWechatProfile(wechatFetch),
     ...{ paymentFetch },
   });
   try {
@@ -339,7 +342,7 @@ test("verified notification and active query concurrently activate exactly one p
   for (const response of results.slice(2))
     assert.equal(response.json().data.project.id, result.project.id);
   const restarted = await createApplication(config, {
-    wechatFetch,
+    wechatFetch: withWechatProfile(wechatFetch),
     paymentFetch,
   });
   try {
@@ -394,6 +397,31 @@ test("buyer cancels an order before payment preparation without contacting WeCha
   );
 });
 
+test("signed unpaid and closed provider queries can omit amount while successful payments still require it", async () => {
+  const token = await login("provider-without-unpaid-amount");
+  const order = await prepareOrder(token);
+  delete supplierOrders.get(order.outTradeNo)!.amount;
+  const pending = await readOrder(token, order.id);
+  assert.equal(pending.statusCode, 200, pending.body);
+  assert.equal(pending.json().data.state, "pending");
+  const closed = await app.inject({
+    method: "POST",
+    url: `/v1/orders/${order.id}/close`,
+    headers: {
+      authorization: `Bearer ${token}`,
+      "idempotency-key": randomUUID(),
+    },
+    payload: {},
+  });
+  assert.equal(closed.statusCode, 201, closed.body);
+  assert.equal(closed.json().data.state, "closed");
+  assert.equal(closed.json().data.project, null);
+  const other = await prepareOrder(token);
+  const transaction = paid(other.outTradeNo);
+  delete supplierOrders.get(other.outTradeNo)!.amount;
+  assert.equal((await notify(transaction)).statusCode, 400);
+});
+
 test("cancellation preserves an in-flight payment until the original WeChat order can be reconciled", async () => {
   const token = await login("cancel-prepare-race");
   const order = (await create(token)).json().data;
@@ -409,7 +437,7 @@ test("cancellation preserves an in-flight payment until the original WeChat orde
     release = resolve;
   });
   const concurrent = await createApplication(config, {
-    wechatFetch,
+    wechatFetch: withWechatProfile(wechatFetch),
     paymentFetch: async (input, init) => {
       if (new URL(String(input)).pathname === "/v3/pay/transactions/jsapi") {
         reached();
@@ -606,7 +634,7 @@ test("local payment configuration rejects production, default-off reads, real tr
   const order = await prepareOrder(token);
   const disabled = await createApplication(
     { ...config, payments: undefined },
-    { wechatFetch },
+    { wechatFetch: withWechatProfile(wechatFetch) },
   );
   try {
     assert.equal(
@@ -643,7 +671,10 @@ test("local payment configuration rejects production, default-off reads, real tr
     ),
   );
   await assert.rejects(() =>
-    createApplication(config, { wechatFetch, paymentFetch: fetch }),
+    createApplication(config, {
+      wechatFetch: withWechatProfile(wechatFetch),
+      paymentFetch: fetch,
+    }),
   );
   for (const path of [
     "/v1/webhooks/wechat-pay/payments",
@@ -659,7 +690,7 @@ test("local payment configuration rejects production, default-off reads, real tr
             notifyUrl: "https://synthetic.invalid" + path,
           },
         },
-        { wechatFetch, paymentFetch },
+        { wechatFetch: withWechatProfile(wechatFetch), paymentFetch },
       ),
     );
   const post = paymentRequests.find(
@@ -700,12 +731,18 @@ test("durable Inbox survives a failed activation transaction and restart without
   const offline: typeof fetch = async () => {
     throw new Error("synthetic offline");
   };
-  app = await createApplication(config, { wechatFetch, paymentFetch: offline });
+  app = await createApplication(config, {
+    wechatFetch: withWechatProfile(wechatFetch),
+    paymentFetch: offline,
+  });
   const restored = (await readOrder(token, order.id)).json().data;
   assert.equal(restored.state, "paid");
   assert.ok(restored.project.entitlement.id);
   await app.close();
-  app = await createApplication(config, { wechatFetch, paymentFetch });
+  app = await createApplication(config, {
+    wechatFetch: withWechatProfile(wechatFetch),
+    paymentFetch,
+  });
   const next = await prepareOrder(token);
   const nextPayment = paid(next.outTradeNo);
   await db.$executeRawUnsafe(
@@ -785,7 +822,7 @@ test("a buyer can create and replay an order with a single database connection",
   url.searchParams.set("pool_timeout", "2");
   const limited = await createApplication(
     { ...config, databaseUrl: url.toString() },
-    { wechatFetch, paymentFetch },
+    { wechatFetch: withWechatProfile(wechatFetch), paymentFetch },
   );
   try {
     const token = await login("single-connection", limited);

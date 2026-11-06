@@ -1,3 +1,4 @@
+import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -54,7 +55,9 @@ before(async () => {
     0,
     "Isolated integration schema migration failed",
   );
-  app = await createApplication(config, { wechatFetch });
+  app = await createApplication(config, {
+    wechatFetch: withWechatProfile(wechatFetch),
+  });
 });
 
 after(async () => {
@@ -78,7 +81,7 @@ function login(code: string = randomUUID(), target = app) {
   return target.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code },
+    payload: { ...phoneLogin(), code },
   });
 }
 function me(token: string, target = app) {
@@ -131,13 +134,15 @@ test("concurrent first logins restore one account across restart and AppIDs stay
     new Set(results.map((r) => r.json().data.session.token)).size,
     8,
   );
-  const restarted = await createApplication(config, { wechatFetch });
+  const restarted = await createApplication(config, {
+    wechatFetch: withWechatProfile(wechatFetch),
+  });
   const separateApp = await createApplication(
     {
       ...config,
       wechat: { appId: "synthetic-app-b", secret: "synthetic-secret-b" },
     },
-    { wechatFetch },
+    { wechatFetch: withWechatProfile(wechatFetch) },
   );
   try {
     assert.deepEqual(
@@ -164,7 +169,9 @@ test("one code can create only one session even during concurrent replay and res
   );
   assert.equal(results.filter((r) => r.statusCode === 201).length, 1);
   assert.equal(results.filter((r) => r.statusCode === 401).length, 7);
-  const restarted = await createApplication(config, { wechatFetch });
+  const restarted = await createApplication(config, {
+    wechatFetch: withWechatProfile(wechatFetch),
+  });
   try {
     const replay = await login(code, restarted);
     assert.equal(replay.statusCode, 401);
@@ -190,7 +197,9 @@ test("logout revokes replayed tokens but a new login recovers the same account",
   assert.notEqual(recovered.session.token, first.session.token);
   assert.equal((await me(recovered.session.token)).statusCode, 200);
   assert.equal((await me(first.session.token)).statusCode, 401);
-  const restarted = await createApplication(config, { wechatFetch });
+  const restarted = await createApplication(config, {
+    wechatFetch: withWechatProfile(wechatFetch),
+  });
   try {
     assert.equal((await me(first.session.token, restarted)).statusCode, 401);
   } finally {
@@ -232,7 +241,7 @@ test("different accounts cannot revoke each other's sessions and missing tokens 
 test("expired tokens remain invalid after a fresh login", async () => {
   const short = await createApplication(
     { ...config, sessionTtlSeconds: 1 },
-    { wechatFetch },
+    { wechatFetch: withWechatProfile(wechatFetch) },
   );
   try {
     const first = (await login(randomUUID(), short)).json().data;
@@ -261,7 +270,7 @@ test("clients cannot submit identity, credentials or malformed login codes", asy
     const result = await app.inject({
       method: "POST",
       url: "/v1/sessions/wechat",
-      payload,
+      payload: { ...phoneLogin(), ...payload },
     });
     assert.equal(result.statusCode, 400);
     assert.doesNotMatch(result.body, /forged/);
@@ -318,7 +327,7 @@ test("production cannot inject synthetic WeChat transport and unconfigured login
   await assert.rejects(
     createApplication(
       { ...config, environment: "production" },
-      { wechatFetch },
+      { wechatFetch: withWechatProfile(wechatFetch) },
     ),
     /only allowed in test/,
   );
@@ -341,11 +350,15 @@ test("login has a shared Redis limit across processes and fails closed without R
     redisKeyPrefix: `${schema}:limit`,
     loginLimitPerMinute: 2,
   };
-  const a = await createApplication(limitedConfig, { wechatFetch });
-  const b = await createApplication(limitedConfig, { wechatFetch });
+  const a = await createApplication(limitedConfig, {
+    wechatFetch: withWechatProfile(wechatFetch),
+  });
+  const b = await createApplication(limitedConfig, {
+    wechatFetch: withWechatProfile(wechatFetch),
+  });
   const unavailable = await createApplication(
     { ...config, redisUrl: "redis://127.0.0.1:1" },
-    { wechatFetch },
+    { wechatFetch: withWechatProfile(wechatFetch) },
   );
   try {
     const results = await Promise.all([
@@ -366,13 +379,13 @@ test("login has a shared Redis limit across processes and fails closed without R
 test("only the loopback proxy can supply client addresses for login limiting", async () => {
   const limited = await createApplication(
     { ...config, redisKeyPrefix: `${schema}:proxy`, loginLimitPerMinute: 1 },
-    { wechatFetch },
+    { wechatFetch: withWechatProfile(wechatFetch) },
   );
   const attempt = (remoteAddress: string, forwarded: string) =>
     limited.inject({
       method: "POST",
       url: "/v1/sessions/wechat",
-      payload: { code: randomUUID() },
+      payload: { ...phoneLogin(), code: randomUUID() },
       remoteAddress,
       headers: { "x-forwarded-for": forwarded },
     });
@@ -387,5 +400,131 @@ test("only the loopback proxy can supply client addresses for login limiting", a
     );
   } finally {
     await limited.close();
+  }
+});
+
+test("phone authorization generates a nickname, and user edits survive a fresh login", async () => {
+  const issued = await login(`profile-${randomUUID()}`);
+  assert.equal(issued.statusCode, 201);
+  const { user, session } = issued.json().data;
+  assert.equal(user.nickname, "用户1234");
+  assert.equal(Object.hasOwn(user, "phoneNumber"), false);
+  const renamed = await app.inject({
+    method: "POST",
+    url: "/v1/users/me/profile",
+    headers: { authorization: `Bearer ${session.token}` },
+    payload: { nickname: "  梧桐小树  " },
+  });
+  assert.equal(renamed.statusCode, 201);
+  assert.deepEqual(renamed.json().data, { id: user.id, nickname: "梧桐小树" });
+  assert.equal((await me(session.token)).json().data.nickname, "梧桐小树");
+  const again = (await login(`profile-${randomUUID()}`)).json().data;
+  assert.equal(again.user.id, user.id);
+  assert.equal(again.user.nickname, "梧桐小树");
+  assert.doesNotMatch(JSON.stringify(again), /13800001234|synthetic-access/);
+  await Promise.all([
+    login(`profile-concurrent-${randomUUID()}`),
+    app.inject({
+      method: "POST",
+      url: "/v1/users/me/profile",
+      headers: { authorization: `Bearer ${session.token}` },
+      payload: { nickname: "新的昵称" },
+    }),
+  ]);
+  assert.equal((await me(session.token)).json().data.nickname, "新的昵称");
+});
+
+test("login requires phone authorization and the displayed agreement version", async () => {
+  for (const profile of [
+    {},
+    { phoneCode: "synthetic" },
+    { ...phoneLogin(), termsVersion: "old" },
+    { ...phoneLogin(), phoneCode: "" },
+    { ...phoneLogin(), phoneNumber: "13800005678" },
+    { ...phoneLogin(), nickname: "forged" },
+  ]) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/sessions/wechat",
+      payload: { code: randomUUID(), ...profile },
+    });
+    assert.equal(response.statusCode, 400);
+  }
+});
+
+test("nickname edits require the current account and reject blank or oversized names", async () => {
+  assert.equal(
+    (
+      await app.inject({
+        method: "POST",
+        url: "/v1/users/me/profile",
+        payload: { nickname: "小树" },
+      })
+    ).statusCode,
+    401,
+  );
+  const { session } = (await login()).json().data;
+  for (const nickname of ["", "   ", "x".repeat(33), "hello\nworld"]) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/users/me/profile",
+      headers: { authorization: `Bearer ${session.token}` },
+      payload: { nickname },
+    });
+    assert.equal(response.statusCode, 400);
+  }
+});
+
+test("phone lookup checks the proved OpenID and rejects failed or foreign-app replies", async () => {
+  const provider = withWechatProfile(wechatFetch);
+  for (const [reply, status] of [
+    [{ errcode: 40029 }, 401],
+    [{ errcode: 48001 }, 403],
+    [
+      {
+        errcode: 0,
+        phone_info: {
+          phoneNumber: "13800005678",
+          watermark: { appid: "foreign-app" },
+        },
+      },
+      502,
+    ],
+    [
+      {
+        errcode: 0,
+        phone_info: {
+          phoneNumber: "not-a-number",
+          watermark: { appid: config.wechat!.appId },
+        },
+      },
+      502,
+    ],
+  ] as const) {
+    let phoneRequest: Record<string, string> | undefined;
+    const isolated = await createApplication(config, {
+      wechatFetch: async (input, options) => {
+        if (
+          new URL(String(input)).pathname === "/wxa/business/getuserphonenumber"
+        ) {
+          phoneRequest = JSON.parse(String(options?.body));
+          return new Response(JSON.stringify(reply));
+        }
+        return provider(input, options);
+      },
+    });
+    try {
+      const response = await login(randomUUID(), isolated);
+      assert.equal(response.statusCode, status);
+      assert.equal(phoneRequest?.openid, "synthetic-open-a");
+      assert.match(phoneRequest?.code ?? "", /^synthetic-phone-/);
+      assert.equal(response.json().data, undefined);
+      assert.doesNotMatch(
+        response.body,
+        /13800005678|foreign-app|synthetic-access/,
+      );
+    } finally {
+      await isolated.close();
+    }
   }
 });

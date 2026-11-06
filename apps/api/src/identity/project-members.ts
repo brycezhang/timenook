@@ -1,7 +1,8 @@
 import { ForbiddenException } from "@nestjs/common";
+import { USER_TERMS_VERSION } from "@timenook/contracts";
 import type { Prisma } from "@prisma/client";
 
-export const TERMS_VERSION = "shiguang-story-2026-11-05";
+export const TERMS_VERSION = USER_TERMS_VERSION;
 
 export async function acceptTermsIn(
   tx: Prisma.TransactionClient,

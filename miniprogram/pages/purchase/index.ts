@@ -25,8 +25,6 @@ Page({
     loggedIn: false,
     localVerification: PAYMENT_VERIFICATION_BUILD,
     packageVersionId: "",
-    shippingRegionCode: "",
-    shippingRegionLabel: "",
     verificationBusy: false,
     verificationError: "",
     hasOrderIntent: false,
@@ -35,10 +33,7 @@ Page({
     catalogError: "",
     recipientTypes: [] as RecipientType[],
     packagePrice: "",
-    actualPrice: "",
-    isE2e: false,
     purchasable: false,
-    shippingRegions: [] as { code: string; label: string }[],
     packageTerms: [] as PackageTerm[],
     packageTitle: "",
     availability: "套餐准备中，暂未开放购买",
@@ -108,18 +103,13 @@ Page({
       mode,
       agreed: true,
       loggedIn: !!context,
-      shippingRegionCode: this.data.shippingRegionCode,
-      shippingRegionLabel: this.data.shippingRegionLabel,
       packageVersionId: "",
       availability: "套餐准备中，暂未开放购买",
       loading: false,
       catalogError: "",
       recipientTypes: [],
       packagePrice: "",
-      actualPrice: "",
-      isE2e: false,
       purchasable: false,
-      shippingRegions: [],
       packageTerms: [],
       packageTitle: "",
       selection: null,
@@ -136,10 +126,7 @@ Page({
       catalogError: "",
       recipientTypes: [],
       packagePrice: "",
-      actualPrice: "",
-      isE2e: false,
       purchasable: false,
-      shippingRegions: [],
       packageTerms: [],
       packageTitle: "",
       selection: null,
@@ -157,12 +144,7 @@ Page({
           ? (offer.version.price.value / 100).toFixed(2)
           : "",
         packageTerms: offer.version?.terms ?? [],
-        shippingRegions: offer.version?.shippingRegions ?? [],
         purchasable: offer.purchasable,
-        actualPrice: offer.checkout
-          ? (offer.checkout.amount / 100).toFixed(2)
-          : "",
-        isE2e: offer.checkout?.isE2e ?? false,
         availability: offer.purchasable
           ? "制作、回听与下载长期有效"
           : "套餐准备中，暂未开放购买",
@@ -193,8 +175,6 @@ Page({
           ...(context !== sessionClient.context()
             ? {
                 purchasable: false,
-                actualPrice: "",
-                isE2e: false,
                 catalogError: "登录状态已变化，请重新加载套餐",
               }
             : {}),
@@ -206,8 +186,6 @@ Page({
         if (current())
           this.setData({
             restoredOrder,
-            actualPrice: (restoredOrder.amount / 100).toFixed(2),
-            isE2e: restoredOrder.isE2e,
           });
       } catch {
         if (current())
@@ -267,17 +245,6 @@ Page({
   privacy() {
     go("terms");
   },
-  chooseShippingRegion(e: E) {
-    const region = this.data.shippingRegions[Number(e.detail.value)];
-    if (region)
-      this.setData({
-        shippingRegionCode: region.code,
-        shippingRegionLabel: region.label,
-      });
-  },
-  shippingRegion(e: E) {
-    this.setData({ shippingRegionCode: e.detail.value.trim() });
-  },
   orders() {
     const order = this.data.restoredOrder;
     go("order", order ? `id=${order.id}` : "");
@@ -329,12 +296,8 @@ Page({
       if (!intent) {
         if (!localOnly && (!this.data.purchasable || !this.data.agreed))
           throw new Error("套餐暂未开放购买");
-        if (
-          !this.data.packageVersionId ||
-          !this.data.selection ||
-          !this.data.shippingRegionCode
-        )
-          throw new Error("请选择配送地区");
+        if (!this.data.packageVersionId || !this.data.selection)
+          throw new Error("请确认套餐与称呼后重试");
         intent = {
           key: paymentKey(),
           command: {
@@ -350,7 +313,6 @@ Page({
                 : {}),
               relationshipLabel: this.data.selectedLabel,
             },
-            shippingRegionCode: this.data.shippingRegionCode,
           },
         };
         // Persist before the first request: unknown network results replay this intent.
@@ -375,7 +337,7 @@ Page({
         ) {
           wx.removeStorageSync(storageKey);
           this.setData({ hasOrderIntent: false, restoredOrder: null });
-          throw new Error("订单未创建，请核对套餐、称呼与配送区域后重试");
+          throw new Error("订单未创建，请核对套餐与称呼后重试");
         }
         throw error;
       });

@@ -15,6 +15,7 @@ async function harness() {
   });
   const storage = new Map<string, unknown>();
   const requests: WechatMiniprogram.RequestOption[] = [];
+  const routes: string[] = [];
   let page: any,
     loginCount = 0;
   runInNewContext(bundled.outputFiles[0].text, {
@@ -23,6 +24,7 @@ async function harness() {
       page.setData = (patch: object) => Object.assign(page.data, patch);
     },
     wx: {
+      navigateTo: ({ url }: { url: string }) => routes.push(url),
       getStorageSync: (key: string) => structuredClone(storage.get(key)),
       setStorageSync: (key: string, value: unknown) =>
         storage.set(key, structuredClone(value)),
@@ -39,7 +41,7 @@ async function harness() {
       },
     },
   });
-  return { page, storage, requests, logins: () => loginCount };
+  return { page, storage, requests, routes, logins: () => loginCount };
 }
 function respond(
   request: WechatMiniprogram.RequestOption,
@@ -113,26 +115,12 @@ test("native pairing uses fresh codes twice, confirms the displayed pair and sig
     },
   });
   await refreshing;
-  const signingIn = h.page.finish();
-  await new Promise((resolve) => setImmediate(resolve));
-  const login = h.requests.shift()!;
-  assert.equal(login.url, `${base}/sessions/wechat`);
-  assert.equal((login.data as { code: string }).code, "fresh-device-3");
-  respond(
-    login,
-    {
-      user: challenge.targetUser,
-      session: {
-        id: "33333333-3333-4333-8333-333333333333",
-        token: "S".repeat(43),
-        expiresAt: "2099-01-01T00:00:00.000Z",
-      },
-    },
-    201,
-  );
-  await signingIn;
-  assert.equal(h.page.data.userId, challenge.targetUser.id);
-  assert.equal(h.logins(), 3);
+  h.page.finish();
+  assert.deepEqual(h.routes, [
+    `/pages/login/index?next=back&expectedUserId=${challenge.targetUser.id}`,
+  ]);
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.logins(), 2);
   assert.equal(
     JSON.stringify([...h.storage]).includes("P".repeat(43)),
     false,

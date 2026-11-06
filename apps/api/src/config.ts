@@ -29,7 +29,7 @@ export interface ApiConfig {
     profileVersion: "internal-acceptance-v1";
   };
   payments?: WechatPayConfig;
-  checkoutE2e?: { enabled: true; userIds: string[] };
+  checkoutE2e?: { enabled: true };
   // No production D08 approval exists. This mode only exercises isolated tests.
   participation?: { mode: "synthetic-d08" };
   privacyJournal?: { root: string; key: string };
@@ -150,27 +150,16 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     );
   }
   let checkoutE2e: ApiConfig["checkoutE2e"];
-  if (env.TIMENOOK_CHECKOUT_E2E_ENABLED || env.TIMENOOK_CHECKOUT_E2E_USER_IDS) {
-    const userIds = (env.TIMENOOK_CHECKOUT_E2E_USER_IDS ?? "")
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean);
+  if (env.TIMENOOK_CHECKOUT_E2E_ENABLED) {
     if (
       env.TIMENOOK_CHECKOUT_E2E_ENABLED !== "1" ||
-      !userIds.length ||
-      userIds.some(
-        (id) =>
-          !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-            id,
-          ),
-      ) ||
       payments?.mode !== "ordinary-merchant" ||
       env.INTERNAL_ACCEPTANCE_ENABLED !== "1"
     )
       throw new ConfigurationError(
-        "E2E checkout requires ordinary merchant, internal acceptance and an explicit user UUID allowlist",
+        "E2E checkout requires ordinary merchant and internal acceptance",
       );
-    checkoutE2e = { enabled: true, userIds: [...new Set(userIds)] };
+    checkoutE2e = { enabled: true };
   }
   const sessionTtlSeconds = Number(env.SESSION_TTL_SECONDS ?? "604800");
   if (

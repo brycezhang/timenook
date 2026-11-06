@@ -137,6 +137,8 @@ model InterviewPreferences {
 
 model User {
   id         String           @id @db.Uuid
+  nickname   String?          @db.VarChar(32)
+  phoneNumber String?          @map("phone_number") @db.VarChar(32)
   createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   identities WechatIdentity[]
   sessions   Session[]
@@ -425,7 +427,6 @@ model PaymentOrder {
   packageSnapshot Json @map("package_snapshot")
   recipient Json?
   template Json
-  shippingRegionCode String @map("shipping_region_code")
   subjectName String? @map("subject_name")
   bookTitle String? @map("book_title")
   state String @default("pending")

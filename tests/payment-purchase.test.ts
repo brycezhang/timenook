@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { build } from "esbuild";
 import { runInNewContext } from "node:vm";
+import { readFileSync } from "node:fs";
 const base = "http://127.0.0.1:3417/v1";
 const bundle = await build({
   entryPoints: ["miniprogram/pages/purchase/index.ts"],
@@ -81,6 +82,28 @@ function harness(
   return { page, requests, calls, storage, payments };
 }
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+test("purchase page offers checkout without collecting a shipping region", () => {
+  const template = readFileSync(
+    "miniprogram/pages/purchase/index.wxml",
+    "utf8",
+  );
+  assert.doesNotMatch(
+    template,
+    /选择配送地区|<picker|shippingRegion|actualPrice|isE2e|受控|验收|0\.01/,
+  );
+  const disabled = template.match(
+    /bindtap="pay"[^>]*disabled="\{\{(.*?)\}\}"/,
+  )![1];
+  assert.equal(
+    runInNewContext(disabled, {
+      verificationBusy: false,
+      loading: false,
+      hasOrderIntent: false,
+      purchasable: true,
+    }),
+    false,
+  );
+});
 function respond(r: WechatMiniprogram.RequestOption, data: unknown) {
   r.success?.({
     statusCode: 200,
@@ -115,7 +138,6 @@ test("actual purchase action persists one local order intent, skips native payme
   const { page, requests, calls } = harness();
   page.setData({
     packageVersionId: "44444444-4444-4444-8444-444444444444",
-    shippingRegionCode: "CN-110000",
     selection: { recipientCode: null, customLabel: "恩师" },
     selectedLabel: "恩师",
   });
@@ -152,24 +174,19 @@ test("actual purchase action persists one local order intent, skips native payme
   await retry;
   assert.ok(!calls.includes("native-payment"));
 });
-test("a definitive create rejection lets the purchase page send the corrected region and recipient with a new intent", async () => {
+test("a definitive create rejection lets the purchase page correct the recipient with a new intent", async () => {
   const { page, requests } = harness();
   page.setData({ packageVersionId: "44444444-4444-4444-8444-444444444444" });
-  page.shippingRegion({ detail: { value: "CN-NOT-INCLUDED" } });
   page.customLabel({ detail: { value: "恩师" } });
   const rejected = page.verifyPurchase();
   const first = requests.shift()!;
   reject(first, 400, "INVALID_REQUEST");
   await rejected;
   assert.equal(page.data.hasOrderIntent, false);
-  page.shippingRegion({ detail: { value: "CN-110000" } });
   page.customLabel({ detail: { value: "老师" } });
   const corrected = page.verifyPurchase();
   const second = requests.shift()!;
-  assert.equal(
-    (second.data as { shippingRegionCode: string }).shippingRegionCode,
-    "CN-110000",
-  );
+  assert.equal("shippingRegionCode" in (second.data as object), false);
   assert.equal(
     (second.data as { recipient: { relationshipLabel: string } }).recipient
       .relationshipLabel,
@@ -194,7 +211,6 @@ test("unknown or non-validation create failures preserve the original intent acr
     firstPage.page.setData({
       packageVersionId: "44444444-4444-4444-8444-444444444444",
     });
-    firstPage.page.shippingRegion({ detail: { value: "CN-110000" } });
     firstPage.page.customLabel({ detail: { value: "恩师" } });
     const action = firstPage.page.verifyPurchase();
     const first = firstPage.requests.shift()!;
@@ -208,7 +224,6 @@ test("unknown or non-validation create failures preserve the original intent acr
     reentry.page.setData({
       packageVersionId: "55555555-5555-4555-8555-555555555555",
     });
-    reentry.page.shippingRegion({ detail: { value: "CN-CHANGED" } });
     reentry.page.customLabel({ detail: { value: "老师" } });
     const retry = reentry.page.verifyPurchase();
     const repeated = reentry.requests.shift()!;
@@ -226,7 +241,6 @@ test("a late rejection from the previous account cannot clear or replace either 
   first.page.setData({
     packageVersionId: "44444444-4444-4444-8444-444444444444",
   });
-  first.page.shippingRegion({ detail: { value: "CN-110000" } });
   first.page.customLabel({ detail: { value: "恩师" } });
   const pending = first.page.verifyPurchase();
   const original = first.requests.shift()!;
@@ -244,7 +258,6 @@ test("a late rejection from the previous account cannot clear or replace either 
   other.page.setData({
     packageVersionId: "44444444-4444-4444-8444-444444444444",
   });
-  other.page.shippingRegion({ detail: { value: "CN-110000" } });
   other.page.customLabel({ detail: { value: "妈妈" } });
   const otherAction = other.page.verifyPurchase();
   const otherRequest = other.requests.shift()!;
@@ -284,21 +297,19 @@ const paidNativeOrder = {
     entitlement: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", copies: 1 },
   },
 };
-test("release checkout persists the order before native payment, reconciles cancellation and restores the same paid project after restart", async () => {
+test("release checkout needs no shipping region, persists the order before native payment and restores the same paid project after cancellation", async () => {
   const h = harness(undefined, true);
   h.page.setData({
     purchasable: true,
-    actualPrice: "0.01",
-    isE2e: true,
     agreed: true,
     packageVersionId: "44444444-4444-4444-8444-444444444444",
-    shippingRegionCode: "CN-110000",
     selection: { recipientCode: null, customLabel: "恩师" },
     selectedLabel: "恩师",
   });
   const action = h.page.pay();
   assert.equal(h.requests[0]?.url, base + "/orders");
   assert.equal("amount" in (h.requests[0].data as object), false);
+  assert.equal("shippingRegionCode" in (h.requests[0].data as object), false);
   const intents = () =>
     [...h.storage.entries()].filter(([k]) =>
       k.startsWith("timenook.payment-intent"),
@@ -343,7 +354,6 @@ test("reopening the purchase page exposes the original pending order without ope
     command: {
       packageVersionId: "44444444-4444-4444-8444-444444444444",
       recipient: { relationshipLabel: "恩师" },
-      shippingRegionCode: "CN-110000",
     },
     orderId: order.id,
   });
@@ -370,6 +380,6 @@ test("reopening the purchase page exposes the original pending order without ope
   await shown;
   assert.equal(h.page.data.hasOrderIntent, true);
   assert.equal(h.page.data.restoredOrder.id, order.id);
-  assert.equal(h.page.data.actualPrice, "0.01");
+  assert.equal("actualPrice" in h.page.data, false);
   assert.equal(h.payments.length, 0);
 });

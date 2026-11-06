@@ -222,7 +222,6 @@ test.beforeAll(async () => {
       payload: {
         packageVersionId: versionId,
         recipient: { relationshipLabel: "恩师" },
-        shippingRegionCode: "CN-110000",
       },
     }),
   );
@@ -249,7 +248,6 @@ test.beforeAll(async () => {
       payload: {
         packageVersionId: versionId,
         recipient: { relationshipLabel: "朋友" },
-        shippingRegionCode: "CN-110000",
       },
     }),
   );

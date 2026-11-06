@@ -344,23 +344,8 @@ Page({
       await this.load(generation, context);
     });
   },
-  async login() {
-    if (this.data.busy) return;
-    const generation = ++this.generation;
-    this.setData({ busy: true, status: "" });
-    try {
-      await sessionClient.login();
-      if (generation === this.generation) {
-        this.setData({ busy: false });
-        await this.refresh();
-      }
-    } catch (error) {
-      if (generation === this.generation)
-        this.setData({
-          busy: false,
-          status: error instanceof Error ? error.message : "登录失败，请重试",
-        });
-    }
+  login() {
+    if (!this.data.busy) go("login", "next=back");
   },
   key(input: string) {
     if (this.intent?.input !== input)

@@ -1,3 +1,4 @@
+import { go } from "../../services/store";
 import { sessionClient, ApiFailure } from "../../services/session";
 import { setDataMode } from "../../services/mode";
 import type {
@@ -149,7 +150,7 @@ Page({
   cancel() {
     return this.action("cancel");
   },
-  async finish() {
+  finish() {
     const expectedUserId = this.data.challenge?.targetUser.id;
     if (
       this.data.busy ||
@@ -157,21 +158,27 @@ Page({
       !expectedUserId
     )
       return;
+    go(
+      "login",
+      `next=back&expectedUserId=${encodeURIComponent(expectedUserId)}`,
+    );
+  },
+  async onShow() {
+    if (this.data.challenge?.state !== "linked" || !sessionClient.context())
+      return;
     const version = ++this.version;
-    this.loginPending = true;
-    this.setData({ busy: true });
     try {
-      const result = await sessionClient.login(expectedUserId);
-      if (version === this.version)
+      const user = await sessionClient.restore();
+      if (
+        version === this.version &&
+        user?.id === this.data.challenge.targetUser.id
+      )
         this.setData({
-          userId: result.user.id,
+          userId: user.id,
           status: "已登录同一产品账号，项目和资料沿用原有授权。",
         });
     } catch (error) {
       if (version === this.version) this.setData({ status: message(error) });
-    } finally {
-      this.loginPending = false;
-      if (version === this.version) this.setData({ busy: false });
     }
   },
   onUnload() {

@@ -1,2 +1,2 @@
-<view class="s-page"><image class="login-photo" src="/assets/home-family.jpg" mode="aspectFill"/><view class="s-title s-space">让故事有个家</view><view class="s-muted s-space">登录后，接着记录和制作。</view><view wx:if="{{status}}" class="s-error s-space">{{status}}</view></view>
-<view class="s-dock"><view class="s-term">点击微信登录，即表示同意<text bindtap="terms">《使用条款》</text></view><button class="s-button" bindtap="login" loading="{{busy}}" disabled="{{busy}}">微信登录</button><button class="s-link" bindtap="cancel" disabled="{{busy}}">暂不登录</button></view>
+<view class="s-page"><image class="login-photo" src="/assets/home-family.jpg" mode="aspectFill"/><view class="s-title s-space">让故事有个家</view><view class="s-muted s-space">登录后，接着记录和制作。</view></view>
+<quick-login visible="{{loginVisible}}" expected-user-id="{{expectedUserId}}" bindsuccess="loginSucceeded" bindclose="cancel"/>

@@ -10,12 +10,21 @@ export interface ApiErrorResponse {
   meta: { requestId: string };
 }
 
+export const USER_TERMS_VERSION = "shiguang-story-2026-11-06";
+
 export interface LoginCommand {
   code: string;
+  phoneCode: string;
+  termsVersion: string;
   expectedUserId?: string;
 }
+export type WechatLoginProfile = Pick<
+  LoginCommand,
+  "phoneCode" | "termsVersion"
+>;
 export interface Account {
   id: string;
+  nickname?: string | null;
 }
 export interface LoginResult {
   user: Account;

@@ -77,7 +77,6 @@ export class CreateOrderDto {
   @ValidateNested()
   @Type(() => RecipientDto)
   recipient!: RecipientDto;
-  @ApiProperty() @IsString() @Length(1, 80) shippingRegionCode!: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -203,21 +202,8 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       });
       if (!version) throw new BadRequestException();
       const isE2e = version.purpose === "e2e";
-      if (
-        isE2e &&
-        (!this.config.checkoutE2e?.enabled ||
-          !this.config.checkoutE2e.userIds.includes(buyer.userId))
-      )
+      if (isE2e && !this.config.checkoutE2e?.enabled)
         throw new ForbiddenException();
-      const snapshot = version.snapshot as {
-        admission?: { d05?: { includedRegionCodes?: string[] } };
-      };
-      if (
-        !snapshot.admission?.d05?.includedRegionCodes?.includes(
-          body.shippingRegionCode,
-        )
-      )
-        throw new BadRequestException();
       if (!body.recipient) throw new BadRequestException();
       const relationship = body.recipient.typeCode
         ? await tx.recipientType.findFirst({
@@ -259,7 +245,6 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
           packageSnapshot: version.snapshot as Prisma.InputJsonValue,
           recipient,
           template: json(BUILTIN_TEMPLATE),
-          shippingRegionCode: body.shippingRegionCode,
           subjectName: body.subjectName?.trim() || null,
           bookTitle: body.bookTitle?.trim() || "我的时光手记",
         },
@@ -283,11 +268,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
     if (session.method === "self_web") throw new ForbiddenException();
     const order = await this.owned(authorization, id);
     const cfg = this.enabled();
-    if (
-      order.isE2e &&
-      (!this.config.checkoutE2e?.enabled ||
-        !this.config.checkoutE2e.userIds.includes(order.buyerId))
-    )
+    if (order.isE2e && !this.config.checkoutE2e?.enabled)
       throw new ForbiddenException();
     if (order.state !== "pending") throw new ConflictException();
     if (Object.keys(body).length) throw new BadRequestException();
@@ -558,8 +539,9 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       transaction.appid !== order.appId ||
       transaction.mchid !== order.merchantId ||
       transaction.out_trade_no !== order.outTradeNo ||
-      amount?.total !== order.amount ||
-      amount.currency !== order.currency ||
+      ((transaction.trade_state === "SUCCESS" || amount !== undefined) &&
+        (amount?.total !== order.amount ||
+          amount.currency !== order.currency)) ||
       (payer?.openid !== undefined && payer.openid !== order.openId)
     )
       throw new BadRequestException();

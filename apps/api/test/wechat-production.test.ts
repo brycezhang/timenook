@@ -1,3 +1,4 @@
+import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
 import { TERMS_VERSION } from "../src/identity/project-members";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
@@ -280,7 +281,6 @@ test("ordinary merchant and controlled acceptance retain internal projects and n
       payload: {
         packageVersionId: randomUUID(),
         recipient: {},
-        shippingRegionCode: "CN-SH",
       },
     });
     assert.equal(
@@ -429,7 +429,10 @@ test("ordinary merchant signed notifications and active queries share durable pa
   };
   let app: Awaited<ReturnType<typeof createApplication>> | undefined;
   try {
-    app = await createAdminApplication(cfg, { paymentFetch, wechatFetch });
+    app = await createAdminApplication(cfg, {
+      paymentFetch,
+      wechatFetch: withWechatProfile(wechatFetch),
+    });
     const origin = { origin: cfg.web!.origin, "x-timenook-web": "1" };
     const webLogin = await app.inject({
       method: "POST",
@@ -484,14 +487,14 @@ test("ordinary merchant signed notifications and active queries share durable pa
       const response = await app!.inject({
         method: "POST",
         url: "/v1/sessions/wechat",
-        payload: { code: code(openId) },
+        payload: { ...phoneLogin(), code: code(openId) },
       });
       assert.equal(response.statusCode, 201, response.body);
       return response.json().data;
     };
     const buyer = await login("isolated-buyer"),
       stranger = await login("isolated-stranger");
-    assert.deepEqual(buyer.user, webActor.user);
+    assert.deepEqual(buyer.user, { ...webActor.user, nickname: "用户1234" });
     const auth = { authorization: `Bearer ${buyer.session.token}` };
     const snapshot = JSON.parse(
       readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
@@ -534,7 +537,6 @@ test("ordinary merchant signed notifications and active queries share durable pa
           packageSnapshot: snapshot,
           recipient: { typeCode: null, relationshipLabel: "讲述者" },
           template: JSON.parse(JSON.stringify(BUILTIN_TEMPLATE)),
-          shippingRegionCode: "CN-110000",
           bookTitle: "隔离协议验证",
         },
       });
@@ -791,7 +793,10 @@ test("ordinary merchant signed notifications and active queries share durable pa
     );
     assert.equal(await db.refundInbox.count(), 1);
     await app.close();
-    app = await createAdminApplication(cfg, { paymentFetch, wechatFetch });
+    app = await createAdminApplication(cfg, {
+      paymentFetch,
+      wechatFetch: withWechatProfile(wechatFetch),
+    });
     assert.equal(
       (await notify("payments", transaction, "ordinary-payment")).statusCode,
       204,
@@ -829,23 +834,17 @@ test("ordinary merchant signed notifications and active queries share durable pa
   }
 });
 
-test("one-fen checkout requires an explicit switch, ordinary merchant and product user UUID allowlist", () => {
-  const userId = randomUUID();
+test("one-fen checkout requires an explicit switch and ordinary merchant, with no user allowlist", () => {
   const enabled = {
     ...ordinary,
     INTERNAL_ACCEPTANCE_ENABLED: "1",
     TIMENOOK_CHECKOUT_E2E_ENABLED: "1",
-    TIMENOOK_CHECKOUT_E2E_USER_IDS: userId,
   };
   assert.deepEqual(readConfig(enabled).checkoutE2e, {
     enabled: true,
-    userIds: [userId],
   });
   for (const override of [
-    { TIMENOOK_CHECKOUT_E2E_ENABLED: undefined },
     { TIMENOOK_CHECKOUT_E2E_ENABLED: "true" },
-    { TIMENOOK_CHECKOUT_E2E_USER_IDS: "" },
-    { TIMENOOK_CHECKOUT_E2E_USER_IDS: "openid-is-not-user-id" },
     { INTERNAL_ACCEPTANCE_ENABLED: undefined },
     { TIMENOOK_WECHAT_PAY_MODE: "" },
   ])
@@ -854,4 +853,8 @@ test("one-fen checkout requires an explicit switch, ordinary merchant and produc
       /E2E|payment/i,
     );
   assert.equal(readConfig(ordinary).checkoutE2e, undefined);
+  assert.equal(
+    readConfig({ ...enabled, TIMENOOK_CHECKOUT_E2E_ENABLED: "" }).checkoutE2e,
+    undefined,
+  );
 });

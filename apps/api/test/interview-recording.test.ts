@@ -1,3 +1,4 @@
+import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
 import { TERMS_VERSION } from "../src/identity/project-members";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
 import assert from "node:assert/strict";
@@ -97,7 +98,10 @@ before(async () => {
     },
   });
   await bootPrivacyFixture(config);
-  app = await createApplication(config, { wechatFetch, paymentFetch });
+  app = await createApplication(config, {
+    wechatFetch: withWechatProfile(wechatFetch),
+    paymentFetch,
+  });
 });
 after(async () => {
   await app?.close();
@@ -124,7 +128,7 @@ async function login(who = randomUUID(), target = app) {
   const r = await target.inject({
     method: "POST",
     url: "/v1/sessions/wechat",
-    payload: { code: `${who}:${randomUUID()}` },
+    payload: { ...phoneLogin(), code: `${who}:${randomUUID()}` },
   });
   assert.equal(r.statusCode, 201, r.body);
   return {
@@ -165,7 +169,6 @@ async function project(versionId = packageId) {
     await request("POST", "/v1/orders", buyer.token, {
       packageVersionId: versionId,
       recipient: { typeCode: "mentor", relationshipLabel: "恩师" },
-      shippingRegionCode: "CN-110000",
       bookTitle: "私人标题不能泄露",
     }),
   );
@@ -951,7 +954,7 @@ test("a late seal cannot overwrite an already verified final object through a co
     }
   }
   const isolated = await createApplication(config, {
-    wechatFetch,
+    wechatFetch: withWechatProfile(wechatFetch),
     paymentFetch,
     recordingObjects: new RacingObjects(root),
   });
@@ -1123,7 +1126,7 @@ test("product recording consumes the existing OSS form adapter and preserves its
     recording: { ...config.recording!, oss: fakeOss },
   };
   const isolated = await createApplication(assembly, {
-    wechatFetch,
+    wechatFetch: withWechatProfile(wechatFetch),
     paymentFetch,
   });
   try {
@@ -1328,7 +1331,7 @@ test("database composite constraints reject another project's subject and the wr
 test("synthetic recording assembly stays absent by default and refuses production configuration", async () => {
   const { recording, ...withoutRecording } = config;
   const unconfigured = await createApplication(withoutRecording, {
-    wechatFetch,
+    wechatFetch: withWechatProfile(wechatFetch),
     paymentFetch,
   });
   try {
@@ -1351,14 +1354,14 @@ test("synthetic recording assembly stays absent by default and refuses productio
   await assert.rejects(
     createApplication(
       { ...config, environment: "production" },
-      { wechatFetch, paymentFetch },
+      { wechatFetch: withWechatProfile(wechatFetch), paymentFetch },
     ),
     /Recording requires isolated synthetic/,
   );
   await assert.rejects(async () => {
     const shared = await createApplication(
       { ...config, audioProbe: { storageRoot: root } },
-      { wechatFetch, paymentFetch },
+      { wechatFetch: withWechatProfile(wechatFetch), paymentFetch },
     );
     await shared.close();
   }, /separate object storage/);

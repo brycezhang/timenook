@@ -20,3 +20,5 @@
  <view class="purchase-dock"><button class="purchase-card" bindtap="purchase"><image src="/assets/sample-book.jpg" mode="aspectFill"/><view><view><text class="amount">999</text> 元 <text class="included">含1本实体书</text></view><view class="purchase-label">开始做一本书 →</view></view></button></view>
 </view>
 <view wx:if="{{!nativeTabs}}" class="tabs"><button class="tab active"><image class="icon" src="/assets/icons/book-open.svg"/>岁月成书</button><button class="tab" bindtap="account"><image class="icon" src="/assets/icons/user.svg"/>我的</button></view>
+
+<quick-login visible="{{loginVisible}}" bindsuccess="loginSucceeded" bindclose="closeLogin"/>

@@ -1,5 +1,9 @@
 import { IdentityAccess } from "../identity/identity-access";
-import { e2eSnapshot, E2E_SHIPPING_REGIONS } from "./e2e-package";
+import {
+  e2eSnapshot,
+  E2E_SHIPPING_REGIONS,
+  E2E_PUBLIC_TERMS,
+} from "./e2e-package";
 import { Equals } from "class-validator";
 import { InvalidPackageException } from "./errors";
 import { ErrorResponseDto } from "../health-contract";
@@ -255,11 +259,13 @@ export class Catalog implements OnModuleDestroy {
     sequence: number;
     publicOffer: Prisma.JsonValue;
   }): PackageVersion {
+    const offer = row.publicOffer as unknown as Omit<
+      PackageVersion,
+      "id" | "sequence"
+    >;
     return {
-      ...(row.publicOffer as unknown as Omit<
-        PackageVersion,
-        "id" | "sequence"
-      >),
+      ...offer,
+      ...(offer.purpose === "e2e" ? { terms: E2E_PUBLIC_TERMS } : {}),
       id: row.id,
       sequence: row.sequence,
     };
@@ -458,29 +464,7 @@ export class Catalog implements OnModuleDestroy {
       "e2e",
       snapshot,
       draft.title,
-      [
-        {
-          label: "固定套餐",
-          text: "标价999元，一个人生项目、一位成年讲述者及一位发起人、首本实体书一本。",
-        },
-        {
-          label: "受控支付验收",
-          text: "本版本仅用于授权账号的真实微信支付验收，实付0.01元；退款上限为实际收到的0.01元。",
-        },
-        { label: "长期服务", text: "制作、原声回听、下载和必要资料长期有效。" },
-        {
-          label: "当前验收额度",
-          text: "单段120秒、总录音1200秒、照片10张、追问10次、故事整理10次、主动重新整理3次。",
-        },
-        {
-          label: "商业待定事项",
-          text: "印刷规格、正式配送和商业售后尚未审批；本次不安排实体书生产，不代表正式售卖准入。",
-        },
-        {
-          label: "验收退款",
-          text: "未参与时从付款、使用后未投产时从首次使用起365个自然日内可提交验收退款申请，核验后7个自然日内处理。退款按实付，终止制作及首本权益，不自动删除资料。",
-        },
-      ],
+      E2E_PUBLIC_TERMS,
       E2E_SHIPPING_REGIONS,
     );
   }
@@ -493,13 +477,8 @@ export class Catalog implements OnModuleDestroy {
     ).map((row) => this.versionView(row));
   }
   async current(authorization?: string): Promise<CurrentPackage> {
-    const user = authorization
-      ? await this.identity.current(authorization)
-      : null;
-    const allowed =
-      !!user &&
-      !!this.config.checkoutE2e?.enabled &&
-      this.config.checkoutE2e.userIds.includes(user.id);
+    if (authorization) await this.identity.current(authorization);
+    const allowed = !!this.config.checkoutE2e?.enabled;
     const production = await this.database.packageVersion.findFirst({
       where: { realm: this.realm, purpose: "production" },
       orderBy: { sequence: "desc" },

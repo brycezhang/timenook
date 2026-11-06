@@ -25,9 +25,6 @@ interface CatalogPage {
     packageTitle: string;
     availability: string;
     purchasable: boolean;
-    actualPrice: string;
-    isE2e: boolean;
-    shippingRegions: { code: string; label: string }[];
     selectedLabel: string;
     customLabelValue: string;
     selection: unknown;
@@ -308,7 +305,7 @@ const availableOffer = {
     shippingRegions: [{ code: "CN-110000", label: "北京" }],
   },
 };
-test("an eligible buyer sees the 999 label and explicit one-fen charge from the authenticated package", async () => {
+test("a buyer sees only the 999 label while the server quotes one fen internally", async () => {
   const { page, requests, storage } = harness();
   storage.set("timenook.session.v1:https://example.test/timenook/v1", {
     user: { id: "11111111-1111-4111-8111-111111111111" },
@@ -329,14 +326,12 @@ test("an eligible buyer sees the 999 label and explicit one-fen charge from the 
   await loading;
   assert.equal(page.data.catalogError, "");
   assert.equal(page.data.packagePrice, "999.00");
-  assert.equal(page.data.actualPrice, "0.01");
-  assert.equal(page.data.isE2e, true);
   assert.equal(page.data.purchasable, true);
-  assert.equal(page.data.shippingRegions[0].label, "北京");
+  assert.equal("shippingRegions" in page.data, false);
 });
 
 test("ordinary checkout uses the full price while unavailable or inconsistent discounts cannot become buyable", async () => {
-  for (const [payload, price, purchasable] of [
+  for (const [payload, purchasable] of [
     [
       {
         ...availableOffer,
@@ -348,7 +343,6 @@ test("ordinary checkout uses the full price while unavailable or inconsistent di
         },
         version: { ...availableOffer.version, purpose: "production" },
       },
-      "999.00",
       true,
     ],
     [
@@ -358,7 +352,6 @@ test("ordinary checkout uses the full price while unavailable or inconsistent di
         version: null,
         checkout: null,
       },
-      "",
       false,
     ],
     [
@@ -371,7 +364,6 @@ test("ordinary checkout uses the full price while unavailable or inconsistent di
           isE2e: false,
         },
       },
-      "",
       false,
     ],
   ] as const) {
@@ -381,7 +373,7 @@ test("ordinary checkout uses the full price while unavailable or inconsistent di
     respond(requests[1], payload);
     await loading;
     assert.equal(page.data.purchasable, purchasable);
-    assert.equal(page.data.actualPrice, price);
+    assert.equal("actualPrice" in page.data, false);
   }
 });
 
@@ -400,7 +392,6 @@ test("a late account-specific offer cannot carry one-fen eligibility into a diff
   respond(requests[1], availableOffer);
   await loading;
   assert.equal(page.data.purchasable, false);
-  assert.equal(page.data.actualPrice, "");
 });
 
 test("expired catalog authentication clears loading and offers a reload without keeping eligibility", async () => {

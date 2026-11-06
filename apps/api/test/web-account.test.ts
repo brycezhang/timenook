@@ -1,3 +1,4 @@
+import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -319,20 +320,22 @@ test("replacement ignores forged cookies, WeChat sessions and web sessions using
       wechat: { appId: "synthetic-app", secret: "synthetic-secret" },
     },
     {
-      wechatFetch: async () =>
-        new Response(
-          JSON.stringify({
-            openid: "synthetic-open",
-            session_key: "synthetic-key",
-          }),
-        ),
+      wechatFetch: withWechatProfile(
+        async () =>
+          new Response(
+            JSON.stringify({
+              openid: "synthetic-open",
+              session_key: "synthetic-key",
+            }),
+          ),
+      ),
     },
   );
   try {
     const native = await otherKeyApp.inject({
       method: "POST",
       url: "/v1/sessions/wechat",
-      payload: { code: `synthetic-${randomUUID()}` },
+      payload: { ...phoneLogin(), code: `synthetic-${randomUUID()}` },
     });
     assert.equal(native.statusCode, 201);
     const nativeSession = native.json().data;
@@ -397,7 +400,7 @@ test("web sessions authorize existing user APIs but require CSRF for state chang
     headers: { cookie },
   });
   assert.equal(me.statusCode, 200);
-  assert.deepEqual(me.json().data, account.user);
+  assert.deepEqual(me.json().data, { ...account.user, nickname: null });
   const rejected = await app.inject({
     method: "DELETE",
     url: `/v1/sessions/${data.session.id}`,

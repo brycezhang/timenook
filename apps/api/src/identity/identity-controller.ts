@@ -10,9 +10,17 @@ import {
   Post,
   Req,
 } from "@nestjs/common";
-import { IsString, IsOptional, IsUUID, Length, Matches } from "class-validator";
+import {
+  IsString,
+  IsOptional,
+  IsUUID,
+  Length,
+  Matches,
+  Equals,
+} from "class-validator";
+import { Transform } from "class-transformer";
 import type { FastifyRequest } from "fastify";
-import type { LoginCommand } from "@timenook/contracts";
+import { USER_TERMS_VERSION, type LoginCommand } from "@timenook/contracts";
 import { IdentityAccess } from "./identity-access";
 import {
   ApiBearerAuth,
@@ -28,7 +36,7 @@ import {
 import { AccountResponseDto, LoginResponseDto } from "./identity-contract";
 import { ErrorResponseDto } from "../health-contract";
 
-export class WechatLoginDto implements LoginCommand {
+export class WechatLoginDto {
   @IsString()
   @Length(1, 256)
   @Matches(/^\S+$/)
@@ -40,7 +48,37 @@ export class WechatLoginDto implements LoginCommand {
   code!: string;
 }
 
-class SessionLoginDto extends WechatLoginDto {
+class NicknameDto {
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @Length(1, 32)
+  @Matches(/^[^\u0000-\u001f\u007f]+$/u)
+  @ApiProperty({
+    minLength: 1,
+    maxLength: 32,
+    description: "User-confirmed nickname from the WeChat nickname input",
+  })
+  nickname!: string;
+}
+
+class SessionLoginDto extends WechatLoginDto implements LoginCommand {
+  @Equals(USER_TERMS_VERSION)
+  @ApiProperty({
+    enum: [USER_TERMS_VERSION],
+    description:
+      "Explicit acceptance of the displayed terms and privacy notice",
+  })
+  termsVersion!: string;
+
+  @IsString()
+  @Length(1, 256)
+  @Matches(/^\S+$/)
+  @ApiProperty({
+    description:
+      "One-use code returned by getPhoneNumber; distinct from wx.login code",
+  })
+  phoneCode!: string;
+
   @IsOptional()
   @IsUUID()
   expectedUserId?: string;
@@ -69,7 +107,25 @@ export class IdentityController {
       data: await this.identity.login(
         command.code,
         request.ip,
+        { phoneCode: command.phoneCode, termsVersion: command.termsVersion },
         command.expectedUserId,
+      ),
+      meta: { requestId: request.id },
+    };
+  }
+
+  @Post("users/me/profile")
+  @Header("Cache-Control", "no-store")
+  @ApiBearerAuth()
+  @ApiOkResponse({ type: AccountResponseDto })
+  async updateProfile(
+    @Body() command: NicknameDto,
+    @Req() request: FastifyRequest,
+  ) {
+    return {
+      data: await this.identity.updateNickname(
+        command.nickname,
+        request.headers.authorization,
       ),
       meta: { requestId: request.id },
     };
