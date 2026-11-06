@@ -99,30 +99,32 @@ function harness(name: "home" | "account" = "home", signedIn = false) {
 }
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-test("home 999 purchase opens shared phone login and enters new-book only after successful authorization", async () => {
-  const h = harness();
-  h.page.purchase();
-  assert.equal(h.quick.data.visible, true);
-  assert.equal(h.quick.data.agreed, false);
-  assert.deepEqual(h.routes, []);
-  await h.quick.login(phoneEvent);
-  assert.equal(h.requests.length, 0);
-  h.quick.toggleAgreed();
-  const pending = h.quick.login(phoneEvent);
-  await tick();
-  assert.equal(h.quick.data.busy, true);
-  assert.deepEqual(h.routes, []);
-  assert.deepEqual(JSON.parse(JSON.stringify(h.requests[0].data)), {
-    code: "fresh-wechat-code",
-    phoneCode: "synthetic-phone-code",
-    termsVersion: USER_TERMS_VERSION,
+for (const surface of ["home", "account"] as const) {
+  test(`${surface} purchase opens shared phone login and enters new-book only after successful authorization`, async () => {
+    const h = harness(surface);
+    h.page.purchase();
+    assert.equal(h.quick.data.visible, true);
+    assert.equal(h.quick.data.agreed, false);
+    assert.deepEqual(h.routes, []);
+    await h.quick.login(phoneEvent);
+    assert.equal(h.requests.length, 0);
+    h.quick.toggleAgreed();
+    const pending = h.quick.login(phoneEvent);
+    await tick();
+    assert.equal(h.quick.data.busy, true);
+    assert.deepEqual(h.routes, []);
+    assert.deepEqual(JSON.parse(JSON.stringify(h.requests[0].data)), {
+      code: "fresh-wechat-code",
+      phoneCode: "synthetic-phone-code",
+      termsVersion: USER_TERMS_VERSION,
+    });
+    h.respond();
+    await pending;
+    assert.equal(h.quick.data.visible, false);
+    assert.deepEqual(h.routes, ["/pages/new-book/index"]);
+    assert.equal(h.storage.has(`timenook.session.v1:${base}`), true);
   });
-  h.respond();
-  await pending;
-  assert.equal(h.quick.data.visible, false);
-  assert.deepEqual(h.routes, ["/pages/new-book/index"]);
-  assert.equal(h.storage.has(`timenook.session.v1:${base}`), true);
-});
+}
 
 test("a signed-in home purchase goes directly to new-book without another login", () => {
   const h = harness("home", true);

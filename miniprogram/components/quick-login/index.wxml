@@ -1,7 +1,7 @@
 <view wx:if="{{visible}}" class="quick-login-mask" catchtouchmove="preventMove">
  <view class="quick-login-sheet" role="dialog" aria-modal="true" aria-label="微信快捷登录">
   <view class="s-subtitle">微信快捷登录</view>
-  <view class="s-muted s-space">授权微信绑定的手机号，登录后继续。手机号不公开展示。</view>
+  <view class="s-muted s-space">授权微信绑定的手机号，登录后继续。</view>
   <view class="s-term s-space">请阅读<text bindtap="terms">《使用条款》</text>和<text bindtap="privacy">《隐私保护指引》</text></view>
   <button class="quick-login-check" bindtap="toggleAgreed" aria-role="checkbox" aria-checked="{{agreed}}" disabled="{{busy}}"><text class="quick-login-box {{agreed ? 'checked' : ''}}">{{agreed ? '✓' : ''}}</text><text>我已阅读并同意上述协议</text></button>
   <button class="s-button quick-login-submit" open-type="getPhoneNumber|agreePrivacyAuthorization" bindgetphonenumber="login" loading="{{busy}}" disabled="{{busy || !agreed}}">手机号快捷登录</button>
