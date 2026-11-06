@@ -66,6 +66,7 @@ await build({
   target: "es2020",
   platform: "neutral",
   bundle: true,
+  nodePaths: [path.resolve(import.meta.dirname, "../node_modules")],
   plugins: [
     {
       name: "native-shared-modules",
@@ -104,6 +105,22 @@ await build({
     __TIMENOOK_API_BASE_URL__: JSON.stringify(apiBase),
   },
 });
+// Native encoding is an independent module; publish notices and an exact source link.
+const notices = path.resolve(
+  import.meta.dirname,
+  "../third-party/lamejs-1.2.7",
+);
+await fs.mkdir(`${out}/third-party/lamejs-1.2.7`, { recursive: true });
+for (const name of [
+  "NOTICE.md",
+  "UPSTREAM-LICENSE.txt",
+  "LGPL-3.0.txt",
+  "GPL-3.0.txt",
+])
+  await fs.copyFile(
+    path.join(notices, name),
+    `${out}/third-party/lamejs-1.2.7/${name}`,
+  );
 for (const page of config.pages) {
   for (const ext of [".js", ".wxml", ".wxss", ".json"])
     await fs.access(`${out}/${page}${ext}`);

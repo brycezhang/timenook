@@ -124,6 +124,33 @@
   gap: 16rpx;
   margin: 28rpx 0;
 }
+.live-photo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 28rpx;
+  margin: 32rpx 0;
+}
+.live-story-photo {
+  overflow: hidden;
+  border-radius: 18rpx;
+  background: #eeefe5;
+}
+.live-photo-image {
+  display: block;
+  width: 100%;
+}
+.live-photo-placeholder {
+  padding: 60rpx 24rpx;
+  text-align: center;
+  color: var(--muted);
+  font-size: 30rpx;
+}
+.live-photo-caption {
+  padding: 20rpx 24rpx;
+  color: var(--muted);
+  font-size: 30rpx;
+  line-height: 1.7;
+}
 .live-audio-card {
   padding: 22rpx 24rpx 14rpx;
   border: 2rpx solid #dce1ce;

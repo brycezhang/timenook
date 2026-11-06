@@ -3,6 +3,10 @@ import { dataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
 import { storyClient } from "../../services/stories";
 import {
+  clearPhotoPreviews,
+  privatePhotoPreview,
+} from "../../services/story-photos";
+import {
   clearStoryAudio,
   privateStoryAudio,
   requireStoryAudioAccess,
@@ -10,7 +14,11 @@ import {
 import { recordingPartition } from "../../services/interview-recording";
 import { paymentKey } from "../../services/payments";
 import { projectOverviewClient } from "../../services/project-overview";
-import type { StoryView, StoryContext } from "../../../packages/contracts/src";
+import type {
+  StoryView,
+  StoryContext,
+  PhotoCollection,
+} from "../../../packages/contracts/src";
 function stage(story: StoryView | null) {
   const task = story?.task;
   if (!task)
@@ -71,6 +79,8 @@ Page({
   autoOrganize: false,
   ownerContext: "",
   audioSequence: 0,
+  photoSequence: 0,
+  photoKey: "",
   audioSeeking: false,
   liveAudio: null as WechatMiniprogram.InnerAudioContext | null,
   stopProjectWatch: undefined as (() => void) | undefined,
@@ -108,6 +118,8 @@ Page({
     }[],
     liveParagraphs: [] as { text: string; sourceLabel: string }[],
     liveTranscripts: [] as { clipId: string; label: string; text: string }[],
+    livePhotos: [] as { photoId: string; caption: string; image: string }[],
+    photoError: "",
     saveWarning: "",
     canOrganize: false,
     live: false,
@@ -142,6 +154,8 @@ Page({
   async onShow() {
     if (dataMode() === "live") {
       this.visible = true;
+      this.photoKey = "";
+      ++this.photoSequence;
       const generation = ++this.generation,
         context = sessionClient.context();
       this.ownerContext = context;
@@ -161,6 +175,8 @@ Page({
         story: null,
         liveParagraphs: [],
         liveTranscripts: [],
+        livePhotos: [],
+        photoError: "",
         liveAudioSources: [],
         canOrganize: false,
         context: null,
@@ -231,6 +247,9 @@ Page({
       this.stopSessionWatch?.();
       this.stopSessionWatch = undefined;
       void this.stopLiveAudio().catch(() => {});
+      ++this.photoSequence;
+      this.photoKey = "";
+      void clearPhotoPreviews().catch(() => {});
       this.visible = false;
       this.decisionCommand = null;
       this.careCommand = null;
@@ -247,6 +266,8 @@ Page({
         story: null,
         liveParagraphs: [],
         liveTranscripts: [],
+        livePhotos: [],
+        photoError: "",
         liveAudioSources: [],
         canOrganize: false,
         context: null,
@@ -440,6 +461,10 @@ Page({
             error.status === 403 &&
             this.currentLive(generation, context)
           ) {
+            ++this.photoSequence;
+            this.photoKey = "";
+            this.setData({ livePhotos: [], photoError: "" });
+            void clearPhotoPreviews().catch(() => {});
             Object.assign(view, {
               story: result?.story ?? null,
               privateError: "当前无法查看正文，请重新登录或查询",
@@ -449,6 +474,8 @@ Page({
       }
       if (!this.currentLive(generation, context)) return;
       this.setData(view);
+      if (view.story && !view.privateError)
+        void this.loadLivePhotos(view.story, generation, context);
       if (
         this.currentLive(generation, context) &&
         this.data.story?.task &&
@@ -466,6 +493,76 @@ Page({
       if (!background && this.currentLive(generation, context, true))
         this.setData({ busy: false });
     }
+  },
+  async loadLivePhotos(story: StoryView, generation: number, context: string) {
+    const key = `${story.id}:${story.revision?.id ?? "materials"}`;
+    if (this.photoKey === key) return;
+    this.photoKey = key;
+    const sequence = ++this.photoSequence;
+    const current = () =>
+      sequence === this.photoSequence && this.currentLive(generation, context);
+    this.setData({ livePhotos: [], photoError: "" });
+    try {
+      // A composed story displays its immutable photo version. Before composition,
+      // show the photos already collected for this same interview.
+      const snapshot = story.revision
+        ? story.revision.photoSnapshot
+        : (
+            await sessionClient.request<PhotoCollection>(
+              `/projects/${this.projectId}/interviews/${story.interviewId}/photos`,
+            )
+          ).snapshot;
+      if (!current()) return;
+      await clearPhotoPreviews();
+      if (!current()) return;
+      const entries = snapshot?.entries ?? [];
+      this.setData({
+        livePhotos: entries.map((entry) => ({
+          photoId: entry.photoId,
+          caption: entry.caption,
+          image: "",
+        })),
+      });
+      await Promise.all(
+        entries.map(async (entry) => {
+          const asset = entry.assets.find((a) => a.kind === "preview");
+          if (!asset) return;
+          const image = await privatePhotoPreview(
+            this.projectId,
+            story.interviewId,
+            entry.photoId,
+            asset,
+            current,
+          );
+          if (current())
+            this.setData({
+              livePhotos: this.data.livePhotos.map((row) =>
+                row.photoId === entry.photoId ? { ...row, image } : row,
+              ),
+            });
+          else await clearPhotoPreviews([image]);
+        }),
+      );
+    } catch (error) {
+      if (!current()) return;
+      this.photoKey = "";
+      if (error instanceof ApiFailure && [401, 403].includes(error.status))
+        this.liveFailure(generation, context, error, "照片访问已失效");
+      else this.setData({ photoError: "照片暂未加载，请重试。" });
+    }
+  },
+  reloadLivePhotos() {
+    if (
+      !this.data.story ||
+      !this.currentLive(this.generation, this.ownerContext)
+    )
+      return;
+    this.photoKey = "";
+    void this.loadLivePhotos(
+      this.data.story,
+      this.generation,
+      this.ownerContext,
+    );
   },
   moreActions() {
     wx.showActionSheet({
@@ -988,7 +1085,7 @@ Page({
     wx.setStorageSync(`${partition}:active`, this.interviewId);
     go(
       "interview",
-      `projectId=${this.projectId}&interviewId=${this.interviewId}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
+      `projectId=${this.projectId}&interviewId=${this.interviewId}&prepare=1${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
     );
   },
   confirm() {

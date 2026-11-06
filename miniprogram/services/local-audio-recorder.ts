@@ -1,4 +1,5 @@
 import { recordingLease } from "./recording-lease";
+import { prepareDevtoolsRecording } from "./devtools-recording";
 import type {
   ProbeLocalClip,
   ProbeSnapshot,
@@ -35,6 +36,7 @@ export class LocalAudioRecorder {
   private elapsedMs = 0;
   private segmentBegan = 0;
   private openingQuestionId?: string;
+  private maxDurationMs = 300000;
   constructor(
     protected readonly key: string,
     private readonly allowed: () => void = () => {},
@@ -131,11 +133,16 @@ export class LocalAudioRecorder {
       return;
     this.clipId = recordingId();
     this.openingQuestionId = actualQuestionId;
+    this.maxDurationMs = maxDurationMs;
     this.active = true;
     this.stopRequested = false;
     this.update("requesting", "正在请求麦克风权限");
     this.manager.start({
-      duration: maxDurationMs,
+      // Leave room for MP3 encoder padding when devtools returns WebM.
+      duration:
+        wx.getDeviceInfo?.().platform === "devtools"
+          ? Math.max(1, maxDurationMs - 108)
+          : maxDurationMs,
       sampleRate: 16000,
       numberOfChannels: 1,
       encodeBitRate: 48000,
@@ -217,6 +224,16 @@ export class LocalAudioRecorder {
     this.update("saving", "正在保存本机文件，请先别退出");
     try {
       const pending = this.pending;
+      if (!pending.savedPath && wx.getDeviceInfo?.().platform === "devtools") {
+        const prepared = await prepareDevtoolsRecording(
+          pending.tempFilePath,
+          pending.clientClipId,
+          pending.duration,
+          this.maxDurationMs,
+        );
+        pending.savedPath = prepared.savedPath;
+        pending.duration = prepared.duration;
+      }
       pending.savedPath ??= await new Promise<string>((resolve, reject) =>
         wx.getFileSystemManager().saveFile({
           tempFilePath: pending.tempFilePath,

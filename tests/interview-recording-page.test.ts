@@ -36,6 +36,16 @@ const newStoryEntries = await Promise.all(
     ).outputFiles[0].text,
   })),
 );
+const supplementEntry = (
+  await build({
+    entryPoints: ["miniprogram/pages/story/index.ts"],
+    bundle: true,
+    write: false,
+    format: "cjs",
+    platform: "neutral",
+    define: { __TIMENOOK_API_BASE_URL__: JSON.stringify(base) },
+  })
+).outputFiles[0].text;
 function harness(
   options: {
     autoUpload?: boolean;
@@ -2329,6 +2339,70 @@ test("the page passes the remaining server budget to the native recording bounda
     if (!maxDurationMs) assert.match(h.page.data.status, /额度未确认/);
     h.page.onUnload();
   }
+});
+
+test("continue telling from a story opens recording preparation for the same interview instead of its previous upload success", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  let source: any;
+  const routes: string[] = [];
+  runInNewContext(supplementEntry, {
+    Page: (value: any) => {
+      source = value;
+    },
+    wx: {
+      getStorageSync: (key: string) => structuredClone(h.storage.get(key)),
+      setStorageSync: (key: string, value: unknown) =>
+        h.storage.set(key, value),
+      getAccountInfoSync: () => ({ miniProgram: { appId: "synthetic-app" } }),
+      navigateTo: ({ url }: { url: string }) => routes.push(url),
+    },
+  });
+  source.projectId = projectId;
+  source.interviewId = interviewId;
+  source.recoverInterview();
+  const query = Object.fromEntries(
+    new URLSearchParams(routes[0].split("?")[1]),
+  );
+  h.page.onLoad(query);
+  const showing = h.page.onShow();
+  const saved = {
+    ...interview,
+    clips: [{ id: "88888888-8888-4888-8888-888888888888", state: "sealed" }],
+  };
+  respond(h.requests.shift(), { ...context, interviews: [saved] });
+  await showing;
+  assert.equal(
+    h.page.data.flowStep,
+    "prepare",
+    "supplement must display the microphone rather than the old upload result",
+  );
+  assert.equal(h.page.data.interview.id, interviewId);
+  assert.equal(
+    query.draftId,
+    undefined,
+    "supplement stays in the original story",
+  );
+  assert.equal(h.starts, 0, "the microphone waits for the user's start tap");
+  // A delayed task refresh must not send the recording screen back to processing.
+  respond(h.requests.shift(), [], 201);
+  await tick();
+  assert.equal(h.page.data.flowStep, "prepare");
+  await start(h);
+  assert.equal(h.starts, 1);
+  assert.equal(h.page.data.flowStep, "record");
+  await h.page.record();
+  await tick();
+  h.page.onHide();
+  h.page.onLoad({ projectId, interviewId, prepare: "1" });
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [saved] });
+  await returning;
+  assert.equal(
+    h.page.data.flowStep,
+    "review",
+    "an unsubmitted take remains recoverable before a new recording",
+  );
 });
 
 for (const entry of newStoryEntries) {

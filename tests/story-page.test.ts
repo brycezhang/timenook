@@ -29,6 +29,7 @@ function harness(
     missingFiles?: string[];
     missingFileError?: { errMsg: string; errCode?: number; errno?: number };
     unlinkFailure?: number;
+    photoSnapshot?: any;
   } = {},
 ) {
   let now = Date.now();
@@ -44,6 +45,7 @@ function harness(
       ],
     ),
     requests: any[] = [],
+    photoRequests: any[] = [],
     navigation: any[] = [],
     downloads: any[] = [],
     removed: string[] = [],
@@ -84,7 +86,18 @@ function harness(
         storage.set(key, structuredClone(value));
       },
       removeStorageSync: (key: string) => storage.delete(key),
-      request: (o: any) => requests.push(o),
+      request: (o: any) => {
+        if (o.url.endsWith(`/interviews/${interviewId}/photos`)) {
+          photoRequests.push(o);
+          o.success({
+            statusCode: 200,
+            data: {
+              data: { snapshot: options.photoSnapshot ?? null, photos: [] },
+              meta: { requestId: "synthetic-photo-context" },
+            },
+          });
+        } else requests.push(o);
+      },
       downloadFile: (o: any) => downloads.push(o),
       getFileSystemManager: () => ({
         getFileInfo: (o: any) => o.success(info),
@@ -168,6 +181,7 @@ function harness(
     page,
     storage,
     requests,
+    photoRequests,
     respond,
     navigation,
     downloads,
@@ -204,6 +218,102 @@ function story(state = "waiting_inputs", version = 0) {
     },
   };
 }
+const photoSnapshot = {
+  id: "77777777-7777-4777-8777-777777777777",
+  projectId,
+  interviewId,
+  revision: 1,
+  hash: "c".repeat(64),
+  entries: [
+    {
+      photoId: "88888888-8888-4888-8888-888888888888",
+      caption: "讲述时看的照片",
+      assets: [
+        {
+          id: "99999999-9999-4999-8999-999999999999",
+          kind: "preview",
+          bytes: 123,
+          sha256: "a".repeat(64),
+        },
+      ],
+    },
+  ],
+};
+for (const generated of [false, true]) {
+  test(`${generated ? "generated story" : "transcript without a generated story"} displays the associated photo and clears its private preview on hide`, async () => {
+    const h = harness({ photoSnapshot });
+    const result: any = story(generated ? "succeeded" : "no_content");
+    if (generated)
+      result.revision = {
+        id: "revision1",
+        title: "故事",
+        paragraphs: [],
+        reviewItems: [],
+        sourceManifest: [],
+        photoSnapshot,
+      };
+    h.page.onLoad({ projectId, storyId });
+    const showing = h.page.onShow();
+    await turn();
+    h.respond(0, result);
+    await showing;
+    await turn();
+    assert.equal(
+      h.downloads.length,
+      1,
+      "associated photo must be downloaded for inline display",
+    );
+    h.downloads[0].success({
+      statusCode: 200,
+      tempFilePath: "story-photo-preview",
+    });
+    await turn();
+    assert.equal(h.page.data.livePhotos[0].image, "story-photo-preview");
+    assert.equal(h.page.data.livePhotos[0].caption, "讲述时看的照片");
+    assert.equal(
+      h.photoRequests.length,
+      generated ? 0 : 1,
+      "a generated story must use its versioned photo snapshot",
+    );
+    h.page.onHide();
+    await turn();
+    assert.equal(h.page.data.livePhotos.length, 0);
+    assert.ok(h.removed.includes("story-photo-preview"));
+  });
+}
+test("a photo download completing after the story is hidden is deleted without redisplaying it", async () => {
+  const h = harness({ photoSnapshot });
+  h.page.onLoad({ projectId, storyId });
+  const showing = h.page.onShow();
+  await turn();
+  h.respond(0, story("no_content"));
+  await showing;
+  await turn();
+  assert.equal(h.downloads.length, 1);
+  h.page.onHide();
+  h.downloads[0].success({ statusCode: 200, tempFilePath: "late-story-photo" });
+  await turn();
+  assert.equal(h.page.data.livePhotos.length, 0);
+  assert.ok(h.removed.includes("late-story-photo"));
+});
+test("denied photo access clears the story and its private material", async () => {
+  const h = harness({ photoSnapshot });
+  h.page.onLoad({ projectId, storyId });
+  const showing = h.page.onShow();
+  await turn();
+  h.respond(0, story("no_content"));
+  await showing;
+  await turn();
+  assert.equal(h.downloads.length, 1);
+  h.downloads[0].success({
+    statusCode: 403,
+    tempFilePath: "denied-story-photo",
+  });
+  await turn();
+  assert.equal(h.page.data.story, null);
+  assert.equal(h.page.data.livePhotos.length, 0);
+  assert.ok(h.removed.includes("denied-story-photo"));
+});
 test("transcribed audio without a story shows its transcript and clears it when leaving", async () => {
   const h = harness();
   const result: any = story("no_content");

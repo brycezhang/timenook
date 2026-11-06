@@ -94,6 +94,7 @@ Page({
   uploadingClipId: "",
   draftId: "",
   prepareDraft: false,
+  prepareSupplement: false,
   generation: 0,
   liveRecorder: null as InterviewRecorder | null,
   context: null as RecordingContext | null,
@@ -119,6 +120,7 @@ Page({
         : "";
       this.requestedInterviewId = q.interviewId || "";
       this.prepareDraft = !!this.draftId && q.prepare === "1";
+      this.prepareSupplement = !!this.requestedInterviewId && q.prepare === "1";
       this.assistedSessionId = q.assistedSessionId ?? "";
       this.setData({
         mode: "live",
@@ -158,7 +160,17 @@ Page({
   },
   async onShow() {
     this.taskVisible = true;
-    if (dataMode() === "live") await this.refresh();
+    if (dataMode() === "live") {
+      await this.refresh();
+      if (this.prepareSupplement && this.data.interview) {
+        this.prepareSupplement = false;
+        if (
+          this.data.canRecord &&
+          !this.data.localClips.some((clip) => !clip.sealed)
+        )
+          this.prepareCurrent();
+      }
+    }
   },
   watchSession() {
     this.stopSessionWatch?.();
