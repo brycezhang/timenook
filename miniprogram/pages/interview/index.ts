@@ -4,6 +4,10 @@ import { optionalFollowupClient } from "../../services/optional-followup";
 import { dataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
 import {
+  clearPhotoPreviews,
+  privatePhotoPreview,
+} from "../../services/story-photos";
+import {
   InterviewRecorder,
   interviewRecordingClient,
   recordingPartition,
@@ -16,6 +20,7 @@ import type {
   ProductionTaskView,
   RecordingContext,
   RecordingInterview,
+  PhotoCollection,
 } from "../../../packages/contracts/src";
 import type { ProbeLocalClip } from "../../../packages/contracts/src/audio-probe";
 import { questions, samples, touch } from "../../domain/model";
@@ -65,6 +70,14 @@ Page({
     timer: "00:00",
     error: "",
     photo: "",
+    photoContext: false,
+    recordingPhotos: [] as {
+      photoId: string;
+      caption: string;
+      image: string;
+    }[],
+    photosLoading: false,
+    photoError: "",
     permission: false,
     playingId: "",
     questionPicker: false,
@@ -193,6 +206,7 @@ Page({
   },
   clearPrivateView() {
     this.closePlayback();
+    void clearPhotoPreviews().catch(() => {});
     this.uploadingClipId = "";
     if (this.collectionWatch) clearTimeout(this.collectionWatch);
     this.collectionWatch = undefined;
@@ -223,6 +237,10 @@ Page({
         pendingInterviews: [],
         customText: "",
         customIntent: "",
+        photoContext: false,
+        recordingPhotos: [],
+        photosLoading: false,
+        photoError: "",
         busy: false,
         canRecord: false,
         questionPicker: false,
@@ -388,6 +406,9 @@ Page({
     this.setData({
       ...flowView("prepare"),
       interview: value,
+      photoContext: value.actualQuestion.starterKind === "photo",
+      recordingPhotos: [],
+      photoError: "",
       taskRows: [],
       taskError: "",
       question: (value.currentQuestion ?? value.actualQuestion).snapshot.text,
@@ -455,8 +476,61 @@ Page({
       }
     });
     await device.restore();
-    if (this.current(generation, context))
+    if (this.current(generation, context)) {
       this.watchCollection(generation, context, value.id);
+      if (this.data.photoContext) void this.loadRecordingPhotos();
+    }
+  },
+  async loadRecordingPhotos() {
+    const generation = this.generation,
+      context = sessionClient.context(),
+      interviewId = this.data.interview?.id;
+    if (!interviewId || !this.data.photoContext) return;
+    const current = () =>
+      this.current(generation, context) &&
+      this.data.interview?.id === interviewId;
+    this.setData({ photosLoading: true, photoError: "", recordingPhotos: [] });
+    try {
+      const collection = await sessionClient.request<PhotoCollection>(
+        `/projects/${this.projectId}/interviews/${interviewId}/photos`,
+      );
+      if (!current()) return;
+      await clearPhotoPreviews();
+      if (!current()) return;
+      const entries = collection.snapshot?.entries ?? [];
+      this.setData({
+        recordingPhotos: entries.map((entry) => ({
+          photoId: entry.photoId,
+          caption: entry.caption,
+          image: "",
+        })),
+      });
+      await Promise.all(
+        entries.map(async (entry) => {
+          const asset = entry.assets.find((a) => a.kind === "preview");
+          if (!asset) return;
+          const image = await privatePhotoPreview(
+            this.projectId,
+            interviewId,
+            entry.photoId,
+            asset,
+            current,
+          );
+          if (current())
+            this.setData({
+              recordingPhotos: this.data.recordingPhotos.map((photo) =>
+                photo.photoId === entry.photoId ? { ...photo, image } : photo,
+              ),
+            });
+          else await clearPhotoPreviews([image]);
+        }),
+      );
+    } catch (error) {
+      if (this.taskAuthorizationLost(error, generation, context)) return;
+      if (current()) this.setData({ photoError: "照片暂未加载" });
+    } finally {
+      if (current()) this.setData({ photosLoading: false });
+    }
   },
   watchCollection(generation: number, context: string, interviewId: string) {
     if (this.collectionWatch) clearTimeout(this.collectionWatch);
@@ -489,6 +563,7 @@ Page({
       ["recording", "paused", "requesting", "saving"].includes(this.data.state)
     )
       return;
+    this.prepareSupplement = this.data.flowStep === "prepare";
     wx.navigateTo({
       url: `/pages/photos/index?projectId=${encodeURIComponent(this.projectId)}&interviewId=${encodeURIComponent(interview.id)}${this.assistedSessionId ? `&assistedSessionId=${encodeURIComponent(this.assistedSessionId)}` : ""}`,
     });

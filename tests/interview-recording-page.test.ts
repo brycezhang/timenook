@@ -61,6 +61,8 @@ function harness(
     requestedDurations: number[] = [],
     requests: any[] = [],
     uploads: any[] = [],
+    downloads: any[] = [],
+    removed: string[] = [],
     files = new Set<string>(),
     handlers: Record<string, ((v?: any) => void)[]> = {},
     pendingSaves: any[] = [],
@@ -106,6 +108,7 @@ function harness(
       page.setData = (patch: object) => Object.assign(page.data, patch);
     },
     wx: {
+      env: { USER_DATA_PATH: "/user-data" },
       getStorageSync: (key: string) => {
         assert.notEqual(
           key,
@@ -122,6 +125,7 @@ function harness(
       removeStorageSync: (key: string) => storage.delete(key),
       getAccountInfoSync: () => ({ miniProgram: { appId: "synthetic-app" } }),
       request: (o: any) => requests.push(o),
+      downloadFile: (o: any) => downloads.push(o),
       uploadFile: (o: any) => {
         uploads.push(o);
         o.success({ statusCode: 204 });
@@ -171,6 +175,10 @@ function harness(
         getFileInfo: (o: any) =>
           o.success({ size: 6480, digest: "b".repeat(64) }),
         access: (o: any) => (files.has(o.path) ? o.success({}) : o.fail({})),
+        unlink: (o: any) => {
+          removed.push(o.filePath);
+          o.success({});
+        },
       }),
       createInnerAudioContext: () => ({
         src: "",
@@ -197,6 +205,8 @@ function harness(
     requests,
     requestedDurations,
     uploads,
+    downloads,
+    removed,
     files,
     emit,
     pendingSaves,
@@ -2339,6 +2349,113 @@ test("the page passes the remaining server budget to the native recording bounda
     if (!maxDurationMs) assert.match(h.page.data.status, /额度未确认/);
     h.page.onUnload();
   }
+});
+
+test("photo narration displays its private photos while recording and paused, then clears previews on leaving", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  const selected = {
+    ...interview,
+    actualQuestion: { ...question, starterKind: "photo" },
+  };
+  h.page.onLoad({ projectId, interviewId, prepare: "1" });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), { ...context, interviews: [selected] });
+  await showing;
+  assert.equal(h.page.data.photoContext, true);
+  const photoRequest = h.requests.shift();
+  assert.equal(
+    photoRequest.url,
+    `${base}/projects/${projectId}/interviews/${interviewId}/photos`,
+  );
+  const entry = {
+    photoId: "77777777-7777-4777-8777-777777777777",
+    caption: "照片里的往事",
+    assets: [
+      {
+        id: "88888888-8888-4888-8888-888888888888",
+        kind: "preview",
+        bytes: 6480,
+        sha256: "b".repeat(64),
+      },
+    ],
+  };
+  respond(photoRequest, {
+    snapshot: {
+      entries: [
+        entry,
+        { ...entry, photoId: "99999999-9999-4999-8999-999999999999" },
+      ],
+    },
+  });
+  await tick();
+  assert.equal(h.downloads.length, 2);
+  h.downloads.forEach((download) =>
+    download.success({
+      statusCode: 200,
+      tempFilePath: download.url.includes(entry.photoId)
+        ? "photo-preview-0"
+        : "photo-preview-1",
+    }),
+  );
+  await tick();
+  assert.deepEqual(
+    Array.from(h.page.data.recordingPhotos, (p: any) => p.image),
+    ["photo-preview-0", "photo-preview-1"],
+  );
+  await start(h);
+  assert.equal(h.page.data.flowStep, "record");
+  assert.equal(h.page.data.recordingPhotos.length, 2);
+  await h.page.togglePause();
+  assert.equal(h.page.data.state, "paused");
+  assert.equal(h.page.data.recordingPhotos[0].image, "photo-preview-0");
+  h.page.onHide();
+  await tick();
+  assert.equal(h.page.data.recordingPhotos.length, 0);
+  assert.ok(h.removed.includes("photo-preview-0"));
+  assert.ok(h.removed.includes("photo-preview-1"));
+});
+
+test("photo narration discards a preview that finishes downloading after leaving", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  h.page.onLoad({ projectId, interviewId });
+  const showing = h.page.onShow();
+  respond(h.requests.shift(), {
+    ...context,
+    interviews: [
+      { ...interview, actualQuestion: { ...question, starterKind: "photo" } },
+    ],
+  });
+  await showing;
+  respond(h.requests.shift(), {
+    snapshot: {
+      entries: [
+        {
+          photoId: "77777777-7777-4777-8777-777777777777",
+          caption: "照片",
+          assets: [
+            {
+              id: "88888888-8888-4888-8888-888888888888",
+              kind: "preview",
+              bytes: 6480,
+              sha256: "b".repeat(64),
+            },
+          ],
+        },
+      ],
+    },
+  });
+  await tick();
+  assert.equal(h.downloads.length, 1);
+  h.page.onHide();
+  h.downloads[0].success({
+    statusCode: 200,
+    tempFilePath: "late-recording-photo",
+  });
+  await tick();
+  assert.equal(h.page.data.recordingPhotos.length, 0);
+  assert.ok(h.removed.includes("late-recording-photo"));
 });
 
 test("continue telling from a story opens recording preparation for the same interview instead of its previous upload success", async (t) => {

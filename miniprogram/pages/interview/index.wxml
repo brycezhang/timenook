@@ -1,4 +1,4 @@
-<view wx:if="{{!questionPicker && !clipPicker}}" class="interview-focus {{mode === 'live' ? 'live-interview' : ''}} {{flowStep}}">
+<view wx:if="{{!questionPicker && !clipPicker}}" class="interview-focus {{mode === 'live' ? 'live-interview' : ''}} {{flowStep}} {{photoContext ? 'with-photo' : ''}}">
   <button wx:if="{{flowStep === 'review' || flowStep === 'processing'}}" class="focus-more" bindtap="moreActions" aria-label="更多讲述操作">更多</button>
   <view wx:if="{{mode === 'live' && !canRecord && !busy && (flowStep === 'choose' || flowStep === 'prepare')}}" class="permission-state"><view class="title">暂时不能开始讲述</view><view class="question-hint" role="alert">{{status}}</view><button class="btn section" bindtap="refresh">重新核对权限</button></view>
   <block wx:elif="{{flowStep === 'choose'}}">
@@ -18,11 +18,17 @@
     <!-- @development:start --><view wx:if="{{mode !== 'live'}}" class="demo-note">本机演示，录音不会上传。</view><!-- @development:end -->
   </block>
   <block wx:elif="{{flowStep === 'prepare' || flowStep === 'record'}}">
-    <view class="focus-topic">{{flowStep === 'record' ? (state === 'paused' ? '休息一下，想好了再继续' : '正在记录你的声音') : '从一段记得的往事开始'}}</view>
-    <view class="interview-question serif">{{question || '想从哪一段往事讲起？'}}</view>
-    <view wx:if="{{flowStep !== 'record'}}" class="question-hint">{{questionHint || '可以说说当时的人、记得的场景，或一件小事。'}}</view>
-    <view wx:if="{{flowStep !== 'record'}}" class="record-guide"><view>点一下开始，说完再点一下。</view><view class="guide-detail">不用一次讲完，没讲完可以再说一段。</view></view>
-    <view wx:if="{{flowStep === 'record'}}" class="record-timer">{{timer}}</view>
+    <view class="record-prompt"><view class="interview-question serif">{{photoContext && (!interview.currentQuestion || interview.currentQuestion.starterKind === 'photo') ? '看着照片，慢慢讲' : question || '想从哪一段往事讲起？'}}</view></view>
+    <swiper wx:if="{{photoContext && recordingPhotos.length}}" class="recording-photos" indicator-dots="{{recordingPhotos.length > 1}}" indicator-color="#d4dac7" indicator-active-color="#697657">
+      <swiper-item wx:for="{{recordingPhotos}}" wx:key="photoId">
+        <image wx:if="{{item.image}}" class="recording-photo" src="{{item.image}}" mode="aspectFit" aria-label="{{item.caption || '讲述的照片'}}" />
+        <view wx:else class="recording-photo-placeholder">{{photoError || '正在加载照片…'}}</view>
+      </swiper-item>
+    </swiper>
+    <view wx:elif="{{photoContext}}" class="recording-photo-placeholder">{{photoError || (photosLoading ? '正在加载照片…' : '还没有照片')}}<button wx:if="{{!photosLoading && !photoError}}" class="focus-link" bindtap="photos" disabled="{{busy || flowStep === 'record'}}">添加照片</button></view>
+    <button wx:if="{{photoError}}" class="photo-retry focus-link" bindtap="loadRecordingPhotos">重新加载照片</button>
+    <view class="record-controls">
+    <view wx:if="{{flowStep === 'record'}}" class="record-timer">{{timer}}<text wx:if="{{state === 'paused'}}" class="paused-label">已暂停</text></view>
     <view class="focus-recorder">
       <block wx:if="{{flowStep !== 'record'}}">
         <button class="record-button" aria-label="开始说" bindtap="startSpeaking" disabled="{{busy || (mode === 'live' && !canRecord)}}"><image class="record-icon" src="/assets/icons/mic-light.svg" /></button>
@@ -30,15 +36,15 @@
       </block>
       <block wx:elif="{{state === 'recording' || state === 'paused' || state === 'requesting'}}">
         <button class="record-button {{state === 'recording' ? 'recording' : ''}}" aria-label="说完了，停止录音" bindtap="record" disabled="{{busy || state === 'requesting'}}"><image class="record-icon" src="/assets/icons/square-light.svg" /></button>
-        <view class="record-label">说完了，点一下</view>
+        <view class="record-label">结束录音</view>
         <button wx:if="{{mode === 'live' && (state === 'recording' || state === 'paused')}}" class="focus-link pause-control" bindtap="togglePause" disabled="{{busy}}">{{state === 'paused' ? '继续说' : '暂停一下'}}</button>
       </block>
       <block wx:elif="{{state === 'saving'}}"><view class="saving-indicator"/><view class="record-label">正在保存声音…</view></block>
       <block wx:else=""><image class="state-icon" src="/assets/icons/mic.svg"/><button class="btn" bindtap="retry" disabled="{{busy}}">重试录音或保存</button></block>
     </view>
     <view wx:if="{{error || (!busy && status && (!canRecord || state === 'device-error'))}}" class="focus-error" role="alert">{{error || status}}</view>
-    <view wx:else="" class="microphone-note">{{flowStep === 'record' ? '说完后自动上传，故事会慢慢整理好。' : '首次使用时，请允许使用麦克风。'}}</view>
-    <view wx:if="{{flowStep !== 'record'}}" class="focus-bottom"><button class="focus-link" bindtap="chooseAnother" disabled="{{busy}}">{{mode !== 'live' || hasOtherQuestions ? '换个问题' : '其他讲述方式'}}</button></view>
+    </view>
+    <view wx:if="{{flowStep !== 'record'}}" class="focus-bottom"><button wx:if="{{photoContext}}" class="focus-link" bindtap="photos" disabled="{{busy}}">查看照片</button><button wx:else class="focus-link" bindtap="chooseAnother" disabled="{{busy}}">{{mode !== 'live' || hasOtherQuestions ? '换个问题' : '其他讲述方式'}}</button></view>
   </block>
 
   <block wx:elif="{{flowStep === 'review' || flowStep === 'processing'}}">
