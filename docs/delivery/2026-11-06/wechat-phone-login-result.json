@@ -1,0 +1,94 @@
+{
+  "date": "2026-11-06",
+  "sourceCommit": "bf10af2",
+  "release": "/data/server/timenook/releases/20261106-phone-bf10af2",
+  "artifactSha256": "3e7492f6d81bd41372896d3c05ce04653f946bebd675c22be77a93066f870b24",
+  "localReset": {
+    "database": "timenook",
+    "before": {
+      "users": 0,
+      "projects": 0,
+      "sessions": 0,
+      "orders": 0
+    },
+    "after": {
+      "users": 0,
+      "projects": 0,
+      "sessions": 0,
+      "orders": 0
+    },
+    "clearedTables": 95,
+    "retained": [
+      "_prisma_migrations",
+      "service_schema",
+      "admin_accounts",
+      "recipient_types",
+      "outline_template_versions",
+      "package_drafts",
+      "package_versions",
+      "privacy_erasure_registry",
+      "privacy_recovery_state"
+    ],
+    "deletedKeys": 0
+  },
+  "cloudReset": {
+    "database": "timenook",
+    "before": {
+      "users": 42,
+      "projects": 34,
+      "sessions": 132,
+      "orders": 3
+    },
+    "after": {
+      "users": 0,
+      "projects": 0,
+      "sessions": 0,
+      "orders": 0
+    },
+    "clearedTables": 104,
+    "retained": [
+      "_prisma_migrations",
+      "service_schema",
+      "admin_accounts",
+      "recipient_types",
+      "outline_template_versions",
+      "package_drafts",
+      "package_versions",
+      "privacy_erasure_registry",
+      "privacy_recovery_state"
+    ],
+    "deletedKeys": 4
+  },
+  "cloudPrivacyJournalGeneration": 0,
+  "services": {
+    "api": "active/running",
+    "worker": "active/running",
+    "restarts": 0,
+    "exitStatus": 0
+  },
+  "http": {
+    "live": 200,
+    "ready": 200,
+    "admin": 200,
+    "anonymousProjects": 401,
+    "anonymousNicknameUpdate": 401,
+    "codeOnlyLoginRejected": 400
+  },
+  "wechat": {
+    "stableTokenCredentialsVerified": true,
+    "privacyContractName": "《千言一语 - 时光故事小程序隐私保护指引》",
+    "phoneAuthorizationOnDevice": "not-executed"
+  },
+  "checks": {
+    "typecheck": "passed",
+    "nativeReleaseBuild": "passed",
+    "wxmlAndWxss": "29 pages passed",
+    "frontendRelated": "61/61",
+    "nativeBuildTests": "passed",
+    "apiRelatedFinal": "50/50 across affected files",
+    "firstFullFrontend": "308/309, original-audio entry assertion updated and affected 18/18 passed",
+    "firstFullApi": "461/466, five account-response assertions updated and affected files passed"
+  },
+  "miniProgramUpload": "not-executed",
+  "remotePush": "not-executed"
+}
