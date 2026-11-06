@@ -4,6 +4,28 @@
   align-items: center;
   padding: 36rpx 0;
 }
+.profile-info {
+  flex: 1;
+  min-width: 0;
+}
+.nickname-trigger {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  max-width: 100%;
+  width: fit-content;
+  min-height: 88rpx;
+  text-align: left;
+}
+.nickname-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.nickname-edit-icon {
+  width: 36rpx;
+  height: 36rpx;
+  flex-shrink: 0;
+}
 .avatar {
   width: 124rpx;
   height: 124rpx;
@@ -19,12 +41,29 @@
   height: 66rpx;
 }
 
+.nickname-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32rpx;
+  background: rgba(0, 0, 0, 0.4);
+}
+.nickname-dialog {
+  width: 100%;
+  max-width: 640rpx;
+  padding: 40rpx 32rpx 16rpx;
+  border-radius: 24rpx;
+  background: var(--paper);
+}
 .nickname-input {
   background: #fff;
   border: 1rpx solid #d8d1c3;
   border-radius: 16rpx;
   padding: 24rpx;
-  min-height: 64rpx;
+  height: 104rpx;
   font-size: 36rpx;
 }
 .profile .s-subtitle {

@@ -54,6 +54,7 @@ Page({
   cancelEdit() {
     if (!this.data.busy) this.setData({ editing: false, status: "" });
   },
+  preventMove() {},
   async saveNickname(e: { detail: { value: { nickname: string } } }) {
     if (this.data.busy) return;
     const nickname = e.detail.value.nickname.trim();
