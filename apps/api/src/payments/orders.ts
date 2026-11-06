@@ -539,8 +539,9 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       transaction.appid !== order.appId ||
       transaction.mchid !== order.merchantId ||
       transaction.out_trade_no !== order.outTradeNo ||
-      amount?.total !== order.amount ||
-      amount.currency !== order.currency ||
+      ((transaction.trade_state === "SUCCESS" || amount !== undefined) &&
+        (amount?.total !== order.amount ||
+          amount.currency !== order.currency)) ||
       (payer?.openid !== undefined && payer.openid !== order.openId)
     )
       throw new BadRequestException();

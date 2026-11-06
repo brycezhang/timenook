@@ -397,6 +397,31 @@ test("buyer cancels an order before payment preparation without contacting WeCha
   );
 });
 
+test("signed unpaid and closed provider queries can omit amount while successful payments still require it", async () => {
+  const token = await login("provider-without-unpaid-amount");
+  const order = await prepareOrder(token);
+  delete supplierOrders.get(order.outTradeNo)!.amount;
+  const pending = await readOrder(token, order.id);
+  assert.equal(pending.statusCode, 200, pending.body);
+  assert.equal(pending.json().data.state, "pending");
+  const closed = await app.inject({
+    method: "POST",
+    url: `/v1/orders/${order.id}/close`,
+    headers: {
+      authorization: `Bearer ${token}`,
+      "idempotency-key": randomUUID(),
+    },
+    payload: {},
+  });
+  assert.equal(closed.statusCode, 201, closed.body);
+  assert.equal(closed.json().data.state, "closed");
+  assert.equal(closed.json().data.project, null);
+  const other = await prepareOrder(token);
+  const transaction = paid(other.outTradeNo);
+  delete supplierOrders.get(other.outTradeNo)!.amount;
+  assert.equal((await notify(transaction)).statusCode, 400);
+});
+
 test("cancellation preserves an in-flight payment until the original WeChat order can be reconciled", async () => {
   const token = await login("cancel-prepare-race");
   const order = (await create(token)).json().data;
