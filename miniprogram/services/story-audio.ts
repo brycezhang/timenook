@@ -27,9 +27,19 @@ export async function clearStoryAudio(only?: string[]) {
         wx.getFileSystemManager().unlink({
           filePath: path,
           success: () => resolve(),
-          // WeChat FileError 1300002 confirms the file is already absent.
-          fail: (error) =>
-            error.errCode === 1300002 ? resolve() : reject(error),
+          fail: (error) => {
+            // Native runtimes can report a missing temp file with only errMsg.
+            const code =
+              (error as WechatMiniprogram.FileError & { errno?: number })
+                .errno ?? error.errCode;
+            if (
+              code === 1300002 ||
+              code === 1301112 ||
+              /no such file|file not exist|ENOENT/i.test(error.errMsg)
+            )
+              resolve();
+            else reject(error);
+          },
         }),
       );
       removed.add(path);

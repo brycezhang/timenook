@@ -27,6 +27,7 @@ function harness(
   options: {
     storage?: Map<string, any>;
     missingFiles?: string[];
+    missingFileError?: { errMsg: string; errCode?: number; errno?: number };
     unlinkFailure?: number;
   } = {},
 ) {
@@ -99,7 +100,12 @@ function harness(
             removed.includes(o.filePath) ||
             options.missingFiles?.includes(o.filePath)
           ) {
-            o.fail({ errCode: 1300002, errMsg: "no such file or directory" });
+            o.fail(
+              options.missingFileError ?? {
+                errCode: 1300002,
+                errMsg: "no such file or directory",
+              },
+            );
             return;
           }
           removed.push(o.filePath);
@@ -775,7 +781,58 @@ test("a fresh StoryPage runtime recovers a persisted audio cache pointing at an 
   old.page.onUnload();
 });
 
-test("a fresh story runtime retains an audio cleanup reference on permission failure and keeps the unique original", async () => {
+for (const missingFileError of [
+  { errMsg: "unlink:fail no such file or directory wxfile://tmp/old-audio" },
+  { errno: 1300002, errMsg: "unlink:fail" },
+]) {
+  test(`stale playback cache does not block story loading or replay when WeChat returns ${JSON.stringify(missingFileError)}`, async () => {
+    const stalePath = "wxfile://tmp/old-audio";
+    const storage = new Map<string, any>([
+      ["timenook.mode.v1", "live"],
+      [`timenook.session.v1:${base}`, structuredClone(login)],
+      [`timenook.story-audio.v1:${base}`, [stalePath]],
+      [
+        "synthetic-pending-original",
+        [{ path: "only-original", sealed: false }],
+      ],
+    ]);
+    const h = harness({ storage, missingFiles: [stalePath], missingFileError });
+    h.page.onLoad({ projectId, interviewId });
+    const showing = h.page.onShow();
+    await turn();
+    assert.equal(h.requests.length, 1, h.page.data.stage);
+    h.respond(0, {
+      interviewId,
+      clipCount: 1,
+      pendingCount: 0,
+      cloudSaved: true,
+      story: story("succeeded", 1),
+    });
+    await turn();
+    h.respond(1, {
+      ...story("succeeded", 1),
+      task: { ...story("succeeded", 1).task, sources: [source] },
+    });
+    await showing;
+    assert.equal(h.page.data.stage, "故事已整理");
+    assert.equal(h.page.data.audioError, "");
+    assert.deepEqual(h.storage.get(`timenook.story-audio.v1:${base}`), []);
+    const playing = h.page.playLive(audioEvent);
+    await turn();
+    assert.equal(h.requests.length, 3, h.page.data.audioError);
+    h.respond(2, recording);
+    await turn();
+    h.downloads[0].success({ statusCode: 200, tempFilePath: "new-audio" });
+    await playing;
+    assert.equal(h.players[0].plays, 1);
+    assert.equal(h.page.data.audioError, "");
+    assert.ok(h.storage.has("synthetic-pending-original"));
+    assert.ok(!h.removed.includes("only-original"));
+    h.page.onUnload();
+  });
+}
+
+test("audio cleanup permission failure keeps its reference and original without blocking story text", async () => {
   const storage = new Map<string, any>([
     ["timenook.mode.v1", "live"],
     [`timenook.session.v1:${base}`, structuredClone(login)],
@@ -784,10 +841,23 @@ test("a fresh story runtime retains an audio cleanup reference on permission fai
   ]);
   const h = harness({ storage, unlinkFailure: 1300013 });
   h.page.onLoad({ projectId, interviewId });
-  await h.page.onShow();
-  assert.equal(h.requests.length, 0);
-  assert.equal(h.page.data.story, null);
-  assert.match(h.page.data.stage, /临时文件尚未清理/);
+  const showing = h.page.onShow();
+  await turn();
+  assert.equal(h.requests.length, 1, h.page.data.stage);
+  h.respond(0, {
+    interviewId,
+    clipCount: 1,
+    pendingCount: 0,
+    cloudSaved: true,
+    story: story("succeeded", 1),
+  });
+  await turn();
+  h.respond(1, story("succeeded", 1));
+  await showing;
+  assert.equal(h.page.data.story.id, storyId);
+  assert.equal(h.page.data.stage, "故事已整理");
+  assert.equal(h.page.data.error, "");
+  assert.match(h.page.data.audioError, /临时文件尚未清理/);
   assert.deepEqual(h.storage.get(`timenook.story-audio.v1:${base}`), [
     "still-private-audio",
   ]);
