@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -224,6 +224,20 @@ test("release package excludes website and probe routes and ignores stored demo 
     },
   );
   assert.equal(release.status, 0, release.stderr);
+  const media = (await readdir(root, { recursive: true })).filter((file) =>
+    /\.(?:jpe?g|png|svg|webp|gif|flac|m4a|ogg|ape|amr|wma|wav|mp3|mp4|aac|aiff|caf)$/i.test(
+      file,
+    ),
+  );
+  const mediaBytes = (
+    await Promise.all(
+      media.map(async (file) => (await stat(path.join(root, file))).size),
+    )
+  ).reduce((sum, size) => sum + size, 0);
+  assert.ok(
+    mediaBytes < 200 * 1024,
+    `Release media totals ${mediaBytes} bytes`,
+  );
   const config = JSON.parse(
     await readFile(path.join(root, "app.json"), "utf8"),
   );
