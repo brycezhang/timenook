@@ -1,0 +1,16 @@
+{
+  "version": "0.3.1",
+  "applicationCommit": "3d258f723fa28cd87e365995fb50687de0aa4a1c",
+  "queriedOn": "2026-11-06",
+  "confirmationTaskId": "confirmation_upload_f46e7059-44bf-4199-ac5f-4ad472420e45",
+  "status": "success",
+  "detail": "execution_success",
+  "success": true,
+  "packageBytes": 1355260,
+  "completedAt": "2026-11-06T02:21:31.200Z",
+  "completedAtAsiaShanghai": "2026-11-06 10:21:31 UTC+08:00",
+  "queryMethod": "wechatide -c Codex polling_task_result",
+  "reuploaded": false,
+  "submittedForReviewByThisTask": false,
+  "experienceVersionMarkerVerified": false
+}
