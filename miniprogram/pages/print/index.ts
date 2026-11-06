@@ -24,6 +24,7 @@ Page({
     context: null as FirstCopyContext | null,
     blockers: [] as string[],
     busy: false,
+    pageLoading: true,
     status: "",
     unknown: false,
   },
@@ -38,6 +39,7 @@ Page({
         context: null,
         blockers: [],
         busy: false,
+        pageLoading: false,
         status: "登录已失效，请重新登录",
       });
     });
@@ -48,7 +50,7 @@ Page({
   },
   onHide() {
     ++this.generation;
-    this.setData({ context: null, busy: false });
+    this.setData({ context: null, busy: false, pageLoading: false });
   },
   onUnload() {
     this.stopSession?.();
@@ -58,7 +60,7 @@ Page({
     if (this.data.busy) return;
     const n = ++this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.data.context, status: "" });
     try {
       const c = await firstCopyClient.read(this.projectId);
       if (n !== this.generation || owner !== sessionClient.context()) return;
@@ -75,7 +77,8 @@ Page({
           status: e instanceof Error ? e.message : "查询未完成，请重试",
         });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   address() {

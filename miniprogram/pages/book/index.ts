@@ -14,6 +14,7 @@ Page({
     coverImage: "",
     stateLabel: "",
     busy: false,
+    pageLoading: true,
     status: "",
     dirty: false,
   },
@@ -51,7 +52,12 @@ Page({
     ++this.generation;
     if (this.timer) clearTimeout(this.timer);
     void clearPhotoPreviews([this.data.coverImage].filter(Boolean));
-    this.setData({ context: null, coverImage: "", busy: false });
+    this.setData({
+      context: null,
+      coverImage: "",
+      busy: false,
+      pageLoading: false,
+    });
   },
   onUnload() {
     this.stopSession?.();
@@ -61,7 +67,7 @@ Page({
     if (this.data.busy) return;
     const n = ++this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.data.context, status: "" });
     try {
       const [c, p] = await Promise.all([
         bookClient.read(this.projectId),
@@ -101,7 +107,8 @@ Page({
         });
       }
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   accept(c: BookContext) {

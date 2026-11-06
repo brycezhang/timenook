@@ -8,7 +8,7 @@
  <button class="s-row" bindtap="book"><text>我的书 · 预览与印刷</text><text class="s-arrow">›</text></button>
  <view wx:if="{{status}}" class="s-error">{{status}}<button class="s-link" bindtap="refresh">重新读取</button></view>
 </view>
-<view wx:elif="{{busy}}" class="s-page"><view class="s-muted">正在打开你的故事…</view></view>
+<app-loading wx:elif="{{pageLoading || busy}}" variant="project" />
 <view wx:elif="{{status}}" class="s-page"><view class="s-error">{{status}}</view><button class="s-button" bindtap="refresh">重新打开</button></view>
 <view wx:else class="landing">
  <view class="landing-hero"><image src="/assets/home-family.jpg" mode="aspectFill"/><view class="landing-copy"><view class="serif">送给重要的人，<text>一本关于TA自己的书</text></view><view class="landing-sub">把散落的时光，变成一本温暖的书</view></view></view>

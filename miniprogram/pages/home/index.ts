@@ -8,6 +8,7 @@ import type { ProjectOverview } from "../../../packages/contracts/src";
 Page({
   data: {
     nativeTabs: NATIVE_TABS,
+    pageLoading: true,
     busy: false,
     status: "",
     overview: null as ProjectOverview | null,
@@ -78,7 +79,8 @@ Page({
         });
       }
     } finally {
-      if (generation === this.generation) this.setData({ busy: false });
+      if (generation === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   onHide() {

@@ -4,7 +4,12 @@ import { sessionClient, ApiFailure } from "../../services/session";
 import { watchProjectAccess } from "../../services/project-access";
 import { go } from "../../services/store";
 Page({
-  data: { version: null as BookVersionView | null, busy: false, status: "" },
+  data: {
+    version: null as BookVersionView | null,
+    busy: false,
+    pageLoading: true,
+    status: "",
+  },
   projectId: "",
   versionId: "",
   generation: 0,
@@ -47,7 +52,7 @@ Page({
     ++this.generation;
     this.removeFile(this.file);
     this.file = "";
-    this.setData({ version: null, busy: false });
+    this.setData({ version: null, busy: false, pageLoading: false });
   },
   onUnload() {
     this.stopSession?.();
@@ -61,7 +66,7 @@ Page({
     if (this.data.busy) return;
     const n = this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.data.version, status: "" });
     try {
       await work(n, owner);
     } catch (e) {
@@ -71,7 +76,8 @@ Page({
         });
     } finally {
       this.opening = false;
-      if (this.current(n, owner)) this.setData({ busy: false });
+      if (this.current(n, owner))
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   async openPdf() {

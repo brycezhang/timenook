@@ -1,0 +1,19 @@
+<view class="loading loading-{{variant}} {{light ? 'loading-light' : ''}}" role="status" aria-label="加载中" aria-busy="true">
+  <view wx:if="{{variant === 'spinner' || variant === 'photo'}}" class="spinner" aria-hidden="true" />
+  <view wx:else class="skeleton" aria-hidden="true">
+    <view class="bone heading" />
+    <view class="bone subheading" />
+    <view wx:if="{{variant === 'project' || variant === 'book'}}" class="book-cover"><view class="bone cover-title" /><view class="bone cover-subtitle" /></view>
+    <block wx:if="{{variant === 'story'}}">
+      <view class="bone audio" />
+      <view class="paragraph"><view class="bone line" /><view class="bone line" /><view class="bone line short" /></view>
+      <view class="paragraph"><view class="bone line" /><view class="bone line" /><view class="bone line medium" /></view>
+    </block>
+    <block wx:elif="{{variant === 'form'}}">
+      <view class="bone field" /><view class="bone field" /><view class="bone field tall" />
+    </block>
+    <block wx:else>
+      <view class="skeleton-row" wx:for="{{[1, 2, 3]}}" wx:key="*this"><view class="bone row-title" /><view class="bone row-detail" /></view>
+    </block>
+  </view>
+</view>

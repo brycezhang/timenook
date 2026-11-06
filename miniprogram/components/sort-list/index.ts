@@ -1,4 +1,9 @@
-type Row = { id: string; title: string; image?: string };
+type Row = {
+  id: string;
+  title: string;
+  image?: string;
+  imageLoading?: boolean;
+};
 Component({
   properties: {
     items: { type: Array, value: [] as Row[] },

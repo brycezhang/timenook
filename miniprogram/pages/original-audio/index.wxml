@@ -1,3 +1,5 @@
+<app-loading wx:if="{{busy && !entry}}" variant="story" />
+<block wx:else>
 <view class="original-audio-page">
   <view class="eyebrow">岁月成书 · 纸书原声</view>
   <view class="audio-title">书中原声</view>
@@ -19,8 +21,9 @@
     <button wx:if="{{!loggedIn}}" class="audio-button" bindtap="login" disabled="{{busy}}">微信登录后回听</button><view class="s-term">登录即表示同意<text bindtap="terms">《使用条款》</text></view>
   </view>
   <view wx:if="{{status}}" class="audio-status" role="status">{{status}}</view>
-  <view wx:if="{{busy}}" class="waiting">正在核对，请稍候…</view>
+  <app-loading wx:if="{{busy}}" variant="spinner" />
   <button wx:if="{{loggedIn}}" class="audio-button secondary" bindtap="refresh" disabled="{{busy}}">重新查询</button>
   <button wx:if="{{loggedIn}}" class="audio-button text-button" bindtap="logout" disabled="{{busy}}">退出登录</button>
   <view class="s-muted">此入口对应纸书中的故事版本，后续改稿不会替换纸书原声。</view>
 </view>
+</block>

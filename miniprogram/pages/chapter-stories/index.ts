@@ -8,6 +8,7 @@ Page({
     selected: [] as Row[],
     available: [] as Row[],
     busy: false,
+    pageLoading: true,
     status: "",
   },
   projectId: "",
@@ -21,7 +22,7 @@ Page({
   async onShow() {
     const n = ++this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.context, status: "" });
     try {
       const c = await bookClient.read(this.projectId);
       if (n === this.generation && owner === sessionClient.context())
@@ -30,13 +31,19 @@ Page({
       if (n === this.generation)
         this.setData({ status: e instanceof Error ? e.message : "读取失败" });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   onHide() {
     ++this.generation;
     this.context = null;
-    this.setData({ selected: [], available: [], busy: false });
+    this.setData({
+      selected: [],
+      available: [],
+      busy: false,
+      pageLoading: false,
+    });
   },
   apply(c: BookContext) {
     this.context = c;

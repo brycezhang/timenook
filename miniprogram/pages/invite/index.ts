@@ -2,7 +2,14 @@ import { participationClient } from "../../services/participation";
 import { sessionClient } from "../../services/session";
 import { go } from "../../services/store";
 Page({
-  data: { bookTitle: "", token: "", busy: false, status: "", canInvite: false },
+  data: {
+    bookTitle: "",
+    token: "",
+    busy: false,
+    pageLoading: true,
+    status: "",
+    canInvite: false,
+  },
   projectId: "",
   owner: "",
   generation: 0,
@@ -17,7 +24,12 @@ Page({
     if (this.data.busy) return;
     const n = ++this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, status: "", token: "" });
+    this.setData({
+      busy: true,
+      pageLoading: !this.data.bookTitle,
+      status: "",
+      token: "",
+    });
     try {
       const state = await participationClient.state(this.projectId);
       if (n !== this.generation || owner !== sessionClient.context()) return;
@@ -37,7 +49,8 @@ Page({
           status: e instanceof Error ? e.message : "邀请未能准备，请重试",
         });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   onUnload() {

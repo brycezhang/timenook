@@ -69,3 +69,12 @@
   padding: 24rpx 8rpx;
   align-self: center;
 }
+.sort-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  min-height: 56px;
+  background: #eee9df;
+  border-radius: 8px;
+}

@@ -10,7 +10,14 @@ import {
 import { go } from "../../services/store";
 type Row = { id: string; title: string; body: string };
 Page({
-  data: { title: "", rows: [] as Row[], busy: false, status: "", dirty: false },
+  data: {
+    title: "",
+    rows: [] as Row[],
+    busy: false,
+    pageLoading: true,
+    status: "",
+    dirty: false,
+  },
   projectId: "",
   key: "",
   context: null as BookContext | null,
@@ -28,6 +35,7 @@ Page({
         rows: [],
         dirty: false,
         busy: false,
+        pageLoading: false,
         status: "登录已失效，请重新登录",
       });
     });
@@ -38,7 +46,7 @@ Page({
     if (this.data.dirty && this.owner === sessionClient.context()) return;
     const n = ++this.generation;
     this.owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.context, status: "" });
     try {
       const c = await bookClient.read(this.projectId);
       const chapter = c.directory.chapters.find((x) => x.key === this.key);
@@ -63,7 +71,8 @@ Page({
       if (n === this.generation)
         this.setData({ status: e instanceof Error ? e.message : "读取失败" });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   onHide() {

@@ -7,6 +7,7 @@ Page({
   data: {
     rows: [] as { id: string; title: string; state: string }[],
     busy: false,
+    pageLoading: true,
     status: "",
   },
   projectId: "",
@@ -19,12 +20,16 @@ Page({
   },
   onHide() {
     ++this.generation;
-    this.setData({ rows: [], busy: false });
+    this.setData({ rows: [], busy: false, pageLoading: false });
   },
   async refresh() {
     const n = ++this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({
+      busy: true,
+      pageLoading: !this.data.rows.length,
+      status: "",
+    });
     try {
       const p = await projectOverviewClient.read(this.projectId);
       if (n !== this.generation || owner !== sessionClient.context()) return;
@@ -51,7 +56,8 @@ Page({
           status: e instanceof Error ? e.message : "未能读取故事",
         });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   open(e: WechatMiniprogram.TouchEvent) {

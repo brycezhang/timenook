@@ -1,1 +1,4 @@
+<app-loading wx:if="{{pageLoading}}" variant="book" />
+<block wx:else>
 <view class="s-page"><view class="s-title">{{version.snapshot.cover.title || '完整书稿'}}</view><view class="s-muted" wx:if="{{version}}">第 {{version.version}} 版 · {{version.pageCount || 0}} 页</view><view class="s-book"><view class="s-subtitle">{{version.snapshot.cover.title}}</view><view class="s-muted">{{version.snapshot.cover.salutation}}</view></view><button class="s-button" bindtap="openPdf" loading="{{busy}}" disabled="{{busy || version.state!=='ready'}}">打开完整 PDF</button><button class="s-link s-space" bindtap="edit">返回修改内容</button><view class="s-error">{{status}}</view><view wx:if="{{version && version.state!=='ready'}}" class="s-muted">书稿正在更新，请返回我的书生成新版。</view><view class="s-dock"><button class="s-button" disabled="{{busy || version.state!=='ready'}}" bindtap="print">去印刷这本书</button></view></view>
+</block>

@@ -16,6 +16,7 @@ Page({
     image: "",
     hasPhoto: false,
     busy: false,
+    pageLoading: true,
     status: "",
     dirty: false,
   },
@@ -37,6 +38,7 @@ Page({
         hasPhoto: false,
         dirty: false,
         busy: false,
+        pageLoading: false,
         status: "登录已失效，请重新登录",
       });
     });
@@ -45,7 +47,7 @@ Page({
   async onShow() {
     const n = ++this.generation;
     this.owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.context, status: "" });
     try {
       const [c, p] = await Promise.all([
         bookClient.read(this.projectId),
@@ -77,13 +79,14 @@ Page({
       if (n === this.generation)
         this.setData({ status: e instanceof Error ? e.message : "读取失败" });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   onHide() {
     ++this.generation;
     void clearPhotoPreviews([this.data.image].filter(Boolean));
-    this.setData({ image: "", busy: false });
+    this.setData({ image: "", busy: false, pageLoading: false });
   },
   onUnload() {
     this.stopSession?.();

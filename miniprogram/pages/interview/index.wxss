@@ -163,6 +163,9 @@
   background: #eeefe5;
   border-radius: 16rpx;
 }
+.recording-photo-placeholder app-loading {
+  width: 100%;
+}
 .with-photo > .recording-photo-placeholder {
   height: 32vh;
   max-height: 260px;

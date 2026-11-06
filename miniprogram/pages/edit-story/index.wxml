@@ -1,1 +1,4 @@
+<app-loading wx:if="{{pageLoading}}" variant="story" />
+<block wx:else>
 <view class="s-page"><label class="s-field">故事标题<input class="s-input" value="{{title}}" data-field="title" bindinput="input" maxlength="200" /></label><textarea class="story-editor" auto-height value="{{body}}" data-field="body" bindinput="input" maxlength="-1" cursor-spacing="130" /><view class="s-error">{{status}}</view><view class="s-dock"><button class="s-button" bindtap="save" disabled="{{busy}}" loading="{{busy}}">保存修改</button></view></view>
+</block>

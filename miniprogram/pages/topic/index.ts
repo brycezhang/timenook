@@ -20,6 +20,7 @@ Page({
     stateIndex: 0,
     labels: ["可以聊", "稍后再说", "跳过", "不适用", "不再问"],
     busy: false,
+    pageLoading: true,
     status: "",
     existing: false,
   },
@@ -35,7 +36,7 @@ Page({
   async onShow() {
     const n = ++this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.plan, status: "" });
     try {
       const p = await personalPlanClient.read(this.projectId);
       if (n !== this.generation || owner !== sessionClient.context()) return;
@@ -54,7 +55,7 @@ Page({
     } catch (e) {
       this.setData({ status: e instanceof Error ? e.message : "读取失败" });
     } finally {
-      this.setData({ busy: false });
+      this.setData({ busy: false, pageLoading: false });
     }
   },
   onHide() {

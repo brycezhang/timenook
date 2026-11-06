@@ -1,1 +1,5 @@
-<view class="s-page"><view class="s-title">一起，把故事留下。</view><view class="s-book"><view class="s-subtitle serif">{{bookTitle}}</view><view class="s-muted s-space">时光故事</view></view><view class="s-muted">把邀请分享给家人。对方接受后，就能一起记录、编辑和印刷。</view><view wx:if="{{status}}" class="s-error">{{status}}</view><button wx:if="{{status}}" class="s-link" bindtap="prepare">重新准备邀请</button></view><view class="s-dock"><button class="s-button" open-type="share" disabled="{{busy || !token}}">{{busy ? '正在准备邀请…' : '微信分享给家人'}}</button><view class="s-term">请仅邀请愿意共同完成这本书的人。</view></view>
+<app-loading wx:if="{{pageLoading}}" variant="book" />
+<block wx:else>
+<view class="s-page"><view class="s-title">一起，把故事留下。</view><view class="s-book"><view class="s-subtitle serif">{{bookTitle}}</view><view class="s-muted s-space">时光故事</view></view><view class="s-muted">把邀请分享给家人。对方接受后，就能一起记录、编辑和印刷。</view><view wx:if="{{status}}" class="s-error">{{status}}</view><button wx:if="{{status}}" class="s-link" bindtap="prepare">重新准备邀请</button></view><view class="s-dock"><button class="s-button" open-type="share" loading="{{busy}}" disabled="{{busy || !token}}">微信分享给家人</button><view class="s-term">请仅邀请愿意共同完成这本书的人。</view></view>
+
+</block>

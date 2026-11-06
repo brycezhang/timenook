@@ -3,7 +3,7 @@
  <view class="title">{{overview ? overview.bookTitle : participation && participation.bookTitle ? participation.bookTitle : '我的人生项目'}}</view>
  <view class="subtitle">{{overview ? pending + ' 篇待本人确认 · ' + confirmed + ' 篇已确认' : '把生命的故事，温柔收藏'}}</view>
  <view wx:if="{{status}}" class="soft section" role="status">{{status}}</view>
- <view wx:if="{{busy}}" class="note section" role="status">正在打开你的故事书…</view>
+ <app-loading wx:if="{{busy}}" variant="project" />
  <view wx:if="{{overview}}" class="project-progress"><view class="active">讲述往事</view><view class="line"/><view>整理成书</view><view class="line"/><view>寄到身边</view></view>
  <view wx:if="{{participation}}" class="next-story section">
   <view class="row"><image class="icon small" src="/assets/icons/sprout.svg"/><text class="small muted">今天，聊一件记得的小事</text></view>

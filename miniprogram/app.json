@@ -48,7 +48,9 @@
       }
     ]
   },
-  "usingComponents": {},
+  "usingComponents": {
+    "app-loading": "/components/app-loading/index"
+  },
   "window": {
     "navigationBarTitleText": "时光故事 · 岁月成书",
     "navigationBarBackgroundColor": "#F8F4ED",

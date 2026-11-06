@@ -7,7 +7,14 @@ import {
   markEditing,
 } from "../../services/book-editor";
 Page({
-  data: { title: "", body: "", busy: false, status: "", dirty: false },
+  data: {
+    title: "",
+    body: "",
+    busy: false,
+    pageLoading: true,
+    status: "",
+    dirty: false,
+  },
   projectId: "",
   storyId: "",
   story: null as StoryView | null,
@@ -23,6 +30,7 @@ Page({
         body: "",
         dirty: false,
         busy: false,
+        pageLoading: false,
         status: "登录已失效，请重新登录",
       });
     });
@@ -33,7 +41,7 @@ Page({
     if (this.data.dirty && this.owner === sessionClient.context()) return;
     const n = ++this.generation;
     this.owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.story, status: "" });
     try {
       const s = await storyClient.read(this.projectId, this.storyId);
       if (n !== this.generation || this.owner !== sessionClient.context())
@@ -44,7 +52,8 @@ Page({
       if (n === this.generation)
         this.setData({ status: e instanceof Error ? e.message : "读取失败" });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   onHide() {

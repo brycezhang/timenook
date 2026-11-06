@@ -11,6 +11,7 @@ Page({
   data: {
     rows: [] as { id: string; title: string; selected: boolean }[],
     busy: false,
+    pageLoading: true,
     status: "",
   },
   projectId: "",
@@ -24,7 +25,7 @@ Page({
   async onShow() {
     const n = ++this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.story, status: "" });
     try {
       const s = await storyClient.read(this.projectId, this.storyId);
       if (n !== this.generation || owner !== sessionClient.context()) return;
@@ -42,7 +43,8 @@ Page({
       if (n === this.generation)
         this.setData({ status: e instanceof Error ? e.message : "读取失败" });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   onHide() {

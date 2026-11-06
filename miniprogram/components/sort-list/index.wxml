@@ -1,6 +1,7 @@
 <view class="sort-row {{dragging === item.id ? 'dragging' : ''}}" wx:for="{{rows}}" wx:key="id">
   <button class="sort-content" data-id="{{item.id}}" bindtap="open" disabled="{{disabled}}">
     <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" />
+    <view wx:elif="{{editable}}" class="sort-image-placeholder"><app-loading wx:if="{{item.imageLoading}}" variant="spinner" /><image wx:else src="/assets/icons/image.svg" aria-label="照片暂未加载" /></view>
     <text wx:if="{{numbered}}" class="sort-number">第{{index + 1}}章</text><text wx:if="{{!editable}}" class="sort-title">{{item.title}}</text>
   </button>
   <input wx:if="{{editable}}" class="sort-caption" value="{{item.title}}" data-id="{{item.id}}" bindinput="input" maxlength="1000" placeholder="添加照片说明" disabled="{{disabled}}" />

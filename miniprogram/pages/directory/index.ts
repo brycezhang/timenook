@@ -9,6 +9,7 @@ Page({
     title: "",
     rows: [] as { id: string; title: string }[],
     busy: false,
+    pageLoading: true,
     status: "",
   },
   projectId: "",
@@ -20,7 +21,7 @@ Page({
   async onShow() {
     const n = ++this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.context, status: "" });
     try {
       const [c, p] = await Promise.all([
         bookClient.read(this.projectId),
@@ -36,13 +37,14 @@ Page({
       if (n === this.generation)
         this.setData({ status: e instanceof Error ? e.message : "读取失败" });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   onHide() {
     ++this.generation;
     this.context = null;
-    this.setData({ rows: [], busy: false });
+    this.setData({ rows: [], busy: false, pageLoading: false });
   },
   open(e: WechatMiniprogram.CustomEvent<{ id: string }>) {
     go(

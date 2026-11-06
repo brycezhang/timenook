@@ -129,6 +129,7 @@ Page({
     error: "",
     privateError: "",
     busy: false,
+    pageLoading: dataMode() === "live",
     pendingLocal: false,
     retryable: false,
     id: "",
@@ -182,8 +183,9 @@ Page({
         context: null,
         error: "",
         privateError: "",
-        stage: "正在查询保存与整理状态",
+        stage: "",
         busy: false,
+        pageLoading: true,
         decisionReady: false,
         canDecide: false,
         allowInBook: false,
@@ -202,7 +204,10 @@ Page({
       }
       if (!this.currentLive(generation, context)) return;
       if (!context || !this.projectId || (!this.interviewId && !this.storyId)) {
-        this.setData({ stage: "请登录并从本次采访进入故事" });
+        this.setData({
+          pageLoading: false,
+          stage: "请登录并从本次采访进入故事",
+        });
         return;
       }
       await this.refreshLive(generation, context);
@@ -272,6 +277,7 @@ Page({
         canOrganize: false,
         context: null,
         busy: false,
+        pageLoading: false,
         error: "",
         privateError: "",
       });
@@ -327,6 +333,7 @@ Page({
     if (!background)
       this.setData({
         busy: true,
+        pageLoading: !this.data.story && !this.data.context,
         error: "",
         decisionReady: false,
         canDecide: false,
@@ -491,7 +498,7 @@ Page({
       this.liveFailure(generation, context, error, "查询失败，请重试");
     } finally {
       if (!background && this.currentLive(generation, context, true))
-        this.setData({ busy: false });
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   async loadLivePhotos(story: StoryView, generation: number, context: string) {

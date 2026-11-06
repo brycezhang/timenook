@@ -10,6 +10,7 @@ Page({
     rows: [] as Row[],
     selected: "",
     busy: false,
+    pageLoading: true,
     status: "",
     switching: false,
     loggedIn: false,
@@ -21,7 +22,7 @@ Page({
   },
   async onShow() {
     const n = ++this.generation;
-    this.setData({ busy: true, status: "", rows: [] });
+    this.setData({ busy: true, pageLoading: true, status: "", rows: [] });
     try {
       const user = await sessionClient.restore();
       if (n !== this.generation) return;
@@ -44,12 +45,13 @@ Page({
           status: e instanceof Error ? e.message : "项目未能读取",
         });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   onHide() {
     ++this.generation;
-    this.setData({ rows: [], pending: [], busy: false });
+    this.setData({ rows: [], pending: [], busy: false, pageLoading: false });
   },
   choose(e: WechatMiniprogram.TouchEvent) {
     const id = e.currentTarget.dataset.id as string;

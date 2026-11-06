@@ -13,6 +13,7 @@ Page({
       rows: { id: string; title: string }[];
     }[],
     busy: false,
+    pageLoading: true,
     status: "",
   },
   projectId: "",
@@ -27,7 +28,7 @@ Page({
   onHide() {
     ++this.generation;
     this.plan = null;
-    this.setData({ groups: [], busy: false });
+    this.setData({ groups: [], busy: false, pageLoading: false });
   },
   apply(p: PersonalPlan) {
     this.plan = p;
@@ -60,7 +61,7 @@ Page({
   async refresh() {
     const n = ++this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.plan, status: "" });
     try {
       const p = await personalPlanClient.read(this.projectId);
       if (n === this.generation && owner === sessionClient.context())
@@ -69,7 +70,8 @@ Page({
       if (n === this.generation)
         this.setData({ status: e instanceof Error ? e.message : "读取失败" });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   open(e: WechatMiniprogram.CustomEvent<{ id: string }>) {

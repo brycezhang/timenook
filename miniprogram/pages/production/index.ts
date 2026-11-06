@@ -16,6 +16,7 @@ Page({
     view: null as FulfillmentView | null,
     label: "",
     busy: false,
+    pageLoading: true,
     status: "",
   },
   projectId: "",
@@ -28,6 +29,7 @@ Page({
         view: null,
         label: "",
         busy: false,
+        pageLoading: false,
         status: "登录已失效，请重新登录",
       });
     });
@@ -38,7 +40,7 @@ Page({
   },
   onHide() {
     ++this.generation;
-    this.setData({ view: null, busy: false });
+    this.setData({ view: null, busy: false, pageLoading: false });
   },
   onUnload() {
     this.stopSession?.();
@@ -48,7 +50,7 @@ Page({
     if (this.data.busy) return;
     const n = ++this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.data.view, status: "" });
     try {
       const view = await fulfillmentClient.read(this.projectId);
       if (n === this.generation && owner === sessionClient.context())
@@ -68,7 +70,8 @@ Page({
           status: e instanceof Error ? e.message : "未能读取进度",
         });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   book() {

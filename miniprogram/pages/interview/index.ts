@@ -50,6 +50,7 @@ Page({
     ...flowView("choose"),
     status: "",
     busy: false,
+    pageLoading: dataMode() === "live",
     canRecord: false,
     localClips: [] as InterviewLocalClip[],
     taskRows: [] as (ProductionTaskView & { label: string })[],
@@ -242,6 +243,7 @@ Page({
         photosLoading: false,
         photoError: "",
         busy: false,
+        pageLoading: false,
         canRecord: false,
         questionPicker: false,
         clipPicker: false,
@@ -294,6 +296,7 @@ Page({
       taskRows: [],
       taskError: "",
       busy: true,
+      pageLoading: true,
       status: "正在查询当前权限与保存状态",
       question: "",
       localClips: [],
@@ -382,7 +385,8 @@ Page({
         });
       }
     } finally {
-      if (generation === this.generation) this.setData({ busy: false });
+      if (generation === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   async attach(value: RecordingInterview, generation: number, context: string) {

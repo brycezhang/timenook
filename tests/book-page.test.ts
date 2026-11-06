@@ -29,6 +29,37 @@ async function manuscript(v = version()) {
   await loading;
   return h;
 }
+test("initial book loading ends on success or failure, while updates keep the current book visible", async () => {
+  const h = harness("book");
+  h.page.onLoad({ projectId });
+  assert.equal(h.page.data.pageLoading, true);
+  const initial = h.page.refresh();
+  h.respond(0, context(null));
+  await tick();
+  assert.equal(h.page.data.pageLoading, true, "wait for the project title too");
+  h.respond(1, overview());
+  await initial;
+  assert.equal(h.page.data.pageLoading, false);
+
+  const current = h.page.data.context;
+  const generation = h.page.generate();
+  assert.equal(h.page.data.busy, true);
+  assert.equal(h.page.data.pageLoading, false);
+  assert.equal(h.page.data.context, current);
+  h.respond(2, version("queued"));
+  await generation;
+  h.page.onUnload();
+
+  const failed = harness("book");
+  failed.page.onLoad({ projectId });
+  const pending = failed.page.refresh();
+  failed.requests[0].fail({ errMsg: "offline" });
+  failed.respond(1, overview());
+  await pending;
+  assert.equal(failed.page.data.pageLoading, false);
+  assert.ok(failed.page.data.status);
+  failed.page.onUnload();
+});
 test("ready book exposes separate cover, directory, exact PDF and printing entries", async () => {
   const h = await book();
   h.page.cover();

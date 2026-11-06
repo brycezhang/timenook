@@ -1,1 +1,4 @@
+<app-loading wx:if="{{pageLoading}}" variant="list" />
+<block wx:else>
 <view class="s-page"><view class="s-title">选择入书原声</view><view class="s-muted">选中的原声可通过书中的入口回听。</view><button class="s-row" wx:for="{{rows}}" wx:key="id" bindtap="toggle" data-id="{{item.id}}" disabled="{{busy}}"><text>{{item.title}}</text><text class="audio-choice {{item.selected?'selected':''}}">{{item.selected?'✓ 已选择':'选择'}}</text></button><view class="s-error">{{status}}</view><view class="s-dock"><button class="s-button" bindtap="save" disabled="{{busy}}" loading="{{busy}}">保存选择</button></view></view>
+</block>

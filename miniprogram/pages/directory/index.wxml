@@ -1,1 +1,5 @@
+<app-loading wx:if="{{pageLoading}}" variant="list" />
+<block wx:else>
 <view class="s-page"><view class="s-title">{{title}}</view><view class="s-muted">共 {{rows.length}} 个章节</view><view class="s-space"><sort-list id="chapters" items="{{rows}}" numbered disabled="{{busy}}" bindopen="open" bindreorder="reorder" /></view><button class="s-button secondary" bindtap="add" disabled="{{busy}}">添加章节</button><view class="s-error" wx:if="{{status}}">{{status}}</view><view class="s-dock"><button class="s-button" bindtap="done">完成，返回我的书</button></view></view>
+
+</block>

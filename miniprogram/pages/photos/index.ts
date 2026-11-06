@@ -25,7 +25,12 @@ type Event = {
 };
 Page({
   data: {
-    rows: [] as { id: string; title: string; image: string }[],
+    rows: [] as {
+      id: string;
+      title: string;
+      image: string;
+      imageLoading: boolean;
+    }[],
     previewPath: "",
     photos: [] as LocalPhoto[],
     snapshot: null as PhotoMaterials | null,
@@ -33,6 +38,7 @@ Page({
     hasDraft: false,
     status: "",
     busy: false,
+    pageLoading: true,
   },
   picking: false,
   uploadQueue: null as Promise<void> | null,
@@ -115,6 +121,7 @@ Page({
       photos: [],
       snapshot: null,
       busy: true,
+      pageLoading: true,
       status: "正在查询当前照片权限",
     });
     try {
@@ -169,7 +176,8 @@ Page({
             error instanceof Error ? error.message : "查询失败，可重新查询",
         });
     } finally {
-      if (this.relevant(g, context)) this.setData({ busy: false });
+      if (this.relevant(g, context))
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   onHide() {
@@ -192,6 +200,7 @@ Page({
       captions: {},
       hasDraft: false,
       busy: false,
+      pageLoading: false,
       status: "",
     });
   },
@@ -490,6 +499,7 @@ Page({
         id: p.photoId,
         title: p.caption,
         image: "",
+        imageLoading: p.assets.some((a) => a.kind === "preview"),
       })),
     });
     await Promise.all(
@@ -507,11 +517,18 @@ Page({
           if (this.current(n, owner))
             this.setData({
               rows: this.data.rows.map((r) =>
-                r.id === p.photoId ? { ...r, image } : r,
+                r.id === p.photoId ? { ...r, image, imageLoading: false } : r,
               ),
             });
           else await clearPhotoPreviews([image]);
-        } catch {}
+        } catch {
+          if (this.current(n, owner))
+            this.setData({
+              rows: this.data.rows.map((r) =>
+                r.id === p.photoId ? { ...r, imageLoading: false } : r,
+              ),
+            });
+        }
       }),
     );
   },

@@ -11,6 +11,7 @@ Page({
     regions: [] as string[],
     regionIndex: -1,
     busy: false,
+    pageLoading: true,
     status: "",
     dirty: false,
   },
@@ -28,6 +29,7 @@ Page({
         detail: "",
         dirty: false,
         busy: false,
+        pageLoading: false,
         status: "登录已失效，请重新登录",
       });
     });
@@ -37,7 +39,7 @@ Page({
     if (this.data.dirty) return;
     const n = ++this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, pageLoading: !this.context, status: "" });
     try {
       const c = await firstCopyClient.read(this.projectId);
       if (n !== this.generation || owner !== sessionClient.context()) return;
@@ -56,7 +58,8 @@ Page({
       if (n === this.generation)
         this.setData({ status: e instanceof Error ? e.message : "读取失败" });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation)
+        this.setData({ busy: false, pageLoading: false });
     }
   },
   onHide() {
