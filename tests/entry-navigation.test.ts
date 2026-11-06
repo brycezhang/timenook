@@ -49,7 +49,9 @@ async function harness(
       removeStorageSync: (key: string) => storage.delete(key),
       switchTab: ({ url }: { url: string }) => routes.push(url),
       navigateTo: ({ url }: { url: string }) => routes.push(url),
+      redirectTo: ({ url }: { url: string }) => routes.push(url),
       reLaunch: ({ url }: { url: string }) => routes.push(url),
+      pageScrollTo: () => {},
       login: (options: any) =>
         options.success({ code: "synthetic-device-code" }),
       request(options: any) {
@@ -59,7 +61,10 @@ async function harness(
           rejectMembership = false;
           options.success({
             statusCode: 401,
-            data: { error: { code: "UNAUTHENTICATED" } },
+            data: {
+              error: { code: "UNAUTHENTICATED" },
+              meta: { requestId: projectId },
+            },
           });
           return;
         }
@@ -133,6 +138,97 @@ test("home without memberships shows the purchase entry", async () => {
   assert.equal(h.page.data.overview, null);
   h.page.purchase();
   assert.deepEqual(h.routes, ["/pages/new-book/index"]);
+});
+test("home keeps the current book visible while returning from another page", async () => {
+  const h = await harness("home", [{ projectId }]);
+  await h.page.onShow();
+  h.page.onHide();
+  assert.equal(h.page.data.overview?.projectId, projectId);
+  const returning = h.page.onShow();
+  assert.equal(h.page.data.overview?.projectId, projectId);
+  assert.equal(h.page.data.busy, false);
+  await returning;
+});
+test("home clears a retained book after rejected membership", async () => {
+  const h = await harness("home", [{ projectId }]);
+  await h.page.onShow();
+  h.expireNextMembership();
+  await h.page.onShow();
+  assert.equal(h.page.data.overview, null);
+  assert.equal(h.page.data.loggedIn, false);
+});
+test("home clears the retained book immediately when returning after logout", async () => {
+  const h = await harness("home", [{ projectId }]);
+  await h.page.onShow();
+  h.page.onHide();
+  h.storage.delete(`timenook.session.v1:${base}`);
+  const returning = h.page.onShow();
+  assert.equal(h.page.data.overview, null);
+  assert.equal(h.page.data.loggedIn, false);
+  await returning;
+});
+test("home offers standalone login without opening checkout", async () => {
+  const h = await harness("home", [], false);
+  await h.page.onShow();
+  h.page.login();
+  assert.deepEqual(h.routes, ["/pages/login/index"]);
+});
+test("standalone login returns home without orders or payment", async () => {
+  const h = await harness("login", [], false, true);
+  h.page.onLoad({});
+  const pending = h.page.login();
+  h.page.onHide();
+  await Promise.resolve();
+  h.finishLogin();
+  await pending;
+  assert.equal(h.page.data.busy, false);
+  assert.deepEqual(h.routes, ["/pages/home/index"]);
+  assert.deepEqual(h.requests, ["/sessions/wechat"]);
+});
+test("new purchase authenticates on its own page and preserves the draft", async () => {
+  const h = await harness("new-book", [], false);
+  h.page.setData({ name: "妈妈 & 回忆", salutation: "妈妈" });
+  h.page.next();
+  const route = new URL(h.routes[0], "https://example.test");
+  assert.equal(route.pathname, "/pages/login/index");
+  const login = await harness("login", [], false);
+  login.page.onLoad(Object.fromEntries(route.searchParams));
+  await login.page.login();
+  const destination = new URL(login.routes[0], "https://example.test");
+  assert.equal(destination.pathname, "/pages/purchase/index");
+  assert.equal(destination.searchParams.get("bookTitle"), "妈妈 & 回忆");
+  assert.equal(destination.searchParams.get("salutation"), "妈妈");
+  assert.deepEqual(login.requests, ["/sessions/wechat"]);
+});
+test("My shows an existing local session while validating it", async () => {
+  const h = await harness("account", []);
+  const pending = h.page.onShow();
+  assert.equal(h.page.data.loggedIn, true);
+  await pending;
+});
+test("native tab taps navigate even when the custom bar selection lags behind the page", async () => {
+  const bundle = await build({
+    entryPoints: ["miniprogram/custom-tab-bar/index.ts"],
+    bundle: true,
+    write: false,
+    format: "cjs",
+    platform: "neutral",
+  });
+  const routes: string[] = [];
+  let bar: any;
+  runInNewContext(bundle.outputFiles[0].text, {
+    Component(value: any) {
+      bar = value;
+    },
+    wx: {
+      getStorageSync: () => undefined,
+      switchTab: ({ url }: { url: string }) => routes.push(url),
+    },
+  });
+  bar.methods.switchTab.call(bar, {
+    currentTarget: { dataset: { page: "home" } },
+  });
+  assert.deepEqual(routes, ["/pages/home/index"]);
 });
 test("My provides project, new purchase and terms entries without loading private projects", async () => {
   const h = await harness("account", [], false);

@@ -180,6 +180,14 @@ test("native tab handlers use cached tab navigation and the package supplies its
 
 test("built new-book preserves an encoded user title and salutation", async () => {
   const app = await harness("live");
+  app.storage.set("timenook.session.v1:https://example.test/api/v1", {
+    user: { id: "11111111-1111-4111-8111-111111111111" },
+    session: {
+      id: "22222222-2222-4222-8222-222222222222",
+      token: "a".repeat(43),
+      expiresAt: "2099-01-01T00:00:00Z",
+    },
+  });
   const p = await app.open("pages/new-book/index");
   p.input({
     currentTarget: { dataset: { field: "name" } },

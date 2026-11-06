@@ -23,7 +23,6 @@ Page({
     mode: dataMode(),
     bookTitle: "",
     loggedIn: false,
-    loginBusy: false,
     localVerification: PAYMENT_VERIFICATION_BUILD,
     packageVersionId: "",
     shippingRegionCode: "",
@@ -86,14 +85,14 @@ Page({
   requestedRecipient: "",
   orderOwnerContext: "",
   onHide() {
-    if (this.data.verificationBusy || this.data.loginBusy) return;
+    if (this.data.verificationBusy) return;
     ++this.catalogGeneration;
   },
   onUnload() {
     ++this.catalogGeneration;
   },
   async onShow() {
-    if (this.data.loginBusy || this.data.verificationBusy) return;
+    if (this.data.verificationBusy) return;
     const generation = ++this.catalogGeneration;
     const mode = dataMode();
     const context = sessionClient.context();
@@ -303,20 +302,10 @@ Page({
     if (PAYMENT_VERIFICATION_BUILD) return this.checkout(true);
   },
   // @development-only:end
-  async login() {
-    if (this.data.loginBusy) return;
-    this.setData({ loginBusy: true, verificationError: "" });
-    try {
-      await sessionClient.login();
-      this.setData({ loggedIn: true });
-    } catch (e) {
-      this.setData({
-        verificationError: e instanceof Error ? e.message : "登录未完成",
-      });
-    } finally {
-      this.setData({ loginBusy: false });
-    }
-    if (this.data.loggedIn) await this.onShow();
+  login() {
+    wx.redirectTo({
+      url: `/pages/login/index?next=purchase&bookTitle=${encodeURIComponent(this.data.bookTitle)}&salutation=${encodeURIComponent(this.requestedRecipient)}`,
+    });
   },
   async checkout(localOnly = false) {
     if (dataMode() !== "live" || this.data.verificationBusy) return;

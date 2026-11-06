@@ -153,6 +153,14 @@ const { promisify } = require("node:util");
       const p = await run.page("home", (d) => !!d.overview);
       assert.equal(p.overview.bookTitle, "妈妈的一生");
     });
+    await run.step("home project switch responds to a native tap", async () => {
+      const p = await run.mp.currentPage();
+      await (await p.$(".project-heading .s-link")).tap();
+      await run.page("projects", (d) => d.rows.length === 1);
+      const projects = await run.mp.currentPage();
+      await (await projects.$(".s-card")).tap();
+      await run.page("home", (d) => d.overview?.projectId === id);
+    });
     await run.step(
       "book directory opens directly editable chapter",
       async () => {

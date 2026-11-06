@@ -10,6 +10,7 @@ Page({
     showProjectTab(this, "account");
     if (this.loginPending) return;
     const n = ++this.generation;
+    this.setData({ loggedIn: !!sessionClient.context() });
     try {
       const user = await sessionClient.restore();
       if (n === this.generation) this.setData({ loggedIn: !!user, status: "" });

@@ -1,4 +1,5 @@
 import { go } from "../../services/store";
+import { sessionClient } from "../../services/session";
 Page({
   data: { name: "", salutation: "" },
   input(e: WechatMiniprogram.Input) {
@@ -9,8 +10,8 @@ Page({
   next() {
     if (!this.data.name.trim()) return;
     go(
-      "purchase",
-      `bookTitle=${encodeURIComponent(this.data.name.trim())}&salutation=${encodeURIComponent(this.data.salutation.trim())}`,
+      sessionClient.context() ? "purchase" : "login",
+      `next=purchase&bookTitle=${encodeURIComponent(this.data.name.trim())}&salutation=${encodeURIComponent(this.data.salutation.trim())}`,
     );
   },
 });

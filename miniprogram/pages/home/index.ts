@@ -1,5 +1,5 @@
 import { NATIVE_TABS } from "../../config";
-import { sessionClient } from "../../services/session";
+import { ApiFailure, sessionClient } from "../../services/session";
 import { projectOverviewClient } from "../../services/project-overview";
 import { showProjectTab, switchProjectTab } from "../../services/navigation";
 import { go } from "../../services/store";
@@ -11,39 +11,75 @@ Page({
     status: "",
     overview: null as ProjectOverview | null,
     count: 0,
+    loggedIn: false,
   },
   generation: 0,
+  ownerContext: "",
   onLoad() {},
   async onShow() {
     showProjectTab(this, "home");
     const generation = ++this.generation;
-    this.setData({ busy: true, status: "", overview: null });
+    const owner = sessionClient.context();
+    const selectedId = projectOverviewClient.selected();
+    if (
+      !owner ||
+      owner !== this.ownerContext ||
+      (selectedId && selectedId !== this.data.overview?.projectId)
+    ) {
+      this.setData({ overview: null, count: 0 });
+      wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+    }
+    this.ownerContext = owner;
+    this.setData({
+      busy: !!owner && !this.data.overview,
+      status: "",
+      loggedIn: !!owner,
+    });
     try {
-      if (!(await sessionClient.restore())) return;
-      const owner = sessionClient.context();
+      if (!(await sessionClient.restore())) {
+        if (generation === this.generation)
+          this.setData({ overview: null, count: 0, loggedIn: false });
+        return;
+      }
+      if (generation !== this.generation || owner !== sessionClient.context())
+        return;
       const { projects } = await projectOverviewClient.memberships();
       const selected =
         projects.find(
           (p) => p.projectId === projectOverviewClient.selected(),
         ) ?? projects[0];
-      if (!selected || generation !== this.generation) return;
+      if (generation !== this.generation || owner !== sessionClient.context())
+        return;
+      if (!selected) {
+        this.setData({ overview: null, count: 0 });
+        return;
+      }
       const overview = await projectOverviewClient.read(selected.projectId);
       if (generation !== this.generation || owner !== sessionClient.context())
         return;
       projectOverviewClient.select(selected.projectId);
       this.setData({ overview, count: projects.length });
     } catch (e) {
-      if (generation === this.generation)
+      if (generation === this.generation) {
+        if (
+          owner !== sessionClient.context() ||
+          (e instanceof ApiFailure && [401, 403].includes(e.status))
+        )
+          this.setData({
+            overview: null,
+            count: 0,
+            loggedIn: !!sessionClient.context(),
+          });
         this.setData({
           status: e instanceof Error ? e.message : "项目未能读取，请重试",
         });
+      }
     } finally {
       if (generation === this.generation) this.setData({ busy: false });
     }
   },
   onHide() {
     ++this.generation;
-    this.setData({ overview: null, busy: false });
   },
   onUnload() {
     this.onHide();
@@ -53,6 +89,9 @@ Page({
   },
   purchase() {
     go("new-book");
+  },
+  login() {
+    go("login");
   },
   switchProject() {
     go("projects", "switch=1");

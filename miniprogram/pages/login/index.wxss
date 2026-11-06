@@ -1,0 +1,6 @@
+.login-photo {
+  display: block;
+  width: 100%;
+  height: 440rpx;
+  border-radius: 28rpx;
+}

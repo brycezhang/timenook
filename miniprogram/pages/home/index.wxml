@@ -3,9 +3,10 @@
  <view class="s-title">{{overview.bookTitle}}</view>
  <view class="s-book"><text class="s-subtitle serif">{{overview.bookTitle}}</text><text class="s-muted s-space">时光故事 · 岁月成书</text></view>
  <button wx:if="{{overview.canInvite}}" class="s-link" bindtap="invite">邀请一起记录</button>
- <view class="s-card s-space"><view class="s-subtitle">{{overview.canRecord ? '今天，想聊些什么？' : '故事仍然为你保留'}}</view><view class="s-muted s-space">{{overview.canRecord ? '从一段难忘的往事开始。' : '当前项目已停止新增与制作，可查看已有资料。'}}</view><button wx:if="{{overview.canRecord}}" class="s-button s-space" bindtap="record">开始讲述</button></view>
+ <view class="s-card s-space"><view class="s-subtitle">{{overview.canRecord ? '今天，想聊些什么？' : '故事仍然为你保留'}}</view><view class="s-muted s-space">{{overview.canRecord ? '从一段难忘的往事开始。' : '当前项目暂不能新增或制作，可切换其他项目继续记录。已有资料仍可查看。'}}</view><button wx:if="{{overview.canRecord}}" class="s-button s-space" bindtap="record">开始讲述</button></view>
  <button class="s-row" bindtap="stories"><text>已记录的故事 · {{overview.stories.length}}</text><text class="s-arrow">›</text></button>
  <button class="s-row" bindtap="book"><text>我的书 · 预览与印刷</text><text class="s-arrow">›</text></button>
+ <view wx:if="{{status}}" class="s-error">{{status}}<button class="s-link" bindtap="refresh">重新读取</button></view>
 </view>
 <view wx:elif="{{busy}}" class="s-page"><view class="s-muted">正在打开你的故事…</view></view>
 <view wx:elif="{{status}}" class="s-page"><view class="s-error">{{status}}</view><button class="s-button" bindtap="refresh">重新打开</button></view>
@@ -15,7 +16,7 @@
 不需要写</text><view>像聊天一样轻松</view></view><view><image src="/assets/icons/image.svg"/><text>照片与声音
 一起珍藏</text><view>让回忆更完整</view></view><view><image src="/assets/icons/book-open.svg"/><text>把一生故事
 变成一本书</text><view>留给最爱的人</view></view></view>
- <view class="landing-note serif">有些爱，值得被认真记录。</view><button class="s-term" bindtap="terms">私密记录 · 家人一起完成 · 原声随书珍藏</button>
+ <view class="landing-note serif">有些爱，值得被认真记录。</view><button wx:if="{{!loggedIn}}" class="s-link" bindtap="login">已有项目？微信登录</button><button class="s-term" bindtap="terms">私密记录 · 家人一起完成 · 原声随书珍藏</button>
  <view class="purchase-dock"><button class="purchase-card" bindtap="purchase"><image src="/assets/sample-book.jpg" mode="aspectFill"/><view><view><text class="amount">999</text> 元 <text class="included">含1本实体书</text></view><view class="purchase-label">开始做一本书 →</view></view></button></view>
 </view>
 <view wx:if="{{!nativeTabs}}" class="tabs"><button class="tab active"><image class="icon" src="/assets/icons/book-open.svg"/>岁月成书</button><button class="tab" bindtap="account"><image class="icon" src="/assets/icons/user.svg"/>我的</button></view>
