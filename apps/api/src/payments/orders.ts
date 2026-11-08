@@ -159,6 +159,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
   assertScope(order: PaymentOrder) {
     const cfg = this.enabled();
     if (
+      order.provider !== "wechat" ||
       order.appId !== cfg.appId ||
       order.merchantId !== cfg.merchantId ||
       order.mode !== this.mode()
@@ -358,7 +359,10 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
         }
       }
       if (submit) {
-        const parameters = await provider.prepare(order);
+        const parameters = await provider.prepare({
+          ...order,
+          openId: order.openId!,
+        });
         await this.database.paymentSubmission.update({
           where: { orderId: id },
           data: { parameters },
@@ -495,6 +499,8 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       amount: order.amount,
       currency: order.currency,
       mode: order.mode,
+      provider: order.provider,
+      channel: order.channel,
       state: order.state,
       packageVersionId: order.packageVersionId,
       materialsUnavailable: deleted,
@@ -573,6 +579,21 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
     eventId?: string,
   ) {
     const verified = this.validatePayment(order, transaction);
+    return this.deliverVerifiedPayment(
+      order,
+      {
+        transactionId: verified.transaction_id as string,
+        paidAt: verified.success_time as string,
+      },
+      eventId,
+    );
+  }
+  // Called only after each provider adapter validates its own authoritative fact.
+  async deliverVerifiedPayment(
+    order: PaymentOrder,
+    payment: { transactionId: string; paidAt: string },
+    eventId?: string,
+  ) {
     const plans = new ProjectPlans(
       this.config.databaseUrl,
       order.template as unknown as BuiltinTemplate,
@@ -586,15 +607,15 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
         });
         if (
           existing &&
-          existing.providerTransactionId !== verified.transaction_id
+          existing.providerTransactionId !== payment.transactionId
         )
           throw new ConflictException();
         if (!existing) {
           await tx.paymentTransaction.create({
             data: {
               orderId: order.id,
-              providerTransactionId: verified.transaction_id,
-              paidAt: new Date(verified.success_time),
+              providerTransactionId: payment.transactionId,
+              paidAt: new Date(payment.paidAt),
               amount: order.amount,
               currency: order.currency,
             },
@@ -619,7 +640,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
             projectId,
             order.packageVersionId,
             order.packageSnapshot,
-            new Date(verified.success_time),
+            new Date(payment.paidAt),
           );
           await tx.paymentOrder.update({
             where: { id: order.id },

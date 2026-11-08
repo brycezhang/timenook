@@ -28,6 +28,16 @@ export const router = createRouter({
       meta: { title: "故事阅读", private: true },
     },
     { path: "/invite/:token", component: Invite, meta: { title: "项目邀请" } },
+    {
+      path: "/purchase",
+      component: () => import("./views/Purchase.vue"),
+      meta: { title: "新购一本书", private: true },
+    },
+    {
+      path: "/purchase/return/:orderId",
+      component: () => import("./views/PurchaseReturn.vue"),
+      meta: { title: "付款确认", private: true },
+    },
     { path: "/account", component: Account, meta: { title: "我的" } },
     { path: "/sample", component: Sample, meta: { title: "公开样书" } },
     { path: "/terms", component: Terms, meta: { title: "使用条款" } },
