@@ -35,12 +35,13 @@ export class WebApiError extends Error {
     );
   }
 }
-async function request<T>(
+export async function request<T>(
   path: string,
   init: {
     method?: string;
     data?: unknown;
     csrf?: string;
+    idempotencyKey?: string;
     signal?: AbortSignal;
   } = {},
 ): Promise<T> {
@@ -55,6 +56,9 @@ async function request<T>(
       ...(init.data === undefined
         ? {}
         : { "Content-Type": "application/json" }),
+      ...(init.idempotencyKey
+        ? { "Idempotency-Key": init.idempotencyKey }
+        : {}),
       ...(init.csrf ? { "X-CSRF-Token": init.csrf } : {}),
     },
     ...(init.data === undefined ? {} : { body: JSON.stringify(init.data) }),

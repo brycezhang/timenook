@@ -63,8 +63,10 @@ onUnmounted(() => {
     {{ error }}<button class="text-button" @click="load">重新读取</button>
   </div>
   <section v-if="projects.length" class="project-grid" aria-label="我的项目">
-    <article
+    <RouterLink
       v-for="project in projects"
+      :to="`/projects/${project.projectId}`"
+      :aria-label="`打开项目：${project.bookTitle}`"
       :key="project.projectId"
       class="project-card"
     >
@@ -81,7 +83,7 @@ onUnmounted(() => {
         <h3>{{ project.bookTitle }}</h3>
         <p class="muted">与小程序共享同一个项目</p>
       </div>
-    </article>
+    </RouterLink>
   </section>
   <section v-else-if="!loading && !error" class="empty-state panel">
     <span class="empty-icon"><Icon name="book" :size="32" /></span>

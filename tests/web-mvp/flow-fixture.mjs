@@ -145,6 +145,10 @@ export async function storyBrowser(engine) {
           .getByRole("button", { name: "获取验证码", exact: true })
           .click();
         await page
+          .getByRole("status")
+          .filter({ hasText: "验证码已发送" })
+          .waitFor();
+        await page
           .getByLabel("短信验证码", { exact: true })
           .fill(messages.at(-1).code);
         await page
