@@ -327,6 +327,22 @@ export async function stopBookFixture() {
   }
 }
 
+/** Real browser transport over this isolated fixture; only external suppliers are substituted. */
+export async function enableBookBrowser(
+  origin: string,
+  smsSender: NonNullable<Parameters<typeof createApplication>[1]>["smsSender"],
+) {
+  await app.close();
+  config.web = {
+    origin,
+    sessionKey: randomBytes(32).toString("base64"),
+    loginTtlSeconds: 300,
+    sessionTtlSeconds: 43200,
+  };
+  config.books!.entryBaseUrl = `${origin}/app/audio/`;
+  app = await createApplication(config, { ...fixtureOptions, smsSender });
+}
+
 export async function login(who = randomUUID(), target = app) {
   const r = await target.inject({
     method: "POST",
