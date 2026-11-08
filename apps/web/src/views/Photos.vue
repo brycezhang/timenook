@@ -107,8 +107,7 @@ async function load() {
       needsSync.value = !!(
         source?.revision &&
         value.snapshot &&
-        (source.revision.photoSnapshotId ??
-          source.revision.photoSnapshot?.id) !== value.snapshot.id
+        source.revision.photoSnapshot?.id !== value.snapshot.id
       );
     } else {
       const value = await recordingApi.context(projectId.value);
