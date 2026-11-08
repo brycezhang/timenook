@@ -8,9 +8,15 @@ import Project from "./views/Project.vue";
 import Story from "./views/Story.vue";
 import Invite from "./views/Invite.vue";
 import NotFound from "./views/NotFound.vue";
+import Recording from "./views/Recording.vue";
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    {
+      path: "/projects/:projectId/record",
+      component: Recording,
+      meta: { title: "记录回忆", private: true },
+    },
     { path: "/", component: Home, meta: { title: "岁月成书" } },
     {
       path: "/projects",
