@@ -13,6 +13,16 @@ export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
+      path: "/projects/:projectId/photos",
+      component: () => import("./views/Photos.vue"),
+      meta: { title: "从照片说起", private: true },
+    },
+    {
+      path: "/projects/:projectId/stories/:storyId/photos",
+      component: () => import("./views/StoryPhotos.vue"),
+      meta: { title: "故事照片", private: true },
+    },
+    {
       path: "/projects/:projectId/record",
       component: Recording,
       meta: { title: "记录回忆", private: true },

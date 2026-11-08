@@ -1069,7 +1069,15 @@ export class Stories {
       : null;
     const photoSnapshotId =
       command.participant?.photoSnapshotId === undefined
-        ? base?.photoSnapshotId
+        ? base
+          ? base.photoSnapshotId
+          : (
+              await this.photos?.readSnapshot(
+                tx,
+                story.projectId,
+                story.interviewId,
+              )
+            )?.id
         : command.participant.photoSnapshotId;
     if (photoSnapshotId && !this.photos)
       throw new ServiceUnavailableException();

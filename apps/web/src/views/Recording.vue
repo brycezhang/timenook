@@ -24,6 +24,7 @@ import {
 import { auth } from "../session";
 import { WebApiError } from "../api";
 import Icon from "../components/Icon.vue";
+import StoryPhotoGallery from "../components/StoryPhotoGallery.vue";
 import "../recording.css";
 
 const route = useRoute(),
@@ -566,15 +567,24 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="recording-page">
+  <div
+    class="recording-page"
+    :class="{
+      'photo-recording-page': interview?.actualQuestion.starterKind === 'photo',
+    }"
+  >
     <RouterLink class="recording-back" :to="`/projects/${projectId}`"
       >← 返回项目</RouterLink
     >
-    <header class="page-heading">
+    <header
+      v-if="interview?.actualQuestion.starterKind !== 'photo'"
+      class="page-heading"
+    >
       <p class="eyebrow">留下声音，也留下故事</p>
       <h1>记录一段回忆</h1>
       <p class="muted">慢慢说，不用一次讲完整。</p>
     </header>
+    <header v-else class="page-heading"><h1>看着照片，讲一讲</h1></header>
     <section
       v-if="loading"
       class="recording-panel panel"
@@ -613,9 +623,19 @@ onUnmounted(() => {
         >
       </section>
       <section class="recording-panel panel" :aria-busy="busy">
+        <StoryPhotoGallery
+          v-if="interview?.actualQuestion.starterKind === 'photo'"
+          :project-id="projectId"
+          :interview-id="interview.id"
+          recording
+          @denied="failed(new WebApiError(403), generation)"
+        />
         <template v-if="!interview">
           <p class="eyebrow">今天，想从哪里说起？</p>
           <h2>从一个话题开始</h2>
+          <RouterLink class="text-button" :to="`/projects/${projectId}/photos`"
+            >从照片说起<Icon name="arrow" :size="16"
+          /></RouterLink>
           <div v-if="!custom" class="recording-topics" aria-label="讲述话题">
             <button
               v-for="item in context.plan.eligibleQuestions"
@@ -655,7 +675,7 @@ onUnmounted(() => {
             重新选题
           </button>
         </template>
-        <template v-else
+        <template v-else-if="interview.actualQuestion.starterKind !== 'photo'"
           ><p class="eyebrow">这次想讲的事</p>
           <h2 class="recording-question">{{ question }}</h2></template
         >
@@ -729,6 +749,16 @@ onUnmounted(() => {
             结束后自动上传。原声会保留，文字可随后修改。
           </p>
         </div>
+        <RouterLink
+          v-if="
+            interview?.actualQuestion.starterKind === 'photo' &&
+            !capturing &&
+            !busy
+          "
+          class="text-button"
+          :to="`/projects/${projectId}/photos?interviewId=${interview.id}`"
+          >管理讲述照片</RouterLink
+        >
       </section>
       <section v-if="sources.length" class="panel recording-playback">
         <div>

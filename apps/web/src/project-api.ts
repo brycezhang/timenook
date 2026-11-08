@@ -10,6 +10,10 @@ export interface StoryRevision {
   reviewResolutions: { item: string; reason: string }[] | null;
   reviewItems: string[] | null;
   photoSnapshotId: string | null;
+  photoSnapshot?:
+    import("../../../packages/contracts/src").PhotoMaterials | null;
+  audioManifest?:
+    import("../../../packages/contracts/src").StorySourceView[] | null;
 }
 export interface StoryRecord {
   id: string;

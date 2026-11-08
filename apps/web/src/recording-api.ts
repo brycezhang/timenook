@@ -1,6 +1,7 @@
 import { auth, restoreSession } from "./session";
 import { WebApiError } from "./api";
-import { audioDigest, type LocalRecording } from "./recording-store";
+import type { LocalRecording } from "./recording-store";
+import { fetchVerifiedBlob } from "./private-media";
 import type {
   RecordingContext,
   RecordingInterview,
@@ -149,7 +150,6 @@ export const recordingApi = {
     await saved({ ...clip, sealed: true });
   },
   async original(projectId: string, interviewId: string, clipId: string) {
-    const owner = auth.account.value;
     const path = `${base(projectId, interviewId)}/clips/${clipId}`;
     const clip = await request<RecordingClip>(path);
     if (
@@ -161,23 +161,7 @@ export const recordingApi = {
       clip.asset.sha256 !== clip.sha256
     )
       throw Error("原声来源无效，请重新读取。");
-    const response = await fetch(`/api/v1${path}/content`, {
-      credentials: "same-origin",
-      cache: "no-store",
-      redirect: "error",
-      signal: AbortSignal.timeout(30000),
-      headers: { "X-Timenook-Web": "1" },
-    });
-    if (!response.ok)
-      throw new WebApiError(response.status, "原声暂时无法读取，请重试。");
-    const blob = await response.blob();
-    if (
-      auth.account.value?.session.id !== owner?.session.id ||
-      blob.size !== clip.asset.bytes ||
-      (await audioDigest(blob)) !== clip.asset.sha256
-    )
-      throw Error("原声校验未通过，请重新读取。");
-    return blob;
+    return fetchVerifiedBlob(`${path}/content`, clip.asset);
   },
 };
 export async function uploadRecording(form: ProbeUploadForm, blob: Blob) {
