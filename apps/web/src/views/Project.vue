@@ -206,6 +206,12 @@ async function copyInvite() {
           ><RouterLink class="button secondary" :to="`/projects/${id}/book`"
             >查看书稿<Icon name="arrow" :size="16"
           /></RouterLink>
+          <RouterLink
+            v-if="project.canRecord"
+            class="text-button"
+            :to="`/projects/${id}/photos`"
+            >从照片说起<Icon name="arrow" :size="16"
+          /></RouterLink>
         </div>
       </div>
       <div class="member-hero-cover">

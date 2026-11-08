@@ -13,6 +13,8 @@ import {
 } from "../project-api";
 import { WebApiError } from "../api";
 import Icon from "../components/Icon.vue";
+import StoryPhotoGallery from "../components/StoryPhotoGallery.vue";
+import StoryAudio from "../components/StoryAudio.vue";
 const route = useRoute(),
   projectId = computed(() => String(route.params.projectId));
 const story = ref<StoryRecord | null>(null),
@@ -25,6 +27,14 @@ const story = ref<StoryRecord | null>(null),
   conflict = ref(false),
   saved = ref(false);
 let generation = 0;
+function accessLost() {
+  generation++;
+  story.value = null;
+  title.value = "";
+  body.value = "";
+  editing.value = false;
+  error.value = "暂时无法访问这段故事，请返回项目重新查看。";
+}
 const clear = auth.onClear(() => {
   generation++;
   story.value = null;
@@ -190,6 +200,17 @@ async function inclusion() {
         {{ storyDate(story) }}<span>·</span>{{ storyMinutes(story) }} 分钟原声
       </p>
       <div class="reading-rule" />
+      <StoryPhotoGallery
+        v-if="
+          story.revision.photoSnapshotId || story.revision.photoSnapshot?.id
+        "
+        :project-id="projectId"
+        :interview-id="story.interviewId"
+        :snapshot-id="
+          story.revision.photoSnapshotId || story.revision.photoSnapshot?.id
+        "
+        @denied="accessLost"
+      />
       <div class="prose">
         <p v-for="(paragraph, index) in story.revision.paragraphs" :key="index">
           {{ paragraph.text }}
@@ -247,7 +268,24 @@ async function inclusion() {
         <span v-if="loading" class="spinner" />刷新故事
       </button>
     </section>
+    <StoryPhotoGallery
+      v-if="!story.revision && !editing"
+      :project-id="projectId"
+      :interview-id="story.interviewId"
+      @denied="accessLost"
+    />
+    <StoryAudio
+      v-if="!editing"
+      :project-id="projectId"
+      :story="story"
+      @denied="accessLost"
+    />
     <div v-if="!editing" class="reader-actions">
+      <RouterLink
+        class="button secondary"
+        :to="`/projects/${projectId}/stories/${story.id}/photos`"
+        >管理照片</RouterLink
+      >
       <button
         v-if="story.revision"
         class="button secondary"
