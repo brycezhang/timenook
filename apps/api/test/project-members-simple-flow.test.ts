@@ -359,7 +359,12 @@ test("payer and multiple invited members can create, edit, preview and submit wi
     404,
   );
   assert.equal(
-    await db.termsAcceptance.count({ where: { version: TERMS_VERSION } }),
+    await db.termsAcceptance.count({
+      where: {
+        version: TERMS_VERSION,
+        userId: { in: [p.buyer.id, member.id, second.id, outsider.id] },
+      },
+    }),
     4,
   );
 });

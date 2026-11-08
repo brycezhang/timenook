@@ -1,46 +1,68 @@
-import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile, chmod } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { after, before, test } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
 import { createApplication } from "../src/application";
 import type { ApiConfig } from "../src/config";
+import { createInternalProject } from "../src/projects/internal-project";
+import { USER_TERMS_VERSION } from "@timenook/contracts";
 import { bootPrivacyFixture, closePrivacyFixture } from "./privacy-fixture";
-import { ProjectPlans } from "../src/projects/project-plans";
-import { ProjectServiceTerms } from "../src/projects/service-terms";
-import { Deletions } from "../src/care/deletions";
-import { internalSnapshot } from "../src/projects/internal-profile";
-import { PrivacyRights } from "../src/care/privacy-rights";
-import {
-  PERSISTENT_WEB_EXPIRY,
-  provisionWebAccount,
-} from "../src/web/web-provisioning";
 
-const schema = `web_${randomUUID().replaceAll("-", "")}`;
-const origin = "https://localhost:3447";
-let root: string;
-let config: ApiConfig & {
-  web: {
-    origin: string;
-    sessionKey: string;
-    loginTtlSeconds: number;
-    sessionTtlSeconds: number;
-  };
-};
-let app: Awaited<ReturnType<typeof createApplication>>;
+const schema = `phone_${randomUUID().replaceAll("-", "")}`;
+const origin = "https://localhost:4330";
 const headers = { origin, "x-timenook-web": "1" };
-
+const delivered = new Map<
+  string,
+  { phone: string; code: string; outId: string }
+>();
+let app: Awaited<ReturnType<typeof createApplication>>;
+let config: ApiConfig;
+let rejectSms = false;
+const options = {
+  wechatFetch: async (
+    input: Parameters<typeof fetch>[0],
+    init?: RequestInit,
+  ) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/cgi-bin/stable_token")
+      return Response.json({
+        access_token: "synthetic-access",
+        expires_in: 7200,
+      });
+    if (url.pathname === "/wxa/business/getuserphonenumber") {
+      const { code } = JSON.parse(String(init?.body));
+      return Response.json({
+        phone_info: {
+          phoneNumber: code,
+          purePhoneNumber: code,
+          countryCode: "86",
+          watermark: { appid: "synthetic-phone-app" },
+        },
+      });
+    }
+    return Response.json({
+      openid: url.searchParams.get("js_code")!.split(":")[0],
+      session_key: "synthetic-key",
+    });
+  },
+  smsSender: {
+    async sendOtp(input: { phone: string; code: string; outId: string }) {
+      if (rejectSms) throw new Error("supplier rejected with private details");
+      delivered.set(input.outId, input);
+    },
+  },
+};
 before(async () => {
   const url = new URL(process.env.DATABASE_URL!);
-  assert.ok(["localhost", "127.0.0.1", "::1"].includes(url.hostname));
+  assert.ok(["127.0.0.1", "localhost", "::1"].includes(url.hostname));
   url.searchParams.set("schema", schema);
-  root = await mkdtemp(join(tmpdir(), "timenook-web-account-"));
   config = {
+    acceptance: {
+      mode: "internal-acceptance",
+      profileVersion: "internal-acceptance-v1",
+    },
     environment: "test",
     host: "127.0.0.1",
     port: 3417,
@@ -50,9 +72,10 @@ before(async () => {
     web: {
       origin,
       sessionKey: randomBytes(32).toString("base64"),
-      loginTtlSeconds: 900,
+      loginTtlSeconds: 300,
       sessionTtlSeconds: 43200,
     },
+    wechat: { appId: "synthetic-phone-app", secret: "synthetic-secret" },
   };
   const migrated = spawnSync(
     process.execPath,
@@ -62,11 +85,10 @@ before(async () => {
       encoding: "utf8",
     },
   );
-  assert.equal(migrated.status, 0, "isolated migrations");
+  assert.equal(migrated.status, 0, "isolated PostgreSQL migrations");
   await bootPrivacyFixture(config);
-  app = await createApplication(config);
+  app = await createApplication(config, options);
 });
-
 after(async () => {
   await app?.close();
   if (!config) return;
@@ -80,794 +102,327 @@ after(async () => {
     await db.$disconnect();
     redis.disconnect();
     await closePrivacyFixture(config);
-    await rm(root, { recursive: true, force: true });
   }
 });
-
-test("an unusable web login link is rejected without issuing a session", async () => {
+async function challenge(phone: string) {
   const response = await app.inject({
+    method: "POST",
+    url: "/v1/web/sms-codes",
+    headers,
+    payload: { phone, termsVersion: USER_TERMS_VERSION },
+  });
+  assert.equal(response.statusCode, 201, response.body);
+  const data = response.json().data;
+  const sms = delivered.get(data.challengeId)!;
+  assert.ok(sms, "only the external SMS boundary captures the code");
+  assert.doesNotMatch(response.body, new RegExp(sms.code));
+  assert.equal(response.headers["cache-control"], "no-store");
+  return { ...data, code: sms.code };
+}
+async function login(phone: string) {
+  const proof = await challenge(phone);
+  return app.inject({
+    method: "POST",
+    url: "/v1/web/session",
+    headers,
+    payload: {
+      challengeId: proof.challengeId,
+      code: proof.code,
+      termsVersion: USER_TERMS_VERSION,
+    },
+  });
+}
+function cookieOf(response: { headers: Record<string, unknown> }) {
+  return String(response.headers["set-cookie"]).split(";")[0];
+}
+test("SMS login issues a secure Cookie session, restores the account and consumes its proof once", async () => {
+  const proof = await challenge("13800000001");
+  const payload = {
+    challengeId: proof.challengeId,
+    code: proof.code,
+    termsVersion: USER_TERMS_VERSION,
+  };
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/web/session",
+    headers,
+    payload,
+  });
+  assert.equal(response.statusCode, 201, response.body);
+  assert.equal(response.json().data.user.nickname, "用户0001");
+  assert.equal(response.json().data.session.token, undefined);
+  assert.match(String(response.headers["set-cookie"]), /HttpOnly/);
+  assert.match(String(response.headers["set-cookie"]), /Secure/);
+  const restored = await app.inject({
+    method: "GET",
+    url: "/v1/web/session",
+    headers: { cookie: cookieOf(response) },
+  });
+  assert.equal(restored.statusCode, 200);
+  assert.deepEqual(restored.json().data.user, response.json().data.user);
+  const replay = await app.inject({
+    method: "POST",
+    url: "/v1/web/session",
+    headers,
+    payload,
+  });
+  assert.equal(replay.statusCode, 401);
+});
+
+function wechat(phone: string, identity = randomUUID()) {
+  return app.inject({
+    method: "POST",
+    url: "/v1/sessions/wechat",
+    payload: {
+      code: `${identity}:${randomUUID()}`,
+      phoneCode: phone,
+      termsVersion: USER_TERMS_VERSION,
+    },
+  });
+}
+test("web-first and mini-program-first proofs resolve the same account and keep an edited nickname", async () => {
+  const web = await login("13800000002");
+  assert.equal(web.statusCode, 201, web.body);
+  const native = await wechat("13800000002");
+  assert.equal(native.statusCode, 201, native.body);
+  assert.equal(web.json().data.user.id, native.json().data.user.id);
+  const otherNative = await wechat("13800000003");
+  assert.equal(otherNative.statusCode, 201);
+  await app.inject({
+    method: "POST",
+    url: "/v1/users/me/profile",
+    headers: {
+      authorization: `Bearer ${otherNative.json().data.session.token}`,
+    },
+    payload: { nickname: "家人的故事" },
+  });
+  const otherWeb = await login("+8613800000003");
+  assert.equal(otherWeb.statusCode, 201, otherWeb.body);
+  assert.equal(otherWeb.json().data.user.id, otherNative.json().data.user.id);
+  assert.equal(otherWeb.json().data.user.nickname, "家人的故事");
+});
+test("concurrent first web and WeChat login converge on one account", async () => {
+  const proof = await challenge("13800000004");
+  const [web, native] = await Promise.all([
+    app.inject({
+      method: "POST",
+      url: "/v1/web/session",
+      headers,
+      payload: {
+        challengeId: proof.challengeId,
+        code: proof.code,
+        termsVersion: USER_TERMS_VERSION,
+      },
+    }),
+    wechat("13800000004"),
+  ]);
+  assert.equal(web.statusCode, 201, web.body);
+  assert.equal(native.statusCode, 201, native.body);
+  assert.equal(web.json().data.user.id, native.json().data.user.id);
+});
+test("invalid codes cannot authenticate; five errors invalidate the challenge", async () => {
+  const proof = await challenge("13800000005");
+  for (let i = 0; i < 5; i++) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/web/session",
+      headers,
+      payload: {
+        challengeId: proof.challengeId,
+        code: proof.code === "000000" ? "111111" : "000000",
+        termsVersion: USER_TERMS_VERSION,
+      },
+    });
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.headers["set-cookie"], undefined);
+  }
+  const consumed = await app.inject({
+    method: "POST",
+    url: "/v1/web/session",
+    headers,
+    payload: {
+      challengeId: proof.challengeId,
+      code: proof.code,
+      termsVersion: USER_TERMS_VERSION,
+    },
+  });
+  assert.equal(consumed.statusCode, 401);
+});
+test("login requires current terms and the same origin; legacy demo endpoints are absent", async () => {
+  for (const attempted of [
+    {},
+    { ...headers, origin: "https://foreign.invalid" },
+  ]) {
+    const denied = await app.inject({
+      method: "POST",
+      url: "/v1/web/sms-codes",
+      headers: attempted,
+      payload: { phone: "13800000006", termsVersion: USER_TERMS_VERSION },
+    });
+    assert.equal(denied.statusCode, 403);
+  }
+  const noTerms = await app.inject({
+    method: "POST",
+    url: "/v1/web/sms-codes",
+    headers,
+    payload: { phone: "13800000006" },
+  });
+  assert.equal(noTerms.statusCode, 400);
+  for (const path of [
+    "/v1/web/mock-session",
+    "/v1/web/mock-purchases",
+    "/v1/web/wechat-link",
+    "/v1/wechat-links/claim",
+  ]) {
+    const result = await app.inject({
+      method: "POST",
+      url: path,
+      headers,
+      payload: {},
+    });
+    assert.equal(result.statusCode, 404);
+  }
+  const legacy = await app.inject({
     method: "POST",
     url: "/v1/web/session",
     headers,
     payload: { ticket: "A".repeat(43) },
   });
-  assert.equal(response.statusCode, 401);
-  assert.equal(response.headers["set-cookie"], undefined);
-  assert.equal(response.headers["cache-control"], "no-store");
+  assert.equal(legacy.statusCode, 400);
 });
-
-async function cli(command: string, input: unknown) {
-  const id = randomUUID(),
-    inputFile = join(root, `${id}.input.json`),
-    outputFile = join(root, `${id}.output.json`);
-  await writeFile(inputFile, JSON.stringify(input), { mode: 0o600 });
-  const result = spawnSync(
-    process.execPath,
-    [
-      join(__dirname, "../src/web/web-cli.js"),
-      command,
-      "--input-file",
-      inputFile,
-      "--output-file",
-      outputFile,
-    ],
-    {
-      env: {
-        ...process.env,
-        NODE_ENV: "test",
-        DATABASE_URL: config.databaseUrl,
-        REDIS_URL: config.redisUrl,
-        WEB_ORIGIN: origin,
-        WEB_SESSION_KEY: config.web.sessionKey,
-        PRIVACY_JOURNAL_ROOT: config.privacyJournal!.root,
-        PRIVACY_JOURNAL_KEY: config.privacyJournal!.key,
-      },
-      encoding: "utf8",
-    },
-  );
-  assert.equal(result.status, 0, `controlled ${command} command`);
-  assert.equal(result.stdout, "", "credentials stay in owner-only output");
-  return JSON.parse(await readFile(outputFile, "utf8"));
-}
-
-test("a provisioned account signs in without WeChat and restores the same user", async () => {
-  const account = await cli("create", {});
-  const issued = await cli("issue", { userId: account.user.id });
-  const link = new URL(issued.url);
-  assert.equal(link.origin, origin);
-  assert.equal(link.pathname, "/app/login");
-  assert.equal(link.search, "");
-  const ticket = new URLSearchParams(link.hash.slice(1)).get("ticket");
-  assert.match(ticket!, /^[A-Za-z0-9_-]{43}$/);
-  const response = await app.inject({
+test("resend is limited across phone representations and provider failures never sign in", async () => {
+  await challenge("13800000007");
+  const resent = await app.inject({
     method: "POST",
-    url: "/v1/web/session",
+    url: "/v1/web/sms-codes",
     headers,
-    payload: { ticket },
+    payload: { phone: "+8613800000007", termsVersion: USER_TERMS_VERSION },
   });
-  assert.equal(response.statusCode, 201);
-  assert.deepEqual(response.json().data.user, account.user);
-  assert.equal(response.json().data.session.token, undefined);
-  assert.doesNotMatch(response.body, new RegExp(ticket!));
-  const cookie = String(response.headers["set-cookie"]);
-  assert.match(cookie, /__Secure-timenook_web=/);
-  assert.match(cookie, /HttpOnly/);
-  assert.match(cookie, /Secure/);
-  assert.match(cookie, /SameSite=Strict/);
-  assert.match(cookie, /Path=\/api\/v1/);
-  const current = await app.inject({
-    method: "GET",
-    url: "/v1/web/session",
-    headers: { cookie: cookie.split(";")[0] },
-  });
-  assert.equal(current.statusCode, 200);
-  assert.deepEqual(current.json().data, response.json().data);
-  const projects = await app.inject({
-    method: "GET",
-    url: "/v1/web/projects",
-    headers: { cookie: cookie.split(";")[0] },
-  });
-  assert.equal(projects.statusCode, 200);
-  assert.deepEqual(projects.json().data, { projects: [] });
-});
-
-test("cross-origin and non-explicit login requests cannot consume a valid link", async () => {
-  const account = await cli("create", {}),
-    issued = await cli("issue", { userId: account.user.id });
-  const ticket = new URLSearchParams(new URL(issued.url).hash.slice(1)).get(
-    "ticket",
-  );
-  for (const attemptedHeaders of [
-    {},
-    { ...headers, origin: "https://other.example" },
-    { origin },
-  ]) {
-    const rejected = await app.inject({
-      method: "POST",
-      url: "/v1/web/session",
-      headers: attemptedHeaders,
-      payload: { ticket },
-    });
-    assert.equal(rejected.statusCode, 403);
-    assert.equal(rejected.headers["set-cookie"], undefined);
-  }
-  const accepted = await app.inject({
-    method: "POST",
-    url: "/v1/web/session",
-    headers,
-    payload: { ticket },
-  });
-  assert.equal(accepted.statusCode, 201);
-});
-
-async function signedIn() {
-  const account = await cli("create", {}),
-    issued = await cli("issue", { userId: account.user.id });
-  const ticket = new URLSearchParams(new URL(issued.url).hash.slice(1)).get(
-    "ticket",
-  );
-  const login = await app.inject({
-    method: "POST",
-    url: "/v1/web/session",
-    headers,
-    payload: { ticket },
-  });
-  assert.equal(login.statusCode, 201);
-  return {
-    account,
-    ticket,
-    cookie: String(login.headers["set-cookie"]).split(";")[0],
-    data: login.json().data,
-  };
-}
-
-test("signing in replaces only the browser's prior web session, including for the same user", async () => {
-  const first = await signedIn();
-  const otherDeviceLink = await cli("issue", { userId: first.account.user.id });
-  const otherDevice = await app.inject({
-    method: "POST",
-    url: "/v1/web/session",
-    headers,
-    payload: {
-      ticket: new URLSearchParams(
-        new URL(otherDeviceLink.url).hash.slice(1),
-      ).get("ticket"),
-    },
-  });
-  assert.equal(otherDevice.statusCode, 201);
-  const otherDeviceCookie = String(otherDevice.headers["set-cookie"]).split(
-    ";",
-  )[0];
-  const account = await cli("create", {});
-  const link = await cli("issue", { userId: account.user.id });
-  const switched = await app.inject({
-    method: "POST",
-    url: "/v1/web/session",
-    headers: { ...headers, cookie: first.cookie },
-    payload: {
-      ticket: new URLSearchParams(new URL(link.url).hash.slice(1)).get(
-        "ticket",
-      ),
-    },
-  });
-  assert.equal(switched.statusCode, 201);
-  const restore = (cookie: string) =>
-    app.inject({ method: "GET", url: "/v1/web/session", headers: { cookie } });
-  assert.equal((await restore(first.cookie)).statusCode, 401);
-  const switchedCookie = String(switched.headers["set-cookie"]).split(";")[0];
-  assert.deepEqual(
-    (await restore(switchedCookie)).json().data.user,
-    account.user,
-  );
-  assert.deepEqual(
-    (await restore(otherDeviceCookie)).json().data.user,
-    first.account.user,
-  );
-
-  const sameUserLink = await cli("issue", { userId: account.user.id });
-  const renewed = await app.inject({
-    method: "POST",
-    url: "/v1/web/session",
-    headers: { ...headers, cookie: switchedCookie },
-    payload: {
-      ticket: new URLSearchParams(new URL(sameUserLink.url).hash.slice(1)).get(
-        "ticket",
-      ),
-    },
-  });
-  assert.equal(renewed.statusCode, 201);
-  assert.equal((await restore(switchedCookie)).statusCode, 401);
-  assert.deepEqual(
-    (await restore(String(renewed.headers["set-cookie"]).split(";")[0])).json()
-      .data.user,
-    account.user,
-  );
-});
-
-test("an unsuccessful login exchange preserves the browser's existing session", async () => {
-  const first = await signedIn();
-  const revoked = await cli("issue", { userId: first.account.user.id });
-  await cli("revoke", { ticketId: revoked.ticket.id });
-  for (const ticket of [
-    "C".repeat(43),
-    first.ticket,
-    new URLSearchParams(new URL(revoked.url).hash.slice(1)).get("ticket"),
-  ]) {
-    const rejected = await app.inject({
-      method: "POST",
-      url: "/v1/web/session",
-      headers: { ...headers, cookie: first.cookie },
-      payload: { ticket },
-    });
-    assert.equal(rejected.statusCode, 401);
-    assert.equal(rejected.headers["set-cookie"], undefined);
-    const restored = await app.inject({
-      method: "GET",
-      url: "/v1/web/session",
-      headers: { cookie: first.cookie },
-    });
-    assert.equal(restored.statusCode, 200);
-    assert.deepEqual(restored.json().data, first.data);
-  }
-});
-
-test("replacement ignores forged cookies, WeChat sessions and web sessions using another key", async () => {
-  const first = await signedIn();
-  const otherKeyApp = await createApplication(
-    {
-      ...config,
-      web: { ...config.web, sessionKey: randomBytes(32).toString("base64") },
-      wechat: { appId: "synthetic-app", secret: "synthetic-secret" },
-    },
-    {
-      wechatFetch: withWechatProfile(
-        async () =>
-          new Response(
-            JSON.stringify({
-              openid: "synthetic-open",
-              session_key: "synthetic-key",
-            }),
-          ),
-      ),
-    },
-  );
+  assert.equal(resent.statusCode, 429);
+  rejectSms = true;
   try {
-    const native = await otherKeyApp.inject({
+    const failed = await app.inject({
       method: "POST",
-      url: "/v1/sessions/wechat",
-      payload: { ...phoneLogin(), code: `synthetic-${randomUUID()}` },
+      url: "/v1/web/sms-codes",
+      headers,
+      payload: { phone: "13800000008", termsVersion: USER_TERMS_VERSION },
     });
-    assert.equal(native.statusCode, 201);
-    const nativeSession = native.json().data;
-    for (const previousToken of [
-      "malformed",
-      randomBytes(32).toString("base64url"),
-      nativeSession.session.token,
-    ]) {
-      const link = await cli("issue", { userId: first.account.user.id });
-      const accepted = await app.inject({
-        method: "POST",
-        url: "/v1/web/session",
-        headers: {
-          ...headers,
-          cookie: `__Secure-timenook_web=${previousToken}`,
-        },
-        payload: {
-          ticket: new URLSearchParams(new URL(link.url).hash.slice(1)).get(
-            "ticket",
-          ),
-        },
-      });
-      assert.equal(accepted.statusCode, 201);
-    }
-    const nativeCurrent = await app.inject({
-      method: "GET",
-      url: "/v1/users/me",
-      headers: { authorization: `Bearer ${nativeSession.session.token}` },
-    });
-    assert.equal(nativeCurrent.statusCode, 200);
-    assert.deepEqual(nativeCurrent.json().data, nativeSession.user);
-
-    const link = await cli("issue", { userId: first.account.user.id });
-    const accepted = await otherKeyApp.inject({
-      method: "POST",
-      url: "/v1/web/session",
-      headers: { ...headers, cookie: first.cookie },
-      payload: {
-        ticket: new URLSearchParams(new URL(link.url).hash.slice(1)).get(
-          "ticket",
-        ),
-      },
-    });
-    assert.equal(accepted.statusCode, 201);
-    const restored = await app.inject({
-      method: "GET",
-      url: "/v1/web/session",
-      headers: { cookie: first.cookie },
-    });
-    assert.equal(restored.statusCode, 200);
-    assert.deepEqual(restored.json().data, first.data);
+    assert.equal(failed.statusCode, 503);
+    assert.equal(failed.headers["set-cookie"], undefined);
+    assert.doesNotMatch(failed.body, /supplier|private|13800000008/);
   } finally {
-    await otherKeyApp.close();
+    rejectSms = false;
   }
 });
-
-test("web sessions authorize existing user APIs but require CSRF for state changes and logout", async () => {
-  const { account, cookie, data } = await signedIn();
-  const me = await app.inject({
+test("logout requires CSRF, revokes only the web session and hides private project lists", async () => {
+  const web = await login("13800000009");
+  const native = await wechat("13800000009");
+  const cookie = cookieOf(web);
+  const before = await app.inject({
     method: "GET",
-    url: "/v1/users/me",
+    url: "/v1/participations",
     headers: { cookie },
   });
-  assert.equal(me.statusCode, 200);
-  assert.deepEqual(me.json().data, { ...account.user, nickname: null });
-  const rejected = await app.inject({
+  assert.equal(before.statusCode, 200, before.body);
+  assert.deepEqual(before.json().data, { projects: [] });
+  const denied = await app.inject({
     method: "DELETE",
-    url: `/v1/sessions/${data.session.id}`,
+    url: "/v1/web/session",
     headers: { ...headers, cookie },
   });
-  assert.equal(rejected.statusCode, 403);
-  const stillCurrent = await app.inject({
-    method: "GET",
-    url: "/v1/web/session",
-    headers: { cookie },
-  });
-  assert.equal(stillCurrent.statusCode, 200);
-  const logout = await app.inject({
+  assert.equal(denied.statusCode, 403);
+  const loggedOut = await app.inject({
     method: "DELETE",
     url: "/v1/web/session",
-    headers: { ...headers, cookie, "x-csrf-token": data.csrfToken },
+    headers: { ...headers, cookie, "x-csrf-token": web.json().data.csrfToken },
   });
-  assert.equal(logout.statusCode, 204);
-  assert.match(
-    String(logout.headers["set-cookie"]),
-    /Expires=Thu, 01 Jan 1970/,
-  );
-  assert.equal(
-    (
-      await app.inject({
-        method: "GET",
-        url: "/v1/users/me",
-        headers: { cookie },
-      })
-    ).statusCode,
-    401,
-  );
-  assert.equal(
-    (
-      await app.inject({
-        method: "GET",
-        url: "/v1/web/session",
-        headers: { cookie },
-      })
-    ).statusCode,
-    401,
-  );
+  assert.equal(loggedOut.statusCode, 204);
+  const hidden = await app.inject({
+    method: "GET",
+    url: "/v1/participations",
+    headers: { cookie },
+  });
+  assert.equal(hidden.statusCode, 401);
+  const nativeRemains = await app.inject({
+    method: "GET",
+    url: "/v1/users/me",
+    headers: { authorization: `Bearer ${native.json().data.session.token}` },
+  });
+  assert.equal(nativeRemains.statusCode, 200);
+});
+test("a WeChat identity cannot silently change its phone account", async () => {
+  const identity = randomUUID();
+  const first = await wechat("13800000010", identity);
+  assert.equal(first.statusCode, 201);
+  const changed = await wechat("13800000011", identity);
+  assert.equal(changed.statusCode, 409);
+  const current = await app.inject({
+    method: "GET",
+    url: "/v1/users/me",
+    headers: { authorization: `Bearer ${first.json().data.session.token}` },
+  });
+  assert.equal(current.json().data.id, first.json().data.user.id);
 });
 
-test("operator revocation prevents an unused link from signing in", async () => {
-  const account = await cli("create", {}),
-    issued = await cli("issue", { userId: account.user.id });
-  assert.deepEqual(await cli("revoke", { ticketId: issued.ticket.id }), {
-    revoked: true,
+test("web and mini-program expose the same purchased and invited projects, with no foreign projects", async () => {
+  const native = await wechat("13800000012");
+  const other = await wechat("13800000013");
+  const mine = await createInternalProject(config, {
+    provisionKey: `owned-${randomUUID()}`,
+    initiatorUserId: native.json().data.user.id,
+    bookTitle: "同号账号的书",
   });
-  const ticket = new URLSearchParams(new URL(issued.url).hash.slice(1)).get(
-    "ticket",
-  );
-  const rejected = await app.inject({
+  const invited = await createInternalProject(config, {
+    provisionKey: `invited-${randomUUID()}`,
+    initiatorUserId: other.json().data.user.id,
+    bookTitle: "家人邀请的书",
+  });
+  const invitation = await app.inject({
     method: "POST",
-    url: "/v1/web/session",
-    headers,
-    payload: { ticket },
+    url: `/v1/projects/${invited.projectId}/invitations`,
+    headers: { authorization: `Bearer ${other.json().data.session.token}` },
   });
-  assert.equal(rejected.statusCode, 401);
-  assert.equal(rejected.headers["set-cookie"], undefined);
-});
-
-test("a login link has exactly one winner across concurrent requests and remains consumed after restart", async () => {
-  const account = await cli("create", {}),
-    issued = await cli("issue", { userId: account.user.id });
-  const ticket = new URLSearchParams(new URL(issued.url).hash.slice(1)).get(
-    "ticket",
-  );
-  const attempts = await Promise.all(
-    Array.from({ length: 8 }, () =>
-      app.inject({
-        method: "POST",
-        url: "/v1/web/session",
-        headers,
-        payload: { ticket },
-      }),
-    ),
-  );
-  assert.equal(attempts.filter((r) => r.statusCode === 201).length, 1);
-  assert.equal(attempts.filter((r) => r.statusCode === 401).length, 7);
-  const restarted = await createApplication(config);
-  try {
-    const replay = await restarted.inject({
-      method: "POST",
-      url: "/v1/web/session",
-      headers,
-      payload: { ticket },
-    });
-    assert.equal(replay.statusCode, 401);
-    const winner = attempts.find((r) => r.statusCode === 201)!;
-    const current = await restarted.inject({
+  assert.equal(invitation.statusCode, 201, invitation.body);
+  const accepted = await app.inject({
+    method: "POST",
+    url: `/v1/invitations/${invitation.json().data.token}/accept`,
+    headers: { authorization: `Bearer ${native.json().data.session.token}` },
+    payload: { termsVersion: USER_TERMS_VERSION },
+  });
+  assert.equal(accepted.statusCode, 201, accepted.body);
+  const web = await login("13800000012");
+  const [webList, miniList, foreign] = await Promise.all([
+    app.inject({
       method: "GET",
-      url: "/v1/web/session",
-      headers: { cookie: String(winner.headers["set-cookie"]).split(";")[0] },
-    });
-    assert.equal(current.statusCode, 200);
-    assert.deepEqual(current.json().data.user, account.user);
-  } finally {
-    await restarted.close();
-  }
-});
-
-test("login exchange is rate limited independently of the WeChat identity provider", async () => {
-  const limited = await createApplication({
-    ...config,
-    loginLimitPerMinute: 2,
-    redisKeyPrefix: `${schema}:limited`,
-  });
-  try {
-    const statuses = [];
-    for (let attempt = 0; attempt < 3; attempt++)
-      statuses.push(
-        (
-          await limited.inject({
-            method: "POST",
-            url: "/v1/web/session",
-            headers,
-            payload: { ticket: "B".repeat(43) },
-          })
-        ).statusCode,
-      );
-    assert.deepEqual(statuses, [401, 401, 429]);
-  } finally {
-    await limited.close();
-  }
-});
-
-test("expired links and expired sessions cannot be restored", async (t) => {
-  const account = await cli("create", {}),
-    issued = await cli("issue", { userId: account.user.id });
-  const { cookie, data } = await signedIn();
-  const ticket = new URLSearchParams(new URL(issued.url).hash.slice(1)).get(
-    "ticket",
-  );
-  t.mock.timers.enable({
-    apis: ["Date"],
-    now: Date.parse(data.session.expiresAt) + 1,
-  });
-  try {
-    assert.equal(
-      (
-        await app.inject({
-          method: "POST",
-          url: "/v1/web/session",
-          headers,
-          payload: { ticket },
-        })
-      ).statusCode,
-      401,
-    );
-    assert.equal(
-      (
-        await app.inject({
-          method: "GET",
-          url: "/v1/web/session",
-          headers: { cookie },
-        })
-      ).statusCode,
-      401,
-    );
-    assert.equal(
-      (
-        await app.inject({
-          method: "GET",
-          url: "/v1/users/me",
-          headers: { cookie },
-        })
-      ).statusCode,
-      401,
-    );
-  } finally {
-    t.mock.timers.reset();
-  }
-});
-
-test("session credentials and CSRF proofs cannot be mixed between accounts", async () => {
-  const first = await signedIn(),
-    second = await signedIn();
-  for (const wrongProof of [second.data.csrfToken, "中".repeat(43)]) {
-    assert.equal(
-      (
-        await app.inject({
-          method: "DELETE",
-          url: "/v1/web/session",
-          headers: {
-            ...headers,
-            cookie: first.cookie,
-            "x-csrf-token": wrongProof,
-          },
-        })
-      ).statusCode,
-      403,
-    );
-  }
-  assert.equal(
-    (
-      await app.inject({
-        method: "GET",
-        url: "/v1/users/me",
-        headers: {
-          cookie: first.cookie,
-          authorization: `Bearer ${"A".repeat(43)}`,
-        },
-      })
-    ).statusCode,
-    403,
-  );
-  assert.equal(
-    (
-      await app.inject({
-        method: "GET",
-        url: "/v1/users/me",
-        headers: { cookie: `${first.cookie}; ${second.cookie}` },
-      })
-    ).statusCode,
-    401,
-  );
-  assert.equal(
-    (
-      await app.inject({
-        method: "GET",
-        url: "/v1/web/session",
-        headers: { cookie: first.cookie },
-      })
-    ).statusCode,
-    200,
-  );
-});
-
-test("the project list hides active-data deletion immediately before payload erasure", async () => {
-  const { account, cookie } = await signedIn();
-  const db = new PrismaClient({ datasourceUrl: config.databaseUrl });
-  const plans = new ProjectPlans(config.databaseUrl);
-  const projectId = randomUUID();
-  try {
-    await plans.createProject({ projectId, createdBy: account.user.id });
-    await db.project.update({
-      where: { id: projectId },
-      data: { bookTitle: "合成待清理私人书名" },
-    });
-    const list = () =>
-      app.inject({
-        method: "GET",
-        url: "/v1/web/projects",
-        headers: { cookie },
-      });
-    assert.deepEqual((await list()).json().data.projects, [
-      { id: projectId, bookTitle: "合成待清理私人书名", role: "initiator" },
-    ]);
-    const now = new Date().toISOString();
-    await db.$transaction((tx) =>
-      app.get(PrivacyRights).publishIn(tx, {
-        eventId: randomUUID(),
-        projectId,
-        kind: "deletion",
-        occurredAt: now,
-        payload: {
-          operation: "erase",
-          requestId: null,
-          trigger: "verified_request",
-          categories: ["activeData"],
-          effectiveAt: now,
-          accessEpoch: 0,
-          targets: [],
-          taskFences: [],
-          targetAttemptId: null,
-        },
-      }),
-    );
-    // Fixture checkpoint: the denial has committed but no erasure worker ran.
-    const retained = await db.project.findUniqueOrThrow({
-      where: { id: projectId },
-    });
-    assert.equal(retained.bookTitle, "合成待清理私人书名");
-    const response = await list();
-    assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.json().data, { projects: [] });
-    assert.doesNotMatch(response.body, /合成待清理私人书名/);
-  } finally {
-    await plans.close();
-    await db.$disconnect();
-  }
-});
-
-test("internal acceptance links remain reusable across browsers and logout until revoked", async (t) => {
-  const previous = await signedIn();
-  config.acceptance = {
-    mode: "internal-acceptance",
-    profileVersion: "internal-acceptance-v1",
-  };
-  try {
-    const upgraded = await app.inject({
+      url: "/v1/participations",
+      headers: { cookie: cookieOf(web) },
+    }),
+    app.inject({
       method: "GET",
-      url: "/v1/web/session",
-      headers: { cookie: previous.cookie },
-    });
-    assert.equal(upgraded.statusCode, 200);
-    assert.equal(upgraded.json().data.session.expiresAt, PERSISTENT_WEB_EXPIRY);
-    assert.match(String(upgraded.headers["set-cookie"]), /Expires=.*9999/);
-
-    const issued = await provisionWebAccount(config, "issue", {
-      userId: previous.account.user.id,
-    });
-    assert.ok(issued.ticket);
-    assert.equal(issued.ticket.expiresAt, PERSISTENT_WEB_EXPIRY);
-    const ticket = new URLSearchParams(new URL(issued.url!).hash.slice(1)).get(
-      "ticket",
-    );
-    const now = Date.now();
-    t.mock.method(Date, "now", () => now + 2 * 86400000);
-    const login = await app.inject({
-      method: "POST",
-      url: "/v1/web/session",
-      headers,
-      payload: { ticket },
-    });
-    assert.equal(login.statusCode, 201);
-    assert.equal(login.json().data.session.expiresAt, PERSISTENT_WEB_EXPIRY);
-    const cookie = String(login.headers["set-cookie"]).split(";")[0];
-    t.mock.method(Date, "now", () => now + 30 * 86400000);
-    assert.equal(
-      (
-        await app.inject({
-          method: "GET",
-          url: "/v1/web/session",
-          headers: { cookie },
-        })
-      ).statusCode,
-      200,
-    );
-    const secondBrowser = await app.inject({
-      method: "POST",
-      url: "/v1/web/session",
-      headers,
-      payload: { ticket },
-    });
-    assert.equal(
-      secondBrowser.statusCode,
-      201,
-      "same link opens another browser",
-    );
-    assert.deepEqual(secondBrowser.json().data.user, login.json().data.user);
-    const logout = await app.inject({
-      method: "DELETE",
-      url: "/v1/web/session",
-      headers: {
-        ...headers,
-        cookie,
-        "x-csrf-token": login.json().data.csrfToken,
-      },
-    });
-    assert.equal(logout.statusCode, 204);
-    assert.equal(
-      (
-        await app.inject({
-          method: "GET",
-          url: "/v1/web/session",
-          headers: { cookie },
-        })
-      ).statusCode,
-      401,
-    );
-    const afterLogout = await app.inject({
-      method: "POST",
-      url: "/v1/web/session",
-      headers,
-      payload: { ticket },
-    });
-    assert.equal(
-      afterLogout.statusCode,
-      201,
-      "same link signs in after logout",
-    );
-    await provisionWebAccount(config, "revoke", { ticketId: issued.ticket.id });
-    assert.equal(
-      (
-        await app.inject({
-          method: "POST",
-          url: "/v1/web/session",
-          headers,
-          payload: { ticket },
-        })
-      ).statusCode,
-      401,
-      "explicit revocation disables the reusable link",
-    );
-  } finally {
-    t.mock.restoreAll();
-    delete config.acceptance;
-  }
-});
-
-test("web-only startup and explicit maintenance preserve an existing lifetime project", async () => {
-  const { account, cookie } = await signedIn();
-  await app.close();
-  const db = new PrismaClient({ datasourceUrl: config.databaseUrl });
-  const plans = new ProjectPlans(config.databaseUrl),
-    terms = new ProjectServiceTerms(config.databaseUrl);
-  const projectId = randomUUID(),
-    admissionId = randomUUID();
-  try {
-    await plans.createProject({ projectId, createdBy: account.user.id });
-    const snapshot = internalSnapshot("internal-acceptance-v1");
-    const anchor = new Date(Date.now() - 1000 * 86400000);
-    await db.internalProjectAdmission.create({
-      data: {
-        id: admissionId,
-        projectId,
-        initiatorUserId: account.user.id,
-        provisionKey: `web-lifetime-${projectId}`,
-        requestHash: "a".repeat(64),
-        profileVersion: "internal-acceptance-v1",
-        snapshot,
-        createdAt: anchor,
-      },
-    });
-    await db.project.update({
-      where: { id: projectId },
-      data: { bookTitle: "合成内测保留书名" },
-    });
-    await db.$transaction((tx) =>
-      terms.activateInternal(tx, projectId, admissionId, snapshot, anchor),
-    );
-    await terms.recordFact({
-      projectId,
-      eventId: `synthetic-web-delivery-${randomUUID()}`,
-      kind: "delivery_completed",
-      occurredAt: new Date(anchor.getTime() + 86400000),
-    });
-    app = await createApplication(config);
-    const list = () =>
-      app.inject({
-        method: "GET",
-        url: "/v1/web/projects",
-        headers: { cookie },
-      });
-    assert.deepEqual((await list()).json().data.projects, [
-      { id: projectId, bookTitle: "合成内测保留书名", role: "initiator" },
-    ]);
-    const outsider = await signedIn();
-    assert.deepEqual(
-      (
-        await app.inject({
-          method: "GET",
-          url: "/v1/web/projects",
-          headers: { cookie: outsider.cookie },
-        })
-      ).json().data,
-      { projects: [] },
-    );
-    await new Promise((resolve) => setTimeout(resolve, 1300));
-    assert.deepEqual((await list()).json().data.projects, [
-      { id: projectId, bookTitle: "合成内测保留书名", role: "initiator" },
-    ]);
-    await app.get(Deletions).sweep();
-    assert.deepEqual((await list()).json().data.projects, [
-      { id: projectId, bookTitle: "合成内测保留书名", role: "initiator" },
-    ]);
-    assert.equal((await terms.read(projectId)).canRecord, true);
-    const [deletions] = await db.$queryRaw<
-      { n: bigint }[]
-    >`SELECT count(*) n FROM privacy_deletions WHERE project_id=${projectId}::uuid`;
-    assert.equal(deletions.n, 0n);
-  } finally {
-    await plans.close();
-    await terms.close();
-    await db.$disconnect();
-  }
+      url: "/v1/participations",
+      headers: { authorization: `Bearer ${native.json().data.session.token}` },
+    }),
+    app.inject({
+      method: "GET",
+      url: "/v1/participations",
+      headers: { authorization: `Bearer ${other.json().data.session.token}` },
+    }),
+  ]);
+  assert.equal(webList.statusCode, 200, webList.body);
+  assert.deepEqual(webList.json().data, miniList.json().data);
+  assert.deepEqual(
+    webList
+      .json()
+      .data.projects.map((p: { projectId: string }) => p.projectId)
+      .sort(),
+    [mine.projectId, invited.projectId].sort(),
+  );
+  assert.equal(
+    foreign
+      .json()
+      .data.projects.some(
+        (p: { projectId: string }) => p.projectId === mine.projectId,
+      ),
+    false,
+  );
 });

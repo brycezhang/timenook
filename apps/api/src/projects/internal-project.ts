@@ -11,7 +11,7 @@ import { ProjectPlans } from "./project-plans";
 import { ProjectServiceTerms } from "./service-terms";
 import { internalSnapshot } from "./internal-profile";
 
-/** Internal-only composition, shared by the operator CLI and mock checkout. */
+/** Internal-only composition, used by the operator CLI. */
 export async function createInternalProject(
   config: ApiConfig,
   input: Record<string, unknown>,

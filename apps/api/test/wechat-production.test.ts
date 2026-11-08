@@ -1,4 +1,10 @@
-import { withWechatProfile, phoneLogin } from "./wechat-profile-fixture";
+import { fixtureWebSession } from "./web-session-fixture";
+import { createInternalProject } from "../src/projects/internal-project";
+import {
+  withWechatProfile,
+  phoneLogin,
+  verifiedPhone,
+} from "./wechat-profile-fixture";
 import { TERMS_VERSION } from "../src/identity/project-members";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
@@ -221,37 +227,24 @@ test("ordinary merchant and controlled acceptance retain internal projects and n
       (await app.inject({ method: "GET", url: "/v1/orders" })).statusCode,
       401,
     );
-    const login = await app.inject({
-      method: "POST",
-      url: "/v1/web/mock-session",
-      headers: origin,
-      payload: {},
+    const actor = await fixtureWebSession(app, cfg);
+    const cookie = actor.cookie;
+    const internal = await createInternalProject(cfg, {
+      provisionKey: `fixture-${randomUUID()}`,
+      initiatorUserId: actor.user.id,
+      bookTitle: "内部故事书",
+      subjectName: "讲述者",
     });
-    assert.equal(login.statusCode, 201, login.body);
-    const actor = login.json().data;
-    const cookie = (login.headers["set-cookie"] as string[])
-      .map((value) => value.split(";")[0])
-      .join("; ");
-    const internal = await app.inject({
-      method: "POST",
-      url: "/v1/web/mock-purchases",
-      headers: { ...origin, cookie, "x-csrf-token": actor.csrfToken },
-      payload: {
-        purchaseKey: randomUUID(),
-        bookTitle: "内部故事书",
-        subjectName: "讲述者",
-      },
-    });
-    assert.equal(internal.statusCode, 201, internal.body);
-    assert.equal(internal.json().data.source, "internal-acceptance");
-    const projectId = internal.json().data.projectId;
+    const projectId = internal.projectId;
     const projects = await app.inject({
       method: "GET",
-      url: "/v1/web/projects",
+      url: "/v1/participations",
       headers: { cookie },
     });
     assert.deepEqual(
-      projects.json().data.projects.map((p: { id: string }) => p.id),
+      projects
+        .json()
+        .data.projects.map((p: { projectId: string }) => p.projectId),
       [projectId],
     );
     const participation = await app.inject({
@@ -434,55 +427,20 @@ test("ordinary merchant signed notifications and active queries share durable pa
       wechatFetch: withWechatProfile(wechatFetch),
     });
     const origin = { origin: cfg.web!.origin, "x-timenook-web": "1" };
-    const webLogin = await app.inject({
-      method: "POST",
-      url: "/v1/web/mock-session",
-      headers: origin,
-      payload: {},
-    });
-    assert.equal(webLogin.statusCode, 201, webLogin.body);
-    const webActor = webLogin.json().data;
-    const cookie = String(webLogin.headers["set-cookie"]).split(";")[0];
+    const webActor = await fixtureWebSession(app, cfg);
+    const cookie = webActor.cookie;
     const webHeaders = {
       ...origin,
       cookie,
       "x-csrf-token": webActor.csrfToken,
     };
-    const challenge = await app.inject({
-      method: "POST",
-      url: "/v1/web/wechat-link",
-      headers: webHeaders,
-      payload: {},
-    });
-    assert.equal(challenge.statusCode, 201, challenge.body);
-    const claimed = await app.inject({
-      method: "POST",
-      url: "/v1/wechat-links/claim",
-      payload: {
-        linkCode: challenge.json().data.challenge.code,
-        code: code("isolated-buyer"),
+    // Existing verified web-account owner, then a real mini-program login proof.
+    await db.user.update({
+      where: { id: webActor.user.id },
+      data: {
+        phoneNumber: `+86${verifiedPhone(cfg.wechat!.appId, "isolated-buyer")}`,
       },
     });
-    assert.equal(claimed.statusCode, 201, claimed.body);
-    const pair = claimed.json().data;
-    const nativeConfirmed = await app.inject({
-      method: "POST",
-      url: "/v1/wechat-links/confirm",
-      payload: {
-        proof: pair.proof,
-        verificationCode: pair.challenge.verificationCode,
-        code: code("isolated-buyer"),
-      },
-    });
-    assert.equal(nativeConfirmed.statusCode, 201, nativeConfirmed.body);
-    const linked = await app.inject({
-      method: "POST",
-      url: `/v1/web/wechat-link/${pair.challenge.id}/confirm`,
-      headers: webHeaders,
-      payload: { verificationCode: pair.challenge.verificationCode },
-    });
-    assert.equal(linked.statusCode, 201, linked.body);
-    assert.equal(linked.json().data.challenge.state, "linked");
     const login = async (openId: string) => {
       const response = await app!.inject({
         method: "POST",

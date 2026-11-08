@@ -17,9 +17,9 @@ import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
 import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
-import { PrivacyRights } from "../care/privacy-rights";
+import { phoneAccountIn } from "../identity/phone-account";
+import { acceptTermsIn } from "../identity/project-members";
 import { IdentityAccess } from "../identity/identity-access";
-import { createInternalProject } from "../projects/internal-project";
 import {
   PERSISTENT_WEB_EXPIRY,
   webCredentialExpiry,
@@ -28,7 +28,6 @@ import {
 
 export const WEB_COOKIE = "__Secure-timenook_web";
 export const WEB_COOKIE_PATH = "/api/v1";
-export const MOCK_ACCOUNT_COOKIE = "__Secure-timenook_mock";
 
 @Injectable()
 export class WebAccess implements OnModuleDestroy {
@@ -37,7 +36,6 @@ export class WebAccess implements OnModuleDestroy {
   private connection?: Promise<void>;
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
-    private readonly rights: PrivacyRights,
     private readonly identity: IdentityAccess,
   ) {
     this.db = new PrismaClient({ datasourceUrl: config.databaseUrl });
@@ -53,10 +51,15 @@ export class WebAccess implements OnModuleDestroy {
   }
   private view(
     token: string,
-    session: { id: string; userId: string; expiresAt: Date },
+    session: {
+      id: string;
+      userId: string;
+      expiresAt: Date;
+      user?: { nickname: string | null };
+    },
   ) {
     return {
-      user: { id: session.userId },
+      user: { id: session.userId, nickname: session.user?.nickname ?? null },
       session: { id: session.id, expiresAt: session.expiresAt.toISOString() },
       csrfToken: createHmac(
         "sha256",
@@ -72,50 +75,6 @@ export class WebAccess implements OnModuleDestroy {
       request.headers["x-timenook-web"] !== "1"
     )
       throw new ForbiddenException();
-  }
-  mockEnabled() {
-    return this.config.acceptance?.mode === "internal-acceptance";
-  }
-  async mockLogin(request: FastifyRequest) {
-    if (!this.mockEnabled()) throw new ServiceUnavailableException();
-    this.requireOrigin(request);
-    await this.limit(request.ip);
-    let ticket = request.cookies[MOCK_ACCOUNT_COOKIE];
-    if (!ticket) {
-      ticket = randomBytes(32).toString("base64url");
-      await this.db.user.create({
-        data: {
-          id: randomUUID(),
-          webLoginTickets: {
-            create: {
-              id: randomUUID(),
-              tokenHash: webDigest(ticket),
-              expiresAt: new Date(PERSISTENT_WEB_EXPIRY),
-            },
-          },
-        },
-      });
-    }
-    const result = await this.exchange(ticket, request.cookies[WEB_COOKIE]);
-    return { ...result, ticket };
-  }
-  async mockPurchase(
-    request: FastifyRequest,
-    input: {
-      purchaseKey: string;
-      bookTitle: string;
-      subjectName: string;
-    },
-  ) {
-    if (!this.mockEnabled()) throw new ServiceUnavailableException();
-    const current = await this.requireMutation(request);
-    await this.limit(`purchase:${current.data.user.id}`, 20);
-    return createInternalProject(this.config, {
-      provisionKey: `web-mock:${current.data.user.id}:${input.purchaseKey}`,
-      initiatorUserId: current.data.user.id,
-      bookTitle: input.bookTitle,
-      subjectName: input.subjectName,
-    });
   }
   async limit(
     source: string,
@@ -138,6 +97,39 @@ export class WebAccess implements OnModuleDestroy {
       throw new ServiceUnavailableException();
     }
     if (Number(count) > maximum) throw new HttpException("Rate limited", 429);
+  }
+  async login(phoneNumber: string, previousToken?: string) {
+    const token = randomBytes(32).toString("base64url");
+    const session = await this.db.$transaction(async (tx) => {
+      const user = await phoneAccountIn(tx, phoneNumber);
+      await acceptTermsIn(tx, user.id, "web_login");
+      if (previousToken && /^[A-Za-z0-9_-]{43}$/.test(previousToken))
+        await tx.session.updateMany({
+          where: {
+            tokenHash: webDigest(previousToken),
+            webSession: {
+              is: { keyHash: webDigest(this.config.web!.sessionKey) },
+            },
+            revokedAt: null,
+          },
+          data: { revokedAt: new Date() },
+        });
+      return tx.session.create({
+        include: { user: { select: { nickname: true } } },
+        data: {
+          id: randomUUID(),
+          userId: user.id,
+          tokenHash: webDigest(token),
+          expiresAt: new Date(
+            Date.now() + this.config.web!.sessionTtlSeconds * 1000,
+          ),
+          webSession: {
+            create: { keyHash: webDigest(this.config.web!.sessionKey) },
+          },
+        },
+      });
+    });
+    return { token, data: this.view(token, session) };
   }
   async exchange(ticket: string, previousToken?: string) {
     const token = randomBytes(32).toString("base64url"),
@@ -204,7 +196,7 @@ export class WebAccess implements OnModuleDestroy {
       throw new UnauthorizedException();
     const session = await this.db.session.findUnique({
       where: { tokenHash: webDigest(token) },
-      include: { webSession: true },
+      include: { webSession: true, user: { select: { nickname: true } } },
     });
     if (
       !session ||
@@ -213,16 +205,6 @@ export class WebAccess implements OnModuleDestroy {
       session.webSession?.keyHash !== webDigest(this.config.web!.sessionKey)
     )
       throw new UnauthorizedException();
-    if (
-      this.config.acceptance?.mode === "internal-acceptance" &&
-      session.expiresAt.toISOString() !== PERSISTENT_WEB_EXPIRY
-    ) {
-      session.expiresAt = new Date(PERSISTENT_WEB_EXPIRY);
-      await this.db.session.update({
-        where: { id: session.id },
-        data: { expiresAt: session.expiresAt },
-      });
-    }
     return { token, data: this.view(token, session) };
   }
   async requireMutation(request: FastifyRequest) {
@@ -258,72 +240,6 @@ export class WebAccess implements OnModuleDestroy {
       ? await this.current(request)
       : await this.requireMutation(request);
     request.headers.authorization = `Bearer ${current.token}`;
-  }
-  async projects(request: FastifyRequest) {
-    const current = await this.current(request),
-      userId = current.data.user.id;
-    await this.rights.assertHealthy();
-    const subjects = await this.db.projectSubject.findMany({
-      where: { boundUserId: userId },
-      select: { projectId: true },
-    });
-    const candidates = await this.db.project.findMany({
-      where: {
-        OR: [
-          { createdBy: userId },
-          { id: { in: subjects.map((s) => s.projectId) } },
-        ],
-      },
-      orderBy: { id: "asc" },
-    });
-    const projects: {
-      id: string;
-      bookTitle: string;
-      role: "initiator" | "narrator";
-    }[] = [];
-    for (const candidate of candidates) {
-      const item = await this.db.$transaction(async (tx) => {
-        await this.identity.current(`Bearer ${current.token}`, tx);
-        await tx.$queryRaw`SELECT id FROM projects WHERE id=${candidate.id}::uuid FOR SHARE`;
-        await this.rights.assertReplayed(candidate.id);
-        if (await this.rights.deletedIn(tx, candidate.id, "activeData"))
-          return null;
-        const project = await tx.project.findUnique({
-          where: { id: candidate.id },
-        });
-        const subject = await tx.projectSubject.findUnique({
-          where: { projectId: candidate.id },
-        });
-        if (
-          !project ||
-          (project.createdBy !== userId && subject?.boundUserId !== userId)
-        )
-          return null;
-        if (subject?.boundUserId && subject.boundUserId !== userId) {
-          const sharing = await tx.consentRecord.findFirst({
-            where: {
-              projectId: project.id,
-              bindingVersion: subject.bindingVersion,
-              accessEpoch: project.accessEpoch,
-              purpose: "sharing",
-            },
-            orderBy: { sequence: "desc" },
-          });
-          if (!sharing?.granted || sharing.granteeUserId !== userId)
-            return null;
-        }
-        return {
-          id: project.id,
-          bookTitle: project.bookTitle ?? "人生故事书",
-          role:
-            subject?.boundUserId === userId
-              ? ("narrator" as const)
-              : ("initiator" as const),
-        };
-      });
-      if (item) projects.push(item);
-    }
-    return { projects };
   }
   async onModuleDestroy() {
     this.redis.disconnect();

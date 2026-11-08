@@ -10,7 +10,7 @@ export interface ApiErrorResponse {
   meta: { requestId: string };
 }
 
-export const USER_TERMS_VERSION = "shiguang-story-2026-11-06";
+export const USER_TERMS_VERSION = "shiguang-story-2026-11-08";
 
 export interface LoginCommand {
   code: string;

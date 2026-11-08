@@ -24,6 +24,14 @@ export interface ApiConfig {
     loginTtlSeconds: number;
     sessionTtlSeconds: number;
   };
+  sms?: {
+    accessKeyId: string;
+    accessKeySecret: string;
+    signName: string;
+    templateCode: string;
+    phoneDailyLimit: number;
+    ipDailyLimit: number;
+  };
   acceptance?: {
     mode: "internal-acceptance";
     profileVersion: "internal-acceptance-v1";
@@ -391,6 +399,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
           }
         : undefined,
     web: readWebConfig(env),
+    sms: readSmsConfig(env),
     payments,
     checkoutE2e,
     privacyJournal,
@@ -493,4 +502,34 @@ export function validateAiProbeConfig(config: AiProbeConfig) {
     throw new ConfigurationError(
       "Explicit complete AI probe candidate configuration is required",
     );
+}
+
+function readSmsConfig(env: NodeJS.ProcessEnv): ApiConfig["sms"] {
+  const keys = [
+    "ALIYUN_SMS_ACCESS_KEY_ID",
+    "ALIYUN_SMS_ACCESS_KEY_SECRET",
+    "ALIYUN_SMS_SIGN_NAME",
+    "ALIYUN_SMS_TEMPLATE_CODE",
+  ] as const;
+  if (!keys.some((key) => env[key])) return undefined;
+  if (keys.some((key) => !env[key]?.trim()))
+    throw new ConfigurationError(
+      "SMS requires credentials, signature and template together",
+    );
+  const phoneDailyLimit = Number(env.SMS_PHONE_DAILY_LIMIT ?? "10"),
+    ipDailyLimit = Number(env.SMS_IP_DAILY_LIMIT ?? "100");
+  if (
+    ![phoneDailyLimit, ipDailyLimit].every(
+      (value) => Number.isSafeInteger(value) && value > 0,
+    )
+  )
+    throw new ConfigurationError("SMS limits must be positive integers");
+  return {
+    accessKeyId: env.ALIYUN_SMS_ACCESS_KEY_ID!,
+    accessKeySecret: env.ALIYUN_SMS_ACCESS_KEY_SECRET!,
+    signName: env.ALIYUN_SMS_SIGN_NAME!,
+    templateCode: env.ALIYUN_SMS_TEMPLATE_CODE!,
+    phoneDailyLimit,
+    ipDailyLimit,
+  };
 }

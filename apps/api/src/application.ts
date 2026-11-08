@@ -146,11 +146,8 @@ import { IdentityAccess, WECHAT_FETCH } from "./identity/identity-access";
 import { IdentityController } from "./identity/identity-controller";
 import { WebController } from "./web/web-controller";
 import { WebAccess } from "./web/web-access";
-import {
-  WechatLinks,
-  WebWechatLinkController,
-  NativeWechatLinkController,
-} from "./identity/wechat-link";
+import { SmsCodes } from "./sms/sms-codes";
+import { SMS_SENDER, aliyunSmsSender, type SmsSender } from "./sms/aliyun-sms";
 import { HttpException } from "@nestjs/common";
 
 @Controller("health")
@@ -203,6 +200,7 @@ export async function createApplication(
     probeObjects?: ProbeObjects;
     aiFetch?: typeof fetch;
     paymentFetch?: typeof fetch;
+    smsSender?: SmsSender;
     recordingObjects?: ProbeObjects;
     refundRuntime?: Partial<RefundRuntime>;
   } = {},
@@ -235,6 +233,10 @@ export async function createApplication(
         "Web product runtime requires the separate controlled acceptance assembly and lifetime-service verification",
       );
   }
+  if (options.smsSender && config.environment !== "test")
+    throw new ConfigurationError(
+      "SMS transport overrides require isolated tests",
+    );
   if (options.feishuFetch && config.environment !== "test")
     throw new ConfigurationError(
       "Feishu transport overrides require isolated tests",
@@ -486,8 +488,8 @@ export async function createApplication(
   const module = {
     module: AppModule,
     controllers: [
-      ...(config.web ? [WebController, WebWechatLinkController] : []),
-      NativeWechatLinkController,
+      ...(config.web ? [WebController] : []),
+      ...(config.web && !productEnabled ? [ParticipationController] : []),
       PaymentWebhookController,
       RefundWebhookController,
       ...(config.payments
@@ -552,7 +554,16 @@ export async function createApplication(
         : []),
     ],
     providers: [
-      ...(config.web ? [WebAccess] : []),
+      ...(config.web
+        ? [
+            WebAccess,
+            SmsCodes,
+            {
+              provide: SMS_SENDER,
+              useValue: options.smsSender ?? aliyunSmsSender(config.sms),
+            },
+          ]
+        : []),
       { provide: API_CONFIG, useValue: config },
       { provide: ADMIN_FEISHU_FETCH, useValue: options.feishuFetch ?? fetch },
       Infrastructure,
@@ -657,7 +668,6 @@ export async function createApplication(
         : []),
       { provide: WECHAT_FETCH, useValue: options.wechatFetch ?? fetch },
       IdentityAccess,
-      WechatLinks,
       ProjectStreams,
       Participation,
       PersonalPlans,
