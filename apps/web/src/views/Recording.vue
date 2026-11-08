@@ -223,7 +223,7 @@ async function load() {
           ? route.query.draftId
           : crypto.randomUUID();
       if (route.query.draftId !== draftId)
-        await router.replace({ query: { draftId } });
+        await router.replace({ query: { ...route.query, draftId } });
       draft = await recordingStore.draft(draftId, userId, projectId.value);
       if (!current(version)) return;
       persistedDraft.value = !!draft;

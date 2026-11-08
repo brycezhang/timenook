@@ -75,6 +75,21 @@ for (const engine of [chromium, webkit]) {
           }),
         ).toBeVisible();
         await expect(page.locator(".recent-story")).toHaveCount(1);
+        const initialTopic = await page.locator(".topic-card h2").innerText();
+        await page
+          .locator(".topic-card")
+          .getByRole("button", { name: "换个话题", exact: true })
+          .click();
+        const chosenTopic = await page.locator(".topic-card h2").innerText();
+        assert.notEqual(chosenTopic, initialTopic);
+        await page
+          .getByRole("link", { name: "从这里开始", exact: true })
+          .click();
+        await expect(page.locator(".recording-question")).toHaveText(
+          chosenTopic,
+        );
+        await nav.getByRole("button", { name: "首页", exact: true }).click();
+        await expect(page.locator(".recent-story")).toHaveCount(1);
         await nav.getByRole("button", { name: "项目", exact: true }).click();
         await expect(page.locator(".project-card")).toHaveCount(2);
         await page

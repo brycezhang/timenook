@@ -43,6 +43,10 @@ for (const engine of [chromium, webkit])
         databaseUrl: dbUrl.toString(),
         redisUrl: process.env.REDIS_URL,
         redisKeyPrefix: schema,
+        acceptance: {
+          mode: "internal-acceptance",
+          profileVersion: "internal-acceptance-v1",
+        },
         web: {
           origin,
           sessionKey: randomBytes(32).toString("base64"),
@@ -251,6 +255,12 @@ for (const engine of [chromium, webkit])
           path: join(root, ".playwright-mcp/web-mvp-projects.png"),
           fullPage: true,
         });
+        // Cross-tab revocation must protect a private route; the new member home is public.
+        await page.goto(`${origin}/app/projects`);
+        await page
+          .getByRole("heading", { name: "同号项目 · 妈妈的故事", exact: true })
+          .first()
+          .waitFor();
         // Delay an actual old-account restoration response across a tab switch.
         let releaseOld;
         let restorationReady;

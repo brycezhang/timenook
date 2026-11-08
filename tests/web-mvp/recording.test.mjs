@@ -316,7 +316,9 @@ for (const engine of [chromium, webkit])
           .getByRole("button", { name: "换个话题", exact: true })
           .click();
         await page.getByRole("button", { name: "自己写一个话题" }).click();
-        await page.getByLabel("想讲的话题").fill("小时候，您常在河边做什么？");
+        await page
+          .getByLabel("想讲的话题", { exact: true })
+          .fill("小时候，您常在河边做什么？");
         await page
           .getByRole("button", { name: "就聊这个", exact: true })
           .click();
@@ -326,6 +328,21 @@ for (const engine of [chromium, webkit])
         await page
           .getByRole("button", { name: "暂停录音", exact: true })
           .waitFor();
+        await page.setViewportSize({ width: 320, height: 568 });
+        await page.evaluate(() => window.scrollTo(0, 0));
+        const controlsFit = () =>
+          page.locator(".recording-actions").evaluate((element) => {
+            const r = element.getBoundingClientRect(),
+              nav = document
+                .querySelector(".bottom-nav")
+                .getBoundingClientRect();
+            return r.top >= 0 && r.bottom <= nav.top;
+          });
+        assert.equal(
+          await controlsFit(),
+          true,
+          "pause and end fit above the 320px bottom bar",
+        );
         await page.waitForTimeout(1300);
         await page
           .getByRole("button", { name: "暂停录音", exact: true })
@@ -333,6 +350,11 @@ for (const engine of [chromium, webkit])
         await expect(
           page.getByRole("status").filter({ hasText: "已暂停" }),
         ).toBeVisible();
+        assert.equal(
+          await controlsFit(),
+          true,
+          "resume and end remain in the 320px viewport",
+        );
         await page
           .getByRole("button", { name: "继续录音", exact: true })
           .click();

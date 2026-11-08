@@ -52,6 +52,10 @@ for (const engine of [chromium, webkit])
       const projectPage = await fixture.context.newPage();
       await projectPage.setViewportSize({ width: 1280, height: 900 });
       await projectPage.goto(`${fixture.origin}/app/projects/${p.projectId}`);
+      await projectPage
+        .getByRole("navigation", { name: "主导航", exact: true })
+        .getByRole("button", { name: "岁月成书", exact: true })
+        .click();
       await projectPage.getByAltText("故事书封面照片").waitFor();
       assert.ok(
         await projectPage
@@ -143,6 +147,7 @@ for (const engine of [chromium, webkit])
       );
       page.once("dialog", (dialog) => dialog.accept());
       await page
+        .getByRole("dialog", { name: "编辑封面", exact: true })
         .getByRole("button", { name: "读取最新内容", exact: true })
         .click();
       await page.getByText("内容已修改，请重新生成", { exact: true }).waitFor();

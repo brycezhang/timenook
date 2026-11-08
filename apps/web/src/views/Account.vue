@@ -110,6 +110,13 @@ async function logout() {
       ><Icon name="projects" /><span>我的项目</span
       ><Icon name="arrow" :size="17"
     /></RouterLink>
+    <RouterLink v-if="auth.account.value" to="/purchase"
+      ><Icon name="plus" /><span>新购一本书</span><Icon name="arrow" :size="17"
+    /></RouterLink>
+    <button v-else @click="$emit('login', '/purchase')">
+      <Icon name="plus" /><span>新购一本书</span
+      ><Icon name="arrow" :size="17" />
+    </button>
     <button v-if="canInvite && workspace.active.value" @click="inviting = true">
       <Icon name="users" /><span>邀请家人</span><Icon name="arrow" :size="17" />
     </button>
