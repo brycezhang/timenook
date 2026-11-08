@@ -109,13 +109,13 @@
   },
   "sms": {
     "providerSendHttpStatus": 201,
-    "phoneReceipt": "not verified",
-    "userLogin": "pending human code entry; browser wait timed out"
+    "phoneReceipt": "confirmed by user on 2026-11-08",
+    "userLogin": "deferred by user; code not entered; resume when user is available"
   },
   "alipay": {
     "configuredAcceptanceAmountFen": 1,
     "displayAmountFen": 99900,
-    "realPayment": "pending human login and payment",
+    "realPayment": "deferred by user; no real payment executed",
     "systemRefund": "out of scope",
     "paymentServiceModified": false
   },
