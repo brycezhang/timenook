@@ -15,6 +15,7 @@ const clear = auth.onClear(() => {
   editing.value = false;
   nickname.value = "";
   nicknameError.value = "";
+  saving.value = false;
 });
 onUnmounted(() => {
   generation++;

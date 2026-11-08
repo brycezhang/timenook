@@ -61,6 +61,9 @@ watch(
     story.value = null;
     title.value = "";
     body.value = "";
+    editing.value = false;
+    busy.value = false;
+    saved.value = false;
     void load();
   },
   { immediate: true },

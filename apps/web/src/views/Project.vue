@@ -54,6 +54,10 @@ watch(
   id,
   () => {
     project.value = null;
+    modal.value = null;
+    inviteUrl.value = "";
+    draftTitle.value = "";
+    busy.value = false;
     query.value = "";
     filter.value = "all";
     void load();
