@@ -12,6 +12,7 @@ import {
   type ProjectOverview,
 } from "../project-api";
 import Icon from "../components/Icon.vue";
+import ProjectCover from "../components/ProjectCover.vue";
 const route = useRoute();
 const id = computed(() => String(route.params.projectId));
 const project = ref<ProjectOverview | null>(null),
@@ -215,12 +216,14 @@ async function copyInvite() {
         </div>
       </div>
       <div class="member-hero-cover">
-        <div class="project-cover">
-          <span>时光故事 · 岁月成书</span>
-          <h2>{{ project.bookTitle }}</h2>
-          <div class="cover-line" />
-          <Icon name="book" :size="34" /><small>爱与岁月的故事</small>
-        </div>
+        <ProjectCover
+          :project-id="id"
+          :title="project.bookTitle"
+          @denied="
+            project = null;
+            load();
+          "
+        />
       </div>
     </section>
     <section class="stories-section">
