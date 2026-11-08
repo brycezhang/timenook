@@ -196,6 +196,7 @@
   padding: 24px 20px;
   min-height: 255px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
 }
 .project-card:nth-child(even) .project-card-cover {
