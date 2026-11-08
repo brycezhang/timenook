@@ -49,6 +49,7 @@ for (const engine of [chromium, webkit])
       await page.getByRole("button", { name: "保存封面", exact: true }).click();
       await page.getByText("封面已保存", { exact: true }).waitFor();
       const projectPage = await fixture.context.newPage();
+      await projectPage.setViewportSize({ width: 1280, height: 900 });
       await projectPage.goto(`${fixture.origin}/app/projects/${p.projectId}`);
       await projectPage.getByAltText("故事书封面照片").waitFor();
       assert.ok(
