@@ -254,24 +254,30 @@ for (const engine of [chromium, webkit])
         });
         if (engine === webkit)
           await context.addInitScript(() => {
-            navigator.mediaDevices.getUserMedia = async () => {
-              const input = new AudioContext();
-              const oscillator = input.createOscillator();
-              const output = input.createMediaStreamDestination();
-              oscillator.frequency.value = 440;
-              oscillator.connect(output);
-              oscillator.start();
-              await input.resume();
-              for (const track of output.stream.getTracks()) {
-                const stop = track.stop.bind(track);
-                track.stop = () => {
-                  stop();
-                  oscillator.stop();
-                  void input.close();
-                };
-              }
-              return output.stream;
-            };
+            // Keep the synthetic input on one MediaDevices instance for this document.
+            Object.defineProperty(navigator, "mediaDevices", {
+              value: navigator.mediaDevices,
+              configurable: true,
+            });
+            navigator.mediaDevices.getUserMedia =
+              async function syntheticMicrophone() {
+                const input = new AudioContext();
+                const oscillator = input.createOscillator();
+                const output = input.createMediaStreamDestination();
+                oscillator.frequency.value = 440;
+                oscillator.connect(output);
+                oscillator.start();
+                await input.resume();
+                for (const track of output.stream.getTracks()) {
+                  const stop = track.stop.bind(track);
+                  track.stop = () => {
+                    stop();
+                    oscillator.stop();
+                    void input.close();
+                  };
+                }
+                return output.stream;
+              };
           });
         const page = await context.newPage();
         page.setDefaultTimeout(10000);
@@ -309,15 +315,52 @@ for (const engine of [chromium, webkit])
           },
         );
         await page.goto(`${origin}/app/projects/${project.projectId}/record`);
-        await page.getByRole("heading", { name: "从一个话题开始" }).waitFor();
+        await page
+          .getByRole("button", { name: "开始录音", exact: true })
+          .waitFor();
+        await page
+          .getByRole("button", { name: "换个话题", exact: true })
+          .click();
         await page.getByRole("button", { name: "自己写一个话题" }).click();
-        await page.getByLabel("想讲的话题").fill("小时候，您常在河边做什么？");
+        await page
+          .getByLabel("想讲的话题", { exact: true })
+          .fill("小时候，您常在河边做什么？");
+        await page
+          .getByRole("button", { name: "就聊这个", exact: true })
+          .click();
         await page
           .getByRole("button", { name: "开始录音", exact: true })
           .click();
         await page
           .getByRole("button", { name: "暂停录音", exact: true })
           .waitFor();
+        await page.setViewportSize({ width: 320, height: 568 });
+        await page.evaluate(() => window.scrollTo(0, 0));
+        const controlsFit = () =>
+          page.locator(".recording-actions").evaluate((element) => {
+            const r = element.getBoundingClientRect(),
+              nav = document
+                .querySelector(".bottom-nav")
+                .getBoundingClientRect();
+            return r.top >= 0 && r.bottom <= nav.top;
+          });
+        assert.equal(
+          await controlsFit(),
+          true,
+          "pause and end fit above the 320px bottom bar",
+        );
+        await mkdir(join(root, "output/playwright"), { recursive: true });
+        await page.screenshot({
+          path: join(
+            root,
+            `output/playwright/design-active-record-${engine.name()}-320.png`,
+          ),
+        });
+        if (engine === webkit)
+          assert.equal(
+            await page.evaluate(() => navigator.mediaDevices.getUserMedia.name),
+            "syntheticMicrophone",
+          );
         await page.waitForTimeout(1300);
         await page
           .getByRole("button", { name: "暂停录音", exact: true })
@@ -325,6 +368,17 @@ for (const engine of [chromium, webkit])
         await expect(
           page.getByRole("status").filter({ hasText: "已暂停" }),
         ).toBeVisible();
+        assert.equal(
+          await controlsFit(),
+          true,
+          "resume and end remain in the 320px viewport",
+        );
+        await page.screenshot({
+          path: join(
+            root,
+            `output/playwright/design-paused-record-${engine.name()}-320.png`,
+          ),
+        });
         await page
           .getByRole("button", { name: "继续录音", exact: true })
           .click();
@@ -373,7 +427,9 @@ for (const engine of [chromium, webkit])
         await page.goto(
           `${origin}/app/projects/${secondProject.projectId}/record`,
         );
-        await page.getByRole("heading", { name: "从一个话题开始" }).waitFor();
+        await page
+          .getByRole("button", { name: "开始录音", exact: true })
+          .waitFor();
         assert.equal(
           await page.getByRole("heading", { name: "还有录音等待上传" }).count(),
           0,
@@ -470,7 +526,9 @@ for (const engine of [chromium, webkit])
           fullPage: true,
         });
         await page.goto(`${origin}/app/projects/${project.projectId}/record`);
-        await page.getByRole("heading", { name: "从一个话题开始" }).waitFor();
+        await page
+          .getByRole("button", { name: "开始录音", exact: true })
+          .waitFor();
         assert.equal(
           await page.getByRole("heading", { name: "故事已整理好" }).count(),
           0,

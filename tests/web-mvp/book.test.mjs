@@ -37,6 +37,7 @@ for (const engine of [chromium, webkit])
       await page
         .getByRole("heading", { name: "我的书稿", exact: true })
         .waitFor();
+      await page.getByRole("button", { name: "编辑封面", exact: true }).click();
       await page.getByLabel("书名", { exact: true }).fill("妈妈的旧时光");
       await page.getByLabel("封面寄语").fill("把一路走来的日子，留给家人。");
       await page
@@ -51,6 +52,10 @@ for (const engine of [chromium, webkit])
       const projectPage = await fixture.context.newPage();
       await projectPage.setViewportSize({ width: 1280, height: 900 });
       await projectPage.goto(`${fixture.origin}/app/projects/${p.projectId}`);
+      await projectPage
+        .getByRole("navigation", { name: "主导航", exact: true })
+        .getByRole("button", { name: "岁月成书", exact: true })
+        .click();
       await projectPage.getByAltText("故事书封面照片").waitFor();
       assert.ok(
         await projectPage
@@ -61,6 +66,9 @@ for (const engine of [chromium, webkit])
           }),
       );
       await projectPage.close();
+      await page
+        .getByRole("button", { name: "管理入书故事", exact: true })
+        .click();
       await page.getByRole("button", { name: "添加章节", exact: true }).click();
       await page.getByLabel("章节名称 2", { exact: true }).fill("后来的日子");
       await page
@@ -110,6 +118,7 @@ for (const engine of [chromium, webkit])
         1,
         "download keeps the open reader",
       );
+      await page.getByRole("button", { name: "编辑封面", exact: true }).click();
       await page.getByLabel("封面寄语").fill("尚未保存的寄语");
       const bookContext = books.data(
         await books.request("GET", `${base}/book`, p.buyer.token),
@@ -138,6 +147,7 @@ for (const engine of [chromium, webkit])
       );
       page.once("dialog", (dialog) => dialog.accept());
       await page
+        .getByRole("dialog", { name: "编辑封面", exact: true })
         .getByRole("button", { name: "读取最新内容", exact: true })
         .click();
       await page.getByText("内容已修改，请重新生成", { exact: true }).waitFor();

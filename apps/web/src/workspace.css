@@ -1,0 +1,615 @@
+/* Shared project navigation and the member workspace. */
+.sidebar-project {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 24px;
+  padding: 15px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--brown);
+  text-align: left;
+}
+.sidebar-project span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.workspace-empty {
+  margin-bottom: 28px;
+}
+.workspace-empty .text-button {
+  display: flex;
+  margin: 15px auto 0;
+}
+.member-home-skeleton {
+  padding: 28px;
+  display: grid;
+  gap: 20px;
+}
+.member-home-heading {
+  margin-bottom: 28px;
+  gap: 16px;
+}
+.member-home-heading h1 {
+  font-size: 30px;
+  font-weight: 600;
+}
+.workspace-hero {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  overflow: hidden;
+  min-height: 330px;
+}
+.workspace-hero-copy {
+  padding: 34px;
+  min-width: 0;
+}
+.workspace-hero-copy > h2 {
+  font:
+    500 32px/1.55 "Songti SC",
+    Georgia,
+    serif;
+  margin: 22px 0;
+  overflow-wrap: anywhere;
+}
+.workspace-hero .hero-stats {
+  display: flex;
+  gap: 26px;
+  margin: 25px 0 0;
+}
+.workspace-hero .hero-stats > div {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.workspace-hero .hero-stats strong {
+  font:
+    500 28px/1.5 Georgia,
+    serif;
+}
+.workspace-hero .hero-stats span {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.workspace-hero-cover {
+  background: var(--sand);
+  padding: 28px;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+.workspace-hero-cover .project-cover {
+  width: 190px;
+  max-width: 100%;
+  height: 270px;
+  min-height: 0;
+  overflow: hidden;
+  gap: 6px;
+  padding: 18px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 7px;
+  border-radius: 0;
+  box-shadow: 5px 7px 16px #352d2510;
+}
+.workspace-hero-cover .project-cover h2 {
+  width: 100%;
+  font-size: 21px;
+  line-height: 1.4;
+  margin: 8px 0;
+  flex-shrink: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.workspace-hero-cover .project-cover > span,
+.workspace-hero-cover .project-cover small {
+  font-size: 7px;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+.workspace-hero-cover .project-cover small {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.workspace-hero-cover .cover-line {
+  margin: 3px auto;
+}
+.workspace-hero-cover .project-cover-photo {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+.workspace-hero-cover .project-cover-photo img {
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.workspace-lower {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 32px;
+  margin-top: 32px;
+  align-items: start;
+}
+.recent-stories > .row-between h2 {
+  font-size: 18px;
+}
+.recent-stories h2 small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  margin-left: 5px;
+}
+.recent-story {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 23px 0;
+  border-bottom: 1px solid var(--line);
+}
+.recent-story > div {
+  flex: 1;
+  min-width: 0;
+}
+.recent-story > div > span,
+.recent-story p {
+  color: var(--muted);
+  font-size: 11px;
+}
+.recent-story h3 {
+  font-size: 15px;
+  margin: 4px 0 7px;
+  overflow-wrap: anywhere;
+}
+.recent-index {
+  font:
+    16px Georgia,
+    serif;
+  color: var(--muted);
+}
+.recent-empty {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 35px 0;
+  color: var(--muted);
+}
+.topic-card {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 26px;
+  color: var(--olive);
+}
+.topic-card > .eyebrow {
+  margin-top: 20px;
+  color: var(--muted);
+}
+.topic-card h2 {
+  font:
+    500 23px/1.65 "Songti SC",
+    Georgia,
+    serif;
+  color: var(--ink);
+  margin-bottom: 25px;
+  overflow-wrap: anywhere;
+}
+.topic-card .text-button {
+  color: inherit;
+}
+.current-project-label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.story-create-action {
+  margin: 24px 0;
+}
+.stories-section > .row-between {
+  margin-bottom: 20px;
+}
+.project-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.project-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.project-card-cover {
+  background: var(--sand);
+  padding: 24px 20px;
+  min-height: 255px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+}
+.project-card:nth-child(even) .project-card-cover {
+  background: var(--soft);
+}
+.project-card .project-cover {
+  width: 145px;
+  max-width: 100%;
+  padding: 20px 14px;
+  height: 200px;
+  min-height: 0;
+  overflow: hidden;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 6px;
+  border-radius: 0;
+  box-shadow: none;
+}
+.project-card .project-cover h2 {
+  font-size: 20px;
+  line-height: 1.35;
+  margin: 0;
+  width: 100%;
+  flex-shrink: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.project-card .project-cover .cover-line {
+  margin: 3px auto;
+}
+.project-card .project-cover-photo {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+.project-card .project-cover-photo img {
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.project-card-info {
+  padding: 18px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.project-card-info h3 {
+  font-size: 16px;
+  margin: 0;
+}
+.current-project-note {
+  display: flex;
+  gap: 4px;
+  color: var(--olive);
+  font-size: 10px;
+}
+.project-open {
+  border: 1px solid var(--line);
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 8px;
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 25px;
+  max-width: 700px;
+  margin: auto;
+}
+.profile-card .account-avatar {
+  width: 56px;
+  height: 56px;
+  margin: 0;
+  font:
+    26px "Songti SC",
+    serif;
+  flex-shrink: 0;
+}
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+.profile-identity h2 {
+  font-size: 19px;
+  overflow-wrap: anywhere;
+}
+.account-links > a,
+.account-links > button {
+  justify-content: flex-start;
+  gap: 18px;
+  min-height: 78px;
+}
+.account-links span {
+  flex: 1;
+}
+.account-logout {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px;
+  width: 100%;
+  max-width: 700px;
+  margin: 24px auto;
+}
+.profile-brand {
+  text-align: center;
+  font:
+    20px "Songti SC",
+    serif;
+  letter-spacing: 6px;
+  color: var(--muted);
+  margin: 55px auto 35px;
+}
+.edit-dialog::backdrop {
+  background: #352d2566;
+  backdrop-filter: blur(3px);
+}
+.edit-dialog .field-label input,
+.edit-dialog textarea {
+  font-size: 16px;
+}
+html:has(dialog:modal) {
+  overflow: hidden;
+}
+@media (max-width: 1150px) {
+  .project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .workspace-lower {
+    grid-template-columns: 1.3fr 1fr;
+    gap: 24px;
+  }
+  .workspace-hero-copy {
+    padding: 25px;
+  }
+}
+@media (max-width: 800px) {
+  .bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .bottom-nav button {
+    width: auto;
+    border-radius: 8px;
+    font-size: 9px;
+  }
+  .bottom-nav button.active {
+    background: var(--paper);
+  }
+  .member-home-heading h1 {
+    font-size: 27px;
+  }
+  .workspace-hero .hero-stats {
+    gap: 20px;
+  }
+  .workspace-hero .hero-stats > div {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+@media (max-width: 560px) {
+  .member-home-heading {
+    display: block;
+    position: relative;
+    padding-top: 34px;
+  }
+  .member-home-heading > .button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    border: 0;
+    background: none;
+    white-space: nowrap;
+  }
+  .member-home-heading h1 {
+    font-size: 25px;
+  }
+  .member-home-heading > .button {
+    font-size: 11px;
+    padding: 10px;
+    min-height: 26px;
+    padding: 0;
+    gap: 6px;
+  }
+  .workspace-hero {
+    display: block;
+    position: relative;
+    min-height: 320px;
+  }
+  .workspace-hero-copy {
+    padding: 23px;
+  }
+  .workspace-hero-copy > h2 {
+    font-size: 27px;
+    max-width: calc(100% - 98px);
+    margin: 24px 0 16px;
+    min-height: 115px;
+  }
+  .workspace-hero-cover {
+    position: absolute;
+    width: 100px;
+    right: 20px;
+    top: 70px;
+    padding: 0;
+    background: none;
+  }
+  .workspace-hero-cover .project-cover {
+    width: 100%;
+    height: 135px;
+    min-height: 0;
+    overflow: hidden;
+    padding: 10px 7px;
+    gap: 0;
+  }
+  .workspace-hero-cover .project-cover h2 {
+    font-size: 12px;
+    line-height: 1.4;
+    margin: 0 0 6px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .workspace-hero-cover .project-cover > span,
+  .workspace-hero-cover .project-cover small,
+  .workspace-hero-cover .cover-line {
+    display: none;
+  }
+  .workspace-hero-cover .project-cover-photo {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    width: 100%;
+  }
+  .workspace-hero-cover .project-cover-photo img {
+    height: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .workspace-hero .hero-stats {
+    justify-content: space-between;
+    gap: 8px;
+    max-width: 265px;
+  }
+  .workspace-hero .hero-stats > div {
+    flex-direction: row;
+    gap: 5px;
+  }
+  .workspace-hero .hero-stats strong {
+    font-size: 24px;
+  }
+  .workspace-hero .hero-stats span {
+    font-size: 9px;
+  }
+  .workspace-hero .hero-actions {
+    margin-top: 18px;
+    gap: 8px;
+  }
+  .workspace-hero .hero-actions .button {
+    font-size: 12px;
+    padding: 11px 13px;
+  }
+  .workspace-hero .hero-actions .text-button {
+    font-size: 12px;
+  }
+  .workspace-lower {
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+    margin-top: 28px;
+  }
+  .workspace-lower > * {
+    width: 100%;
+  }
+  .recent-stories > .row-between h2 {
+    font-size: 16px;
+  }
+  .recent-story {
+    gap: 12px;
+    padding: 20px 0;
+  }
+  .recent-story h3 {
+    font-size: 14px;
+  }
+  .topic-card {
+    padding: 23px;
+  }
+  .topic-card h2 {
+    font-size: 21px;
+  }
+  .project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .project-card {
+    display: flex;
+    padding: 0;
+    gap: 0;
+  }
+  .project-card-cover {
+    padding: 20px 16px;
+    min-height: 190px;
+  }
+  .project-card .project-cover {
+    height: 155px;
+    min-height: 0;
+    padding: 16px 8px;
+  }
+  .project-card .project-cover h2 {
+    font-size: 16px;
+  }
+  .project-card .project-cover > span,
+  .project-card .project-cover small {
+    font-size: 7px;
+  }
+  .project-card-info {
+    padding: 14px;
+    gap: 12px;
+  }
+  .project-card-info h3 {
+    font-size: 15px;
+  }
+  .profile-card {
+    padding: 22px 20px;
+    gap: 16px;
+  }
+  .profile-identity h2 {
+    font-size: 18px;
+  }
+  .account-links > a,
+  .account-links > button {
+    min-height: 83px;
+    padding: 18px;
+    gap: 16px;
+  }
+}
+@media (max-width: 359px) {
+  .member-home-heading h1 {
+    font-size: 23px;
+  }
+  .member-home-heading {
+    gap: 10px;
+  }
+  .workspace-hero-copy {
+    padding: 20px 17px;
+  }
+  .workspace-hero-cover {
+    right: 15px;
+    width: 85px;
+  }
+  .workspace-hero-copy > h2 {
+    font-size: 24px;
+    max-width: calc(100% - 88px);
+  }
+  .project-card-cover {
+    padding: 15px 12px;
+  }
+  .project-card-info {
+    padding: 12px 10px;
+  }
+  .profile-card {
+    flex-wrap: wrap;
+  }
+}

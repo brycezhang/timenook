@@ -224,3 +224,106 @@
     font-size: 28px;
   }
 }
+
+/* Keep the selected prompt and recording controls together; topic selection is separate. */
+.recording-panel {
+  text-align: center;
+}
+.recording-panel .recording-question {
+  font:
+    500 25px/1.6 "Songti SC",
+    Georgia,
+    serif;
+  margin: 0;
+  padding: 5px 0 20px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.recording-mic {
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--brown);
+  margin: 12px auto 18px;
+}
+.recording-shortcuts {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+}
+.recording-shortcuts .text-button {
+  font-size: 12px;
+}
+.recording-controls .recording-timer {
+  font-family: Georgia, serif;
+  font-weight: 500;
+  color: var(--ink);
+}
+.edit-dialog .recording-topics {
+  margin: 22px 0 14px;
+}
+.edit-dialog .recording-topic {
+  font-size: 14px;
+}
+.edit-dialog .recording-custom textarea {
+  font-size: 16px;
+}
+@media (max-width: 600px) {
+  .recording-panel .recording-question {
+    font-size: 23px;
+    max-height: 115px;
+  }
+  .recording-controls {
+    gap: 15px;
+  }
+  .recording-shortcuts {
+    gap: 14px;
+  }
+}
+@media (max-height: 650px) and (max-width: 600px) {
+  .recording-page > .page-heading {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .recording-back {
+    margin-bottom: 14px;
+  }
+  .recording-panel {
+    padding: 22px 18px;
+  }
+  .recording-panel .recording-question {
+    font-size: 21px;
+    max-height: 100px;
+    padding-bottom: 10px;
+  }
+  .recording-mic {
+    display: none;
+  }
+  .recording-controls {
+    margin-top: 16px;
+    gap: 12px;
+  }
+  .recording-timer {
+    font-size: 34px;
+  }
+  .recording-shortcuts {
+    margin-top: 16px;
+  }
+  .photo-recording-page .recording-photos {
+    max-height: 145px;
+    overflow: auto;
+  }
+  .photo-recording-page .recording-photos img {
+    max-height: 125px;
+  }
+}

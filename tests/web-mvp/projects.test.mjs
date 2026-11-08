@@ -160,12 +160,10 @@ for (const [engineName, engine] of [
           .getByRole("heading", { name: "一起记录的人", exact: true })
           .waitFor();
         // A fresh browser profile must explicitly join, even after it logs in.
-        const memberContext = await flow.context
-          .browser()
-          .newContext({
-            ignoreHTTPSErrors: true,
-            viewport: { width: 320, height: 780 },
-          });
+        const memberContext = await flow.context.browser().newContext({
+          ignoreHTTPSErrors: true,
+          viewport: { width: 320, height: 780 },
+        });
         const memberPage = await memberContext.newPage();
         const outsider = await books.login();
         await memberPage.goto(invitationUrl);
@@ -207,7 +205,7 @@ for (const [engineName, engine] of [
         );
         assert.ok(
           (await memberPage
-            .getByRole("link", { name: "开始讲述", exact: true })
+            .getByRole("link", { name: "再记一个故事", exact: true })
             .count()) >= 1,
         );
         assert.equal(

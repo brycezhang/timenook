@@ -6,6 +6,7 @@ import { bookApi } from "../book-api";
 import { projectError } from "../project-api";
 import { fetchVerifiedBlob } from "../private-media";
 import { auth } from "../session";
+import { workspace } from "../workspace";
 import { WebApiError } from "../api";
 import Icon from "../components/Icon.vue";
 import "../book.css";
@@ -57,6 +58,7 @@ async function load(initial = false) {
     )
       stop();
     entry.value = value;
+    workspace.select(value.projectId);
     clearTimeout(expiry);
     if (value.accessExpiresAt)
       expiry = setTimeout(
