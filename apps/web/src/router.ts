@@ -29,6 +29,16 @@ export const router = createRouter({
       meta: { title: "我的故事", private: true },
     },
     {
+      path: "/projects/:projectId/book",
+      component: () => import("./views/Book.vue"),
+      meta: { title: "我的书稿", private: true },
+    },
+    {
+      path: "/audio/:entryId",
+      component: () => import("./views/OriginalAudio.vue"),
+      meta: { title: "书中原声", private: true },
+    },
+    {
       path: "/projects/:projectId/stories/:storyId",
       component: Story,
       meta: { title: "故事阅读", private: true },
