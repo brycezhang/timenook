@@ -46,6 +46,9 @@ onUnmounted(() => {
       我的项目<span v-if="!loading && !error">{{ projects.length }}</span>
     </h1>
     <p class="muted">购买和受邀参与的故事书，都在这里。</p>
+    <RouterLink class="button secondary" to="/purchase"
+      >新购一本书<Icon name="plus" :size="16"
+    /></RouterLink>
   </section>
   <section
     v-if="loading && !projects.length"
@@ -88,9 +91,7 @@ onUnmounted(() => {
   <section v-else-if="!loading && !error" class="empty-state panel">
     <span class="empty-icon"><Icon name="book" :size="32" /></span>
     <h2>第一本故事书，从这里开始。</h2>
-    <p>
-      你还没有项目。使用购买时的手机号登录，<br />或接受家人的邀请后，在这里继续记录。
-    </p>
+    <p>你还没有项目。新购一本书，<br />或接受家人的邀请后，在这里继续记录。</p>
     <RouterLink class="button secondary" to="/sample"
       >先翻翻样书<Icon name="arrow" :size="16"
     /></RouterLink>
