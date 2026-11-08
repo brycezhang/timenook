@@ -1,0 +1,226 @@
+.production-page {
+  max-width: 1000px;
+  margin: auto;
+}
+.production-heading {
+  margin: 25px 0 30px;
+}
+.production-heading h1 {
+  margin: 7px 0 12px;
+  font-size: clamp(26px, 4vw, 36px);
+}
+.production-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 22px;
+}
+.production-card,
+.production-progress,
+.production-submit {
+  padding: 28px;
+  min-width: 0;
+}
+.production-card-title {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  margin-bottom: 22px;
+}
+.production-card h2,
+.production-submit h2 {
+  font-size: 20px;
+}
+.production-number {
+  color: var(--terracotta);
+  font:
+    italic 23px Georgia,
+    serif;
+}
+.production-book-cover {
+  width: 180px;
+  min-height: 235px;
+  margin: 28px auto;
+  padding: 28px 20px;
+  background: #ece4d5;
+  border-left: 7px solid #b6a58e;
+  box-shadow: 6px 9px 18px #352d2514;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  text-align: center;
+  color: #6a5a44;
+}
+.production-book-cover h3 {
+  font:
+    22px/1.7 "Songti SC",
+    SimSun,
+    serif;
+  overflow-wrap: anywhere;
+  margin: 18px 0;
+}
+.production-book-cover small {
+  font-size: 10px;
+}
+.production-card > .text-button {
+  margin-top: 12px;
+}
+.production-entitlement {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  border-top: 1px solid var(--line);
+  gap: 4px;
+  margin-top: 24px;
+  padding-top: 18px;
+}
+.production-entitlement small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+.production-address fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.production-address .field-label:first-child {
+  margin-top: 0;
+}
+.production-address select {
+  width: 100%;
+  margin-top: 9px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.production-address-summary {
+  font-style: normal;
+  display: grid;
+  gap: 14px;
+  overflow-wrap: anywhere;
+}
+.production-address-summary p {
+  line-height: 1.9;
+}
+.production-progress {
+  margin-bottom: 24px;
+}
+.production-progress h2 {
+  font-size: 27px;
+  margin: 20px 0 10px;
+}
+.production-progress > .text-button {
+  margin-top: 18px;
+}
+.production-steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 0;
+  margin: 28px 0;
+}
+.production-steps li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  border-top: 2px solid var(--line);
+  padding: 14px 0 0;
+}
+.production-steps .complete {
+  color: var(--olive);
+  border-color: var(--olive);
+}
+.production-facts {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  background: var(--sand);
+  border-radius: 10px;
+  margin: 20px 0;
+}
+.production-facts div {
+  display: grid;
+  grid-template-columns: 85px minmax(0, 1fr);
+  gap: 10px;
+}
+.production-facts dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.production-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.production-notice {
+  margin-top: 18px;
+  color: var(--muted);
+}
+.production-feedback {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 20px 0;
+  color: var(--olive);
+}
+.production-submit {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+}
+.production-blockers {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.production-help {
+  margin: 25px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.production-help a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.production-history {
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+  color: var(--muted);
+}
+.production-history article {
+  padding: 16px 0;
+  font-size: 12px;
+}
+.production-history h3 {
+  font-size: 14px;
+}
+@media (max-width: 700px) {
+  .production-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .production-card,
+  .production-progress,
+  .production-submit {
+    padding: 22px;
+  }
+  .production-steps li {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    font-size: 11px;
+  }
+  .production-progress h2 {
+    font-size: 24px;
+  }
+  .production-submit > .button {
+    width: 100%;
+  }
+}

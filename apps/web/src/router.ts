@@ -13,6 +13,11 @@ export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
+      path: "/projects/:projectId/production",
+      component: () => import("./views/Production.vue"),
+      meta: { title: "制作与物流", private: true },
+    },
+    {
       path: "/projects/:projectId/record",
       component: Recording,
       meta: { title: "记录回忆", private: true },
