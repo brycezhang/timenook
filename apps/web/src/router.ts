@@ -4,6 +4,9 @@ import Projects from "./views/Projects.vue";
 import Account from "./views/Account.vue";
 import Sample from "./views/Sample.vue";
 import Terms from "./views/Terms.vue";
+import Project from "./views/Project.vue";
+import Story from "./views/Story.vue";
+import Invite from "./views/Invite.vue";
 import NotFound from "./views/NotFound.vue";
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -14,6 +17,17 @@ export const router = createRouter({
       component: Projects,
       meta: { title: "我的项目", private: true },
     },
+    {
+      path: "/projects/:projectId",
+      component: Project,
+      meta: { title: "我的故事", private: true },
+    },
+    {
+      path: "/projects/:projectId/stories/:storyId",
+      component: Story,
+      meta: { title: "故事阅读", private: true },
+    },
+    { path: "/invite/:token", component: Invite, meta: { title: "项目邀请" } },
     {
       path: "/purchase",
       component: () => import("./views/Purchase.vue"),

@@ -1366,3 +1366,506 @@ input::placeholder {
     transition-duration: 0.001ms !important;
   }
 }
+/* Member projects and story reading share the formal web design tokens. */
+.row,
+.row-between {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.row-between {
+  justify-content: space-between;
+}
+.text-small {
+  font-size: 11px;
+}
+.full-width {
+  width: 100%;
+}
+.project-heading {
+  margin: 25px 0 28px;
+  align-items: flex-start;
+}
+.project-heading h1 {
+  font-size: 30px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.project-heading .text-button {
+  margin-top: 6px;
+  font-size: 11px;
+}
+.project-heading > div {
+  min-width: 0;
+}
+.project-heading > .button {
+  flex-shrink: 0;
+}
+.member-project-hero {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  overflow: hidden;
+  margin-bottom: 40px;
+}
+.member-hero-copy {
+  padding: 36px;
+}
+.member-hero-copy h2 {
+  font-family: "Songti SC", SimSun, serif;
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.6;
+  margin: 20px 0 12px;
+}
+.member-hero-copy > p {
+  font-size: 12px;
+}
+.member-hero-cover {
+  background: #ece4d7;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+}
+.member-hero-cover .project-cover {
+  width: min(220px, 100%);
+  min-height: 270px;
+  box-shadow: 6px 8px 15px #352d2518;
+  background: #fffcf7;
+  border-width: 8px;
+}
+.hero-stats {
+  display: flex;
+  gap: 30px;
+  margin: 25px 0;
+}
+.hero-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hero-stats strong {
+  font-family: Georgia, serif;
+  font-size: 26px;
+  font-weight: 400;
+}
+.hero-stats span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.stories-section > .row-between {
+  margin-bottom: 20px;
+}
+.stories-section h2 {
+  font-size: 23px;
+}
+.stories-section h2 small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  margin-left: 5px;
+}
+.story-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.segmented {
+  display: flex;
+  padding: 4px;
+  border: 1px solid var(--line);
+  background: var(--sand);
+  border-radius: 9px;
+}
+.segmented button {
+  border: 0;
+  background: none;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  border-radius: 6px;
+}
+.segmented button.selected {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 4px #352d2510;
+}
+.search-field {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-width: 250px;
+  height: 41px;
+}
+.search-field svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.story-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.story-card {
+  display: block;
+  min-width: 0;
+  padding: 24px;
+  text-align: left;
+  position: relative;
+  transition:
+    border-color 0.18s,
+    transform 0.18s;
+}
+.story-card:hover {
+  border-color: var(--brown);
+  transform: translateY(-2px);
+}
+.story-card > .row-between {
+  gap: 8px;
+  align-items: flex-start;
+}
+.story-chapter {
+  font-size: 10px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.story-card .badge {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.badge.neutral {
+  background: var(--sand);
+  color: var(--muted);
+}
+.card-index {
+  display: block;
+  color: #b5a58f;
+  font:
+    italic 30px Georgia,
+    serif;
+  margin: 24px 0 10px;
+}
+.story-card h3 {
+  font-family: "Songti SC", SimSun, serif;
+  font-size: 22px;
+  line-height: 1.6;
+  font-weight: 500;
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
+}
+.story-excerpt {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.9;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 68px;
+  overflow-wrap: anywhere;
+}
+.story-card-footer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 10px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 15px;
+  flex-wrap: wrap;
+}
+.story-card-footer svg {
+  margin-left: auto;
+}
+.reader-toolbar {
+  margin: 0 0 28px;
+  flex-wrap: wrap;
+}
+.story-reader {
+  max-width: 720px;
+  padding: 30px 30px 0;
+  margin: auto;
+}
+.story-reader h1 {
+  font-family: "Songti SC", SimSun, serif;
+  font-size: 36px;
+  font-weight: 500;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.reading-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+.reading-rule {
+  width: 45px;
+  height: 2px;
+  background: var(--terracotta);
+  margin: 30px 0;
+}
+.prose {
+  font-family: "Songti SC", SimSun, serif;
+  font-size: 18px;
+  line-height: 2.3;
+  overflow-wrap: anywhere;
+}
+.prose p + p {
+  margin-top: 25px;
+}
+.story-end {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 45px 0;
+}
+.story-notes {
+  margin-top: 30px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.reader-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 28px 0;
+}
+.story-editor {
+  padding: 30px;
+  max-width: 760px;
+  margin: auto;
+}
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  margin: 22px 0 12px;
+}
+.field-label input:not([type="checkbox"]),
+.field-label textarea {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  width: 100%;
+  height: auto;
+  margin-top: 9px;
+  font: inherit;
+  padding: 12px;
+  color: var(--ink);
+}
+.field-label textarea {
+  font-size: 16px;
+  line-height: 1.9;
+  resize: vertical;
+}
+.detail-skeleton {
+  padding: 30px;
+  margin: 20px 0;
+}
+.detail-skeleton .skeleton-cover {
+  aspect-ratio: auto;
+  height: 180px;
+}
+.edit-dialog {
+  position: fixed;
+  z-index: 42;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  width: min(440px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0;
+  box-shadow: 0 25px 100px #352d2529;
+}
+.edit-dialog-body {
+  padding: 32px;
+  position: relative;
+}
+.edit-dialog h2 {
+  font-size: 23px;
+  line-height: 1.6;
+}
+.edit-dialog-body > .muted {
+  font-size: 12px;
+  line-height: 1.9;
+  margin: 14px 0;
+}
+.dialog-shade {
+  position: fixed;
+  inset: 0;
+  background: #352d2566;
+  backdrop-filter: blur(3px);
+  z-index: 41;
+}
+.nickname-button {
+  justify-content: center;
+  margin: 6px auto 0;
+  font-size: 11px;
+}
+.invitation-panel {
+  text-align: center;
+  padding: 45px;
+  max-width: 620px;
+  margin: 35px auto;
+}
+.invitation-panel h1 {
+  font-family: "Songti SC", SimSun, serif;
+  font-size: 30px;
+  line-height: 1.6;
+}
+.invitation-title {
+  font-size: 23px;
+  font-family: "Songti SC", SimSun, serif;
+  margin: 24px 0 15px;
+  overflow-wrap: anywhere;
+}
+.invitation-panel > .muted {
+  font-size: 13px;
+  line-height: 1.9;
+}
+.invitation-steps {
+  display: flex;
+  justify-content: center;
+  gap: 25px;
+  border-block: 1px solid var(--line);
+  margin: 25px 0;
+  padding: 22px 0;
+}
+.invitation-steps span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.invitation-panel .agreement {
+  text-align: left;
+}
+.invitation-footnote {
+  display: block;
+  margin: 16px auto 0;
+  font-size: 11px;
+}
+.invitation-panel .error {
+  margin: 15px 0;
+}
+.project-card:focus-visible,
+.story-card:focus-visible {
+  outline: 2px solid var(--brown);
+  outline-offset: 3px;
+}
+@media (max-width: 1000px) {
+  .member-hero-copy {
+    padding: 26px;
+  }
+  .member-hero-cover {
+    padding: 25px;
+  }
+  .member-hero-copy h2 {
+    font-size: 27px;
+  }
+}
+@media (max-width: 650px) {
+  .project-heading {
+    display: block;
+    margin-top: 18px;
+  }
+  .project-heading h1 {
+    font-size: 25px;
+  }
+  .project-heading > .button {
+    margin-top: 18px;
+  }
+  .member-project-hero {
+    grid-template-columns: 1fr;
+    margin-bottom: 30px;
+  }
+  .member-hero-copy {
+    padding: 26px;
+  }
+  .member-hero-copy h2 {
+    font-size: 29px;
+  }
+  .member-hero-cover {
+    display: none;
+  }
+  .hero-stats {
+    gap: 36px;
+  }
+  .story-toolbar {
+    display: block;
+  }
+  .segmented {
+    width: fit-content;
+    max-width: 100%;
+  }
+  .segmented button {
+    font-size: 10px;
+    padding: 8px 9px;
+  }
+  .search-field {
+    max-width: none;
+    margin-top: 14px;
+  }
+  .story-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .story-reader {
+    padding: 15px 4px 0;
+  }
+  .story-reader h1 {
+    font-size: 29px;
+  }
+  .prose {
+    font-size: 17px;
+    line-height: 2.15;
+  }
+  .story-editor {
+    padding: 20px;
+  }
+  .reader-toolbar {
+    gap: 16px;
+  }
+  .reader-toolbar .row {
+    gap: 8px;
+  }
+  .reader-actions .button {
+    font-size: 12px;
+    padding: 11px 14px;
+  }
+  .invitation-panel {
+    padding: 30px 22px;
+    margin: 15px auto;
+  }
+  .invitation-panel h1 {
+    font-size: 25px;
+  }
+  .edit-dialog-body {
+    padding: 28px 22px;
+  }
+  .edit-dialog h2 {
+    font-size: 21px;
+  }
+}

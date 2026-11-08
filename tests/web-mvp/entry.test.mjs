@@ -306,7 +306,7 @@ for (const engine of [chromium, webkit])
         await other
           .getByRole("heading", { name: "第一本故事书，从这里开始。" })
           .waitFor();
-        await page.getByRole("button", { name: "关闭登录" }).click();
+        await page.getByRole("dialog").waitFor({ state: "hidden" });
         await page
           .getByRole("heading", { name: "第一本故事书，从这里开始。" })
           .waitFor();

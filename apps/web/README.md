@@ -10,7 +10,10 @@
 - 当前账号的真实项目列表与空态，使用现行项目成员接口 `/participations`。
 - 与小程序使用同一个已验证手机号归属同一产品账号，保留昵称与购买/受邀项目。
 
-故事、录音、照片、书稿编辑、邀请页面、支付宝购买和印刷等后续切片尚未在新 Vue 页面实现。支付宝首版方案已确定，但本阶段没有接入支付、创建销售订单或改动 payment-service。
+- 项目详情、故事搜索与入书筛选、故事阅读/版本编辑、编入及移出书稿；并发版本冲突保留未保存的文字。
+- 项目名称与昵称修改，网页邀请链接生成、短信登录返回原邀请、明确同意并接受后取得成员资格。
+
+录音、照片、书稿编辑、支付宝购买和印刷等后续切片继续实施。WV03 本身不创建销售订单或修改 payment-service。
 
 ## 开发与验证
 
@@ -47,4 +50,4 @@ pnpm test:web-mvp
 
 该命令不加入旧产品网页 CI，也不恢复已退役的浏览器模拟小程序套件。供应商真实投递、部署及真机验收另行记录。
 
-已定方案见 [ADR 0019](../../docs/adr/0019-phone-unified-product-account.md)、[开发计划](../../docs/delivery/2026-11-07/web-vue-development-plan.md)，本阶段证据见[交付记录](../../docs/delivery/2026-11-08/web-mvp-entry.md)。
+已定方案见 [ADR 0019](../../docs/adr/0019-phone-unified-product-account.md)、[开发计划](../../docs/delivery/2026-11-07/web-vue-development-plan.md)，首阶段证据见[入口与登录记录](../../docs/delivery/2026-11-08/web-mvp-entry.md)，项目、故事与邀请证据见 [WV03 记录](../../docs/delivery/2026-11-08/web-mvp-stories.md)。

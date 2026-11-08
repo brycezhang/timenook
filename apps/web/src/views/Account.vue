@@ -1,9 +1,48 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onUnmounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { auth } from "../session";
+import { projectApi, projectError } from "../project-api";
 import Icon from "../components/Icon.vue";
 defineEmits<{ login: [] }>();
+const editing = ref(false),
+  nickname = ref(""),
+  nicknameError = ref(""),
+  saving = ref(false);
+let generation = 0;
+const clear = auth.onClear(() => {
+  generation++;
+  editing.value = false;
+  nickname.value = "";
+  nicknameError.value = "";
+  saving.value = false;
+});
+onUnmounted(() => {
+  generation++;
+  clear();
+});
+function editNickname() {
+  nickname.value = auth.account.value?.user.nickname ?? "";
+  nicknameError.value = "";
+  editing.value = true;
+}
+async function saveNickname() {
+  if (!nickname.value.trim()) return;
+  const current = generation;
+  saving.value = true;
+  nicknameError.value = "";
+  try {
+    const result = await projectApi.nickname(nickname.value.trim());
+    if (current === generation) {
+      auth.updateNickname(result.nickname);
+      editing.value = false;
+    }
+  } catch (reason) {
+    if (current === generation) nicknameError.value = projectError(reason);
+  } finally {
+    if (current === generation) saving.value = false;
+  }
+}
 const busy = ref(false),
   error = ref("");
 async function logout() {
@@ -26,6 +65,14 @@ async function logout() {
   <section class="account-panel panel">
     <div class="account-avatar"><Icon name="user" :size="30" /></div>
     <h2>{{ auth.account.value?.user.nickname ?? "欢迎来到时光故事" }}</h2>
+    <button
+      v-if="auth.account.value"
+      class="text-button nickname-button"
+      aria-label="修改昵称"
+      @click="editNickname"
+    >
+      修改昵称<Icon name="pencil" :size="15" />
+    </button>
     <p class="muted">
       {{
         auth.account.value
@@ -54,5 +101,49 @@ async function logout() {
       ><span v-if="busy" class="spinner" />
     </button>
   </div>
+  <dialog
+    :open="editing"
+    class="edit-dialog"
+    aria-label="修改昵称"
+    @cancel.prevent="editing = false"
+  >
+    <form class="edit-dialog-body" @submit.prevent="saveNickname">
+      <button
+        type="button"
+        class="icon-button close-dialog"
+        aria-label="关闭昵称修改"
+        :disabled="saving"
+        @click="editing = false"
+      >
+        <Icon name="x" />
+      </button>
+      <h2>修改昵称</h2>
+      <label class="field-label"
+        >昵称<input
+          v-model="nickname"
+          required
+          maxlength="32"
+          autocomplete="nickname"
+      /></label>
+      <p v-if="nicknameError" class="error" role="alert">{{ nicknameError }}</p>
+      <div class="hero-actions">
+        <button class="button" :disabled="saving || !nickname.trim()">
+          <span v-if="saving" class="spinner" />保存昵称</button
+        ><button
+          type="button"
+          class="button secondary"
+          :disabled="saving"
+          @click="editing = false"
+        >
+          取消
+        </button>
+      </div>
+    </form>
+  </dialog>
+  <div
+    v-if="editing"
+    class="dialog-shade"
+    @click="!saving && (editing = false)"
+  />
   <p v-if="error" class="error" role="alert">{{ error }}</p>
 </template>

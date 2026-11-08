@@ -12,9 +12,12 @@ const changes =
     ? new BroadcastChannel("timenook-web-session")
     : undefined;
 const listeners = new Set<() => void>();
+const operations = new Set<AbortController>();
 function forget() {
   generation++;
   controller?.abort();
+  for (const operation of operations) operation.abort();
+  operations.clear();
   clearTimeout(expiry);
   account.value = null;
   restoring.value = false;
@@ -65,6 +68,49 @@ export const auth = {
   onClear(listener: () => void) {
     listeners.add(listener);
     return () => listeners.delete(listener);
+  },
+  async protect<T>(
+    action: (owner: WebSession, signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const owner = account.value,
+      version = generation;
+    if (!owner) throw new WebApiError(401);
+    const operation = new AbortController();
+    operations.add(operation);
+    try {
+      const current = await webApi.restore();
+      if (generation !== version)
+        throw new DOMException("Request superseded", "AbortError");
+      if (
+        current.session.id !== owner.session.id ||
+        current.user.id !== owner.user.id
+      ) {
+        forget();
+        throw new WebApiError(401);
+      }
+      const result = await action(owner, operation.signal);
+      if (generation !== version)
+        throw new DOMException("Request superseded", "AbortError");
+      return result;
+    } catch (error) {
+      if (
+        generation === version &&
+        error instanceof WebApiError &&
+        error.status === 401
+      )
+        forget();
+      throw error;
+    } finally {
+      operations.delete(operation);
+    }
+  },
+  updateNickname(nickname: string) {
+    if (account.value)
+      account.value = {
+        ...account.value,
+        user: { ...account.value.user, nickname },
+      };
+    changed();
   },
   async login(challengeId: string, code: string) {
     return mutate(async () => {

@@ -27,6 +27,11 @@ async function loggedIn() {
   await router.push(afterLogin);
 }
 watch([() => route.fullPath, auth.restoring, auth.account], () => {
+  if (signedIn.value && loginVisible.value) {
+    loginVisible.value = false;
+    void router.replace(afterLogin);
+    return;
+  }
   if (route.meta.private && !auth.restoring.value && !signedIn.value)
     login(route.fullPath);
 });
@@ -46,7 +51,7 @@ onMounted(() => {
         <button :class="{ active: route.path === '/' }" @click="navigate('/')">
           <Icon name="home" />岁月成书</button
         ><button
-          :class="{ active: route.path === '/projects' }"
+          :class="{ active: route.path.startsWith('/projects') }"
           @click="navigate('/projects')"
         >
           <Icon name="book" />我的项目</button
@@ -105,7 +110,9 @@ onMounted(() => {
           <Home v-else @login="login()"
         /></template>
         <RouterView v-else v-slot="{ Component }"
-          ><component :is="Component" @login="login()"
+          ><component
+            :is="Component"
+            @login="(target?: string) => login(target)"
         /></RouterView>
       </main>
     </div>
@@ -113,7 +120,7 @@ onMounted(() => {
       <button :class="{ active: route.path === '/' }" @click="navigate('/')">
         <Icon name="home" /><span>岁月成书</span></button
       ><button
-        :class="{ active: route.path === '/projects' }"
+        :class="{ active: route.path.startsWith('/projects') }"
         @click="navigate('/projects')"
       >
         <Icon name="book" /><span>我的项目</span></button
