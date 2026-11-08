@@ -5,7 +5,6 @@ import { RouterLink } from "vue-router";
   <section class="page-heading">
     <p class="eyebrow">公开样书 · 示例内容</p>
     <h1>把平凡的日子，写成一本书。</h1>
-    <p class="muted">以下为独立创作的样书节选，不来自用户私人项目。</p>
   </section>
   <article class="sample-book">
     <div class="sample-cover">
@@ -29,7 +28,6 @@ import { RouterLink } from "vue-router";
       <p>
         现在回头想，记住的也不只是枣子的味道。是放学回家时院门敞着，是灶房里飘出的饭香，是有人知道我们一定会回来。
       </p>
-      <p class="sample-caption">示例故事，展示文字整理与成书阅读效果。</p>
     </div>
   </article>
   <div class="reading-actions">

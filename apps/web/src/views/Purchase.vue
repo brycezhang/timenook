@@ -101,9 +101,7 @@ onUnmounted(() => {
 </script>
 <template>
   <section class="page-heading">
-    <p class="eyebrow">把熟悉的声音，写成家人的故事</p>
     <h1>新购一本书</h1>
-    <p class="muted">一个项目，邀请家人一起记录。</p>
   </section>
   <section v-if="wechat" class="panel purchase-panel">
     <h2>请在浏览器中打开付款</h2>

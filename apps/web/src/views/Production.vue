@@ -300,9 +300,7 @@ async function submit() {
       >← 返回书稿</RouterLink
     >
     <header class="production-heading">
-      <p class="eyebrow">从回忆，到可以捧在手里的书</p>
       <h1>让故事，成为一本书</h1>
-      <p class="muted">书稿和收货地址就绪后，就可以安排首本制作。</p>
     </header>
     <section
       v-if="loading && !context"

@@ -153,9 +153,7 @@ const duration = (ms: number) =>
     >
     <header class="book-heading">
       <div>
-        <span class="eyebrow">留在书里的声音</span>
         <h1>书中原声</h1>
-        <p>听见这篇故事原本的声音。</p>
       </div>
       <Icon name="mic" :size="32" />
     </header>
@@ -175,7 +173,6 @@ const duration = (ms: number) =>
     <section v-else-if="entry" class="book-card">
       <span class="badge neutral">对应故事第 {{ entry.story.version }} 版</span>
       <h2>{{ entry.story.title }}</h2>
-      <p class="book-muted">原声按这份书稿收录的顺序播放。</p>
       <div
         v-for="(clip, index) in entry.clips"
         :key="clip.clipId"

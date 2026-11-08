@@ -59,7 +59,6 @@ async function logout() {
 </script>
 <template>
   <section class="page-heading">
-    <p class="eyebrow">让回忆有一个安心的归处</p>
     <h1>我的</h1>
   </section>
   <section class="account-panel panel">
@@ -73,13 +72,6 @@ async function logout() {
     >
       修改昵称<Icon name="pencil" :size="15" />
     </button>
-    <p class="muted">
-      {{
-        auth.account.value
-          ? "同一手机号，网页和小程序接着记录。"
-          : "登录后，查看你购买和受邀参与的故事书。"
-      }}
-    </p>
     <RouterLink v-if="auth.account.value" class="button" to="/projects"
       >我的项目<Icon name="arrow" :size="16" /></RouterLink
     ><button v-else class="button" @click="$emit('login')">
@@ -88,7 +80,6 @@ async function logout() {
   </section>
   <section class="panel account-purchase">
     <h2>为重要的人，新做一本书</h2>
-    <p class="muted">保留熟悉的声音，把平凡日子里的故事慢慢写下来。</p>
     <RouterLink
       v-if="auth.account.value"
       class="button secondary"

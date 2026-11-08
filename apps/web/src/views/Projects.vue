@@ -41,11 +41,9 @@ onUnmounted(() => {
 </script>
 <template>
   <section class="page-heading">
-    <p class="eyebrow">家人的故事，随时接着记录</p>
     <h1>
       我的项目<span v-if="!loading && !error">{{ projects.length }}</span>
     </h1>
-    <p class="muted">购买和受邀参与的故事书，都在这里。</p>
     <RouterLink class="button secondary" to="/purchase"
       >新购一本书<Icon name="plus" :size="16"
     /></RouterLink>
@@ -84,7 +82,6 @@ onUnmounted(() => {
           project.origin === "purchased" ? "我购买的" : "受邀参与"
         }}</span>
         <h3>{{ project.bookTitle }}</h3>
-        <p class="muted">与小程序共享同一个项目</p>
       </div>
     </RouterLink>
   </section>

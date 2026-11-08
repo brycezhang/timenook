@@ -117,10 +117,6 @@
   border-radius: 2px;
   background: currentColor;
 }
-.recording-footnote {
-  color: var(--muted);
-  font-size: 12px;
-}
 .recording-spinner {
   display: inline-block;
   vertical-align: middle;
@@ -226,8 +222,5 @@
   }
   .photo-recording-page .recording-timer {
     font-size: 28px;
-  }
-  .photo-recording-page .recording-footnote {
-    display: none;
   }
 }

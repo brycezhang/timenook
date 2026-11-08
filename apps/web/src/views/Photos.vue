@@ -289,11 +289,7 @@ function remove(id: string) {
       >← {{ storyId ? "返回故事" : "返回项目" }}</RouterLink
     >
     <header class="page-heading">
-      <p class="eyebrow">让回忆有画面</p>
       <h1>{{ storyId ? "故事里的照片" : "从照片说起" }}</h1>
-      <p class="muted">
-        一张老照片，常常能想起许多事。为照片写下人物、时间或地点。
-      </p>
     </header>
     <section
       v-if="loading"
@@ -404,7 +400,6 @@ function remove(id: string) {
       <section v-else-if="!pending.length" class="panel empty-state">
         <Icon name="book" :size="32" />
         <h2>给这个故事添一张照片</h2>
-        <p>上传后，照片和说明会一起保存在这段讲述里。</p>
       </section>
       <div class="hero-actions photo-actions">
         <button

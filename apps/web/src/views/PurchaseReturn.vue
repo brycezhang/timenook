@@ -157,9 +157,6 @@ onUnmounted(() => {
         </button>
       </div>
     </template>
-    <p class="muted payment-note">
-      订单和项目归当前登录账号所有。付款状态以服务端核实结果为准。
-    </p>
   </section>
   <RouterLink class="text-button" to="/projects">返回我的项目</RouterLink>
 </template>
@@ -177,10 +174,6 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 12px;
   margin: 24px 0;
-}
-.payment-note {
-  font-size: 12px;
-  margin-top: 28px;
 }
 .payment-panel .notice {
   margin: 20px 0;

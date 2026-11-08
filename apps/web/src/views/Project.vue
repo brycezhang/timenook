@@ -169,7 +169,6 @@ async function copyInvite() {
   <template v-if="project">
     <section class="project-heading row-between">
       <div>
-        <p class="eyebrow">一起留下，慢慢成书</p>
         <h1>{{ project.bookTitle }}</h1>
         <button class="text-button" @click="rename">
           修改项目名称 <Icon name="pencil" :size="14" />
@@ -229,7 +228,6 @@ async function copyInvite() {
     <section class="stories-section">
       <div class="row-between">
         <div>
-          <p class="eyebrow">每一段，都是人生</p>
           <h2>
             我的故事 <small>{{ project.stories.length }}</small>
           </h2>

@@ -233,7 +233,6 @@ async function inclusion() {
       ><label class="field-label"
         >故事正文<textarea v-model="body" required rows="16" />
       </label>
-      <p class="muted text-small">段落之间空一行。保存会创建新的故事版本。</p>
       <div class="hero-actions">
         <button
           class="button"

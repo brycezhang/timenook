@@ -23,9 +23,6 @@ defineEmits<{ login: [target?: string] }>();
           >先看看样书</RouterLink
         >
       </div>
-      <p class="hero-note">
-        <Icon name="lock" :size="13" />同一手机号，继续小程序中的项目
-      </p>
     </div>
     <figure class="family-photo">
       <img
@@ -67,9 +64,6 @@ defineEmits<{ login: [target?: string] }>();
       <div>
         <p class="eyebrow">先翻开一段故事</p>
         <h2>一段平凡的往事，<br />也能成为书里的一页。</h2>
-        <p class="muted">
-          看看讲述如何被留在纸上。<br />公开样书，无需登录即可阅读。
-        </p>
         <RouterLink class="text-button" to="/sample"
           >翻阅样书<Icon name="arrow" :size="16"
         /></RouterLink>

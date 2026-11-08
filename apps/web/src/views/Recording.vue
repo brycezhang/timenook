@@ -580,9 +580,7 @@ onUnmounted(() => {
       v-if="interview?.actualQuestion.starterKind !== 'photo'"
       class="page-heading"
     >
-      <p class="eyebrow">留下声音，也留下故事</p>
       <h1>记录一段回忆</h1>
-      <p class="muted">慢慢说，不用一次讲完整。</p>
     </header>
     <header v-else class="page-heading"><h1>看着照片，讲一讲</h1></header>
     <section
@@ -631,7 +629,6 @@ onUnmounted(() => {
           @denied="failed(new WebApiError(403), generation)"
         />
         <template v-if="!interview">
-          <p class="eyebrow">今天，想从哪里说起？</p>
           <h2>从一个话题开始</h2>
           <RouterLink class="text-button" :to="`/projects/${projectId}/photos`"
             >从照片说起<Icon name="arrow" :size="16"
@@ -745,9 +742,6 @@ onUnmounted(() => {
           <p v-if="!context.canRecord" class="notice">
             当前项目暂时无法新增录音。
           </p>
-          <p v-if="!capturing && !busy" class="recording-footnote">
-            结束后自动上传。原声会保留，文字可随后修改。
-          </p>
         </div>
         <RouterLink
           v-if="
@@ -763,7 +757,6 @@ onUnmounted(() => {
       <section v-if="sources.length" class="panel recording-playback">
         <div>
           <h2>听听这段声音</h2>
-          <p class="muted">每段讲述的原声都保留在这里。</p>
         </div>
         <div class="recording-source-list">
           <button

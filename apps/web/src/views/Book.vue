@@ -425,9 +425,7 @@ onBeforeUnmount(() => {
     >
     <header class="book-heading">
       <div>
-        <span class="eyebrow">把时光慢慢装订成书</span>
         <h1>我的书稿</h1>
-        <p>整理封面与目录，让讲过的故事有一个温柔的归处。</p>
       </div>
       <button
         class="button secondary small"

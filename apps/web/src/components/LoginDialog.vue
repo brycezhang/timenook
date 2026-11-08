@@ -107,11 +107,7 @@ async function submit() {
         <Icon name="x" />
       </button>
       <div class="login-mark"><Icon name="book" :size="28" /></div>
-      <p class="eyebrow">欢迎来到时光故事</p>
       <h2 id="login-title">登录，继续你的故事</h2>
-      <p class="muted login-description">
-        使用小程序的同一手机号，<br />就能看到原来的项目与家人的故事。
-      </p>
       <label for="phone">手机号</label>
       <div class="phone-input">
         <span>+86</span
@@ -175,9 +171,6 @@ async function submit() {
           submitting ? "正在登录" : "登录并继续"
         }}<Icon v-if="!submitting" name="arrow" :size="17" />
       </button>
-      <p class="login-footnote">
-        <Icon name="lock" :size="13" />项目与原声仅对有权访问的成员开放
-      </p>
     </form>
   </dialog>
 </template>

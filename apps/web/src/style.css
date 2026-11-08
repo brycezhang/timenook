@@ -300,10 +300,6 @@ svg {
 .account-purchase h2 {
   font-size: 20px;
 }
-.account-purchase p {
-  line-height: 1.8;
-  margin: 12px 0 20px;
-}
 .hero {
   display: grid;
   grid-template-columns: 1.1fr 1fr;
@@ -333,7 +329,7 @@ svg {
 .hero h1 > span {
   color: var(--terracotta);
 }
-.hero-copy > p:not(.hero-note) {
+.hero-copy > p {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.95;
@@ -343,14 +339,6 @@ svg {
   gap: 10px;
   flex-wrap: wrap;
   margin-top: 27px;
-}
-.hero-note {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 10px;
-  margin-top: 14px;
 }
 .family-photo {
   position: relative;
@@ -664,12 +652,12 @@ svg {
   max-width: 700px;
   margin: auto;
 }
+.account-panel > .button,
+.account-purchase .button {
+  margin-top: 20px;
+}
 .account-panel h2 {
   font-size: 23px;
-}
-.account-panel p {
-  font-size: 13px;
-  margin: 12px 0 24px;
 }
 .account-links {
   max-width: 700px;
@@ -739,17 +727,9 @@ svg {
   border-radius: 15px;
   margin-bottom: 22px;
 }
-.login-form > .eyebrow {
-  margin-bottom: 8px;
-}
 .login-form h2 {
   font-size: 24px;
   letter-spacing: 0.025em;
-}
-.login-description {
-  font-size: 12px;
-  line-height: 1.9;
-  margin: 12px 0 23px;
 }
 .login-form > label:not(.agreement) {
   display: block;
@@ -826,15 +806,6 @@ input::placeholder {
   font-size: 11px;
   color: var(--olive);
   margin-bottom: 13px;
-}
-.login-footnote {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: 10px;
-  color: var(--muted);
-  margin-top: 17px;
 }
 .spinner {
   display: inline-block;
@@ -930,12 +901,6 @@ input::placeholder {
 }
 .sample-story > p + p {
   margin-top: 22px;
-}
-.sample-caption {
-  font-size: 11px !important;
-  color: var(--muted);
-  border-top: 1px solid var(--line);
-  padding-top: 18px;
 }
 .reading-actions {
   text-align: center;
@@ -1086,7 +1051,7 @@ input::placeholder {
   .hero h1 {
     font-size: 31px;
   }
-  .hero-copy > p:not(.hero-note) {
+  .hero-copy > p {
     font-size: 12px;
   }
   .kicker {
@@ -1095,9 +1060,6 @@ input::placeholder {
   }
   .hero-actions {
     margin-top: 23px;
-  }
-  .hero-note {
-    font-size: 9px;
   }
   .family-photo {
     aspect-ratio: 4/5.3;
@@ -1154,15 +1116,12 @@ input::placeholder {
     line-height: 1.55;
     margin-bottom: 17px;
   }
-  .hero-copy > p:not(.hero-note) {
+  .hero-copy > p {
     font-size: 13px;
   }
   .hero-actions .button {
     padding: 11px 16px;
     font-size: 13px;
-  }
-  .hero-note {
-    font-size: 10px;
   }
   .family-photo {
     aspect-ratio: 1.23;
@@ -1288,9 +1247,6 @@ input::placeholder {
   .login-form h2 {
     font-size: 23px;
   }
-  .login-description {
-    font-size: 12px;
-  }
   .sample-cover {
     padding: 40px 15px 32px;
     border-width: 11px;
@@ -1345,16 +1301,10 @@ input::placeholder {
   .login-form h2 {
     font-size: 21px;
   }
-  .login-description {
-    margin-bottom: 16px;
-  }
   .login-mark {
     width: 44px;
     height: 44px;
     margin-bottom: 16px;
-  }
-  .login-footnote {
-    font-size: 9px;
   }
   .send-code {
     min-width: 88px;
