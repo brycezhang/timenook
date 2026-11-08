@@ -339,7 +339,6 @@ export async function enableBookBrowser(
     loginTtlSeconds: 300,
     sessionTtlSeconds: 43200,
   };
-  config.books!.entryBaseUrl = `${origin}/app/audio/`;
   app = await createApplication(config, { ...fixtureOptions, smsSender });
 }
 
