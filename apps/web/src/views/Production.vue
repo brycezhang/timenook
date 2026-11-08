@@ -33,7 +33,7 @@ const address = reactive({
 let generation = 0;
 let submitIntent: { fact: string; key: string } | undefined;
 let addressIntent: { fact: string; key: string } | undefined;
-const clear = auth.onClear(() => {
+function clearPrivate() {
   generation++;
   context.value = null;
   progress.value = null;
@@ -44,7 +44,18 @@ const clear = auth.onClear(() => {
     detail: "",
   });
   submitIntent = addressIntent = undefined;
-});
+  loading.value = false;
+  busy.value = message.value = actionError.value = "";
+  needsRefresh.value = unknown.value = dirty.value = false;
+}
+const clear = auth.onClear(clearPrivate);
+function handleDenied(reason: unknown) {
+  if (!(reason instanceof WebApiError) || ![403, 404].includes(reason.status))
+    return false;
+  clearPrivate();
+  error.value = productionError(reason);
+  return true;
+}
 function acceptAddress(value: FirstCopyContext) {
   Object.assign(
     address,
@@ -72,7 +83,8 @@ async function load() {
     needsRefresh.value = unknown.value = false;
     actionError.value = "";
   } catch (reason) {
-    if (current === generation) error.value = productionError(reason);
+    if (current === generation && !handleDenied(reason))
+      error.value = productionError(reason);
   } finally {
     if (current === generation) loading.value = false;
   }
@@ -214,11 +226,10 @@ async function saveAddress() {
     addressIntent = undefined;
     message.value = "收货地址已保存。";
   } catch (reason) {
-    if (current === generation) {
+    if (current === generation && !handleDenied(reason)) {
       actionError.value = productionError(reason);
       needsRefresh.value =
-        reason instanceof WebApiError &&
-        [403, 409, 422].includes(reason.status);
+        reason instanceof WebApiError && [409, 422].includes(reason.status);
     }
   } finally {
     if (current === generation) busy.value = "";
@@ -266,6 +277,7 @@ async function submit() {
     } else unknown.value = true;
   } catch (reason) {
     if (current !== generation) return;
+    if (handleDenied(reason)) return;
     if (
       reason instanceof WebApiError &&
       reason.status > 0 &&

@@ -10,6 +10,9 @@ const {
   readyFirstCopyBook,
 } = require("./dist-test/test/first-copy-fixture.js");
 const { paymentAdmin } = require("./dist-test/test/payment-admin-fixture.js");
+const {
+  TERMS_VERSION,
+} = require("./dist-test/src/identity/project-members.js");
 async function admin(url, headers, body) {
   return books.data(
     await books.app.inject({
@@ -31,6 +34,210 @@ async function fillAddress(page, detail = "合成地址一号") {
     .filter({ hasText: "收货地址已保存" })
     .waitFor();
 }
+
+for (const engine of [chromium, webkit])
+  test(
+    `${engine.name()}: losing project membership clears private production content after any denied action`,
+    { timeout: 120000 },
+    async () => {
+      const flow = await storyBrowser(engine, {
+        previewPort: Number(process.env.TIMENOOK_TEST_PREVIEW_PORT || 4446),
+      });
+      try {
+        const p = await readyFirstCopyBook();
+        const other = await books.project();
+        const invite = books.data(
+          await books.request(
+            "POST",
+            `/v1/projects/${other.projectId}/invitations`,
+            other.buyer.token,
+          ),
+        );
+        books.data(
+          await books.request(
+            "POST",
+            `/v1/invitations/${invite.token}/accept`,
+            p.narrator.token,
+            {
+              termsVersion: TERMS_VERSION,
+            },
+          ),
+        );
+        const page = await flow.context.newPage();
+        page.setDefaultTimeout(10000);
+        await page.goto(
+          `${flow.origin}/app/projects/${p.projectId}/production`,
+        );
+        await flow.signIn(page, flow.phoneFor(p.narrator));
+        await fillAddress(page);
+        const member = await books.db.projectMember.findUniqueOrThrow({
+          where: {
+            projectId_userId: { projectId: p.projectId, userId: p.narrator.id },
+          },
+        });
+        for (const action of ["address", "submit", "refresh"]) {
+          if (action === "address")
+            await page
+              .getByLabel("详细地址", { exact: true })
+              .fill("失权前未保存的私人地址");
+          if (action === "refresh") {
+            await page
+              .getByRole("button", { name: "提交印刷", exact: true })
+              .click();
+            await page
+              .getByRole("heading", { name: "已提交，等待制作", exact: true })
+              .waitFor();
+            const current = books.data(
+              await books.request("GET", p.base, p.buyer.token),
+              200,
+            );
+            const headers = await paymentAdmin(books.config, books.app, [
+              "fulfillment:write",
+              "audit:read",
+            ]);
+            const orderBase = `/v1/admin/fulfillment/${current.production.id}`;
+            const view = await admin(`${orderBase}/attempts`, headers, {
+              bookVersionId: p.book.id,
+              snapshotHash: p.book.snapshotHash,
+              pdfHash: p.book.pdf.sha256,
+              addressHash: current.address.hash,
+              supplierRef: "record:synthetic-provider",
+              dueAt: new Date(Date.now() + 86400000).toISOString(),
+            });
+            const attemptBase = `${orderBase}/attempts/${view.current.id}`;
+            await admin(`${attemptBase}/handoff`, headers, {});
+            await admin(`${attemptBase}/receipt`, headers, {
+              outcome: "accepted",
+              evidenceRef: "synthetic:印厂已接单",
+            });
+            await admin(`${attemptBase}/printing`, headers, {
+              printedAt: new Date().toISOString(),
+              evidenceRef: "synthetic:登记完成印制",
+            });
+            await admin(`${attemptBase}/shipping`, headers, {
+              carrier: "失权前私人承运公司",
+              number: "SYNTHETIC-PRIVATE-TRACKING",
+              shippedAt: new Date().toISOString(),
+              evidenceRef: "synthetic:登记发货",
+            });
+            await page
+              .getByRole("button", { name: "刷新进度", exact: true })
+              .click();
+            await page
+              .getByText("SYNTHETIC-PRIVATE-TRACKING", { exact: true })
+              .waitFor();
+            // A transport failure preserves already loaded private content.
+            await page.route(
+              `**/api/v1/projects/${p.projectId}/first-copy`,
+              (route) => route.abort(),
+              { times: 1 },
+            );
+            await page
+              .getByRole("button", { name: "刷新进度", exact: true })
+              .click();
+            await page
+              .getByRole("alert")
+              .filter({ hasText: "暂时无法读取制作状态" })
+              .waitFor();
+            assert.equal(
+              await page
+                .getByText("SYNTHETIC-PRIVATE-TRACKING", { exact: true })
+                .count(),
+              1,
+            );
+            await page
+              .getByRole("button", { name: "重新读取", exact: true })
+              .click();
+            await page.getByRole("alert").waitFor({ state: "hidden" });
+            await page
+              .getByRole("button", { name: "刷新进度", exact: true })
+              .click({ trial: true });
+          }
+          // Controlled operator fixture: the next browser request uses the real
+          // session and authorization checks against the revoked DB membership.
+          await books.db.projectMember.delete({
+            where: {
+              projectId_userId: {
+                projectId: p.projectId,
+                userId: p.narrator.id,
+              },
+            },
+          });
+          const endpoint = `/api/v1/projects/${p.projectId}/first-copy${action === "refresh" ? "" : `/${action}`}`;
+          const denied = page.waitForResponse(
+            (response) =>
+              new URL(response.url()).pathname === endpoint &&
+              response.status() === 403,
+          );
+          await page
+            .getByRole("button", {
+              name: {
+                address: "保存收货地址",
+                submit: "提交印刷",
+                refresh: "刷新进度",
+              }[action],
+              exact: true,
+            })
+            .click();
+          await denied;
+          await page
+            .getByRole("alert")
+            .filter({ hasText: "请确认项目成员资格" })
+            .waitFor();
+          assert.equal(
+            await page.locator(".production-card").count(),
+            0,
+            `${action}: private book/address must be removed`,
+          );
+          assert.equal(
+            await page.getByRole("region", { name: "制作与物流进度" }).count(),
+            0,
+          );
+          assert.equal(
+            await page
+              .getByText("SYNTHETIC-PRIVATE-TRACKING", { exact: true })
+              .count(),
+            0,
+          );
+          assert.equal(await page.getByRole("dialog").count(), 0);
+          assert.equal(
+            (
+              await page.request.get(`${flow.origin}/api/v1/web/session`, {
+                headers: { "X-Timenook-Web": "1" },
+              })
+            ).status(),
+            200,
+          );
+          assert.equal(
+            (
+              await page.request.get(
+                `${flow.origin}/api/v1/projects/${other.projectId}/overview`,
+                { headers: { "X-Timenook-Web": "1" } },
+              )
+            ).status(),
+            200,
+          );
+          if (action !== "refresh") {
+            await books.db.projectMember.create({ data: member });
+            await page
+              .getByRole("button", { name: "重新读取", exact: true })
+              .click();
+            await page.getByLabel("收件人", { exact: true }).waitFor();
+          }
+        }
+        await page.screenshot({
+          path: join(
+            root,
+            `output/playwright/wv08-revoked-${engine.name()}.png`,
+          ),
+          fullPage: true,
+        });
+        assert.deepEqual(flow.errors, []);
+      } finally {
+        await flow.close();
+      }
+    },
+  );
 
 for (const engine of [chromium, webkit])
   test(
