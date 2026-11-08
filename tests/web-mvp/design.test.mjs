@@ -92,6 +92,26 @@ for (const engine of [chromium, webkit]) {
         await expect(page.locator(".recent-story")).toHaveCount(1);
         await nav.getByRole("button", { name: "项目", exact: true }).click();
         await expect(page.locator(".project-card")).toHaveCount(2);
+        await page.setViewportSize({ width: 320, height: 568 });
+        assert.equal(
+          await page
+            .locator(".project-card .project-cover")
+            .evaluateAll((covers) =>
+              covers.every((cover) => {
+                const b = cover.getBoundingClientRect(),
+                  c = cover.closest(".project-card").getBoundingClientRect();
+                return b.left >= c.left && b.right <= c.right;
+              }),
+            ),
+          true,
+          "both thumbnails stay inside their 320px project cards",
+        );
+        await expect(page.locator(".project-card .skeleton")).toHaveCount(0);
+        await page.screenshot({
+          path: `${root}/output/playwright/design-two-projects-${engine.name()}-320.png`,
+          fullPage: true,
+        });
+        await page.setViewportSize({ width: 390, height: 844 });
         await page
           .locator(".project-card")
           .filter({ hasText: secondTitle })
