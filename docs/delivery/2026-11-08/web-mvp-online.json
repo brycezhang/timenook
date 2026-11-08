@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "applicationCommit": "41e6c8d1b5680264393469913185b4f9afb295fd",
+  "mainMergeCommit": "e25d97eb960e0e27d5c664b70d0db48225706f88",
+  "pullRequest": "https://github.com/brycezhang/timenook/pull/164",
+  "releaseSha256": "6195f0df4583cf3479cef5fe7e9cfc7d3192d0955d83d65158d78ea2b0e779a5",
+  "manifestFiles": 438,
+  "releasePlatform": "linux-arm64-build, Linux-x64 target dependencies",
+  "apiRelease": "/data/server/timenook/releases/20261108-web-mvp-41e6c8d",
+  "webRelease": "/data/server/timenook-web/releases/20261108-web-mvp-41e6c8d",
+  "services": {
+    "api": "active/running",
+    "worker": "active/running",
+    "restarts": 0
+  },
+  "migrations": [
+    "20261108090000_web_alipay",
+    "20261108100000_phone_account_uniqueness"
+  ],
+  "publicChecks": [
+    {
+      "path": "/api/health/live",
+      "status": 200
+    },
+    {
+      "path": "/api/health/ready",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/participations",
+      "status": 401
+    },
+    {
+      "path": "/api/v1/web/orders",
+      "status": 401
+    },
+    {
+      "path": "/.env",
+      "status": 404
+    },
+    {
+      "path": "/app/",
+      "status": 200
+    },
+    {
+      "path": "/app/projects/00000000-0000-0000-0000-000000000000/book",
+      "status": 200
+    },
+    {
+      "path": "/app/third-party/lamejs-1.2.7/NOTICE.md",
+      "status": 200
+    },
+    {
+      "browser": "chromium",
+      "publicEntry": "passed",
+      "widths": [320, 1440]
+    },
+    {
+      "browser": "webkit",
+      "publicEntry": "passed",
+      "widths": [320, 1440]
+    }
+  ],
+  "engineeringBrowserScenarios": {
+    "count": 19,
+    "result": "passed across full run and affected targeted reruns",
+    "initialFullRun": {
+      "passed": 15,
+      "failed": 2
+    },
+    "bookTargetedRerun": {
+      "passed": 2,
+      "failed": 0
+    },
+    "productionAfterReviewFix": {
+      "passed": 6,
+      "failed": 0
+    }
+  },
+  "review": {
+    "standardsFindings": 0,
+    "specFindings": 1,
+    "specFindingFixed": true
+  },
+  "ci": {
+    "prHead": "41e6c8d1b5680264393469913185b4f9afb295fd",
+    "pr": "success",
+    "mainHead": "e25d97eb960e0e27d5c664b70d0db48225706f88",
+    "mainRun": 42452815075,
+    "main": "success"
+  },
+  "liveMedia": {
+    "identity": "privileged isolated operator fixture",
+    "deviceInput": "fictional synthesized voice and image",
+    "supplierTransport": "real",
+    "stages": [
+      "real-oss-photo-caption-passed",
+      "real-mp3-auto-upload-started",
+      "real-oss-asr-story-passed",
+      "real-story-edit-photo-and-original-passed",
+      "real-book-cover-pdf-view-download-passed",
+      "real-fixed-book-audio-passed",
+      "content-only-project-print-rights-blocked",
+      "operator-session-revoked-passed"
+    ],
+    "pdfPages": 6,
+    "pdfBytes": 383371,
+    "operatorSessionRevoked": true
+  },
+  "sms": {
+    "providerSendHttpStatus": 201,
+    "phoneReceipt": "not verified",
+    "userLogin": "pending human code entry; browser wait timed out"
+  },
+  "alipay": {
+    "configuredAcceptanceAmountFen": 1,
+    "displayAmountFen": 99900,
+    "realPayment": "pending human login and payment",
+    "systemRefund": "out of scope",
+    "paymentServiceModified": false
+  },
+  "deviceAndPhysicalAcceptance": "fresh Mini Program phone authorization, physical mobile microphone/browser interruptions, printing/shipping not executed"
+}
