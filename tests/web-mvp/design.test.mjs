@@ -11,7 +11,7 @@ for (const engine of [chromium, webkit]) {
       try {
         const first = await books.readyStory();
         const second = await books.project();
-        const secondTitle = "爸爸的时光手记";
+        const secondTitle = "爸爸的时光手记 · 全家一起珍藏的故事";
         const overview = books.data(
           await books.request(
             "GET",
@@ -99,6 +99,20 @@ for (const engine of [chromium, webkit]) {
         await expect(page.locator(".workspace-hero-copy h2")).toHaveText(
           secondTitle,
         );
+        await page.setViewportSize({ width: 320, height: 568 });
+        assert.equal(
+          await page
+            .locator(".workspace-hero-cover")
+            .evaluate(
+              (cover) =>
+                cover.getBoundingClientRect().bottom <=
+                document.querySelector(".hero-stats").getBoundingClientRect()
+                  .top,
+            ),
+          true,
+          "long-title cover stays above the statistics",
+        );
+        await page.setViewportSize({ width: 390, height: 844 });
         await nav.getByRole("button", { name: "书稿", exact: true }).click();
         await expect(page.locator(".book-cover h2")).toHaveText(secondTitle);
         await nav.getByRole("button", { name: "故事", exact: true }).click();
