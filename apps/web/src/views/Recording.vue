@@ -24,6 +24,7 @@ import {
 import { auth } from "../session";
 import { WebApiError } from "../api";
 import Icon from "../components/Icon.vue";
+import ModalDialog from "../components/ModalDialog.vue";
 import StoryPhotoGallery from "../components/StoryPhotoGallery.vue";
 import "../recording.css";
 
@@ -50,6 +51,22 @@ const seconds = ref(0),
   audioError = ref("");
 const audio = ref<HTMLAudioElement>();
 const persistedDraft = ref(false);
+const topicPicker = ref(false);
+let previousTopic = { custom: false, text: "", key: "" };
+function openTopics() {
+  previousTopic = {
+    custom: custom.value,
+    text: customText.value,
+    key: questionKey.value,
+  };
+  topicPicker.value = true;
+}
+function cancelTopics() {
+  custom.value = previousTopic.custom;
+  customText.value = previousTopic.text;
+  questionKey.value = previousTopic.key;
+  topicPicker.value = false;
+}
 let generation = 0,
   disposed = false,
   ownerSession = "",
@@ -174,6 +191,7 @@ async function load() {
   denied.value = false;
   error.value = "";
   processingError.value = "";
+  topicPicker.value = false;
   stage.value = "idle";
   seconds.value = 0;
   try {
@@ -212,7 +230,12 @@ async function load() {
       custom.value = !!draft?.input.selfWritten;
       customText.value = draft?.input.selfWritten?.text ?? "";
       questionKey.value =
-        draft?.input.questionKey ?? value.plan.defaultQuestion?.key ?? "";
+        draft?.input.questionKey ??
+        value.plan.eligibleQuestions.find(
+          (q) => q.key === route.query.questionKey,
+        )?.key ??
+        value.plan.defaultQuestion?.key ??
+        "";
     }
   } catch (reason) {
     failed(reason, version);
@@ -628,54 +651,15 @@ onUnmounted(() => {
           recording
           @denied="failed(new WebApiError(403), generation)"
         />
-        <template v-if="!interview">
-          <h2>从一个话题开始</h2>
-          <RouterLink class="text-button" :to="`/projects/${projectId}/photos`"
-            >从照片说起<Icon name="arrow" :size="16"
-          /></RouterLink>
-          <div v-if="!custom" class="recording-topics" aria-label="讲述话题">
-            <button
-              v-for="item in context.plan.eligibleQuestions"
-              :key="item.key"
-              class="recording-topic"
-              :class="{ selected: questionKey === item.key }"
-              :aria-pressed="questionKey === item.key"
-              :disabled="busy || persistedDraft"
-              @click="questionKey = item.key"
-            >
-              <span>{{ item.text }}</span
-              ><Icon v-if="questionKey === item.key" name="check" :size="18" />
-            </button>
-          </div>
-          <label v-else class="recording-custom"
-            >想讲的话题<textarea
-              v-model="customText"
-              rows="3"
-              maxlength="500"
-              :disabled="busy || persistedDraft"
-              placeholder="比如：小时候，家里最热闹的一天是什么样？"
-            />
-          </label>
-          <button
-            class="text-button"
-            :disabled="busy || persistedDraft"
-            @click="custom = !custom"
-          >
-            {{ custom ? "看看推荐话题" : "自己写一个话题" }}
-          </button>
-          <button
-            v-if="persistedDraft"
-            class="text-button"
-            :disabled="busy"
-            @click="newDraft"
-          >
-            重新选题
-          </button>
-        </template>
-        <template v-else-if="interview.actualQuestion.starterKind !== 'photo'"
-          ><p class="eyebrow">这次想讲的事</p>
-          <h2 class="recording-question">{{ question }}</h2></template
+        <h2
+          v-if="interview?.actualQuestion.starterKind !== 'photo'"
+          class="recording-question"
         >
+          {{ question || "选择一个想讲的话题" }}
+        </h2>
+        <div class="recording-mic" aria-hidden="true">
+          <Icon name="mic" :size="32" />
+        </div>
         <div class="recording-controls">
           <div
             class="recording-timer"
@@ -684,11 +668,9 @@ onUnmounted(() => {
           >
             {{ time }}
           </div>
-          <p v-if="stage === 'paused'" class="muted" role="status">
-            已暂停，想好了再继续。
-          </p>
+          <p v-if="stage === 'paused'" class="muted" role="status">已暂停</p>
           <p v-else-if="stage === 'recording'" class="muted" role="status">
-            正在录音，按自己的节奏慢慢讲。
+            正在录音
           </p>
           <p v-else-if="stage === 'saving'" class="muted" role="status">
             <span class="recording-spinner" />正在保存这段声音，请稍候。
@@ -743,6 +725,70 @@ onUnmounted(() => {
             当前项目暂时无法新增录音。
           </p>
         </div>
+        <div v-if="!interview" class="recording-shortcuts">
+          <button
+            class="text-button"
+            :disabled="busy || persistedDraft"
+            @click="openTopics"
+          >
+            换个话题
+          </button>
+          <RouterLink class="text-button" :to="`/projects/${projectId}/photos`"
+            >从照片说起<Icon name="arrow" :size="15"
+          /></RouterLink>
+          <button
+            v-if="persistedDraft"
+            class="text-button"
+            :disabled="busy"
+            @click="newDraft"
+          >
+            重新选题
+          </button>
+        </div>
+        <ModalDialog
+          v-if="topicPicker"
+          title="选一个想讲的话题"
+          @close="cancelTopics"
+        >
+          <div v-if="!custom" class="recording-topics" aria-label="讲述话题">
+            <button
+              v-for="item in context.plan.eligibleQuestions"
+              :key="item.key"
+              class="recording-topic"
+              :class="{ selected: questionKey === item.key }"
+              :aria-pressed="questionKey === item.key"
+              :disabled="busy || persistedDraft"
+              @click="questionKey = item.key"
+            >
+              <span>{{ item.text }}</span
+              ><Icon v-if="questionKey === item.key" name="check" :size="18" />
+            </button>
+          </div>
+          <label v-else class="recording-custom"
+            >想讲的话题<textarea
+              v-model="customText"
+              rows="3"
+              maxlength="500"
+              :disabled="busy || persistedDraft"
+              placeholder="比如：小时候，家里最热闹的一天是什么样？"
+            />
+          </label>
+          <button
+            class="text-button"
+            :disabled="busy || persistedDraft"
+            @click="custom = !custom"
+          >
+            {{ custom ? "看看推荐话题" : "自己写一个话题" }}
+          </button>
+
+          <button
+            class="button full-width"
+            :disabled="!question.trim()"
+            @click="topicPicker = false"
+          >
+            就聊这个
+          </button>
+        </ModalDialog>
         <RouterLink
           v-if="
             interview?.actualQuestion.starterKind === 'photo' &&

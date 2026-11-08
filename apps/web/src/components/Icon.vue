@@ -23,6 +23,15 @@ defineProps<{ name: string; size?: number }>();
       <path d="m3 10 9-7 9 7v10H3Z" />
       <path d="M9 20v-8h6v8" />
     </template>
+    <template v-else-if="name === 'projects'">
+      <path d="m12 3 10 6-10 6L2 9l10-6Z" />
+      <path d="m2 15 10 6 10-6" />
+    </template>
+    <template v-else-if="name === 'stories'">
+      <path
+        d="M8 2v4m8-4v4M4 10h7M4 14h5M4 18h4M20 10V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h6m4-3 5-5 2 2-5 5-3 1 1-3Z"
+      />
+    </template>
     <template v-else-if="name === 'user'">
       <circle cx="12" cy="8" r="4" />
       <path d="M4 21v-2a8 8 0 0 1 16 0v2" />

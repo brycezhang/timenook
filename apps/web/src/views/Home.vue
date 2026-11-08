@@ -1,120 +1,247 @@
 <script setup lang="ts">
+import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import Icon from "../components/Icon.vue";
 import { auth } from "../session";
+import { workspace } from "../workspace";
+import {
+  projectApi,
+  projectError,
+  storyTitle,
+  storyMinutes,
+  storyDate,
+  type ProjectOverview,
+} from "../project-api";
+import { recordingApi } from "../recording-api";
+import type { RecordingContext } from "../../../../packages/contracts/src";
+import PublicHome from "./PublicHome.vue";
+import ProjectCover from "../components/ProjectCover.vue";
+import EmptyProjects from "../components/EmptyProjects.vue";
+import InviteDialog from "../components/InviteDialog.vue";
+import Icon from "../components/Icon.vue";
 defineEmits<{ login: [target?: string] }>();
+const project = ref<ProjectOverview | null>(null),
+  topics = ref<RecordingContext | null>(null);
+const loading = ref(false),
+  error = ref(""),
+  topicIndex = ref(0),
+  inviting = ref(false);
+let generation = 0;
+const selectedId = workspace.selectedId;
+async function load() {
+  const current = ++generation;
+  project.value = null;
+  topics.value = null;
+  error.value = "";
+  topicIndex.value = 0;
+  inviting.value = false;
+  if (!selectedId.value || !auth.account.value) {
+    loading.value = false;
+    return;
+  }
+  loading.value = true;
+  try {
+    const result = await projectApi.overview(selectedId.value);
+    if (current !== generation) return;
+    project.value = result;
+    if (result.canRecord) {
+      const value = await recordingApi.context(result.projectId);
+      if (current === generation) topics.value = value;
+    }
+  } catch (reason) {
+    if (current === generation) error.value = projectError(reason);
+  } finally {
+    if (current === generation) loading.value = false;
+  }
+}
+watch(
+  selectedId,
+  () => {
+    void load();
+  },
+  { immediate: true },
+);
+onUnmounted(() => {
+  generation++;
+});
+const recent = computed(() =>
+  [...(project.value?.stories ?? [])]
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, 3),
+);
+const minutes = computed(
+  () =>
+    project.value?.stories.reduce(
+      (sum, story) => sum + storyMinutes(story),
+      0,
+    ) ?? 0,
+);
+const question = computed(
+  () => topics.value?.plan.eligibleQuestions[topicIndex.value],
+);
+const recordPath = computed(
+  () =>
+    `/projects/${selectedId.value}/record${question.value ? `?questionKey=${encodeURIComponent(question.value.key)}` : ""}`,
+);
+function nextTopic() {
+  const count = topics.value?.plan.eligibleQuestions.length ?? 0;
+  if (count) topicIndex.value = (topicIndex.value + 1) % count;
+}
 </script>
 <template>
-  <section class="hero">
-    <div class="hero-copy">
-      <span class="kicker"><Icon name="mic" :size="16" />用声音，珍藏一生</span>
-      <h1>
-        有些故事，<br />只有<span>他们</span>能讲。<br />有些时光，值得成书。
-      </h1>
-      <p>
-        听一段往事，留一段原声。<br />把父母与家人的人生，写成可以捧在手里的书。
-      </p>
-      <div class="hero-actions">
-        <RouterLink v-if="auth.account.value" class="button" to="/projects"
-          >继续我的故事<Icon name="arrow" :size="17" /></RouterLink
-        ><button v-else class="button" @click="$emit('login')">
-          登录，继续记录<Icon name="arrow" :size="17" /></button
-        ><RouterLink class="button secondary" to="/sample"
-          >先看看样书</RouterLink
-        >
-      </div>
+  <section
+    v-if="
+      auth.restoring.value ||
+      (auth.account.value &&
+        workspace.loading.value &&
+        !workspace.projects.value.length)
+    "
+    class="member-home-skeleton panel"
+    aria-busy="true"
+    aria-label="正在读取创作空间"
+  >
+    <div class="skeleton skeleton-line" />
+    <div class="skeleton skeleton-cover" />
+    <div class="skeleton skeleton-line" />
+  </section>
+  <PublicHome
+    v-else-if="!auth.account.value"
+    @login="(target?: string) => $emit('login', target)"
+  />
+  <template v-else>
+    <div v-if="workspace.error.value" class="notice error" role="alert">
+      {{ workspace.error.value
+      }}<button class="text-button" @click="workspace.refresh">重试</button>
     </div>
-    <figure class="family-photo">
-      <img
-        src="/images/family.jpg"
-        alt="母女相伴，翻阅人生故事书的效果示意"
-        fetchpriority="high"
-      />
-      <figcaption>
-        留住故事，也留住熟悉的声音。<small>效果示意</small>
-      </figcaption>
-    </figure>
-  </section>
-  <section class="steps" aria-label="如何把故事写成书">
-    <article>
-      <span>01</span>
-      <div>
-        <h2>像聊天一样，慢慢说</h2>
-        <p>从一个话题、一张老照片开始，讲什么，由你决定。</p>
+    <template v-if="workspace.active.value">
+      <header class="member-home-heading row-between">
+        <h1>把往事，慢慢写成书。</h1>
+        <button
+          v-if="project?.canInvite"
+          class="button secondary small"
+          @click="inviting = true"
+        >
+          <Icon name="users" :size="17" />邀请家人
+        </button>
+      </header>
+      <div v-if="error" class="notice error" role="alert">
+        {{ error }}<button class="text-button" @click="load">重新读取</button>
       </div>
-    </article>
-    <article>
-      <span>02</span>
-      <div>
-        <h2>把回忆，整理成故事</h2>
-        <p>讲述整理为文字，和家人补充、编辑，保留自己的表达。</p>
-      </div>
-    </article>
-    <article>
-      <span>03</span>
-      <div>
-        <h2>写成一本，值得珍藏的书</h2>
-        <p>把故事、照片和原声留下，成书后再安排印刷。</p>
-      </div>
-    </article>
-  </section>
-  <div class="home-details">
-    <section class="sample-card panel">
-      <img src="/images/book.jpg" alt="人生故事书装帧效果示意" loading="lazy" />
-      <div>
-        <p class="eyebrow">先翻开一段故事</p>
-        <h2>一段平凡的往事，<br />也能成为书里的一页。</h2>
-        <RouterLink class="text-button" to="/sample"
-          >翻阅样书<Icon name="arrow" :size="16"
-        /></RouterLink>
-      </div>
-    </section>
-    <section class="package-card panel">
-      <p class="eyebrow">岁月成书套餐</p>
-      <h2>送给重要的人，<br />一份关于一生的礼物。</h2>
-      <p class="package-price">
-        <span>¥</span>999<small>一个项目 · 首本一本</small>
-      </p>
-      <ul>
-        <li><Icon name="check" :size="16" />语音讲述，整理与编辑人生故事</li>
-        <li><Icon name="check" :size="16" />故事、照片与原声，一起珍藏</li>
-        <li><Icon name="check" :size="16" />专属书稿与一本人生书</li>
-      </ul>
-      <RouterLink v-if="auth.account.value" to="/purchase" class="button"
-        >新购一本书</RouterLink
+      <section
+        v-if="loading && !project"
+        class="member-home-skeleton panel"
+        aria-busy="true"
+        aria-label="正在读取当前项目"
       >
-      <button v-else class="button" @click="$emit('login', '/purchase')">
-        新购一本书
-      </button>
-      <RouterLink to="/terms" class="text-button"
-        >查看服务约定<Icon name="arrow" :size="16"
-      /></RouterLink>
-    </section>
-  </div>
-  <section class="faq">
-    <p class="eyebrow">开始之前</p>
-    <h2>你可能想知道</h2>
-    <details>
-      <summary>不会写作，也可以做一本书吗？</summary>
-      <p>
-        可以。像平常聊天一样讲述即可，讲述会被整理成可阅读的故事。你和家人也可以继续补充和修改。
-      </p>
-    </details>
-    <details>
-      <summary>需要一次把一生都讲完吗？</summary>
-      <p>不需要。每次说一小段，随时回来继续，慢慢把故事补完整。</p>
-    </details>
-    <details>
-      <summary>家人可以一起参与吗？</summary>
-      <p>
-        可以。接受项目邀请后，家人作为成员一起记录、编辑故事和整理书稿。内容只对有权访问的成员开放。
-      </p>
-    </details>
-  </section>
-  <footer class="page-footer">
-    <Icon name="lock" :size="14" />故事与原声，仅对项目成员可见<RouterLink
-      to="/terms"
-      >使用条款</RouterLink
-    >
-  </footer>
+        <div class="skeleton skeleton-cover" />
+        <div class="skeleton skeleton-line" />
+      </section>
+      <template v-if="project">
+        <section class="workspace-hero panel">
+          <div class="workspace-hero-copy">
+            <span class="badge">{{
+              project.canRecord ? "正在记录" : "故事珍藏"
+            }}</span>
+            <h2>{{ project.bookTitle }}</h2>
+            <div class="hero-stats">
+              <div>
+                <strong>{{ project.stories.length }}</strong
+                ><span>篇故事</span>
+              </div>
+              <div>
+                <strong>{{ minutes }}</strong
+                ><span>分钟原声</span>
+              </div>
+              <div>
+                <strong>{{ project.summary.included }}</strong
+                ><span>篇已入书</span>
+              </div>
+            </div>
+            <div class="hero-actions">
+              <RouterLink
+                v-if="project.canRecord"
+                class="button"
+                :to="`/projects/${selectedId}/record`"
+                ><Icon name="mic" :size="18" />开始讲述</RouterLink
+              ><RouterLink
+                class="text-button"
+                :to="`/projects/${selectedId}/book`"
+                >查看书稿<Icon name="arrow" :size="16"
+              /></RouterLink>
+            </div>
+          </div>
+          <div class="workspace-hero-cover">
+            <ProjectCover
+              :project-id="selectedId"
+              :title="project.bookTitle"
+              @denied="load"
+            />
+          </div>
+        </section>
+        <div class="workspace-lower">
+          <section class="recent-stories">
+            <div class="row-between">
+              <h2>
+                最近的故事 <small>{{ project.stories.length }}</small>
+              </h2>
+              <RouterLink class="text-button" to="/stories"
+                >查看全部<Icon name="arrow" :size="16"
+              /></RouterLink>
+            </div>
+            <RouterLink
+              v-for="(story, index) in recent"
+              :key="story.id"
+              class="recent-story"
+              :to="`/projects/${selectedId}/stories/${story.id}`"
+              ><span class="recent-index">{{
+                String(index + 1).padStart(2, "0")
+              }}</span>
+              <div>
+                <span>{{ story.revision?.theme || "人生里的一个片段" }}</span>
+                <h3>{{ storyTitle(story) }}</h3>
+                <p>
+                  {{ storyDate(story) }} · {{ storyMinutes(story) }} 分钟讲述
+                </p>
+              </div>
+              <Icon name="arrow" :size="16"
+            /></RouterLink>
+            <div v-if="!recent.length" class="recent-empty">
+              <Icon name="stories" :size="28" />
+              <p>还没有故事</p>
+              <RouterLink
+                v-if="project.canRecord"
+                class="text-button"
+                :to="recordPath"
+                >开始讲述<Icon name="arrow" :size="16"
+              /></RouterLink>
+            </div>
+          </section>
+          <aside v-if="question" class="topic-card">
+            <div class="row-between">
+              <Icon name="mic" :size="21" /><button
+                class="text-button"
+                @click="nextTopic"
+              >
+                换个话题
+              </button>
+            </div>
+            <p class="eyebrow">今天，不妨聊聊</p>
+            <h2>{{ question.text }}</h2>
+            <RouterLink class="text-button" :to="recordPath"
+              >从这里开始<Icon name="arrow" :size="16"
+            /></RouterLink>
+          </aside>
+        </div>
+      </template>
+      <InviteDialog
+        v-if="inviting && project?.canInvite"
+        :key="selectedId"
+        :project-id="selectedId"
+        @close="inviting = false"
+      />
+    </template>
+    <template v-else-if="!workspace.loading.value && !workspace.error.value"
+      ><EmptyProjects /><PublicHome
+        @login="(target?: string) => $emit('login', target)"
+    /></template>
+  </template>
 </template>

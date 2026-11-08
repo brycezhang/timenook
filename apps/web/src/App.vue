@@ -5,17 +5,19 @@ import { auth, restoreSession } from "./session";
 import LoginDialog from "./components/LoginDialog.vue";
 import Icon from "./components/Icon.vue";
 import Home from "./views/Home.vue";
+import { workspace } from "./workspace";
 const route = useRoute(),
   router = useRouter();
 const loginVisible = ref(false);
-let afterLogin = "/projects";
+let afterLogin = "/";
 const signedIn = computed(() => !!auth.account.value);
-function login(target = "/projects") {
+function login(target = "/") {
   afterLogin = target;
   loginVisible.value = true;
 }
 function navigate(path: string) {
-  if (path === "/projects" && !signedIn.value) login(path);
+  if (["/stories", "/book", "/projects"].includes(path) && !signedIn.value)
+    login(path);
   else void router.push(path);
 }
 function closeLogin() {
@@ -35,6 +37,47 @@ watch([() => route.fullPath, auth.restoring, auth.account], () => {
   if (route.meta.private && !auth.restoring.value && !signedIn.value)
     login(route.fullPath);
 });
+const nav = [
+  { path: "/", label: "岁月成书", mobile: "首页", icon: "home" },
+  { path: "/stories", label: "我的故事", mobile: "故事", icon: "stories" },
+  { path: "/book", label: "我的书稿", mobile: "书稿", icon: "book" },
+  { path: "/projects", label: "我的项目", mobile: "项目", icon: "projects" },
+  { path: "/account", label: "我的", mobile: "我的", icon: "user" },
+];
+function active(path: string) {
+  if (path === "/stories")
+    return (
+      route.path === path ||
+      /^\/projects\/[^/]+(?:\/stories(?:\/.*)?|\/record|\/photos)?$/.test(
+        route.path,
+      )
+    );
+  if (path === "/book")
+    return (
+      route.path === path ||
+      /\/(book|production)$/.test(route.path) ||
+      route.path.startsWith("/audio/")
+    );
+  return route.path === path;
+}
+watch(
+  () => route.params.projectId,
+  (id) => {
+    if (typeof id !== "string") return;
+    workspace.select(id);
+    if (
+      auth.account.value &&
+      !workspace.loading.value &&
+      !workspace.projects.value.some((project) => project.projectId === id)
+    )
+      void workspace.refresh();
+  },
+  { immediate: true },
+);
+watch(workspace.projects, () => {
+  if (typeof route.params.projectId === "string")
+    workspace.select(route.params.projectId);
+});
 onMounted(() => {
   void restoreSession();
 });
@@ -47,19 +90,21 @@ onMounted(() => {
         ><span>时光故事<small>岁月成书</small></span></RouterLink
       >
       <p class="sidebar-caption">给时光一个温柔的归处</p>
+      <button class="sidebar-project" @click="navigate('/projects')">
+        <Icon name="book" /><span>{{
+          workspace.active.value?.bookTitle ?? "一本书，珍藏一生"
+        }}</span
+        ><Icon name="arrow" :size="15" />
+      </button>
       <nav aria-label="主导航">
-        <button :class="{ active: route.path === '/' }" @click="navigate('/')">
-          <Icon name="home" />岁月成书</button
-        ><button
-          :class="{ active: route.path.startsWith('/projects') }"
-          @click="navigate('/projects')"
+        <button
+          v-for="item in nav"
+          :key="item.path"
+          :class="{ active: active(item.path) }"
+          :aria-current="active(item.path) ? 'page' : undefined"
+          @click="navigate(item.path)"
         >
-          <Icon name="book" />我的项目</button
-        ><button
-          :class="{ active: route.path === '/account' }"
-          @click="navigate('/account')"
-        >
-          <Icon name="user" />我的
+          <Icon :name="item.icon" />{{ item.label }}
         </button>
       </nav>
       <div class="sidebar-bottom">
@@ -95,6 +140,19 @@ onMounted(() => {
           {{ auth.restoreError.value
           }}<button class="text-button" @click="restoreSession">重试</button>
         </div>
+        <div
+          v-if="
+            signedIn &&
+            workspace.error.value &&
+            route.path !== '/projects' &&
+            route.path !== '/'
+          "
+          class="notice error"
+          role="alert"
+        >
+          {{ workspace.error.value
+          }}<button class="text-button" @click="workspace.refresh">重试</button>
+        </div>
         <template v-if="route.meta.private && !signedIn"
           ><section
             v-if="auth.restoring.value"
@@ -117,18 +175,14 @@ onMounted(() => {
       </main>
     </div>
     <nav class="bottom-nav" aria-label="手机主导航">
-      <button :class="{ active: route.path === '/' }" @click="navigate('/')">
-        <Icon name="home" /><span>岁月成书</span></button
-      ><button
-        :class="{ active: route.path.startsWith('/projects') }"
-        @click="navigate('/projects')"
+      <button
+        v-for="item in nav"
+        :key="item.path"
+        :class="{ active: active(item.path) }"
+        :aria-current="active(item.path) ? 'page' : undefined"
+        @click="navigate(item.path)"
       >
-        <Icon name="book" /><span>我的项目</span></button
-      ><button
-        :class="{ active: route.path === '/account' }"
-        @click="navigate('/account')"
-      >
-        <Icon name="user" /><span>我的</span>
+        <Icon :name="item.icon" /><span>{{ item.mobile }}</span>
       </button>
     </nav>
     <LoginDialog v-if="loginVisible" @close="closeLogin" @success="loggedIn" />

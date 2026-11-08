@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { auth } from "../session";
+import { workspace } from "../workspace";
 import {
   isWechatBrowser,
   purchaseApi,
@@ -26,7 +27,16 @@ async function load() {
   error.value = "";
   try {
     const result = await purchaseApi.get(String(route.params.orderId));
-    if (generation === current) order.value = result;
+    if (generation === current) {
+      order.value = result;
+      if (
+        result.project &&
+        !workspace.projects.value.some(
+          (project) => project.projectId === result.project!.id,
+        )
+      )
+        void workspace.refresh();
+    }
   } catch (reason) {
     if (generation === current)
       error.value =

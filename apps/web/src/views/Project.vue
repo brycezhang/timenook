@@ -2,6 +2,9 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { auth } from "../session";
+import { workspace } from "../workspace";
+import EmptyProjects from "../components/EmptyProjects.vue";
+import ModalDialog from "../components/ModalDialog.vue";
 import {
   projectApi,
   projectError,
@@ -12,9 +15,10 @@ import {
   type ProjectOverview,
 } from "../project-api";
 import Icon from "../components/Icon.vue";
-import ProjectCover from "../components/ProjectCover.vue";
 const route = useRoute();
-const id = computed(() => String(route.params.projectId));
+const id = computed(() =>
+  String(route.params.projectId ?? workspace.selectedId.value),
+);
 const project = ref<ProjectOverview | null>(null),
   loading = ref(true),
   error = ref("");
@@ -41,7 +45,11 @@ async function load() {
   error.value = "";
   try {
     const result = await projectApi.overview(id.value);
-    if (current === generation) project.value = result;
+    if (current === generation) {
+      project.value = result;
+      if (route.query.invite === "1" && result.canInvite && !modal.value)
+        void invite();
+    }
   } catch (reason) {
     if (current === generation) {
       error.value = projectError(reason);
@@ -61,7 +69,8 @@ watch(
     busy.value = false;
     query.value = "";
     filter.value = "all";
-    void load();
+    if (id.value) void load();
+    else loading.value = false;
   },
   { immediate: true },
 );
@@ -82,13 +91,6 @@ const stories = computed(
         ),
     ) ?? [],
 );
-const minutes = computed(
-  () =>
-    project.value?.stories.reduce(
-      (sum, story) => sum + storyMinutes(story),
-      0,
-    ) ?? 0,
-);
 function rename() {
   draftTitle.value = project.value!.bookTitle;
   actionError.value = "";
@@ -108,6 +110,7 @@ async function saveName() {
     if (current === generation) {
       project.value = result;
       modal.value = null;
+      void workspace.refresh();
     }
   } catch (reason) {
     if (current === generation) actionError.value = projectError(reason);
@@ -152,9 +155,15 @@ async function copyInvite() {
 }
 </script>
 <template>
-  <RouterLink class="text-button" to="/projects">← 我的项目</RouterLink>
+  <RouterLink v-if="route.params.projectId" class="text-button" to="/projects"
+    >← 我的项目</RouterLink
+  >
+  <EmptyProjects
+    v-if="!id && !workspace.loading.value && !workspace.error.value"
+    title="先有一个项目，再留下第一篇故事"
+  />
   <section
-    v-if="loading && !project"
+    v-if="(loading || workspace.loading.value) && !project"
     class="panel detail-skeleton"
     aria-busy="true"
     aria-label="正在读取项目"
@@ -169,7 +178,14 @@ async function copyInvite() {
   <template v-if="project">
     <section class="project-heading row-between">
       <div>
-        <h1>{{ project.bookTitle }}</h1>
+        <p v-if="!route.params.projectId" class="current-project-label">
+          {{ project.bookTitle }}
+        </p>
+        <h1>
+          {{
+            route.params.projectId ? project.bookTitle : "每一段，都是人生。"
+          }}
+        </h1>
         <button class="text-button" @click="rename">
           修改项目名称 <Icon name="pencil" :size="14" />
         </button>
@@ -178,53 +194,14 @@ async function copyInvite() {
         <Icon name="users" :size="17" />邀请家人
       </button>
     </section>
-    <section class="member-project-hero panel">
-      <div class="member-hero-copy">
-        <span class="badge">正在记录</span>
-        <h2>把平凡日子，<br />写成珍贵的故事。</h2>
-        <p class="muted">{{ project.nextStep }}</p>
-        <div class="hero-stats">
-          <div>
-            <strong>{{ project.stories.length }}</strong
-            ><span>篇故事</span>
-          </div>
-          <div>
-            <strong>{{ minutes }}</strong
-            ><span>分钟原声</span>
-          </div>
-          <div>
-            <strong>{{ project.summary.included }}</strong
-            ><span>篇已入书</span>
-          </div>
-        </div>
-        <div class="hero-actions">
-          <RouterLink
-            v-if="project.canRecord"
-            class="button"
-            :to="`/projects/${id}/record`"
-            ><Icon name="mic" :size="18" />开始讲述</RouterLink
-          ><RouterLink class="button secondary" :to="`/projects/${id}/book`"
-            >查看书稿<Icon name="arrow" :size="16"
-          /></RouterLink>
-          <RouterLink
-            v-if="project.canRecord"
-            class="text-button"
-            :to="`/projects/${id}/photos`"
-            >从照片说起<Icon name="arrow" :size="16"
-          /></RouterLink>
-        </div>
-      </div>
-      <div class="member-hero-cover">
-        <ProjectCover
-          :project-id="id"
-          :title="project.bookTitle"
-          @denied="
-            project = null;
-            load();
-          "
-        />
-      </div>
-    </section>
+    <div class="story-create-action">
+      <RouterLink
+        v-if="project.canRecord"
+        class="button"
+        :to="`/projects/${id}/record`"
+        ><Icon name="plus" :size="17" />再记一个故事</RouterLink
+      >
+    </div>
     <section class="stories-section">
       <div class="row-between">
         <div>
@@ -330,88 +307,78 @@ async function copyInvite() {
         >
       </section>
     </section>
-    <dialog
-      :open="!!modal"
-      class="edit-dialog"
-      :aria-label="modal === 'rename' ? '修改项目名称' : '邀请家人'"
-      @cancel.prevent="modal = null"
+    <ModalDialog
+      v-if="modal"
+      :title="modal === 'rename' ? '给这本书一个名字' : '邀请家人'"
+      :close-label="modal === 'invite' ? '关闭邀请' : '关闭修改名称'"
+      :busy="busy"
+      @close="modal = null"
     >
-      <div class="edit-dialog-body">
-        <button
-          class="icon-button close-dialog"
-          :aria-label="modal === 'invite' ? '关闭邀请' : '关闭修改名称'"
-          :disabled="busy"
-          @click="modal = null"
-        >
-          <Icon name="x" /></button
-        ><template v-if="modal === 'rename'"
-          ><h2>给这本书一个名字</h2>
-          <form @submit.prevent="saveName">
-            <label class="field-label"
-              >项目名称<input v-model="draftTitle" required maxlength="120"
-            /></label>
-            <p v-if="actionError" class="error" role="alert">
-              {{ actionError }}
-            </p>
-            <div class="hero-actions">
-              <button class="button" :disabled="busy || !draftTitle.trim()">
-                <span v-if="busy" class="spinner" />保存名称</button
-              ><button
-                type="button"
-                class="button secondary"
-                :disabled="busy"
-                @click="modal = null"
-              >
-                取消</button
-              ><button
-                v-if="actionError"
-                type="button"
-                class="text-button"
-                @click="
-                  modal = null;
-                  load();
-                "
-              >
-                读取最新名称
-              </button>
-            </div>
-          </form></template
-        ><template v-else-if="modal === 'invite'"
-          ><span class="empty-icon"><Icon name="users" :size="32" /></span>
-          <h2>一起把故事写完整</h2>
-          <p class="muted">
-            把链接发给家人，对方登录并接受后，就能一起记录、编辑和成书。
+      <template v-if="modal === 'rename'"
+        ><form @submit.prevent="saveName">
+          <label class="field-label"
+            >项目名称<input v-model="draftTitle" required maxlength="120"
+          /></label>
+          <p v-if="actionError" class="error" role="alert">
+            {{ actionError }}
           </p>
-          <div
-            v-if="busy"
-            class="skeleton skeleton-line"
-            aria-label="正在生成邀请链接"
-          />
-          <template v-if="inviteUrl"
-            ><label class="field-label"
-              >邀请链接<input
-                :value="inviteUrl"
-                readonly
-                @focus="($event.target as HTMLInputElement).select()"
-            /></label>
-            <p class="muted text-small">
-              有效至 {{ inviteExpiry }}；重新生成会使上一个链接失效。
-            </p>
-            <button class="button full-width" @click="copyInvite">
-              {{ copied ? "已复制链接" : "复制邀请链接" }}
-            </button></template
-          >
-          <p v-if="actionError" class="error" role="alert">{{ actionError }}</p>
-          <button
-            v-if="actionError && !inviteUrl"
-            class="text-button"
-            @click="invite"
-          >
-            重新生成
+          <div class="hero-actions">
+            <button class="button" :disabled="busy || !draftTitle.trim()">
+              <span v-if="busy" class="spinner" />保存名称</button
+            ><button
+              type="button"
+              class="button secondary"
+              :disabled="busy"
+              @click="modal = null"
+            >
+              取消</button
+            ><button
+              v-if="actionError"
+              type="button"
+              class="text-button"
+              @click="
+                modal = null;
+                load();
+              "
+            >
+              读取最新名称
+            </button>
+          </div>
+        </form></template
+      ><template v-else-if="modal === 'invite'"
+        ><span class="empty-icon"><Icon name="users" :size="32" /></span>
+        <h2>一起把故事写完整</h2>
+        <p class="muted">
+          把链接发给家人，对方登录并接受后，就能一起记录、编辑和成书。
+        </p>
+        <div
+          v-if="busy"
+          class="skeleton skeleton-line"
+          aria-label="正在生成邀请链接"
+        />
+        <template v-if="inviteUrl"
+          ><label class="field-label"
+            >邀请链接<input
+              :value="inviteUrl"
+              readonly
+              @focus="($event.target as HTMLInputElement).select()"
+          /></label>
+          <p class="muted text-small">
+            有效至 {{ inviteExpiry }}；重新生成会使上一个链接失效。
+          </p>
+          <button class="button full-width" @click="copyInvite">
+            {{ copied ? "已复制链接" : "复制邀请链接" }}
           </button></template
         >
-      </div>
-    </dialog>
-    <div v-if="modal" class="dialog-shade" @click="!busy && (modal = null)" />
+        <p v-if="actionError" class="error" role="alert">{{ actionError }}</p>
+        <button
+          v-if="actionError && !inviteUrl"
+          class="text-button"
+          @click="invite"
+        >
+          重新生成
+        </button></template
+      >
+    </ModalDialog>
   </template>
 </template>

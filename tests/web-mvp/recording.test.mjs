@@ -309,9 +309,17 @@ for (const engine of [chromium, webkit])
           },
         );
         await page.goto(`${origin}/app/projects/${project.projectId}/record`);
-        await page.getByRole("heading", { name: "从一个话题开始" }).waitFor();
+        await page
+          .getByRole("button", { name: "开始录音", exact: true })
+          .waitFor();
+        await page
+          .getByRole("button", { name: "换个话题", exact: true })
+          .click();
         await page.getByRole("button", { name: "自己写一个话题" }).click();
         await page.getByLabel("想讲的话题").fill("小时候，您常在河边做什么？");
+        await page
+          .getByRole("button", { name: "就聊这个", exact: true })
+          .click();
         await page
           .getByRole("button", { name: "开始录音", exact: true })
           .click();
@@ -373,7 +381,9 @@ for (const engine of [chromium, webkit])
         await page.goto(
           `${origin}/app/projects/${secondProject.projectId}/record`,
         );
-        await page.getByRole("heading", { name: "从一个话题开始" }).waitFor();
+        await page
+          .getByRole("button", { name: "开始录音", exact: true })
+          .waitFor();
         assert.equal(
           await page.getByRole("heading", { name: "还有录音等待上传" }).count(),
           0,
@@ -470,7 +480,9 @@ for (const engine of [chromium, webkit])
           fullPage: true,
         });
         await page.goto(`${origin}/app/projects/${project.projectId}/record`);
-        await page.getByRole("heading", { name: "从一个话题开始" }).waitFor();
+        await page
+          .getByRole("button", { name: "开始录音", exact: true })
+          .waitFor();
         assert.equal(
           await page.getByRole("heading", { name: "故事已整理好" }).count(),
           0,

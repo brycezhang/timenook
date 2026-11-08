@@ -1,42 +1,15 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from "vue";
+import { onMounted } from "vue";
 import { RouterLink } from "vue-router";
-import { auth } from "../session";
-import type { ProjectSummary } from "../api";
+import { workspace } from "../workspace";
+import ProjectCover from "../components/ProjectCover.vue";
 import Icon from "../components/Icon.vue";
-const projects = ref<ProjectSummary[]>([]),
-  loading = ref(true),
-  error = ref("");
-let generation = 0;
-const clear = auth.onClear(() => {
-  generation++;
-  projects.value = [];
-});
-async function load() {
-  const current = ++generation;
-  loading.value = true;
-  error.value = "";
-  try {
-    const list = await auth.projects();
-    if (generation === current) projects.value = list;
-  } catch (reason) {
-    if (generation === current)
-      error.value =
-        reason instanceof Error ? reason.message : "项目读取失败，请重试。";
-  } finally {
-    if (generation === current) loading.value = false;
-  }
-}
-watch(
-  () => auth.account.value?.session.id,
-  () => {
-    if (auth.account.value) void load();
-  },
-  { immediate: true },
-);
-onUnmounted(() => {
-  generation++;
-  clear();
+const projects = workspace.projects,
+  loading = workspace.loading,
+  error = workspace.error;
+const load = workspace.refresh;
+onMounted(() => {
+  if (!loading.value) void load();
 });
 </script>
 <template>
@@ -66,22 +39,33 @@ onUnmounted(() => {
   <section v-if="projects.length" class="project-grid" aria-label="我的项目">
     <RouterLink
       v-for="project in projects"
-      :to="`/projects/${project.projectId}`"
+      :to="'/'"
+      @click="workspace.select(project.projectId)"
+      :aria-current="
+        workspace.selectedId.value === project.projectId ? 'true' : undefined
+      "
       :aria-label="`打开项目：${project.bookTitle}`"
       :key="project.projectId"
       class="project-card"
     >
-      <div class="project-cover">
-        <span>时光故事 · 岁月成书</span>
-        <h2>{{ project.bookTitle }}</h2>
-        <div class="cover-line" />
-        <Icon name="book" :size="32" /><small>家人的讲述 · 珍藏的回忆</small>
+      <div class="project-card-cover">
+        <ProjectCover
+          :project-id="project.projectId"
+          :title="project.bookTitle"
+        />
       </div>
       <div class="project-card-info">
         <span class="badge">{{
           project.origin === "purchased" ? "我购买的" : "受邀参与"
         }}</span>
         <h3>{{ project.bookTitle }}</h3>
+        <span
+          v-if="workspace.selectedId.value === project.projectId"
+          class="current-project-note"
+          ><Icon name="check" :size="13" />当前项目</span
+        ><span class="project-open"
+          >打开项目<Icon name="arrow" :size="16"
+        /></span>
       </div>
     </RouterLink>
   </section>

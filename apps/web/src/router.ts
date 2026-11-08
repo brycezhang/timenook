@@ -34,6 +34,16 @@ export const router = createRouter({
     },
     { path: "/", component: Home, meta: { title: "岁月成书" } },
     {
+      path: "/stories",
+      component: Project,
+      meta: { title: "我的故事", private: true },
+    },
+    {
+      path: "/book",
+      component: () => import("./views/Book.vue"),
+      meta: { title: "我的书稿", private: true },
+    },
+    {
       path: "/projects",
       component: Projects,
       meta: { title: "我的项目", private: true },

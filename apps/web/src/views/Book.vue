@@ -13,9 +13,14 @@ import { WebApiError } from "../api";
 import { fetchVerifiedBlob } from "../private-media";
 import { auth } from "../session";
 import Icon from "../components/Icon.vue";
+import ModalDialog from "../components/ModalDialog.vue";
+import EmptyProjects from "../components/EmptyProjects.vue";
+import { workspace } from "../workspace";
 import "../book.css";
 const route = useRoute();
-const projectId = computed(() => String(route.params.projectId));
+const projectId = computed(() =>
+  String(route.params.projectId ?? workspace.selectedId.value),
+);
 const fixedId = computed(() =>
   typeof route.query.version === "string" ? route.query.version : "",
 );
@@ -32,6 +37,8 @@ const title = ref(""),
   chapters = ref<PlanDirectory["chapters"]>([]);
 const savedCover = ref(""),
   savedDirectory = ref("");
+const coverEditor = ref(false),
+  directoryEditing = ref(false);
 const photoPicker = ref(false),
   photoUrls = ref<Record<string, string>>({}),
   photoErrors = ref<Record<string, boolean>>({});
@@ -277,6 +284,9 @@ async function saveCover() {
     if (token !== sequence) return;
     accept(value, true);
     notice.value = "封面已保存";
+    coverEditor.value = false;
+    photoPicker.value = false;
+    void workspace.refresh();
   } catch (cause) {
     if (token === sequence) failure(cause);
   } finally {
@@ -300,6 +310,7 @@ async function saveDirectory() {
     if (token !== sequence) return;
     accept(value, false, true);
     notice.value = "目录已保存";
+    directoryEditing.value = false;
   } catch (cause) {
     if (token === sequence) failure(cause);
   } finally {
@@ -389,6 +400,22 @@ async function pdf(download = false) {
     pdfBusy.value = false;
   }
 }
+function cancelCover() {
+  if (busy.value === "cover") return;
+  const [savedTitle, savedSalutation, savedPhoto] = JSON.parse(
+    savedCover.value,
+  );
+  title.value = savedTitle;
+  salutation.value = savedSalutation;
+  photoAssetId.value = savedPhoto;
+  photoPicker.value = false;
+  coverEditor.value = false;
+}
+function cancelDirectory() {
+  if (busy.value) return;
+  chapters.value = JSON.parse(savedDirectory.value);
+  directoryEditing.value = false;
+}
 function reloadEditor() {
   if (
     dirty.value &&
@@ -408,7 +435,9 @@ watch(
   () => [projectId.value, fixedId.value],
   () => {
     clear();
-    void load(true);
+    coverEditor.value = false;
+    directoryEditing.value = false;
+    if (projectId.value) void load(true);
   },
   { immediate: true },
 );
@@ -420,28 +449,43 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <section class="book-page">
-    <RouterLink class="back-link" :to="`/projects/${projectId}`"
+    <RouterLink
+      v-if="projectId"
+      class="back-link"
+      :to="`/projects/${projectId}`"
       >← 返回故事</RouterLink
     >
-    <header class="book-heading">
+    <EmptyProjects
+      v-if="!projectId && !workspace.loading.value && !workspace.error.value"
+      title="你的第一本书，还在等故事"
+    />
+    <header v-if="projectId" class="book-heading">
       <div>
         <h1>我的书稿</h1>
       </div>
-      <button
-        class="button secondary small"
-        :disabled="loading || !!busy"
-        @click="reloadEditor"
-      >
-        读取最新内容
-      </button>
+      <div class="book-header-actions">
+        <button
+          v-if="editable"
+          class="button secondary small"
+          @click="coverEditor = true"
+        >
+          <Icon name="pencil" :size="16" />编辑封面</button
+        ><button
+          class="text-button"
+          :disabled="loading || !!busy"
+          @click="reloadEditor"
+        >
+          读取最新内容
+        </button>
+      </div>
     </header>
-    <div v-if="error" class="notice" role="alert">
+    <div v-if="error && !coverEditor" class="notice" role="alert">
       {{ error }}
       <button class="text-button" @click="reloadEditor">重试读取</button>
     </div>
     <p v-if="notice" class="book-notice" role="status">{{ notice }}</p>
     <div
-      v-if="loading && !context"
+      v-if="projectId && loading && !context"
       class="book-layout"
       aria-busy="true"
       aria-label="正在读取书稿"
@@ -467,6 +511,7 @@ onBeforeUnmount(() => {
             <span>时光故事 · 岁月成书</span>
             <h2>{{ coverTitle }}</h2>
             <div class="book-cover-rule" />
+            <p>{{ coverSalutation }}</p>
             <div
               v-if="
                 coverPhoto && (!fixedId || displayed?.coverPhotoAccess.allowed)
@@ -486,80 +531,93 @@ onBeforeUnmount(() => {
               </button>
               <div v-else class="skeleton" aria-label="正在读取封面照片" />
             </div>
-            <p>{{ coverSalutation || "每一段平凡的日子，都值得被记住。" }}</p>
+            <small class="book-cover-credit">家人的讲述 · 珍藏的回忆</small>
           </div>
-          <form
-            v-if="editable"
-            class="book-cover-form"
-            @submit.prevent="saveCover"
-          >
-            <label
-              >书名<input
-                :disabled="loading || !!busy"
-                v-model="title"
-                maxlength="120"
-                required
-                aria-label="书名" /></label
-            ><label
-              >封面寄语<textarea
-                :disabled="loading || !!busy"
-                v-model="salutation"
-                rows="3"
-                maxlength="120"
-                aria-label="封面寄语"
-                placeholder="写一句想留在封面上的话"
-              /></label
-            ><button
-              type="button"
-              class="button secondary"
-              :disabled="loading || !!busy"
-              @click="photoPicker = !photoPicker"
-            >
-              {{ photoAssetId ? "更换封面照片" : "选择封面照片" }}
-            </button>
-            <div v-if="photoPicker" class="book-photo-picker">
-              <button
-                type="button"
-                class="book-photo-choice"
-                :disabled="loading || !!busy"
-                :aria-pressed="!photoAssetId"
-                @click="choosePhoto(null)"
-              >
-                不用照片</button
+          <span class="book-preview-caption">封面设计预览</span>
+          <ModalDialog
+            v-if="coverEditor && editable"
+            title="编辑封面"
+            :busy="busy === 'cover'"
+            @close="cancelCover"
+            ><form class="book-cover-form" @submit.prevent="saveCover">
+              <label
+                >书名<input
+                  :disabled="loading || !!busy"
+                  v-model="title"
+                  maxlength="120"
+                  required
+                  aria-label="书名" /></label
+              ><label
+                >封面寄语<textarea
+                  :disabled="loading || !!busy"
+                  v-model="salutation"
+                  rows="3"
+                  maxlength="120"
+                  aria-label="封面寄语"
+                  placeholder="写一句想留在封面上的话"
+                /></label
               ><button
-                v-for="photo in context.coverPhotoOptions"
-                :key="photo.assetId"
                 type="button"
-                class="book-photo-choice"
+                class="button secondary"
                 :disabled="loading || !!busy"
-                :aria-pressed="photoAssetId === photo.assetId"
-                @click="choosePhoto(photo)"
+                @click="photoPicker = !photoPicker"
               >
-                {{ photo.caption || "故事照片" }}
+                {{ photoAssetId ? "更换封面照片" : "选择封面照片" }}
               </button>
-              <p v-if="!context.coverPhotoOptions.length">
-                可从已入书的故事照片中选择。先为故事添加照片，或使用无照片封面。
+              <div v-if="photoPicker" class="book-photo-picker">
+                <button
+                  type="button"
+                  class="book-photo-choice"
+                  :disabled="loading || !!busy"
+                  :aria-pressed="!photoAssetId"
+                  @click="choosePhoto(null)"
+                >
+                  不用照片</button
+                ><button
+                  v-for="photo in context.coverPhotoOptions"
+                  :key="photo.assetId"
+                  type="button"
+                  class="book-photo-choice"
+                  :disabled="loading || !!busy"
+                  :aria-pressed="photoAssetId === photo.assetId"
+                  @click="choosePhoto(photo)"
+                >
+                  {{ photo.caption || "故事照片" }}
+                </button>
+                <p v-if="!context.coverPhotoOptions.length">
+                  可从已入书的故事照片中选择。先为故事添加照片，或使用无照片封面。
+                </p>
+              </div>
+              <p v-if="error" class="notice error" role="alert">
+                {{ error
+                }}<button
+                  class="text-button"
+                  type="button"
+                  @click="reloadEditor"
+                >
+                  读取最新内容
+                </button>
               </p>
-            </div>
-            <button
-              class="button"
-              :disabled="!!busy || loading || !coverDirty || !title.trim()"
-            >
-              <span v-if="busy === 'cover'" class="book-spinner" />{{
-                busy === "cover" ? "正在保存" : "保存封面"
-              }}
-            </button>
-          </form>
+              <button
+                class="button"
+                :disabled="!!busy || loading || !coverDirty || !title.trim()"
+              >
+                <span v-if="busy === 'cover'" class="book-spinner" />{{
+                  busy === "cover" ? "正在保存" : "保存封面"
+                }}
+              </button>
+            </form></ModalDialog
+          >
         </aside>
         <div class="book-main">
           <section v-if="!fixedId" class="book-card">
             <div class="book-section-heading">
               <div>
-                <h2>整理目录</h2>
+                <h2>{{ directoryEditing ? "整理目录" : "书里的故事" }}</h2>
                 <p>{{ includedCount }} 篇故事，{{ chapters.length }} 个章节</p>
               </div>
               <button
-                v-if="editable"
+                v-if="editable && directoryEditing"
                 class="text-button"
                 :disabled="!!busy || loading"
                 @click="addChapter"
@@ -570,143 +628,185 @@ onBeforeUnmount(() => {
             <p v-if="!chapters.length" class="book-empty">
               先讲述一个故事，再把它编进自己的书。
             </p>
-            <fieldset
-              v-for="(chapter, ci) in chapters"
-              :key="chapter.key"
-              class="book-chapter"
-              :disabled="!editable || !!busy || loading"
-            >
-              <legend>第 {{ ci + 1 }} 章</legend>
-              <div class="book-chapter-heading">
-                <input
-                  v-model="chapter.title"
-                  :aria-label="`章节名称 ${ci + 1}`"
-                  maxlength="120"
-                  required
-                />
-                <div class="book-order-buttons">
-                  <button
-                    class="text-button"
-                    :disabled="ci === 0"
-                    :aria-label="`上移章节 ${ci + 1}`"
-                    @click="moveChapter(ci, -1)"
-                  >
-                    ↑</button
-                  ><button
-                    class="text-button"
-                    :disabled="ci === chapters.length - 1"
-                    :aria-label="`下移章节 ${ci + 1}`"
-                    @click="moveChapter(ci, 1)"
-                  >
-                    ↓</button
-                  ><button
-                    v-if="!chapter.storyRefs.length"
-                    class="text-button"
-                    :aria-label="`删除章节 ${ci + 1}`"
-                    @click="chapters.splice(ci, 1)"
-                  >
-                    删除
-                  </button>
-                </div>
-              </div>
-              <div
-                v-for="(id, si) in chapter.storyRefs"
-                :key="id"
-                class="book-story-row"
+            <template v-if="!directoryEditing">
+              <section
+                v-for="(chapter, index) in chapters"
+                :key="chapter.key"
+                class="book-directory-chapter"
               >
-                <div>
-                  <RouterLink
-                    v-if="story(id)"
-                    :to="`/projects/${projectId}/stories/${id}`"
-                    >{{ story(id)?.title }}</RouterLink
-                  ><span v-else>故事已移出入书内容</span
-                  ><small v-if="story(id)"
-                    >当前故事第 {{ story(id)?.version }} 版</small
-                  >
+                <header>
+                  <span>{{ String(index + 1).padStart(2, "0") }}</span>
+                  <h3>{{ chapter.title }}</h3>
+                  <small>{{ chapter.storyRefs.length }} 篇</small>
+                </header>
+                <RouterLink
+                  v-for="id in chapter.storyRefs"
+                  :key="id"
+                  :to="`/projects/${projectId}/stories/${id}`"
+                  >{{ story(id)?.title || "故事"
+                  }}<Icon name="arrow" :size="15"
+                /></RouterLink>
+                <p v-if="!chapter.storyRefs.length" class="book-empty">
+                  暂无故事
+                </p>
+              </section>
+              <button
+                v-if="editable"
+                class="text-button"
+                @click="directoryEditing = true"
+              >
+                <Icon name="plus" :size="16" />管理入书故事
+              </button> </template
+            ><template v-else>
+              <fieldset
+                v-for="(chapter, ci) in chapters"
+                :key="chapter.key"
+                class="book-chapter"
+                :disabled="!editable || !!busy || loading"
+              >
+                <legend>第 {{ ci + 1 }} 章</legend>
+                <div class="book-chapter-heading">
+                  <input
+                    v-model="chapter.title"
+                    :aria-label="`章节名称 ${ci + 1}`"
+                    maxlength="120"
+                    required
+                  />
+                  <div class="book-order-buttons">
+                    <button
+                      class="text-button"
+                      :disabled="ci === 0"
+                      :aria-label="`上移章节 ${ci + 1}`"
+                      @click="moveChapter(ci, -1)"
+                    >
+                      ↑</button
+                    ><button
+                      class="text-button"
+                      :disabled="ci === chapters.length - 1"
+                      :aria-label="`下移章节 ${ci + 1}`"
+                      @click="moveChapter(ci, 1)"
+                    >
+                      ↓</button
+                    ><button
+                      v-if="!chapter.storyRefs.length"
+                      class="text-button"
+                      :aria-label="`删除章节 ${ci + 1}`"
+                      @click="chapters.splice(ci, 1)"
+                    >
+                      删除
+                    </button>
+                  </div>
                 </div>
-                <div class="book-story-actions">
-                  <button
-                    class="text-button"
-                    :disabled="si === 0"
-                    :aria-label="`上移故事 ${id}`"
-                    @click="reorderStory(ci, si, -1)"
-                  >
-                    ↑</button
-                  ><button
-                    class="text-button"
-                    :disabled="si === chapter.storyRefs.length - 1"
-                    :aria-label="`下移故事 ${id}`"
-                    @click="reorderStory(ci, si, 1)"
-                  >
-                    ↓</button
+                <div
+                  v-for="(id, si) in chapter.storyRefs"
+                  :key="id"
+                  class="book-story-row"
+                >
+                  <div>
+                    <RouterLink
+                      v-if="story(id)"
+                      :to="`/projects/${projectId}/stories/${id}`"
+                      >{{ story(id)?.title }}</RouterLink
+                    ><span v-else>故事已移出入书内容</span
+                    ><small v-if="story(id)"
+                      >当前故事第 {{ story(id)?.version }} 版</small
+                    >
+                  </div>
+                  <div class="book-story-actions">
+                    <button
+                      class="text-button"
+                      :disabled="si === 0"
+                      :aria-label="`上移故事 ${id}`"
+                      @click="reorderStory(ci, si, -1)"
+                    >
+                      ↑</button
+                    ><button
+                      class="text-button"
+                      :disabled="si === chapter.storyRefs.length - 1"
+                      :aria-label="`下移故事 ${id}`"
+                      @click="reorderStory(ci, si, 1)"
+                    >
+                      ↓</button
+                    ><select
+                      :value="chapter.key"
+                      :aria-label="`移动故事 ${id}`"
+                      @change="
+                        moveStory(
+                          id,
+                          ($event.target as HTMLSelectElement).value,
+                        )
+                      "
+                    >
+                      <option
+                        v-for="target in chapters"
+                        :key="target.key"
+                        :value="target.key"
+                      >
+                        {{ target.title }}
+                      </option>
+                      <option value="">移出目录</option>
+                    </select>
+                  </div>
+                </div>
+                <p v-if="!chapter.storyRefs.length" class="book-empty">
+                  这一章还没有故事
+                </p>
+              </fieldset>
+              <div v-if="unplaced.length" class="book-unplaced">
+                <h3>待编排的故事</h3>
+                <div
+                  v-for="item in unplaced"
+                  :key="item.id"
+                  class="book-story-row"
+                >
+                  <span
+                    >{{ item.title
+                    }}<small>第 {{ item.version }} 版</small></span
                   ><select
-                    :value="chapter.key"
-                    :aria-label="`移动故事 ${id}`"
+                    :disabled="!editable || !!busy || loading"
+                    value=""
+                    :aria-label="`移动故事 ${item.id}`"
                     @change="
-                      moveStory(id, ($event.target as HTMLSelectElement).value)
+                      moveStory(
+                        item.id,
+                        ($event.target as HTMLSelectElement).value,
+                      )
                     "
                   >
+                    <option value="" disabled>选择章节</option>
                     <option
-                      v-for="target in chapters"
-                      :key="target.key"
-                      :value="target.key"
+                      v-for="chapter in chapters"
+                      :key="chapter.key"
+                      :value="chapter.key"
                     >
-                      {{ target.title }}
+                      {{ chapter.title }}
                     </option>
-                    <option value="">移出目录</option>
                   </select>
                 </div>
               </div>
-              <p v-if="!chapter.storyRefs.length" class="book-empty">
-                这一章还没有故事
-              </p>
-            </fieldset>
-            <div v-if="unplaced.length" class="book-unplaced">
-              <h3>待编排的故事</h3>
-              <div
-                v-for="item in unplaced"
-                :key="item.id"
-                class="book-story-row"
+              <button
+                v-if="editable"
+                class="button secondary"
+                :disabled="
+                  !!busy ||
+                  loading ||
+                  !directoryDirty ||
+                  chapters.some((c) => !c.title.trim())
+                "
+                @click="saveDirectory"
               >
-                <span
-                  >{{ item.title }}<small>第 {{ item.version }} 版</small></span
-                ><select
-                  :disabled="!editable || !!busy || loading"
-                  value=""
-                  :aria-label="`移动故事 ${item.id}`"
-                  @change="
-                    moveStory(
-                      item.id,
-                      ($event.target as HTMLSelectElement).value,
-                    )
-                  "
-                >
-                  <option value="" disabled>选择章节</option>
-                  <option
-                    v-for="chapter in chapters"
-                    :key="chapter.key"
-                    :value="chapter.key"
-                  >
-                    {{ chapter.title }}
-                  </option>
-                </select>
-              </div>
-            </div>
-            <button
-              v-if="editable"
-              class="button secondary"
-              :disabled="
-                !!busy ||
-                loading ||
-                !directoryDirty ||
-                chapters.some((c) => !c.title.trim())
-              "
-              @click="saveDirectory"
+                <span v-if="busy === 'directory'" class="book-spinner" />{{
+                  busy === "directory" ? "正在保存" : "保存目录"
+                }}
+              </button>
+              <button
+                class="text-button"
+                :disabled="!!busy"
+                @click="cancelDirectory"
+              >
+                取消编辑
+              </button></template
             >
-              <span v-if="busy === 'directory'" class="book-spinner" />{{
-                busy === "directory" ? "正在保存" : "保存目录"
-              }}
-            </button>
           </section>
           <section class="book-card book-generation" aria-live="polite">
             <div class="book-section-heading">
