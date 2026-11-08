@@ -28,6 +28,6 @@ Spec 审查发现首页选中的非默认话题被草稿 URL 覆盖，已保留 
 
 ## 发布与清理
 
-网页发布候选 `c5870bf` 已部署到 `/data/server/timenook-web/releases/20261108-web-design-c5870bf`。公网入口实际引用 `index-hId0035n.js` 与 `index-M0r7TUjH.css`，其 SHA-256 与本地构建逐字节一致；线上 API/Worker 均为 active。此次仅本地构建并原子切换网页静态目录；API/Worker 保持既有 `20261108-web-mvp-41e6c8d` 发布，没有迁移或服务端环境变更。代码经 [PR #165](https://github.com/brycezhang/timenook/pull/165) 交付，配置中的 Check 流水线按最终提交运行；本报告的网页发布候选与 Git 文档提交分别记录，最终合并与流水线结果以 PR 和 main 记录为准。
+网页发布候选 `6ef0a34` 已部署到 `/data/server/timenook-web/releases/20261108-web-design-cover-final`。公网入口实际引用 `index-CFQYsgim.js` 与 `index-tdWyTBn3.css`，其 SHA-256 与本地构建逐字节一致；线上 API/Worker 均为 active。此次仅本地构建并原子切换网页静态目录；API/Worker 保持既有 `20261108-web-mvp-41e6c8d` 发布，没有迁移或服务端环境变更。代码经 [PR #165](https://github.com/brycezhang/timenook/pull/165) 交付，配置中的 Check 流水线按最终提交运行；本报告的网页发布候选与 Git 文档提交分别记录，最终合并与流水线结果以 PR 和 main 记录为准。
 
-设计取证后撤销 2 个临时会话，删除 1 个空账号及其会话记录，删除本地私有会话/Cookie 文件并关闭本轮浏览器会话。虚构内容项目保留作既有隔离验收资料；真实用户和项目不变。
+设计取证后撤销 3 个临时会话，删除 1 个空账号及其会话记录，删除本地私有会话/Cookie 文件并关闭本轮浏览器会话。虚构内容项目保留作既有隔离验收资料；真实用户和项目不变。
