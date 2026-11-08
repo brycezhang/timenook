@@ -107,7 +107,7 @@ onMounted(() => {
               <div class="skeleton skeleton-line" />
             </div>
           </section>
-          <Home v-else @login="login()"
+          <Home v-else @login="(target?: string) => login(target)"
         /></template>
         <RouterView v-else v-slot="{ Component }"
           ><component

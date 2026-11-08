@@ -2,7 +2,7 @@
 import { RouterLink } from "vue-router";
 import Icon from "../components/Icon.vue";
 import { auth } from "../session";
-defineEmits<{ login: [] }>();
+defineEmits<{ login: [target?: string] }>();
 </script>
 <template>
   <section class="hero">
@@ -86,6 +86,12 @@ defineEmits<{ login: [] }>();
         <li><Icon name="check" :size="16" />故事、照片与原声，一起珍藏</li>
         <li><Icon name="check" :size="16" />专属书稿与一本人生书</li>
       </ul>
+      <RouterLink v-if="auth.account.value" to="/purchase" class="button"
+        >新购一本书</RouterLink
+      >
+      <button v-else class="button" @click="$emit('login', '/purchase')">
+        新购一本书
+      </button>
       <RouterLink to="/terms" class="text-button"
         >查看服务约定<Icon name="arrow" :size="16"
       /></RouterLink>

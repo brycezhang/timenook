@@ -18,4 +18,5 @@ coverage/
 
 # S0 print artifacts, downloaded verified fonts, and rendered inspection pages
 output/pdf/
+output/playwright/
 .cache/print-probe/

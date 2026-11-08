@@ -4,7 +4,7 @@ import { RouterLink } from "vue-router";
 import { auth } from "../session";
 import { projectApi, projectError } from "../project-api";
 import Icon from "../components/Icon.vue";
-defineEmits<{ login: [] }>();
+defineEmits<{ login: [target?: string] }>();
 const editing = ref(false),
   nickname = ref(""),
   nicknameError = ref(""),
@@ -84,6 +84,23 @@ async function logout() {
       >我的项目<Icon name="arrow" :size="16" /></RouterLink
     ><button v-else class="button" @click="$emit('login')">
       手机号登录<Icon name="arrow" :size="16" />
+    </button>
+  </section>
+  <section class="panel account-purchase">
+    <h2>为重要的人，新做一本书</h2>
+    <p class="muted">保留熟悉的声音，把平凡日子里的故事慢慢写下来。</p>
+    <RouterLink
+      v-if="auth.account.value"
+      class="button secondary"
+      to="/purchase"
+      >新购一本书</RouterLink
+    >
+    <button
+      v-else
+      class="button secondary"
+      @click="$emit('login', '/purchase')"
+    >
+      新购一本书
     </button>
   </section>
   <div class="account-links panel">
