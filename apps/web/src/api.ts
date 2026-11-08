@@ -50,7 +50,10 @@ export async function request<T>(
     credentials: "same-origin",
     cache: "no-store",
     redirect: "error",
-    signal: init.signal ?? AbortSignal.timeout(12000),
+    signal: AbortSignal.any([
+      ...(init.signal ? [init.signal] : []),
+      AbortSignal.timeout(15000),
+    ]),
     headers: {
       "X-Timenook-Web": "1",
       ...(init.data === undefined

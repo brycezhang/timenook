@@ -23,6 +23,11 @@ export const router = createRouter({
       meta: { title: "故事照片", private: true },
     },
     {
+      path: "/projects/:projectId/production",
+      component: () => import("./views/Production.vue"),
+      meta: { title: "制作与物流", private: true },
+    },
+    {
       path: "/projects/:projectId/record",
       component: Recording,
       meta: { title: "记录回忆", private: true },
@@ -37,6 +42,16 @@ export const router = createRouter({
       path: "/projects/:projectId",
       component: Project,
       meta: { title: "我的故事", private: true },
+    },
+    {
+      path: "/projects/:projectId/book",
+      component: () => import("./views/Book.vue"),
+      meta: { title: "我的书稿", private: true },
+    },
+    {
+      path: "/audio/:entryId",
+      component: () => import("./views/OriginalAudio.vue"),
+      meta: { title: "书中原声", private: true },
     },
     {
       path: "/projects/:projectId/stories/:storyId",

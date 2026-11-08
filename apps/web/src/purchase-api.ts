@@ -1,5 +1,5 @@
-import { auth } from "./session";
-import { webApi, WebApiError } from "./api";
+import { memberRequest } from "./project-api";
+import { WebApiError } from "./api";
 export interface PurchaseOrder {
   id: string;
   bookTitle: string;
@@ -30,46 +30,24 @@ async function request<T>(
   data?: unknown,
   key?: string,
 ): Promise<T> {
-  const owner = auth.account.value;
-  if (!owner) throw new WebApiError(401);
-  const current = await webApi.restore();
-  if (
-    auth.account.value?.session.id !== owner.session.id ||
-    current.session.id !== owner.session.id
-  )
-    throw new WebApiError(401);
-  const response = await fetch(`/api/v1/web/orders${path}`, {
-    method: data === undefined ? "GET" : "POST",
-    credentials: "same-origin",
-    cache: "no-store",
-    redirect: "error",
-    signal: AbortSignal.timeout(15000),
-    headers: {
-      "X-Timenook-Web": "1",
-      ...(data === undefined
-        ? {}
-        : {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": owner.csrfToken,
-            "Idempotency-Key": key ?? crypto.randomUUID(),
-          }),
-    },
-    ...(data === undefined ? {} : { body: JSON.stringify(data) }),
-  });
-  if (auth.account.value?.session.id !== owner.session.id)
-    throw new DOMException("Account changed", "AbortError");
-  if (!response.ok)
-    throw new WebApiError(
-      response.status,
-      response.status === 400
-        ? "请检查购买信息。"
-        : response.status === 404
-          ? "订单不存在或不属于当前账号。"
-          : "暂时无法确认订单，请稍后重试。",
+  try {
+    return await memberRequest<T>(
+      `/web/orders${path}`,
+      data,
+      data === undefined ? undefined : (key ?? crypto.randomUUID()),
     );
-  const body = await response.json();
-  if (!body || !("data" in body) || body.error) throw new WebApiError(0);
-  return body.data as T;
+  } catch (error) {
+    if (error instanceof WebApiError)
+      throw new WebApiError(
+        error.status,
+        error.status === 400
+          ? "请检查购买信息。"
+          : error.status === 404
+            ? "订单不存在或不属于当前账号。"
+            : "暂时无法确认订单，请稍后重试。",
+      );
+    throw error;
+  }
 }
 export const purchaseApi = {
   catalog: () =>

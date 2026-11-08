@@ -293,6 +293,17 @@ svg {
   border: 1px solid var(--line);
   border-radius: 14px;
 }
+.account-purchase {
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.account-purchase h2 {
+  font-size: 20px;
+}
+.account-purchase p {
+  line-height: 1.8;
+  margin: 12px 0 20px;
+}
 .hero {
   display: grid;
   grid-template-columns: 1.1fr 1fr;

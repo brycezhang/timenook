@@ -14,7 +14,10 @@ const { verifiedPhone } = apiRequire(
 );
 const { startProductionWorker } = apiRequire("./dist-test/src/tasks/worker.js");
 
-export async function storyBrowser(engine, { alipay, paymentFetch } = {}) {
+export async function storyBrowser(
+  engine,
+  { alipay, paymentFetch, previewPort = 4444 } = {},
+) {
   for (const key of ["DATABASE_URL", "REDIS_URL"])
     assert.ok(
       ["localhost", "127.0.0.1", "::1"].includes(
@@ -24,7 +27,7 @@ export async function storyBrowser(engine, { alipay, paymentFetch } = {}) {
   const previousCwd = process.cwd();
   process.chdir(join(root, "apps/api"));
   const dir = await mkdtemp(join(tmpdir(), "timenook-flow-browser-"));
-  const origin = "https://127.0.0.1:4444";
+  const origin = `https://127.0.0.1:${previewPort}`;
   const messages = [],
     errors = [];
   let server,
@@ -104,7 +107,12 @@ export async function storyBrowser(engine, { alipay, paymentFetch } = {}) {
     );
     server = spawn(
       process.execPath,
-      ["node_modules/vite/bin/vite.js", "preview", "--port", "4444"],
+      [
+        "node_modules/vite/bin/vite.js",
+        "preview",
+        "--port",
+        String(previewPort),
+      ],
       {
         cwd: join(root, "apps/web"),
         env: {
@@ -117,16 +125,20 @@ export async function storyBrowser(engine, { alipay, paymentFetch } = {}) {
       },
     );
     await new Promise((done, fail) => {
+      let serverError = "";
+      server.stderr.on("data", (data) => {
+        serverError += String(data);
+      });
       const timeout = setTimeout(
         () => fail(Error("preview start timeout")),
         15000,
       );
       server.once("exit", () => {
         clearTimeout(timeout);
-        fail(Error("preview exited"));
+        fail(Error(`preview exited: ${serverError}`));
       });
       server.stdout.on("data", (data) => {
-        if (String(data).includes("4444")) {
+        if (String(data).includes(String(previewPort))) {
           clearTimeout(timeout);
           done();
         }

@@ -74,14 +74,12 @@ for (const engine of [chromium, webkit])
         const buyer = await books.login();
         const context =
           engine === webkit
-            ? await f.context
-                .browser()
-                .newContext({
-                  ignoreHTTPSErrors: true,
-                  viewport: { width: 390, height: 844 },
-                  userAgent:
-                    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1",
-                })
+            ? await f.context.browser().newContext({
+                ignoreHTTPSErrors: true,
+                viewport: { width: 390, height: 844 },
+                userAgent:
+                  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1",
+              })
             : f.context;
         let submitted;
         await context.route(
@@ -98,6 +96,18 @@ for (const engine of [chromium, webkit])
           },
         );
         const page = await context.newPage();
+        for (const path of ["/", "/account"]) {
+          await page.goto(`${f.origin}/app${path}`);
+          await page
+            .getByRole("button", { name: "新购一本书", exact: true })
+            .click();
+          await expect(page.getByRole("dialog")).toBeVisible();
+          assert.equal(new URL(page.url()).pathname, `/app${path}`);
+          await page
+            .getByRole("button", { name: "关闭登录", exact: true })
+            .click();
+          await expect(page.getByRole("dialog")).toBeHidden();
+        }
         await page.goto(`${f.origin}/app/purchase`);
         await f.signIn(page, f.phoneFor(buyer));
         await expect(
@@ -118,6 +128,10 @@ for (const engine of [chromium, webkit])
           page.getByText("暂未确认付款。完成支付宝付款后，回到这里查询。", {
             exact: true,
           }),
+        ).toBeVisible();
+        await page.reload();
+        await expect(
+          page.getByRole("button", { name: "继续支付宝付款", exact: true }),
         ).toBeVisible();
         assert.equal(
           await page.evaluate(() => !!window.unsafePaymentScript),
@@ -152,6 +166,32 @@ for (const engine of [chromium, webkit])
         const list = (await response.json()).data.projects;
         assert.equal(list.length, 1);
         assert.equal(list[0].bookTitle, "网页验收 · 外婆的纸船");
+        const wechat = await context.browser().newContext({
+          ignoreHTTPSErrors: true,
+          storageState: await context.storageState(),
+          viewport: { width: 320, height: 640 },
+          userAgent: "Mozilla/5.0 (iPhone) Mobile MicroMessenger/8.0",
+        });
+        try {
+          const insideWechat = await wechat.newPage();
+          await insideWechat.goto(`${f.origin}/app/purchase`);
+          await expect(
+            insideWechat.getByRole("heading", {
+              name: "请在浏览器中打开付款",
+              exact: true,
+            }),
+          ).toBeVisible();
+          await expect(
+            insideWechat.getByRole("button", {
+              name: "复制当前链接",
+              exact: true,
+            }),
+          ).toBeVisible();
+          assert.equal(await insideWechat.locator("form").count(), 0);
+          assert.equal(remote.size, 1);
+        } finally {
+          await wechat.close();
+        }
         await page.screenshot({
           path: join(
             root,

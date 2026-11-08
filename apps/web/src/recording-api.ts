@@ -1,4 +1,5 @@
-import { auth, restoreSession } from "./session";
+import { auth } from "./session";
+import { memberRequest } from "./project-api";
 import { WebApiError } from "./api";
 import type { LocalRecording } from "./recording-store";
 import { fetchVerifiedBlob } from "./private-media";
@@ -17,45 +18,21 @@ async function request<T>(
   data?: unknown,
   idempotencyKey: string = crypto.randomUUID(),
 ): Promise<T> {
-  const owner = auth.account.value;
-  if (!owner) throw new WebApiError(401, "请先登录后继续录音。");
-  const response = await fetch(`/api/v1${path}`, {
-    method: data === undefined ? "GET" : "POST",
-    credentials: "same-origin",
-    cache: "no-store",
-    redirect: "error",
-    signal: AbortSignal.timeout(15000),
-    headers: {
-      "X-Timenook-Web": "1",
-      ...(data === undefined
-        ? {}
-        : {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": owner.csrfToken,
-            "Idempotency-Key": idempotencyKey,
-          }),
-    },
-    ...(data === undefined ? {} : { body: JSON.stringify(data) }),
-  }).catch(() => {
-    throw Error("网络连接未完成，请重试；已保存的录音仍在本机。");
-  });
-  if (auth.account.value?.session.id !== owner.session.id)
-    throw Error("账号已变化，请重新进入项目。");
-  if (!response.ok) {
-    if (response.status === 401) void restoreSession();
-    throw new WebApiError(
-      response.status,
-      response.status === 403 || response.status === 404
-        ? "当前账号无法访问这段讲述，请重新进入项目。"
-        : response.status === 409
-          ? "讲述内容或额度已变化，请重新读取后继续。"
-          : "操作未完成，请重试。",
-    );
+  try {
+    return await memberRequest<T>(path, data, idempotencyKey);
+  } catch (error) {
+    if (error instanceof WebApiError) {
+      throw new WebApiError(
+        error.status,
+        error.status === 403 || error.status === 404
+          ? "当前账号无法访问这段讲述，请重新进入项目。"
+          : error.status === 409
+            ? "讲述内容或额度已变化，请重新读取后继续。"
+            : "操作未完成，请重试；已保存的录音仍在本机。",
+      );
+    }
+    throw error;
   }
-  const result = await response.json();
-  if (!result || !("data" in result) || result.error)
-    throw Error("录音状态读取失败，请重试。");
-  return result.data as T;
 }
 const base = (projectId: string, interviewId?: string) =>
   `/projects/${projectId}/interviews${interviewId ? `/${interviewId}` : ""}`;
