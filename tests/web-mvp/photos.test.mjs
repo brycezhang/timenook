@@ -11,7 +11,7 @@ test(
   "Vue photos upload with retry, retain captions in the story and start a photo interview",
   { timeout: 120000 },
   async () => {
-    const flow = await storyBrowser(chromium);
+    const flow = await storyBrowser(chromium, { previewPort: 4447 });
     try {
       await flow.context.addInitScript(() => {
         // The device input is synthetic; recording, MP3 encoding and upload remain real.
@@ -119,6 +119,7 @@ test(
         page.getByRole("button", { name: "开始录音", exact: true }),
       ).toBeVisible();
       assert.match(page.url(), /\/record\?interviewId=/);
+      const interviewId = new URL(page.url()).searchParams.get("interviewId");
       await page.setViewportSize({ width: 320, height: 568 });
       assert.equal(
         await page.evaluate(
@@ -163,8 +164,26 @@ test(
       await expect(
         page.getByRole("img", { name: "故事照片 1", exact: true }),
       ).toBeVisible();
+      const storyUrl = page.url();
+      await page.goto(
+        `${flow.origin}/app/projects/${p.projectId}/photos?interviewId=${interviewId}`,
+      );
+      await page
+        .getByLabel("照片说明 1", { exact: true })
+        .fill("老院子里的另一段回忆");
+      await page
+        .getByRole("button", { name: "保存照片说明", exact: true })
+        .click();
+      await page
+        .getByRole("status")
+        .filter({ hasText: "照片已保存" })
+        .waitFor();
+      await page.goto(storyUrl);
+      await expect(
+        page.getByRole("img", { name: "老院子里的另一段回忆", exact: true }),
+      ).toBeVisible();
       const media = await page
-        .getByRole("img", { name: "故事照片 1", exact: true })
+        .getByRole("img", { name: "老院子里的另一段回忆", exact: true })
         .getAttribute("src");
       const other = await flow.context.newPage();
       await other.goto(`${flow.origin}/app/account`);
@@ -172,7 +191,7 @@ test(
         .getByRole("button", { name: "退出登录", exact: true })
         .click();
       await expect(
-        page.getByRole("img", { name: "故事照片 1", exact: true }),
+        page.getByRole("img", { name: "老院子里的另一段回忆", exact: true }),
       ).toHaveCount(0);
       assert.equal(
         await page.evaluate(async (url) => {
