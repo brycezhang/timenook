@@ -23,6 +23,7 @@ export interface RecordingDraft {
     selfWritten?: { text: string; intent: string };
   };
 }
+type StoredRecording = Omit<LocalRecording, "blob"> & { audio: ArrayBuffer };
 async function database() {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open("timenook-web-recordings", 1);
@@ -58,12 +59,26 @@ async function transact<T>(
 }
 export const recordingStore = {
   async clips(userId: string, projectId: string): Promise<LocalRecording[]> {
-    return transact("clips", "readonly", (store) =>
-      store.index("owner").getAll(IDBKeyRange.only([userId, projectId])),
+    const rows = await transact<StoredRecording[]>(
+      "clips",
+      "readonly",
+      (store) =>
+        store.index("owner").getAll(IDBKeyRange.only([userId, projectId])),
     );
+    return rows.map(({ audio, ...clip }) => ({
+      ...clip,
+      blob: new Blob([audio], { type: "audio/mpeg" }),
+    }));
   },
   async save(clip: LocalRecording) {
-    await transact("clips", "readwrite", (store) => store.put(clip));
+    // WebKit can reject cloning a Blob into IndexedDB. Commit the exact MP3
+    // bytes with its metadata so recovery keeps the same recording and digest.
+    const { blob, ...metadata } = clip;
+    const stored: StoredRecording = {
+      ...metadata,
+      audio: await blob.arrayBuffer(),
+    };
+    await transact("clips", "readwrite", (store) => store.put(stored));
   },
   async draft(
     id: string,
