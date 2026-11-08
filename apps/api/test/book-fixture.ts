@@ -331,6 +331,7 @@ export async function stopBookFixture() {
 export async function enableBookBrowser(
   origin: string,
   smsSender: NonNullable<Parameters<typeof createApplication>[1]>["smsSender"],
+  options: Parameters<typeof createApplication>[1] = {},
 ) {
   await app.close();
   config.web = {
@@ -339,7 +340,11 @@ export async function enableBookBrowser(
     loginTtlSeconds: 300,
     sessionTtlSeconds: 43200,
   };
-  app = await createApplication(config, { ...fixtureOptions, smsSender });
+  app = await createApplication(config, {
+    ...fixtureOptions,
+    ...options,
+    smsSender,
+  });
 }
 
 export async function login(who = randomUUID(), target = app) {

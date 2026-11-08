@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 
 export const root = resolve(import.meta.dirname, "../..");
@@ -13,7 +14,7 @@ const { verifiedPhone } = apiRequire(
 );
 const { startProductionWorker } = apiRequire("./dist-test/src/tasks/worker.js");
 
-export async function storyBrowser(engine) {
+export async function storyBrowser(engine, { alipay, paymentFetch } = {}) {
   for (const key of ["DATABASE_URL", "REDIS_URL"])
     assert.ok(
       ["localhost", "127.0.0.1", "::1"].includes(
@@ -47,11 +48,34 @@ export async function storyBrowser(engine) {
   }
   try {
     await books.startBookFixture();
-    await books.enableBookBrowser(origin, {
-      async sendOtp(message) {
-        messages.push(message);
+    if (alipay) {
+      books.config.alipay = alipay;
+      const original = await books.db.packageVersion.findFirstOrThrow();
+      const draftId = randomUUID();
+      await books.db.packageDraft.create({
+        data: { id: draftId, realm: "local", ...original.snapshot },
+      });
+      await books.db.packageVersion.create({
+        data: {
+          id: randomUUID(),
+          realm: "local",
+          purpose: "production",
+          draftId,
+          draftRevision: 1,
+          snapshot: original.snapshot,
+          publicOffer: original.publicOffer,
+        },
+      });
+    }
+    await books.enableBookBrowser(
+      origin,
+      {
+        async sendOtp(message) {
+          messages.push(message);
+        },
       },
-    });
+      paymentFetch ? { paymentFetch } : {},
+    );
     await books.app.listen(0, "127.0.0.1");
     const port = books.app.getHttpServer().address().port;
     const key = join(dir, "key.pem"),
@@ -144,6 +168,10 @@ export async function storyBrowser(engine) {
         await page
           .getByRole("button", { name: "获取验证码", exact: true })
           .click();
+        await page
+          .getByRole("status")
+          .filter({ hasText: "验证码已发送" })
+          .waitFor();
         await page
           .getByLabel("短信验证码", { exact: true })
           .fill(messages.at(-1).code);
