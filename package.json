@@ -45,7 +45,7 @@
     "build:miniprogram:development": "TIMENOOK_MINIPROGRAM_PROFILE=development node scripts/build.mjs",
     "test:native-mvp": "pnpm test:native-online",
     "test:native-online": "pnpm build:miniprogram && node scripts/test-native-online.cjs --mvp",
-    "test:web-mvp": "node --test --test-timeout=120000 tests/web-mvp/*.test.mjs"
+    "test:web-mvp": "pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api exec tsc -p tsconfig.test.json && pnpm --filter @timenook/web build && node --test --test-timeout=120000 tests/web-mvp/*.test.mjs"
   },
   "devDependencies": {
     "@napi-rs/canvas": "0.1.100",

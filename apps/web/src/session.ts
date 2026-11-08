@@ -85,12 +85,21 @@ export const auth = {
     if (!owner) return;
     pendingLogout = owner;
     await mutate(async () => {
-      const current = await webApi.restore().catch((error) => {
-        if (error instanceof WebApiError && error.status === 401) return null;
+      try {
+        const current = await webApi.restore().catch((error) => {
+          if (error instanceof WebApiError && error.status === 401) return null;
+          throw error;
+        });
+        if (current?.session.id === owner.session.id)
+          await webApi.logout(owner.csrfToken);
+        // Restorations may have begun while DELETE was pending. Invalidate
+        // them before releasing the Cookie lock, including on request failure.
+        forget();
+        if (current && current.session.id !== owner.session.id) accept(current);
+      } catch (error) {
+        forget();
         throw error;
-      });
-      if (current?.session.id === owner.session.id)
-        await webApi.logout(owner.csrfToken);
+      }
     });
     pendingLogout = null;
     changed();

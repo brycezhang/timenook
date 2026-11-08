@@ -54,6 +54,7 @@ test(
     let reject = false;
     let app, server, browser, db;
     const runtimeErrors = [];
+    const unblock = [];
     try {
       const migrated = spawnSync(
         process.execPath,
@@ -180,6 +181,8 @@ test(
         viewport: { width: 390, height: 844 },
       });
       const page = await context.newPage();
+      page.setDefaultTimeout(10000);
+      page.setDefaultNavigationTimeout(10000);
       page.on("pageerror", (error) => runtimeErrors.push(error.message));
       await page.goto(`${origin}/app/?state=member`);
       await page.getByRole("heading", { name: /有些故事/ }).waitFor();
@@ -250,6 +253,7 @@ test(
       let gets = 0;
       const held = new Promise((resolve) => {
         releaseOld = resolve;
+        unblock.push(resolve);
       });
       const ready = new Promise((resolve) => {
         restorationReady = resolve;
@@ -266,6 +270,7 @@ test(
       await page.reload();
       await ready;
       const other = await context.newPage();
+      other.setDefaultTimeout(10000);
       await other.goto(`${origin}/app/account`);
       await other
         .getByRole("button", { name: "退出登录", exact: true })
@@ -314,9 +319,107 @@ test(
         0,
       );
       await other.goto(`${origin}/app/account`);
+      // A notification queued during logout may restore the still-valid old
+      // Cookie before the DELETE reaches the API. Deliver it after revocation.
+      let releaseDelete, releaseRestore, markDelete, markRestore;
+      let deleting = false,
+        heldRestoreRequest;
+      const deleteHeld = new Promise((resolve) => {
+        releaseDelete = resolve;
+        unblock.push(resolve);
+      });
+      const restoreHeld = new Promise((resolve) => {
+        releaseRestore = resolve;
+        unblock.push(resolve);
+      });
+      const deleteReady = new Promise((resolve) => {
+        markDelete = resolve;
+      });
+      const restoreReady = new Promise((resolve) => {
+        markRestore = resolve;
+      });
+      await other.route("**/api/v1/web/session", async (route) => {
+        if (route.request().method() === "DELETE") {
+          deleting = true;
+          markDelete();
+          await deleteHeld;
+          await route.continue();
+          return;
+        }
+        const response = await route.fetch();
+        if (deleting && !heldRestoreRequest) {
+          heldRestoreRequest = route.request();
+          markRestore();
+          await restoreHeld;
+        }
+        await route.fulfill({ response }).catch(() => {});
+      });
       await other
         .getByRole("button", { name: "退出登录", exact: true })
         .click();
+      await Promise.race([
+        deleteReady,
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("logout DELETE not started")),
+            8000,
+          ),
+        ),
+      ]);
+      await page.evaluate(() => {
+        const channel = new BroadcastChannel("timenook-web-session");
+        channel.postMessage("changed");
+        channel.close();
+      });
+      await Promise.race([
+        restoreReady,
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("queued restoration not started")),
+            8000,
+          ),
+        ),
+      ]);
+      let markLogoutComplete;
+      const logoutComplete = new Promise((resolve) => {
+        markLogoutComplete = resolve;
+      });
+      await page.exposeFunction("observeLogoutCompletion", () =>
+        markLogoutComplete(),
+      );
+      await page.evaluate(() => {
+        const channel = new BroadcastChannel("timenook-web-session");
+        channel.onmessage = () => {
+          channel.close();
+          window.observeLogoutCompletion();
+        };
+      });
+      const deleted = other.waitForResponse(
+        (response) =>
+          response.request().method() === "DELETE" &&
+          response.url().endsWith("/web/session"),
+      );
+      releaseDelete();
+      assert.equal((await deleted).status(), 204);
+      await logoutComplete;
+      const lateRestore = other.waitForResponse(
+        (response) => response.request() === heldRestoreRequest,
+      );
+      releaseRestore();
+      await (await lateRestore).json();
+      await other.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
+      assert.equal(
+        await other
+          .getByRole("button", { name: "手机号登录", exact: true })
+          .count(),
+        1,
+        "logout must invalidate restorations started during revocation",
+      );
       await page.getByRole("dialog").waitFor();
       await page.getByRole("button", { name: "关闭登录" }).click();
       for (const width of [320, 390, 768, 1440]) {
@@ -359,6 +462,7 @@ test(
         "Verified public home/sample, SMS delivery boundary, real Cookie login, same mini-program account/project, reload, cross-tab logout, provider failure and 320–1440px layouts.",
       );
     } finally {
+      for (const resume of unblock) resume();
       await browser?.close();
       if (server) {
         server.kill("SIGTERM");
