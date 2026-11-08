@@ -253,11 +253,20 @@ test("release package excludes website and probe routes and ignores stored demo 
     });
   }
   for (const name of config.pages) {
+    const markup = await readFile(path.join(root, name + ".wxml"), "utf8");
     assert.doesNotMatch(
-      await readFile(path.join(root, name + ".wxml"), "utf8"),
-      /网页|网站|官网|测试|演示|内测|合成验证|本地验证|验证订单|体验购买|useDemo|accountLink|copyInvitation|localVerification/,
+      markup,
+      /<web-view|测试|演示|内测|合成验证|本地验证|验证订单|体验购买|useDemo|accountLink|copyInvitation|localVerification/,
     );
+    // Current terms explain verified-phone identity and each client's invitation
+    // path. This is product policy, while release navigation stays native.
+    if (name !== "pages/terms/index")
+      assert.doesNotMatch(markup, /网页|网站|官网/);
   }
+  assert.match(
+    await readFile(path.join(root, "pages/terms/index.wxml"), "utf8"),
+    /同一已验证手机号在网页和小程序对应同一产品账号/,
+  );
   const app = await harness("demo");
   const homeMarkup = await readFile(
     path.join(root, "pages/home/index.wxml"),
