@@ -110,14 +110,37 @@
   "sms": {
     "providerSendHttpStatus": 201,
     "phoneReceipt": "confirmed by user on 2026-11-08",
-    "userLogin": "deferred by user; code not entered; resume when user is available"
+    "userLogin": "passed: user entered the delivered code in Chrome and authenticated through the public SMS endpoint",
+    "secureHttpOnlyCookie": true,
+    "sessionWithin12Hours": true,
+    "temporaryWebSessionRevoked": true
   },
   "alipay": {
     "configuredAcceptanceAmountFen": 1,
     "displayAmountFen": 99900,
-    "realPayment": "deferred by user; no real payment executed",
+    "realPayment": "passed: user paid CNY 0.01 through desktop Alipay Page; shared ledger and local order both paid",
     "systemRefund": "out of scope",
-    "paymentServiceModified": false
+    "paymentServiceModified": false,
+    "acceptedChannel": "alipay_page",
+    "sharedLedgerPaid": true,
+    "businessBindingMatched": true,
+    "settlementRecorded": true,
+    "stableSingleProjectAfterQueries": true,
+    "repeatedQueries": 3,
+    "onePaymentTransaction": true,
+    "oneFirstCopyEntitlement": true,
+    "realWapPayment": "not executed"
   },
-  "deviceAndPhysicalAcceptance": "fresh Mini Program phone authorization, physical mobile microphone/browser interruptions, printing/shipping not executed"
+  "deviceAndPhysicalAcceptance": "fresh Mini Program phone authorization, physical mobile microphone/browser interruptions, printing/shipping not executed",
+  "accountIntegration": {
+    "sameBuyerForWechatAndAlipay": true,
+    "verifiedPhoneOwner": true,
+    "wechatIdentityPresent": true,
+    "priorWechatPaidProjects": 1,
+    "newAlipayPaidProjects": 1,
+    "totalVisibleProjects": 2,
+    "bothProjectOverviewsReadable": true,
+    "twoProjectCardsVisible": true,
+    "mobileLayoutFits": true
+  }
 }
