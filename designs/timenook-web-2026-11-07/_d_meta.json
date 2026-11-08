@@ -1,0 +1,23 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "时光故事网页": {
+      "versions": [
+        {
+          "path": "index.html",
+          "createdAt": "2026-11-07T06:10:23.135Z",
+          "status": "needs-review",
+          "subtitle": "Vue 3 · 未登录 / 无项目 / 已有项目 · 完整登录演示",
+          "viewport": {
+            "width": 1440,
+            "height": 1000
+          }
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-11-07T06:10:23.136Z",
+  "updatedAt": "2026-11-07T08:42:03.363Z"
+}
