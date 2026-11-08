@@ -1,0 +1,233 @@
+.recording-page {
+  max-width: 820px;
+  margin: 0 auto;
+}
+.recording-back {
+  display: inline-flex;
+  color: var(--muted);
+  margin-bottom: 24px;
+}
+.recording-panel,
+.recording-playback,
+.recording-progress,
+.recording-recovery {
+  padding: 32px;
+  margin-bottom: 24px;
+}
+.photo-recording-page .recording-back {
+  margin-bottom: 12px;
+}
+.photo-recording-page .page-heading {
+  margin-bottom: 16px;
+}
+.photo-recording-page .page-heading h1 {
+  font-size: 26px;
+}
+.photo-recording-page .recording-controls {
+  margin-top: 10px;
+  gap: 10px;
+}
+.photo-recording-page .recording-timer {
+  font-size: 32px;
+}
+.photo-recording-page .recording-panel > .text-button {
+  display: flex;
+  justify-content: center;
+  margin: 12px auto 0;
+}
+.recording-panel h2 {
+  font-size: 25px;
+  margin: 8px 0 24px;
+}
+.recording-topics {
+  display: grid;
+  gap: 10px;
+  max-height: 310px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  padding: 3px;
+}
+.recording-topic {
+  display: flex;
+  text-align: left;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--line);
+  background: transparent;
+  padding: 16px 18px;
+  border-radius: 12px;
+  line-height: 1.7;
+}
+.recording-topic.selected {
+  background: var(--sand);
+  border-color: var(--terracotta);
+}
+.recording-custom {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0 12px;
+}
+.recording-custom textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 14px;
+  border-radius: 12px;
+  color: var(--ink);
+  font: inherit;
+}
+.recording-question {
+  text-align: center;
+  padding: 16px 0;
+  overflow-wrap: anywhere;
+}
+.recording-controls {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 20px;
+  text-align: center;
+}
+.recording-timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 40px;
+  letter-spacing: 4px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.recording-timer.live {
+  color: var(--terracotta);
+}
+.recording-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.recording-start {
+  min-width: 180px;
+  min-height: 56px;
+}
+.recording-stop {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.recording-footnote {
+  color: var(--muted);
+  font-size: 12px;
+}
+.recording-spinner {
+  display: inline-block;
+  vertical-align: middle;
+  height: 18px;
+  width: 18px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: recording-spin 0.8s linear infinite;
+  margin-right: 6px;
+}
+@keyframes recording-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.recording-skeleton {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  margin: 35px auto;
+}
+.recording-playback audio {
+  width: 100%;
+  margin-top: 20px;
+}
+.recording-source-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+.recording-progress {
+  text-align: center;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 16px;
+}
+.recording-progress-icon {
+  height: 52px;
+  width: 52px;
+  display: grid;
+  place-items: center;
+  background: var(--soft);
+  color: var(--olive);
+  border-radius: 50%;
+}
+.recording-progress-icon .recording-spinner {
+  margin: 0;
+}
+.recording-task-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.recording-recovery {
+  display: grid;
+  gap: 12px;
+}
+@media (max-width: 600px) {
+  .recording-panel,
+  .recording-playback,
+  .recording-progress,
+  .recording-recovery {
+    padding: 22px 18px;
+  }
+  .recording-panel h2 {
+    font-size: 21px;
+  }
+  .recording-topic {
+    padding: 13px;
+  }
+  .recording-actions {
+    width: 100%;
+  }
+  .recording-actions .button {
+    flex: 1;
+    padding: 12px 14px;
+  }
+  .recording-topics {
+    max-height: 250px;
+  }
+}
+@media (max-height: 650px) {
+  .photo-recording-page .page-heading h1 {
+    font-size: 22px;
+  }
+  .photo-recording-page .page-heading {
+    margin: 0 0 12px;
+  }
+  .photo-recording-page .recording-panel {
+    padding-top: 16px;
+  }
+  .photo-recording-page .recording-controls {
+    gap: 7px;
+    margin-top: 0;
+  }
+  .photo-recording-page .recording-photos {
+    margin-bottom: 8px;
+  }
+  .photo-recording-page .recording-timer {
+    font-size: 28px;
+  }
+  .photo-recording-page .recording-footnote {
+    display: none;
+  }
+}

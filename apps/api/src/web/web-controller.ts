@@ -9,65 +9,26 @@ import {
   Req,
   Res,
 } from "@nestjs/common";
-import { IsString, IsUUID, Length, Matches } from "class-validator";
+import { Equals, IsString, IsUUID, Matches } from "class-validator";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import {
-  WebAccess,
-  WEB_COOKIE,
-  WEB_COOKIE_PATH,
-  MOCK_ACCOUNT_COOKIE,
-} from "./web-access";
-
-class WebLoginDto {
-  @IsString()
-  @Matches(/^[A-Za-z0-9_-]{43}$/)
-  ticket!: string;
+import { USER_TERMS_VERSION } from "@timenook/contracts";
+import { WebAccess, WEB_COOKIE, WEB_COOKIE_PATH } from "./web-access";
+import { SmsCodes } from "../sms/sms-codes";
+class SmsCodeDto {
+  @IsString() @Matches(/^(?:\+86|86)?1[3-9]\d{9}$/) phone!: string;
+  @Equals(USER_TERMS_VERSION) termsVersion!: string;
 }
-class MockPurchaseDto {
-  @IsUUID() purchaseKey!: string;
-  @IsString() @Length(1, 80) bookTitle!: string;
-  @IsString() @Length(1, 40) subjectName!: string;
+class SmsLoginDto {
+  @IsUUID() challengeId!: string;
+  @IsString() @Matches(/^\d{6}$/) code!: string;
+  @Equals(USER_TERMS_VERSION) termsVersion!: string;
 }
-
 @Controller("v1/web")
 export class WebController {
-  constructor(private readonly access: WebAccess) {}
-  @Get("experience")
-  @Header("Cache-Control", "no-store")
-  experience(@Req() request: FastifyRequest) {
-    return {
-      data: { mockEnabled: this.access.mockEnabled() },
-      meta: { requestId: request.id },
-    };
-  }
-  @Post("mock-session")
-  @Header("Cache-Control", "no-store")
-  async mockLogin(
-    @Req() request: FastifyRequest,
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ) {
-    const result = await this.access.mockLogin(request);
-    this.setCookie(reply, result);
-    reply.setCookie(MOCK_ACCOUNT_COOKIE, result.ticket, {
-      path: "/api/v1/web",
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      expires: new Date(result.data.session.expiresAt),
-    });
-    return { data: result.data, meta: { requestId: request.id } };
-  }
-  @Post("mock-purchases")
-  @Header("Cache-Control", "no-store")
-  async mockPurchase(
-    @Body() input: MockPurchaseDto,
-    @Req() request: FastifyRequest,
-  ) {
-    return {
-      data: await this.access.mockPurchase(request, input),
-      meta: { requestId: request.id },
-    };
-  }
+  constructor(
+    private readonly access: WebAccess,
+    private readonly codes: SmsCodes,
+  ) {}
   private setCookie(
     reply: FastifyReply,
     result: Awaited<ReturnType<WebAccess["current"]>>,
@@ -80,35 +41,35 @@ export class WebController {
       expires: new Date(result.data.session.expiresAt),
     });
   }
+  @Post("sms-codes")
+  @Header("Cache-Control", "no-store")
+  async sendCode(@Body() input: SmsCodeDto, @Req() request: FastifyRequest) {
+    this.access.requireOrigin(request);
+    await this.access.limit(`sms-send:${request.ip}`, 20);
+    return {
+      data: await this.codes.send(input.phone, request.ip),
+      meta: { requestId: request.id },
+    };
+  }
   @Post("session")
   @Header("Cache-Control", "no-store")
-  async exchange(
-    @Body() command: WebLoginDto,
+  async login(
+    @Body() input: SmsLoginDto,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     this.access.requireOrigin(request);
-    await this.access.limit(request.ip);
-    const result = await this.access.exchange(
-      command.ticket,
-      request.cookies[WEB_COOKIE],
-    );
+    await this.access.limit(`sms-login:${request.ip}`, 30);
+    const phone = await this.codes.consume(input.challengeId, input.code);
+    const result = await this.access.login(phone, request.cookies[WEB_COOKIE]);
     this.setCookie(reply, result);
     return { data: result.data, meta: { requestId: request.id } };
   }
   @Get("session")
   @Header("Cache-Control", "no-store")
-  async current(
-    @Req() request: FastifyRequest,
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ) {
+  async current(@Req() request: FastifyRequest) {
     const result = await this.access.current(request);
-    // Refresh the browser's bounded persistent-cookie retention on real use.
-    this.setCookie(reply, result);
-    return {
-      data: result.data,
-      meta: { requestId: request.id },
-    };
+    return { data: result.data, meta: { requestId: request.id } };
   }
   @Delete("session")
   @HttpCode(204)
@@ -124,13 +85,5 @@ export class WebController {
       secure: true,
       sameSite: "strict",
     });
-  }
-  @Get("projects")
-  @Header("Cache-Control", "no-store")
-  async projects(@Req() request: FastifyRequest) {
-    return {
-      data: await this.access.projects(request),
-      meta: { requestId: request.id },
-    };
   }
 }

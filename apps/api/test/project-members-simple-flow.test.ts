@@ -28,6 +28,15 @@ test("project lists show the purchase title for owners and members, then prefer 
   const invite = data(
     await request("POST", `${base}/invitations`, p.buyer.token),
   );
+  const preview = data(
+    await request("GET", `/v1/invitations/${invite.token}`),
+    200,
+  );
+  assert.equal(
+    preview.bookTitle,
+    "私人标题不能泄露",
+    "invitation uses the same purchased book title",
+  );
   data(
     await request(
       "POST",
@@ -359,7 +368,12 @@ test("payer and multiple invited members can create, edit, preview and submit wi
     404,
   );
   assert.equal(
-    await db.termsAcceptance.count({ where: { version: TERMS_VERSION } }),
+    await db.termsAcceptance.count({
+      where: {
+        version: TERMS_VERSION,
+        userId: { in: [p.buyer.id, member.id, second.id, outsider.id] },
+      },
+    }),
     4,
   );
 });

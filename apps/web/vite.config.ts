@@ -1,7 +1,8 @@
-import { lamejsLicense } from "../../tools/lamejs-license";
+import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 import { readFileSync } from "node:fs";
 import { privateArtifactsDeny } from "../../tools/vite-private-artifacts";
+import { lamejsLicense } from "../../tools/lamejs-license";
 
 const tls =
   process.env.TIMENOOK_WEB_TLS_CERT && process.env.TIMENOOK_WEB_TLS_KEY
@@ -20,12 +21,9 @@ const proxy = process.env.TIMENOOK_WEB_API_TARGET
   : undefined;
 
 export default defineConfig({
-  plugins: [lamejsLicense()],
+  plugins: [vue(), lamejsLicense()],
   worker: { format: "es" },
   base: "/app/",
-  define: {
-    __TIMENOOK_COOKIE_WEB__: "true",
-  },
   server: {
     host: "127.0.0.1",
     port: 4330,

@@ -6,6 +6,15 @@ export const phoneLogin = () => ({
   termsVersion: USER_TERMS_VERSION,
 });
 
+const verifiedPhones = new Map<string, string>();
+let nextPhone = 10000;
+export function verifiedPhone(appId: string, openId: string) {
+  const identity = `${appId}:${openId}`;
+  if (!verifiedPhones.has(identity))
+    verifiedPhones.set(identity, `13${nextPhone++}1234`);
+  return verifiedPhones.get(identity)!;
+}
+
 // Only WeChat's external token/phone endpoints are substituted; login HTTP,
 // account ownership, PostgreSQL transactions and Redis remain real.
 export function withWechatProfile(identityFetch: typeof fetch): typeof fetch {
@@ -24,12 +33,16 @@ export function withWechatProfile(identityFetch: typeof fetch): typeof fetch {
       const appid = url.searchParams
         .get("access_token")
         ?.slice("synthetic-access:".length);
+      const phone = verifiedPhone(
+        appid!,
+        JSON.parse(String(options?.body)).openid,
+      );
       return new Response(
         JSON.stringify({
           errcode: 0,
           phone_info: {
-            phoneNumber: "13800001234",
-            purePhoneNumber: "13800001234",
+            phoneNumber: phone,
+            purePhoneNumber: phone,
             countryCode: "86",
             watermark: { appid },
           },

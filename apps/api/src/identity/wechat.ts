@@ -85,7 +85,21 @@ export async function exchangePhoneCode(
     watermark?.appid !== appId
   )
     throw new BadGatewayException();
-  return info.phoneNumber;
+  const country = String(info.countryCode ?? "").replace(/^\+/, "");
+  const local = info.purePhoneNumber;
+  if (
+    !/^[1-9]\d{0,3}$/.test(country) ||
+    typeof local !== "string" ||
+    !/^\d{4,14}$/.test(local)
+  )
+    throw new BadGatewayException();
+  const canonical = `+${country}${local}`;
+  if (
+    !/^\+[1-9]\d{6,14}$/.test(canonical) ||
+    ![local, country + local, canonical].includes(info.phoneNumber)
+  )
+    throw new BadGatewayException();
+  return canonical;
 }
 
 // The only replaceable boundary is the external network request. There is no

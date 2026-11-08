@@ -1,3 +1,4 @@
+import { WebOrders, WebOrdersController } from "./payments/web-orders";
 import { validateInternalMediaConfig } from "./media/product-runtime";
 import { PrivacyRights } from "./care/privacy-rights";
 import {
@@ -146,11 +147,8 @@ import { IdentityAccess, WECHAT_FETCH } from "./identity/identity-access";
 import { IdentityController } from "./identity/identity-controller";
 import { WebController } from "./web/web-controller";
 import { WebAccess } from "./web/web-access";
-import {
-  WechatLinks,
-  WebWechatLinkController,
-  NativeWechatLinkController,
-} from "./identity/wechat-link";
+import { SmsCodes } from "./sms/sms-codes";
+import { SMS_SENDER, aliyunSmsSender, type SmsSender } from "./sms/aliyun-sms";
 import { HttpException } from "@nestjs/common";
 
 @Controller("health")
@@ -203,6 +201,7 @@ export async function createApplication(
     probeObjects?: ProbeObjects;
     aiFetch?: typeof fetch;
     paymentFetch?: typeof fetch;
+    smsSender?: SmsSender;
     recordingObjects?: ProbeObjects;
     refundRuntime?: Partial<RefundRuntime>;
   } = {},
@@ -218,12 +217,20 @@ export async function createApplication(
     throw new ConfigurationError(
       "Internal acceptance requires its profile, web sessions, independent privacy journal and ordinary merchant payments when configured",
     );
+  if (
+    config.alipay?.e2eAmountFen !== undefined &&
+    (config.alipay.e2eAmountFen !== 1 || !config.acceptance)
+  )
+    throw new ConfigurationError(
+      "Alipay one-fen acceptance requires its separate server amount and internal acceptance assembly",
+    );
   if (config.web) {
     validateWebConfig(config.web);
     if (
       config.environment !== "test" &&
       !config.acceptance &&
-      (config.payments ||
+      (config.alipay ||
+        config.payments ||
         config.participation ||
         config.recording ||
         config.photos ||
@@ -235,6 +242,10 @@ export async function createApplication(
         "Web product runtime requires the separate controlled acceptance assembly and lifetime-service verification",
       );
   }
+  if (options.smsSender && config.environment !== "test")
+    throw new ConfigurationError(
+      "SMS transport overrides require isolated tests",
+    );
   if (options.feishuFetch && config.environment !== "test")
     throw new ConfigurationError(
       "Feishu transport overrides require isolated tests",
@@ -397,6 +408,10 @@ export async function createApplication(
   // Development/production always use the native merchant transport.
   if (
     (options.paymentFetch && config.environment !== "test") ||
+    (config.alipay &&
+      (!config.web ||
+        (config.environment === "test" &&
+          (!options.paymentFetch || options.paymentFetch === fetch)))) ||
     (config.payments &&
       (!["local-verification", "ordinary-merchant"].includes(
         config.payments.mode,
@@ -440,6 +455,7 @@ export async function createApplication(
     );
   }
   const productEnabled = !!(
+    config.alipay ||
     config.acceptance ||
     config.payments ||
     config.participation ||
@@ -486,8 +502,9 @@ export async function createApplication(
   const module = {
     module: AppModule,
     controllers: [
-      ...(config.web ? [WebController, WebWechatLinkController] : []),
-      NativeWechatLinkController,
+      ...(config.web ? [WebController] : []),
+      ...(config.web && config.alipay ? [WebOrdersController] : []),
+      ...(config.web && !productEnabled ? [ParticipationController] : []),
       PaymentWebhookController,
       RefundWebhookController,
       ...(config.payments
@@ -552,7 +569,16 @@ export async function createApplication(
         : []),
     ],
     providers: [
-      ...(config.web ? [WebAccess] : []),
+      ...(config.web
+        ? [
+            WebAccess,
+            SmsCodes,
+            {
+              provide: SMS_SENDER,
+              useValue: options.smsSender ?? aliyunSmsSender(config.sms),
+            },
+          ]
+        : []),
       { provide: API_CONFIG, useValue: config },
       { provide: ADMIN_FEISHU_FETCH, useValue: options.feishuFetch ?? fetch },
       Infrastructure,
@@ -657,7 +683,6 @@ export async function createApplication(
         : []),
       { provide: WECHAT_FETCH, useValue: options.wechatFetch ?? fetch },
       IdentityAccess,
-      WechatLinks,
       ProjectStreams,
       Participation,
       PersonalPlans,
@@ -665,6 +690,7 @@ export async function createApplication(
       AdminAccess,
       Catalog,
       Orders,
+      WebOrders,
       Refunds,
       {
         provide: REFUND_RUNTIME,

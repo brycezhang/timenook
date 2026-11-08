@@ -18,6 +18,7 @@ import type {
 } from "@timenook/contracts";
 import { API_CONFIG, ApiConfig } from "../config";
 import { exchangeCode, exchangePhoneCode, wechatAccessToken } from "./wechat";
+import { phoneAccountIn } from "./phone-account";
 import { acceptTermsIn } from "./project-members";
 
 export const WECHAT_FETCH = Symbol("WECHAT_FETCH");
@@ -150,40 +151,18 @@ export class IdentityAccess implements OnModuleDestroy {
     );
     const token = randomBytes(32).toString("base64url");
     const session = await this.database.$transaction(async (transaction) => {
-      // Serialize first-account creation for the same WeChat identity across processes.
-      await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify([appId, openId])}, 0))`;
-      let stored = await transaction.wechatIdentity.findUnique({
-        where: { appId_openId: { appId, openId } },
+      const user = await phoneAccountIn(transaction, phoneNumber, {
+        appId,
+        openId,
       });
-      if (expectedUserId && stored?.userId !== expectedUserId)
+      if (expectedUserId && user.id !== expectedUserId)
         throw new ConflictException();
-      if (!stored) {
-        // An explicit pairing must finish or expire before ordinary first login.
-        const pairing = await transaction.wechatLink.findFirst({
-          where: {
-            appId,
-            openId,
-            state: "paired",
-            expiresAt: { gt: new Date() },
-            session: { revokedAt: null, expiresAt: { gt: new Date() } },
-          },
-        });
-        if (pairing) throw new ConflictException();
-        const user = await transaction.user.create({
-          data: { id: randomUUID(), nickname: `用户${phoneNumber.slice(-4)}` },
-        });
-        stored = await transaction.wechatIdentity.create({
-          data: { appId, openId, userId: user.id },
-        });
-      }
-      // Preserve a nickname edited concurrently by another owned session.
-      await transaction.$executeRaw`UPDATE users SET phone_number=${phoneNumber}, nickname=COALESCE(nickname, ${`用户${phoneNumber.slice(-4)}`}) WHERE id=${stored.userId}::uuid`;
-      await acceptTermsIn(transaction, stored.userId, "wechat_login");
+      await acceptTermsIn(transaction, user.id, "wechat_login");
       return transaction.session.create({
         include: { user: { select: { nickname: true } } },
         data: {
           id: randomUUID(),
-          userId: stored.userId,
+          userId: user.id,
           tokenHash: digest(token),
           expiresAt: new Date(
             Date.now() + (this.config.sessionTtlSeconds ?? 604800) * 1000,

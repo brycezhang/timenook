@@ -1,3 +1,4 @@
+import { fixtureWebSession } from "./web-session-fixture";
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
@@ -110,23 +111,11 @@ async function cli(kind: "web" | "internal", command: string, input: object) {
   return JSON.parse(await readFile(outputFile, "utf8"));
 }
 async function signedIn() {
-  const account = await cli("web", "create", {}),
-    issued = await cli("web", "issue", { userId: account.user.id });
-  const response = await app.inject({
-    method: "POST",
-    url: "/v1/web/session",
-    headers,
-    payload: {
-      ticket: new URLSearchParams(new URL(issued.url).hash.slice(1)).get(
-        "ticket",
-      ),
-    },
-  });
-  assert.equal(response.statusCode, 201);
+  const session = await fixtureWebSession(app, config);
   return {
-    user: account.user,
-    cookie: String(response.headers["set-cookie"]).split(";")[0],
-    csrf: response.json().data.csrfToken,
+    user: session.user,
+    cookie: session.cookie,
+    csrf: session.csrfToken,
   };
 }
 test("controlled CLI creates one real internal project across concurrent retries without any payment identity", async () => {
@@ -144,12 +133,14 @@ test("controlled CLI creates one real internal project across concurrent retries
   assert.equal(first.source, "internal-acceptance");
   const response = await app.inject({
     method: "GET",
-    url: "/v1/web/projects",
+    url: "/v1/participations",
     headers: { cookie: owner.cookie },
   });
   assert.equal(response.statusCode, 200);
   assert.deepEqual(
-    response.json().data.projects.map((p: { id: string }) => p.id),
+    response
+      .json()
+      .data.projects.map((p: { projectId: string }) => p.projectId),
     [first.projectId],
   );
   const db = new PrismaClient({ datasourceUrl: config.databaseUrl });
@@ -182,159 +173,13 @@ function request(
   });
 }
 
-test("mock checkout creates an isolated account and one internal project without any real payment", async () => {
-  const mode = await app.inject({ method: "GET", url: "/v1/web/experience" });
-  assert.equal(mode.json().data.mockEnabled, true);
-  assert.equal(
-    (
-      await app.inject({
-        method: "POST",
-        url: "/v1/web/mock-session",
-        payload: {},
-      })
-    ).statusCode,
-    403,
-  );
-  const loggedIn = await app.inject({
-    method: "POST",
-    url: "/v1/web/mock-session",
-    headers,
-    payload: {},
-  });
-  assert.equal(loggedIn.statusCode, 201);
-  const cookies = (loggedIn.headers["set-cookie"] as string[]).map(
-    (value) => value.split(";")[0],
-  );
-  const cookie = cookies.join("; ");
-  const actor = loggedIn.json().data;
-  const payload = {
-    purchaseKey: randomUUID(),
-    bookTitle: "妈妈的一生",
-    subjectName: "妈妈",
-  };
-  const purchase = (body = payload) =>
-    app.inject({
-      method: "POST",
-      url: "/v1/web/mock-purchases",
-      headers: { ...headers, cookie, "x-csrf-token": actor.csrfToken },
-      payload: body,
-    });
-  assert.equal(
-    (
-      await app.inject({
-        method: "POST",
-        url: "/v1/web/mock-purchases",
-        headers: { ...headers, cookie },
-        payload,
-      })
-    ).statusCode,
-    403,
-  );
-  const [first, replay] = await Promise.all([purchase(), purchase()]);
-  assert.equal(first.statusCode, 201);
-  assert.equal(replay.statusCode, 201);
-  assert.deepEqual(first.json().data, replay.json().data);
-  assert.equal(first.json().data.source, "internal-acceptance");
-  const projectId = first.json().data.projectId;
-  assert.equal(
-    (await purchase({ ...payload, bookTitle: "不同的输入" })).statusCode,
-    409,
-  );
-  const list = await app.inject({
-    method: "GET",
-    url: "/v1/web/projects",
-    headers: { cookie },
-  });
-  assert.deepEqual(
-    list.json().data.projects.map((p: { id: string }) => p.id),
-    [projectId],
-  );
-  const db = new PrismaClient({ datasourceUrl: config.databaseUrl });
-  try {
-    assert.equal(
-      (await db.project.findUniqueOrThrow({ where: { id: projectId } }))
-        .createdBy,
-      actor.user.id,
-    );
-    assert.equal(
-      await db.paymentOrder.count({ where: { buyerId: actor.user.id } }),
-      0,
-    );
-    assert.equal(
-      await db.firstCopyEntitlement.count({ where: { projectId } }),
-      0,
-    );
-    assert.equal(
-      await db.wechatIdentity.count({ where: { userId: actor.user.id } }),
-      0,
-    );
-  } finally {
-    await db.$disconnect();
-  }
-  const logout = await app.inject({
-    method: "DELETE",
-    url: "/v1/web/session",
-    headers: { ...headers, cookie, "x-csrf-token": actor.csrfToken },
-  });
-  assert.equal(logout.statusCode, 204);
-  const again = await app.inject({
-    method: "POST",
-    url: "/v1/web/mock-session",
-    headers: {
-      ...headers,
-      cookie: cookies.find((value) =>
-        value.startsWith("__Secure-timenook_mock="),
-      ),
-    },
-    payload: {},
-  });
-  assert.equal(again.statusCode, 201);
-  assert.equal(again.json().data.user.id, actor.user.id);
-  const other = await app.inject({
-    method: "POST",
-    url: "/v1/web/mock-session",
-    headers,
-    payload: {},
-  });
-  assert.notEqual(other.json().data.user.id, actor.user.id);
-});
-
-test("normal mode never offers mock login or mock payment", async () => {
-  const regular = await createApplication({ ...config, acceptance: undefined });
-  try {
-    assert.equal(
-      (
-        await regular.inject({ method: "GET", url: "/v1/web/experience" })
-      ).json().data.mockEnabled,
-      false,
-    );
-    assert.equal(
-      (
-        await regular.inject({
-          method: "POST",
-          url: "/v1/web/mock-session",
-          headers,
-          payload: {},
-        })
-      ).statusCode,
-      503,
-    );
-    assert.equal(
-      (
-        await regular.inject({
-          method: "POST",
-          url: "/v1/web/mock-purchases",
-          headers,
-          payload: {
-            purchaseKey: randomUUID(),
-            bookTitle: "测试",
-            subjectName: "测试",
-          },
-        })
-      ).statusCode,
-      503,
-    );
-  } finally {
-    await regular.close();
+test("demo login and purchase endpoints are absent even in internal acceptance", async () => {
+  for (const [method, url] of [
+    ["GET", "/v1/web/experience"],
+    ["POST", "/v1/web/mock-session"],
+    ["POST", "/v1/web/mock-purchases"],
+  ] as const) {
+    const response = await app.inject({ method, url, headers });
+    assert.equal(response.statusCode, 404);
   }
 });

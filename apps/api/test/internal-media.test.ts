@@ -1,3 +1,4 @@
+import { fixtureWebSession } from "./web-session-fixture";
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -200,29 +201,14 @@ function data(
   return r.json().data;
 }
 async function login(): Promise<Actor> {
-  const user = (await provisionWebAccount(config, "create", {})) as {
-      user: { id: string };
-    },
-    link = (await provisionWebAccount(config, "issue", {
-      userId: user.user.id,
-    })) as { url: string },
-    reply = await app.inject({
-      method: "POST",
-      url: "/v1/web/session",
-      headers: { origin, "x-timenook-web": "1" },
-      payload: {
-        ticket: new URLSearchParams(new URL(link.url).hash.slice(1)).get(
-          "ticket",
-        ),
-      },
-    });
-  const current = data(reply);
+  const session = await fixtureWebSession(app, config);
   return {
-    id: user.user.id,
-    cookie: String(reply.headers["set-cookie"]).split(";")[0],
-    csrf: current.csrfToken,
+    id: session.user.id,
+    cookie: session.cookie,
+    csrf: session.csrfToken,
   };
 }
+
 function request(
   method: "GET" | "POST",
   url: string,
