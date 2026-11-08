@@ -13,7 +13,13 @@
 - 项目详情、故事搜索与入书筛选、故事阅读/版本编辑、编入及移出书稿；并发版本冲突保留未保存的文字。
 - 项目名称与昵称修改，网页邀请链接生成、短信登录返回原邀请、明确同意并接受后取得成员资格。
 
-录音、照片、书稿编辑、支付宝购买和印刷等后续切片继续实施。WV03 本身不创建销售订单或修改 payment-service。
+- 选题与自写话题、真实 MP3 暂停继续、本机可靠保存、结束自动上传、刷新恢复和失败重试，真实转写/整理结果及原声回听。
+- 照片上传与重试、说明和删除、照片起点讲述、故事照片快照与封面选图。
+- 封面、章节与故事编排、真实书稿生成和失败重试、确定版本 PDF 阅读/下载、书中原声。
+- 支付宝电脑 Page / 手机外部浏览器 WAP；微信内提示外部打开，回跳由服务端核账后幂等交付项目，不接支付宝系统退款，不修改 payment-service。
+- 服务端支持的收货地址、确定书稿提交首本、制作与物流进度；保留当前客服取消边界，不调用管理接口。
+
+工程与实际部署、短信、资金和设备结果分别见[整站交付记录](../../docs/delivery/2026-11-08/web-mvp-integration.md)。
 
 ## 开发与验证
 
@@ -30,6 +36,7 @@ pnpm --filter @timenook/web build
 - `TIMENOOK_WEB_TLS_CERT` / `TIMENOOK_WEB_TLS_KEY`：本地 HTTPS 证书路径。
 - `TIMENOOK_WEB_API_TARGET`：API 进程地址，代理将 `/api/v1/...` 转发到 `/v1/...`。
 - API `WEB_ORIGIN`：实际网页 HTTPS origin；`WEB_SESSION_KEY` 为服务端随机 32 字节 base64 密钥。
+- API `TIMENOOK_ALIPAY_ENABLED=1`、`PAYMENT_SERVICE_BASE_URL`、`PAYMENT_SERVICE_INTERNAL_TOKEN`：仅服务端连接现有支付服务。默认实收 99900 分；获授权的受控验收可配置 `TIMENOOK_ALIPAY_E2E_AMOUNT_FEN=1`，需同时启用受控环境。
 - API `ALIYUN_SMS_ACCESS_KEY_ID`、`ALIYUN_SMS_ACCESS_KEY_SECRET`、`ALIYUN_SMS_SIGN_NAME`、`ALIYUN_SMS_TEMPLATE_CODE`：真实短信配置，保存在 Git 外，禁止使用 `VITE_` 前缀。
 
 ```sh
@@ -38,7 +45,7 @@ pnpm --filter @timenook/web dev
 
 未配置短信时发送接口返回失败，不会签发验证码登录会话。无浏览器开关可跳过验证码；旧内测票据、模拟登录/购买和手动微信配对不再通过公开 HTTP 登录入口提供。
 
-浏览器定向验证使用构建后的网页、隔离 PostgreSQL schema 和 Redis 命名空间，仅替换外部短信/微信网络，不开启运行时演示模式：
+浏览器定向验证使用构建后的网页、隔离 PostgreSQL schema 和 Redis 命名空间，仅替换外部短信/微信/支付/媒体供应商传输和设备输入，不开启运行时演示模式：
 
 ```sh
 pnpm --filter @timenook/contracts build
