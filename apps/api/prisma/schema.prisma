@@ -412,9 +412,11 @@ model PaymentOrder {
   creationState String @default("active") @map("creation_state")
   id String @id @db.Uuid
   buyerId String @map("buyer_id") @db.Uuid
-  appId String @map("app_id")
-  openId String @map("open_id")
-  merchantId String @map("merchant_id")
+  provider String @default("wechat")
+  channel String?
+  appId String? @map("app_id")
+  openId String? @map("open_id")
+  merchantId String? @map("merchant_id")
   outTradeNo String @unique @map("out_trade_no")
   idempotencyKey String @map("idempotency_key")
   requestHash String @map("request_hash") @db.Char(64)
@@ -488,6 +490,7 @@ model RefundInbox {
 }
 
 model PaymentSubmission {
+ remoteOrderNo String? @unique @map("remote_order_no")
  orderId String @id @map("order_id") @db.Uuid
  submittedAt DateTime @default(now()) @map("submitted_at") @db.Timestamptz(3)
  parameters Json?
