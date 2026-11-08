@@ -38,6 +38,7 @@ export interface ApiConfig {
   };
   payments?: WechatPayConfig;
   checkoutE2e?: { enabled: true };
+  alipay?: { baseUrl: string; internalToken: string; e2eAmountFen?: 1 };
   // No production D08 approval exists. This mode only exercises isolated tests.
   participation?: { mode: "synthetic-d08" };
   privacyJournal?: { root: string; key: string };
@@ -156,6 +157,46 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     throw new ConfigurationError(
       "Complete valid ordinary merchant payment configuration and matching server key files are required",
     );
+  }
+  let alipay: ApiConfig["alipay"];
+  if (env.TIMENOOK_ALIPAY_ENABLED) {
+    const baseUrl = env.PAYMENT_SERVICE_BASE_URL?.trim();
+    const internalToken = env.PAYMENT_SERVICE_INTERNAL_TOKEN?.trim();
+    if (env.TIMENOOK_ALIPAY_ENABLED !== "1" || !baseUrl || !internalToken)
+      throw new ConfigurationError(
+        "Alipay requires the existing payment-service URL and internal token",
+      );
+    let parsed: URL;
+    try {
+      parsed = new URL(baseUrl);
+    } catch {
+      throw new ConfigurationError("Invalid payment-service URL");
+    }
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash
+    )
+      throw new ConfigurationError(
+        "Payment-service requires an HTTPS URL without embedded credentials",
+      );
+    if (
+      env.TIMENOOK_ALIPAY_E2E_AMOUNT_FEN &&
+      (env.TIMENOOK_ALIPAY_E2E_AMOUNT_FEN !== "1" ||
+        env.INTERNAL_ACCEPTANCE_ENABLED !== "1")
+    )
+      throw new ConfigurationError(
+        "Alipay one-fen acceptance requires its explicit amount and internal acceptance",
+      );
+    alipay = {
+      baseUrl: baseUrl.replace(/\/+$/, ""),
+      internalToken,
+      ...(env.TIMENOOK_ALIPAY_E2E_AMOUNT_FEN === "1"
+        ? { e2eAmountFen: 1 as const }
+        : {}),
+    };
   }
   let checkoutE2e: ApiConfig["checkoutE2e"];
   if (env.TIMENOOK_CHECKOUT_E2E_ENABLED) {
@@ -402,6 +443,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ApiConfig {
     sms: readSmsConfig(env),
     payments,
     checkoutE2e,
+    alipay,
     privacyJournal,
     aiProbe,
     audioProbe,
