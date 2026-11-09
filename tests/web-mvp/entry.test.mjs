@@ -207,7 +207,8 @@ for (const engine of [chromium, webkit])
         await page.getByRole("button", { name: "登录 / 注册" }).click();
         const dialog = page.getByRole("dialog");
         await dialog.waitFor();
-        assert.equal(await dialog.getByRole("checkbox").isChecked(), false);
+        assert.equal(await dialog.getByRole("checkbox").isChecked(), true);
+        await dialog.getByRole("checkbox").uncheck();
         await dialog.getByLabel("手机号", { exact: true }).fill("13800009991");
         await dialog.getByRole("button", { name: "获取验证码" }).click();
         await dialog
