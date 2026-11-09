@@ -18,6 +18,17 @@ type E = {
   currentTarget: { dataset: Record<string, string> };
   detail: { value: string };
 };
+type OrderIntent = {
+  key: string;
+  command: CreateOrderCommand;
+  orderId?: string;
+};
+
+function unresolvedIntent(storageKey: string) {
+  const intent = wx.getStorageSync(storageKey) as OrderIntent | undefined;
+  return intent?.orderId ? undefined : intent;
+}
+
 Page({
   data: {
     mode: dataMode(),
@@ -97,7 +108,9 @@ Page({
       dataMode() === "live" &&
       context === sessionClient.context();
     const storageKey = `timenook.payment-intent.v1:${API_BASE_URL}:${context.split(":")[0]}`;
-    const intent = context ? wx.getStorageSync(storageKey) : null;
+    const intent = context ? unresolvedIntent(storageKey) : undefined;
+    const order =
+      context === this.orderOwnerContext ? this.data.restoredOrder : null;
     this.orderOwnerContext = context;
     this.setData({
       mode,
@@ -117,8 +130,8 @@ Page({
       customLabelValue: "",
       verificationBusy: false,
       verificationError: "",
-      hasOrderIntent: !!intent,
-      restoredOrder: null,
+      hasOrderIntent: !!intent || !!order,
+      restoredOrder: order,
     });
     if (mode !== "live") return;
     this.setData({
@@ -180,9 +193,9 @@ Page({
             : {}),
         });
     }
-    if (intent?.orderId && current()) {
+    if (order && current()) {
       try {
-        const restoredOrder = await paymentClient.get(intent.orderId);
+        const restoredOrder = await paymentClient.get(order.id);
         if (current())
           this.setData({
             restoredOrder,
@@ -247,22 +260,8 @@ Page({
   },
   orders() {
     const order = this.data.restoredOrder;
-    go("order", order ? `id=${order.id}` : "");
-  },
-  async newPurchase() {
-    if (
-      !this.data.restoredOrder ||
-      this.data.restoredOrder.state === "pending" ||
-      this.data.verificationBusy
-    )
-      return;
-    const context = sessionClient.context();
-    if (!context || context !== this.orderOwnerContext) return;
-    const storageKey = `timenook.payment-intent.v1:${API_BASE_URL}:${context.split(":")[0]}`;
-    if (wx.getStorageSync(storageKey)?.orderId !== this.data.restoredOrder.id)
-      return;
-    wx.removeStorageSync(storageKey);
-    await this.onShow();
+    if (order && this.orderOwnerContext === sessionClient.context())
+      go("order", `id=${order.id}`);
   },
   // @development-only:start
   async verifyPurchase() {
@@ -289,68 +288,74 @@ Page({
     this.setData({ verificationBusy: true, verificationError: "" });
     try {
       const storageKey = `timenook.payment-intent.v1:${API_BASE_URL}:${context.split(":")[0]}`;
-      let intent = wx.getStorageSync(storageKey) as
-        | { key: string; command: CreateOrderCommand; orderId?: string }
-        | undefined;
-      const recovering = !!intent;
-      if (!intent) {
-        if (!localOnly && (!this.data.purchasable || !this.data.agreed))
-          throw new Error("套餐暂未开放购买");
-        if (!this.data.packageVersionId || !this.data.selection)
-          throw new Error("请确认套餐与称呼后重试");
-        intent = {
-          key: paymentKey(),
-          command: {
-            packageVersionId: this.data.packageVersionId,
-            bookTitle: this.data.bookTitle,
-            subjectName:
-              this.data.selectedLabel === "我"
-                ? undefined
-                : this.data.selectedLabel,
-            recipient: {
-              ...(this.data.selection.recipientCode
-                ? { typeCode: this.data.selection.recipientCode }
-                : {}),
-              relationshipLabel: this.data.selectedLabel,
+      let order =
+        this.orderOwnerContext === context ? this.data.restoredOrder : null;
+      const savedIntent = unresolvedIntent(storageKey);
+      const recovering = !!order || !!savedIntent;
+      if (order) {
+        order = await paymentClient.get(order.id);
+      } else {
+        let intent = savedIntent;
+        if (!intent) {
+          if (!localOnly && (!this.data.purchasable || !this.data.agreed))
+            throw new Error("套餐暂未开放购买");
+          if (!this.data.packageVersionId || !this.data.selection)
+            throw new Error("请确认套餐与称呼后重试");
+          intent = {
+            key: paymentKey(),
+            command: {
+              packageVersionId: this.data.packageVersionId,
+              bookTitle: this.data.bookTitle,
+              subjectName:
+                this.data.selectedLabel === "我"
+                  ? undefined
+                  : this.data.selectedLabel,
+              recipient: {
+                ...(this.data.selection.recipientCode
+                  ? { typeCode: this.data.selection.recipientCode }
+                  : {}),
+                relationshipLabel: this.data.selectedLabel,
+              },
             },
-          },
-        };
-        // Persist before the first request: unknown network results replay this intent.
-        wx.setStorageSync(storageKey, intent);
-        this.setData({ hasOrderIntent: true });
-      }
-      const order = await (
-        intent.orderId
-          ? paymentClient.get(intent.orderId)
-          : paymentClient.create(intent.command, intent.key)
-      ).catch((error: unknown) => {
-        // This create endpoint returns INVALID_REQUEST before insertion or after
-        // rolling back its transaction. Other failures can still hide an order.
-        if (
-          !intent.orderId &&
-          error instanceof ApiFailure &&
-          error.status === 400 &&
-          error.code === "INVALID_REQUEST" &&
-          error.requestId &&
-          current() &&
-          wx.getStorageSync(storageKey)?.key === intent.key
-        ) {
-          wx.removeStorageSync(storageKey);
-          this.setData({ hasOrderIntent: false, restoredOrder: null });
-          throw new Error("订单未创建，请核对套餐与称呼后重试");
+          };
+          // Keep the request until the server returns the order ID.
+          wx.setStorageSync(storageKey, intent);
+          this.setData({ hasOrderIntent: true });
         }
-        throw error;
-      });
+        try {
+          order = await paymentClient.create(intent.command, intent.key);
+        } catch (error) {
+          // This rejection means the server did not insert an order.
+          if (
+            error instanceof ApiFailure &&
+            error.status === 400 &&
+            error.code === "INVALID_REQUEST" &&
+            error.requestId &&
+            current() &&
+            wx.getStorageSync(storageKey)?.key === intent.key
+          ) {
+            wx.removeStorageSync(storageKey);
+            this.setData({ hasOrderIntent: false });
+            throw new Error("订单未创建，请核对套餐与称呼后重试");
+          }
+          throw error;
+        }
+        if (!current()) return;
+        // Keep this order on the current page. Pending orders can also be
+        // reopened from the project list.
+        if (wx.getStorageSync(storageKey)?.key === intent.key)
+          wx.removeStorageSync(storageKey);
+      }
       if (!current()) return;
-      // Save the original order before opening WeChat, including cancelled or
-      // unknown outcomes. Reentry queries this order instead of creating another.
-      intent.orderId = order.id;
-      wx.setStorageSync(storageKey, intent);
       this.orderOwnerContext = context;
       this.setData({ hasOrderIntent: true, restoredOrder: order });
       if (order.state === "pending" && (!recovering || localOnly))
-        await paymentClient.pay(order.id, { localOnly, isCurrent: current });
+        order = await paymentClient.pay(order.id, {
+          localOnly,
+          isCurrent: current,
+        });
       if (!current()) return;
+      this.setData({ restoredOrder: order });
       go("order", `id=${order.id}`);
     } catch (error) {
       if (current())

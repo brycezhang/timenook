@@ -297,7 +297,94 @@ const paidNativeOrder = {
     entitlement: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", copies: 1 },
   },
 };
-test("release checkout needs no shipping region, persists the order before native payment and restores the same paid project after cancellation", async () => {
+
+test("a fresh book opens native payment for a new order even when a previous order is cached", async () => {
+  const h = harness(undefined, true);
+  h.storage.set(`timenook.payment-intent.v1:${base}:${token.user.id}`, {
+    key: "previous-purchase",
+    command: { bookTitle: "上一本书" },
+    orderId: order.id,
+  });
+  h.page.onLoad({ bookTitle: encodeURIComponent("我") });
+  const shown = h.page.onShow();
+  respond(
+    h.requests.find((r) => r.url.endsWith("recipient-types"))!,
+    {
+      types: [],
+      customLabelAllowed: true,
+      scope: "one_adult_subject_one_initiator",
+    },
+  );
+  respond(
+    h.requests.find((r) => r.url.endsWith("packages/current"))!,
+    {
+      purchasable: true,
+      reason: "E2E_ONLY",
+      checkout: { listAmount: 99900, amount: 1, currency: "CNY", isE2e: true },
+      version: {
+        id: "44444444-4444-4444-8444-444444444444",
+        purpose: "e2e",
+        title: "故事记录与整理",
+        price: { value: 99900, unit: "fen", currency: "CNY" },
+        scope: {
+          projects: 1,
+          adultSubjects: 1,
+          initiators: 1,
+          firstCopies: 1,
+          agreedShippingIncluded: true,
+          completeExportIncluded: true,
+        },
+        shippingRegions: [],
+        terms: [],
+      },
+    },
+  );
+  await tick();
+  assert.equal(h.page.data.hasOrderIntent, false);
+  await shown;
+  assert.equal(h.requests.length, 2);
+  assert.equal(h.payments.length, 0);
+  h.requests.length = 0;
+
+  const action = h.page.pay();
+  const create = h.requests.shift()!;
+  assert.equal(create.url, base + "/orders");
+  assert.equal((create.data as { bookTitle: string }).bookTitle, "我");
+  assert.notEqual(create.header?.["Idempotency-Key"], "previous-purchase");
+  const newOrder = {
+    ...nativeOrder,
+    id: "66666666-6666-4666-8666-666666666666",
+    bookTitle: "我",
+  };
+  respond(create, newOrder);
+  await tick();
+  const prepare = h.requests.shift()!;
+  assert.equal(prepare.url, base + "/orders/" + newOrder.id + "/payment");
+  respond(prepare, {
+    mode: "wechat",
+    status: "prepared",
+    parameters: {
+      timeStamp: "1780000000",
+      nonceStr: "native",
+      package: "prepay_id=new-book",
+      signType: "RSA",
+      paySign: "signed",
+    },
+  });
+  await tick();
+  assert.equal(h.payments[0]?.package, "prepay_id=new-book");
+  assert.deepEqual(h.calls, ["native-payment"]);
+  h.payments[0].fail?.({ errMsg: "requestPayment:fail cancel" });
+  await tick();
+  respond(h.requests.shift()!, newOrder);
+  await action;
+  assert.deepEqual(h.calls, [
+    "native-payment",
+    "/pages/order/index?id=" + newOrder.id,
+  ]);
+});
+
+test("release checkout keeps the created order on the same page and queries it after cancellation", async () => {
   const h = harness(undefined, true);
   h.page.setData({
     purchasable: true,
@@ -318,7 +405,8 @@ test("release checkout needs no shipping region, persists the order before nativ
   assert.equal(h.page.data.hasOrderIntent, true);
   respond(h.requests.shift()!, nativeOrder);
   await tick();
-  assert.equal((intents()[0][1] as { orderId: string }).orderId, order.id);
+  assert.equal(intents().length, 0);
+  assert.equal(h.page.data.restoredOrder.id, order.id);
   respond(h.requests.shift()!, {
     mode: "wechat",
     status: "prepared",
@@ -337,26 +425,9 @@ test("release checkout needs no shipping region, persists the order before nativ
   assert.equal(h.requests[0].url, base + "/orders/" + order.id);
   respond(h.requests.shift()!, nativeOrder);
   await action;
-  assert.ok(h.calls.includes("/pages/order/index?id=" + order.id));
-  const restarted = harness(h.storage, true);
-  const recovered = restarted.page.pay();
-  assert.equal(restarted.requests[0]?.url, base + "/orders/" + order.id);
-  respond(restarted.requests.shift()!, paidNativeOrder);
-  await recovered;
-  assert.deepEqual(restarted.calls, ["/pages/order/index?id=" + order.id]);
-  assert.equal(restarted.requests.length, 0);
-});
+  assert.equal(h.calls.at(-1), "/pages/order/index?id=" + order.id);
 
-test("reopening the purchase page exposes the original pending order without opening WeChat again", async () => {
-  const h = harness(undefined, true);
-  h.storage.set(`timenook.payment-intent.v1:${base}:${token.user.id}`, {
-    key: "kept-intent",
-    command: {
-      packageVersionId: "44444444-4444-4444-8444-444444444444",
-      recipient: { relationshipLabel: "恩师" },
-    },
-    orderId: order.id,
-  });
+  h.page.onHide();
   const shown = h.page.onShow();
   const recipients = h.requests.find((r) => r.url.endsWith("recipient-types"))!;
   const current = h.requests.find((r) => r.url.endsWith("packages/current"))!;
@@ -372,14 +443,14 @@ test("reopening the purchase page exposes the original pending order without ope
     checkout: null,
   });
   await tick();
-  const original = h.requests.find(
-    (r) => r.url === base + "/orders/" + order.id,
-  );
-  assert.ok(original);
-  respond(original, nativeOrder);
+  assert.equal(h.requests.at(-1)?.url, base + "/orders/" + order.id);
+  respond(h.requests.at(-1)!, paidNativeOrder);
   await shown;
   assert.equal(h.page.data.hasOrderIntent, true);
-  assert.equal(h.page.data.restoredOrder.id, order.id);
+  assert.equal(
+    h.page.data.restoredOrder.project.id,
+    paidNativeOrder.project.id,
+  );
   assert.equal("actualPrice" in h.page.data, false);
-  assert.equal(h.payments.length, 0);
+  assert.equal(h.payments.length, 1);
 });
