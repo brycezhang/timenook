@@ -28,7 +28,7 @@ function harness(
     storage?: Map<string, any>;
     missingFiles?: string[];
     missingFileError?: { errMsg: string; errCode?: number; errno?: number };
-    unlinkFailure?: number;
+    lockedFile?: string;
     photoSnapshot?: any;
   } = {},
 ) {
@@ -102,10 +102,9 @@ function harness(
       getFileSystemManager: () => ({
         getFileInfo: (o: any) => o.success(info),
         unlink: (o: any) => {
-          if (options.unlinkFailure) {
+          if (o.filePath === options.lockedFile) {
             o.fail({
-              errCode: options.unlinkFailure,
-              errMsg: "permission denied",
+              errMsg: `unlink:fail permission denied, open ${o.filePath}`,
             });
             return;
           }
@@ -151,7 +150,10 @@ function harness(
             this.destroys++;
             this.destroyed = true;
           },
-          onEnded() {},
+          ended: undefined as (() => void) | undefined,
+          onEnded(callback: () => void) {
+            this.ended = callback;
+          },
           onError() {},
           onCanplay() {},
           onTimeUpdate() {},
@@ -942,37 +944,35 @@ for (const missingFileError of [
   });
 }
 
-test("audio cleanup permission failure keeps its reference and original without blocking story text", async () => {
+test("an undeletable old playback file is retained for cleanup without blocking a fresh authorized playback", async (t) => {
   const storage = new Map<string, any>([
     ["timenook.mode.v1", "live"],
     [`timenook.session.v1:${base}`, structuredClone(login)],
     [`timenook.story-audio.v1:${base}`, ["still-private-audio"]],
     ["synthetic-pending-original", [{ path: "only-original", sealed: false }]],
   ]);
-  const h = harness({ storage, unlinkFailure: 1300013 });
-  h.page.onLoad({ projectId, interviewId });
-  const showing = h.page.onShow();
+  const h = harness({ storage, lockedFile: "still-private-audio" });
+  t.after(() => h.page.onUnload());
+  await showAudioStory(h);
+  const playing = h.page.playLive(audioEvent);
   await turn();
-  assert.equal(h.requests.length, 1, h.page.data.stage);
-  h.respond(0, {
-    interviewId,
-    clipCount: 1,
-    pendingCount: 0,
-    cloudSaved: true,
-    story: story("succeeded", 1),
-  });
+  assert.equal(h.requests.length, 3, h.page.data.audioError);
+  h.respond(2, recording);
   await turn();
-  h.respond(1, story("succeeded", 1));
-  await showing;
-  assert.equal(h.page.data.story.id, storyId);
+  h.downloads[0].success({ statusCode: 200, tempFilePath: "fresh-audio" });
+  await playing;
+  assert.equal(h.players[0]?.plays, 1, h.page.data.audioError);
+  assert.equal(h.players[0].src, "fresh-audio");
+  h.players[0].ended();
+  await turn();
+  assert.ok(h.removed.includes("fresh-audio"));
+  assert.ok(!h.removed.includes("still-private-audio"));
   assert.equal(h.page.data.stage, "故事已整理");
-  assert.equal(h.page.data.error, "");
-  assert.match(h.page.data.audioError, /临时文件尚未清理/);
+  assert.equal(h.page.data.audioError, "");
   assert.deepEqual(h.storage.get(`timenook.story-audio.v1:${base}`), [
     "still-private-audio",
   ]);
   assert.ok(h.storage.has("synthetic-pending-original"));
-  h.page.onUnload();
 });
 
 test("direct StoryPage unload releases played private audio, listener and private view and tolerates repeated lifecycle cleanup", async () => {

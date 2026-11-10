@@ -194,14 +194,7 @@ Page({
         careEvidence: "",
         careStatus: "",
       });
-      try {
-        await this.stopLiveAudio();
-      } catch (error) {
-        if (this.currentLive(generation, context, true))
-          this.setData({
-            audioError: error instanceof Error ? error.message : "清理失败",
-          });
-      }
+      await this.stopLiveAudio().catch(() => {});
       if (!this.currentLive(generation, context)) return;
       if (!context || !this.projectId || (!this.interviewId && !this.storyId)) {
         this.setData({
@@ -897,7 +890,7 @@ Page({
       `projectId=${this.projectId}&interviewId=${this.interviewId}&storyId=${this.data.story?.id || ""}`,
     );
   },
-  async stopLiveAudio() {
+  async stopLiveAudio(path?: string) {
     ++this.audioSequence;
     this.audioSeeking = false;
     const player = this.liveAudio;
@@ -915,7 +908,7 @@ Page({
       audioPositionLabel: "00:00",
       audioDurationLabel: "--:--",
     });
-    await clearStoryAudio();
+    await clearStoryAudio(path ? [path] : undefined);
   },
   async playLive(e: E) {
     const id = e.currentTarget.dataset.id,
@@ -953,9 +946,10 @@ Page({
         player.play();
         return;
       }
-      await this.stopLiveAudio();
-      if (!this.currentLive(generation, context)) return;
-      const sequence = ++this.audioSequence;
+      // A previous download may still be pending cleanup. Retain its reference
+      // and retry on exit, while reauthorizing and downloading this clip anew.
+      const cleanup = this.stopLiveAudio().catch(() => {});
+      const sequence = this.audioSequence;
       this.setData({
         audioBusy: true,
         loadingClipId: id,
@@ -964,6 +958,12 @@ Page({
           ? audioTime(source.durationMs / 1000)
           : "--:--",
       });
+      await cleanup;
+      if (
+        !this.currentLive(generation, context) ||
+        sequence !== this.audioSequence
+      )
+        return;
       const path = await privateStoryAudio(
         this.projectId,
         source,
@@ -1008,12 +1008,14 @@ Page({
       player.onSeeked(updateTime);
       const finish = () => {
         if (this.liveAudio === player)
-          void this.stopLiveAudio().catch(() =>
-            this.setData({ audioError: "临时原声未能清理，请重试" }),
-          );
+          void this.stopLiveAudio(path).catch(() => {});
       };
       player.onEnded(finish);
-      player.onError(finish);
+      player.onError(() => {
+        if (this.liveAudio !== player) return;
+        finish();
+        this.setData({ audioError: "原声播放失败，请重试" });
+      });
       this.setData({ playingClipId: id });
       player.play();
     } catch (error) {

@@ -58,7 +58,6 @@ export async function privateStoryAudio(
   source: StorySourceView,
   current: () => boolean,
 ) {
-  await clearStoryAudio();
   const context = sessionClient.context();
   const expected = await requireStoryAudioAccess(projectId, source, current);
   return privateAudioFile(
@@ -150,11 +149,8 @@ export async function privateAudioFile(
       throw Error("原声校验未通过");
     return result.tempFilePath;
   } catch (error) {
-    try {
-      if (result.tempFilePath) await clearStoryAudio([result.tempFilePath]);
-    } catch (cleanup) {
-      if (!denied) throw cleanup;
-    }
-    throw denied ?? error;
+    if (result.tempFilePath)
+      await clearStoryAudio([result.tempFilePath]).catch(() => {});
+    throw error;
   }
 }
