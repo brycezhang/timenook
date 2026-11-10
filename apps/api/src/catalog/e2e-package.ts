@@ -5,6 +5,7 @@ import {
   INTERNAL_PROFILE_VERSION,
   INTERNAL_NOTICE,
 } from "../projects/internal-profile";
+export const E2E_PROFILE_VERSION = "paid-e2e-v2";
 export const E2E_NOTICE_VERSION = "paid-e2e-participation-v1";
 export const E2E_NOTICE =
   "受控真实支付验收：本项目标价999元，本次实际支付0.01元。本人确认后按所选用途保存讲述和照片、AI整理及向本项目发起人共享；可分别拒绝或撤回。故事和书稿须本人确认。制作、回听与下载长期有效；实体书规格和商业售后尚待确定，本次不安排实物生产。";
@@ -16,7 +17,7 @@ export const E2E_PUBLIC_TERMS: PackageTerm[] = [
   { label: "长期服务", text: "制作、原声回听、下载和必要资料长期有效。" },
   {
     label: "记录额度",
-    text: "单段120秒、总录音1200秒、照片10张、追问10次、故事整理10次、主动重新整理3次。",
+    text: "单段10分钟、总录音20分钟、照片10张、追问10次、故事整理10次、主动重新整理3次。",
   },
 ];
 /** Current acceptance policy, explicitly separate from commercial D01/D07 approval. */
@@ -42,7 +43,7 @@ export function e2eSnapshot(): Prisma.JsonObject {
   return {
     ...current,
     scope: "paid-e2e",
-    profileVersion: "paid-e2e-v1",
+    profileVersion: E2E_PROFILE_VERSION,
     bookTitle: "岁月成书",
     physicalProduction: false,
     d01: { status: "acceptance-candidate", commercialApproval: false },

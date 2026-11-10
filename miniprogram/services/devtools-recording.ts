@@ -1,3 +1,7 @@
+import {
+  MAX_RECORDING_BYTES,
+  MAX_RECORDING_DURATION_MS,
+} from "../../packages/contracts/src/recording";
 import { Mp3Encoder } from "./mp3-encoder";
 
 /** Devtools can return WebM bytes even when RecorderManager requests MP3. */
@@ -28,7 +32,11 @@ export async function prepareDevtoolsRecording(
       (resolve, reject) => context.decodeAudioData(data, resolve, reject),
     );
     const samples = Math.floor((audio.length * 16000) / audio.sampleRate);
-    if (!samples || audio.duration > 300 || audio.numberOfChannels > 2)
+    if (
+      !samples ||
+      audio.duration * 1000 > MAX_RECORDING_DURATION_MS ||
+      audio.numberOfChannels > 2
+    )
       throw new Error("模拟器录音超出处理范围");
     const channels = Array.from({ length: audio.numberOfChannels }, (_, i) =>
       audio.getChannelData(i),
@@ -39,7 +47,7 @@ export async function prepareDevtoolsRecording(
     let bytes = 0;
     const append = (chunk: Uint8Array) => {
       bytes += chunk.length;
-      if (bytes > 2097152) throw new Error("录音文件超过保存上限");
+      if (bytes > MAX_RECORDING_BYTES) throw new Error("录音文件超过保存上限");
       chunks.push(new Uint8Array(chunk));
     };
     for (let offset = 0; offset < samples; offset += 1152) {

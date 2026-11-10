@@ -200,6 +200,9 @@
   margin-top: 0;
   padding-top: 0;
 }
+.record-controls .record-limit,
+.record-limit-hint { color: var(--muted); font-size: 16px; }
+.record-limit-hint { margin-top: 8rpx; }
 .record-controls .pause-control {
   margin-top: 12rpx;
 }

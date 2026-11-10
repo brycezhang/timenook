@@ -1,5 +1,6 @@
 import { readProjectAdmissionIn } from "../projects/project-admission";
 import { ServiceUnavailableException } from "@nestjs/common";
+import { MAX_RECORDING_DURATION_MS } from "@timenook/contracts";
 import { Prisma } from "@prisma/client";
 
 export async function recordingQuotaIn(
@@ -22,8 +23,12 @@ export async function recordingQuotaIn(
     Number(total.value) < 1
   )
     throw new ServiceUnavailableException();
+  const acceptance =
+    snapshot.scope === "paid-e2e" || snapshot.scope === "internal-acceptance";
   return {
-    perClipMs: Math.min(Number(per.value) * 1000, 300000),
+    perClipMs: acceptance
+      ? MAX_RECORDING_DURATION_MS
+      : Math.min(Number(per.value) * 1000, MAX_RECORDING_DURATION_MS),
     totalMs: Number(total.value) * 1000,
   };
 }

@@ -1,3 +1,4 @@
+import { MAX_RECORDING_BYTES } from "@timenook/contracts";
 import { WebOrders, WebOrdersController } from "./payments/web-orders";
 import { validateInternalMediaConfig } from "./media/product-runtime";
 import { PrivacyRights } from "./care/privacy-rights";
@@ -489,7 +490,7 @@ export async function createApplication(
   if (config.audioProbe || config.recording)
     await adapter.getInstance().register(multipart, {
       limits: {
-        fileSize: config.photos ? 16777216 : 2097152,
+        fileSize: config.photos ? 16777216 : MAX_RECORDING_BYTES,
         fields: 3,
         files: 1,
         parts: 4,

@@ -13,6 +13,7 @@ import type {
   RecordingInterview,
   StoryContext,
 } from "../../../../packages/contracts/src";
+import { MAX_RECORDING_DURATION_MS } from "../../../../packages/contracts/src/recording";
 import { createMp3Recorder } from "../../../../packages/browser-media/src/browser-recorder";
 import { recordingApi } from "../recording-api";
 import {
@@ -41,6 +42,7 @@ const loading = ref(true),
   error = ref(""),
   processingError = ref(""),
   denied = ref(false);
+const recordingLimitSeconds = ref(0);
 const stage = ref("idle"),
   custom = ref(false),
   customText = ref(""),
@@ -94,14 +96,14 @@ const question = computed(
           (q) => q.key === questionKey.value,
         )?.text ?? "")),
 );
-const time = computed(
-  () =>
-    `${Math.floor(seconds.value / 60)
-      .toString()
-      .padStart(2, "0")}:${Math.floor(seconds.value % 60)
-      .toString()
-      .padStart(2, "0")}`,
-);
+function recordingTime(seconds: number) {
+  return `${Math.floor(seconds / 60)
+    .toString()
+    .padStart(2, "0")}:${Math.floor(seconds % 60)
+    .toString()
+    .padStart(2, "0")}`;
+}
+const time = computed(() => recordingTime(seconds.value));
 const unuploaded = computed(() => clips.value.filter((clip) => !clip.sealed));
 const sources = computed(() => {
   const rows = new Map<string, { id: string; local?: LocalRecording }>();
@@ -319,7 +321,9 @@ async function start() {
       !permission.allowed ||
       permission.actualQuestionId !== selected.currentQuestion.id ||
       permission.questionVersion !== selected.questionVersion ||
-      permission.maxDurationMs < 1
+      !Number.isSafeInteger(permission.maxDurationMs) ||
+      permission.maxDurationMs < 1 ||
+      permission.maxDurationMs > MAX_RECORDING_DURATION_MS
     )
       throw Error("暂时无法开始录音，请重新读取项目。");
     const clientClipId = crypto.randomUUID(),
@@ -384,6 +388,7 @@ async function start() {
       };
       void persist(version);
     });
+    recordingLimitSeconds.value = Math.ceil(permission.maxDurationMs / 1000);
     void recorder.start({ duration: permission.maxDurationMs });
   } catch (reason) {
     if (current(version)) {
@@ -666,7 +671,10 @@ onUnmounted(() => {
             :class="{ live: stage === 'recording' }"
             aria-label="录音时长"
           >
-            {{ time }}
+            {{ time
+            }}<span v-if="capturing" class="recording-limit">
+              / {{ recordingTime(recordingLimitSeconds) }}</span
+            >
           </div>
           <p v-if="stage === 'paused'" class="muted" role="status">已暂停</p>
           <p v-else-if="stage === 'recording'" class="muted" role="status">
@@ -721,6 +729,12 @@ onUnmounted(() => {
               interview?.clips.length ? "再补充一段" : "开始录音"
             }}
           </button>
+          <p
+            v-if="context.canRecord && stage === 'idle' && !unuploaded.length"
+            class="muted recording-limit-hint"
+          >
+            单段最长 {{ MAX_RECORDING_DURATION_MS / 60000 }} 分钟，到时自动保存
+          </p>
           <p v-if="!context.canRecord" class="notice">
             当前项目暂时无法新增录音。
           </p>

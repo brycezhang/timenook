@@ -1,3 +1,4 @@
+import { MAX_RECORDING_BYTES } from "@timenook/contracts";
 import { spawn } from "node:child_process";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -37,8 +38,11 @@ function run(binary: string, args: string[], limit: number): Promise<Buffer> {
     });
   });
 }
-export async function inspectAudio(bytes: Buffer): Promise<number> {
-  if (!bytes.length || bytes.length > 2097152)
+export async function inspectAudio(
+  bytes: Buffer,
+  maxDurationMs = 300_000,
+): Promise<number> {
+  if (!bytes.length || bytes.length > MAX_RECORDING_BYTES)
     throw new Error("Audio size invalid");
   const dir = await mkdtemp(join(tmpdir(), "timenook-audio-"));
   const path = join(dir, "input.mp3");
@@ -114,10 +118,10 @@ export async function inspectAudio(bytes: Buffer): Promise<number> {
         "s16le",
         "pipe:1",
       ],
-      9600000,
+      maxDurationMs * 32,
     );
     const durationMs = Math.round(pcm.length / 32);
-    if (durationMs < 1 || durationMs > 300000)
+    if (durationMs < 1 || durationMs > maxDurationMs)
       throw new Error("Audio duration invalid");
     return durationMs;
   } finally {

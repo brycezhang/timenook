@@ -101,6 +101,14 @@
 .recording-timer.live {
   color: var(--terracotta);
 }
+.recording-limit {
+  color: var(--muted);
+  font-size: 0.5em;
+  letter-spacing: 0;
+}
+.recording-limit-hint {
+  margin: 0;
+}
 .recording-actions {
   display: flex;
   gap: 12px;

@@ -2,6 +2,7 @@ import { IdentityAccess } from "../identity/identity-access";
 import {
   e2eSnapshot,
   E2E_SHIPPING_REGIONS,
+  E2E_PROFILE_VERSION,
   E2E_PUBLIC_TERMS,
 } from "./e2e-package";
 import { Equals } from "class-validator";
@@ -445,7 +446,12 @@ export class Catalog implements OnModuleDestroy {
       where: { realm: this.realm, purpose: "e2e" },
       orderBy: { sequence: "desc" },
     });
-    if (existing) return this.versionView(existing);
+    if (
+      existing &&
+      (existing.snapshot as Prisma.JsonObject).profileVersion ===
+        E2E_PROFILE_VERSION
+    )
+      return this.versionView(existing);
     const snapshot = e2eSnapshot();
     const draft = await tx.packageDraft.create({
       data: {

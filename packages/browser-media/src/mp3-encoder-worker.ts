@@ -1,3 +1,5 @@
+import { MAX_RECORDING_BYTES } from "../../contracts/src/recording";
+
 // LGPL-3.0 library is an unchanged, independently replaceable ESM asset.
 import encoderUrl from "@breezystack/lamejs?url";
 const scope = globalThis as unknown as {
@@ -17,7 +19,7 @@ scope.onmessage = async ({ data }) => {
     function append(chunk: Int8Array) {
       if (!chunk.length) return;
       bytes += chunk.length;
-      if (bytes > 2097152) throw Error("录音文件超过保存上限");
+      if (bytes > MAX_RECORDING_BYTES) throw Error("录音文件超过保存上限");
       chunks.push(new Uint8Array(chunk));
     }
     port.onmessage = ({ data: message }) => {
@@ -59,8 +61,7 @@ scope.onmessage = async ({ data }) => {
               throw Error("MP3 格式不符合录音要求");
           }
           const duration = (bytes / 216) * 36;
-          if (duration > data.maxDuration || duration > 300000)
-            throw Error("MP3 时长超过本次额度");
+          if (duration > data.maxDuration) throw Error("MP3 时长超过本次额度");
           chunks.length = 0;
           scope.postMessage({ kind: "complete", output, duration }, [
             output.buffer,

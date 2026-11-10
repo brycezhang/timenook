@@ -11,13 +11,14 @@ export async function sealAudio(
     sha256: string;
     snapshotKey?: string;
   },
+  maxDurationMs?: number,
 ) {
   const expected = (bytes: Buffer) =>
     bytes.length === input.bytes &&
     createHash("sha256").update(bytes).digest("hex") === input.sha256;
   const bytes = await objects.read(input.source);
   if (!expected(bytes)) throw new Error("Staging object mismatch");
-  const durationMs = await inspectAudio(bytes);
+  const durationMs = await inspectAudio(bytes, maxDurationMs);
   // A client may still replace its staging key. Publish only the immutable
   // bytes we inspected; every concurrent completion of this intent has this hash.
   const snapshot = input.snapshotKey ?? `staging/${randomUUID()}.mp3`;

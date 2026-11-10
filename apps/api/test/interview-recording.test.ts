@@ -447,7 +447,7 @@ test("recording permission pins the displayed question while later sealing prese
     }),
   );
   assert.equal(permission.actualQuestionId, started.actualQuestion.id);
-  assert.equal(permission.maxDurationMs, 300000);
+  assert.equal(permission.maxDurationMs, 600000);
   const displayed = data(
     await request("POST", `${base}/actual-question`, p.narrator.token, {
       clientQuestionId: randomUUID(),
@@ -761,6 +761,69 @@ test("recording remains available beyond 2099 and an expired upload grant can be
   }
 });
 
+test("a near-ten-minute MP3 fits the upload, database and seal limits", async () => {
+  const p = await joinedProject();
+  const i = await interview(p);
+  const base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
+  const encoded = spawnSync(
+    process.env.FFMPEG_PATH ?? "ffmpeg",
+    [
+      "-v",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=frequency=440:sample_rate=16000",
+      "-t",
+      "599.85",
+      "-ac",
+      "1",
+      "-b:a",
+      "48k",
+      "-write_xing",
+      "0",
+      "-f",
+      "mp3",
+      "pipe:1",
+    ],
+    { maxBuffer: 4 * 1024 * 1024, timeout: 15000 },
+  );
+  assert.equal(encoded.status, 0, encoded.stderr?.toString());
+  const audio = encoded.stdout;
+  assert.ok(audio.length > 2 * 1024 * 1024);
+  const sha256 = createHash("sha256").update(audio).digest("hex");
+  const intent = data(
+    await request("POST", base, p.narrator.token, {
+      clientClipId: randomUUID(),
+      bytes: audio.length,
+      sha256,
+    }),
+  );
+  // A pre-existing pending upload can use the now-available project budget.
+  await db.recordingIntent.update({
+    where: { id: intent.id },
+    data: { reservedMs: 120000 },
+  });
+  const form = data(
+    await request("POST", `${base}/${intent.id}/upload`, p.narrator.token, {}),
+  );
+  assert.equal(
+    (await formUpload(app, form, audio, {}, p.narrator.token)).statusCode,
+    204,
+  );
+  const sealed = data(
+    await request("POST", `${base}/${intent.id}/seal`, p.narrator.token, {}),
+  );
+  assert.equal(sealed.state, "sealed");
+  assert.equal(sealed.asset.sha256, sha256);
+  assert.ok(sealed.durationMs > 599000 && sealed.durationMs <= 600000);
+  const saved = await db.recordingIntent.findUniqueOrThrow({
+    where: { id: intent.id },
+  });
+  assert.equal(saved.consumedMs, sealed.durationMs);
+  assert.equal(saved.reservedMs, 0);
+});
+
 test("copy followed by database failure remains pending and recovers the same file, quota and unique event", async () => {
   const p = await joinedProject(),
     i = await interview(p),
@@ -815,7 +878,7 @@ test("copy followed by database failure remains pending and recovers the same fi
   );
   assert.equal(restored.clips.length, 0);
   assert.equal(restored.usage.consumedMs, 0);
-  assert.equal(restored.usage.reservedMs, 300000);
+  assert.equal(restored.usage.reservedMs, 600000);
   const responses = await Promise.all([
     request("POST", `${base}/${intent.id}/seal`, p.narrator.token, {}),
     request("POST", `${base}/${intent.id}/seal`, p.narrator.token, {}),

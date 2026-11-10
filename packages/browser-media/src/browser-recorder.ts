@@ -1,3 +1,4 @@
+import { MAX_RECORDING_DURATION_MS } from "../../contracts/src/recording";
 import captureUrl from "./mp3-capture-worklet.ts?worker&url";
 type Run = {
   state: string;
@@ -56,7 +57,7 @@ export function createMp3Recorder(temporaryFile: (blob: Blob) => string) {
   const api = {
     async start(options: { duration: number }) {
       if (current) return;
-      const maxDuration = Math.min(options.duration, 300000);
+      const maxDuration = Math.min(options.duration, MAX_RECORDING_DURATION_MS);
       // Two MP3 frames cover this fixed encoder's delay + padding.
       const maxSamples = Math.floor((maxDuration * 16) / 576) * 576 - 1152;
       const run: Run = { state: "starting" };

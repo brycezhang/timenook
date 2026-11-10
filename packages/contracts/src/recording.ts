@@ -1,4 +1,7 @@
 import type { ActualPlanQuestion, PlanQuestion, PlanContent } from "./index";
+export const MAX_RECORDING_DURATION_MS = 600_000;
+export const MAX_RECORDING_BYTES = 4 * 1024 * 1024;
+
 export interface RecordingClip {
   id: string;
   projectId: string;

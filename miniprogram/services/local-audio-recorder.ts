@@ -1,3 +1,7 @@
+import {
+  MAX_RECORDING_BYTES,
+  MAX_RECORDING_DURATION_MS,
+} from "../../packages/contracts/src/recording";
 import { recordingLease } from "./recording-lease";
 import { prepareDevtoolsRecording } from "./devtools-recording";
 import type {
@@ -120,7 +124,7 @@ export class LocalAudioRecorder {
     if (
       !Number.isSafeInteger(maxDurationMs) ||
       maxDurationMs < 1 ||
-      maxDurationMs > 300000
+      maxDurationMs > MAX_RECORDING_DURATION_MS
     )
       throw new Error("录音额度未确认，请重新查询");
     this.check();
@@ -138,11 +142,12 @@ export class LocalAudioRecorder {
     this.stopRequested = false;
     this.update("requesting", "正在请求麦克风权限");
     this.manager.start({
-      // Leave room for MP3 encoder padding when devtools returns WebM.
+      // Leave time for the native recorder to stop and finish the MP3. iPhone
+      // produced 120.204 seconds when asked to record for 120 seconds.
       duration:
         wx.getDeviceInfo?.().platform === "devtools"
           ? Math.max(1, maxDurationMs - 108)
-          : maxDurationMs,
+          : Math.max(1, maxDurationMs - 500),
       sampleRate: 16000,
       numberOfChannels: 1,
       encodeBitRate: 48000,
@@ -254,7 +259,7 @@ export class LocalAudioRecorder {
       if (
         !/^[0-9a-f]{64}$/.test(info.digest) ||
         info.size < 1 ||
-        info.size > 2097152
+        info.size > MAX_RECORDING_BYTES
       )
         throw new Error("Invalid saved audio");
       const clip: ProbeLocalClip = {

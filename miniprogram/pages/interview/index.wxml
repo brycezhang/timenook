@@ -30,11 +30,12 @@
     <view wx:elif="{{photoContext}}" class="recording-photo-placeholder"><app-loading wx:if="{{photosLoading}}" variant="photo" /><text wx:else>{{photoError || '还没有照片'}}</text><button wx:if="{{!photosLoading && !photoError}}" class="focus-link" bindtap="photos" disabled="{{busy || flowStep === 'record'}}">添加照片</button></view>
     <button wx:if="{{photoError}}" class="photo-retry focus-link" bindtap="loadRecordingPhotos">重新加载照片</button>
     <view class="record-controls">
-    <view wx:if="{{flowStep === 'record'}}" class="record-timer">{{timer}}<text wx:if="{{state === 'paused'}}" class="paused-label">已暂停</text></view>
+    <view wx:if="{{flowStep === 'record'}}" class="record-timer">{{timer}}<text wx:if="{{mode === 'live' && recordingLimitLabel}}" class="record-limit"> / {{recordingLimitLabel}}</text><text wx:if="{{state === 'paused'}}" class="paused-label">已暂停</text></view>
     <view class="focus-recorder">
       <block wx:if="{{flowStep !== 'record'}}">
         <button class="record-button" aria-label="开始说" bindtap="startSpeaking" loading="{{busy}}" disabled="{{busy || (mode === 'live' && !canRecord)}}"><image wx:if="{{!busy}}" class="record-icon" src="/assets/icons/mic-light.svg" /></button>
         <view class="record-label">{{busy ? '正在准备…' : '开始说'}}</view>
+        <view wx:if="{{mode === 'live'}}" class="record-limit-hint">单段最长 {{recordingMaxMinutes}} 分钟，到时自动保存</view>
       </block>
       <block wx:elif="{{state === 'recording' || state === 'paused' || state === 'requesting'}}">
         <button class="record-button {{state === 'recording' ? 'recording' : ''}}" aria-label="说完了，停止录音" bindtap="record" disabled="{{busy || state === 'requesting'}}"><image class="record-icon" src="/assets/icons/square-light.svg" /></button>

@@ -1,8 +1,10 @@
+import { MAX_RECORDING_BYTES } from "@timenook/contracts";
+
 /** Fixed object kinds shared by product and probe adapters. No caller paths. */
 export function objectFormat(key: string) {
   if (/^(staging|sealed)\/[0-9a-f-]{36}\.mp3$/.test(key))
     return {
-      limit: 2097152,
+      limit: MAX_RECORDING_BYTES,
       mime: "audio/mpeg",
       staging: key.startsWith("staging/"),
     };

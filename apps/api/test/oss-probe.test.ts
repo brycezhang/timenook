@@ -106,7 +106,7 @@ test("OSS candidate uses authenticated private copy and bounded reads, with prov
       .reply(200, Buffer.from("synthetic-audio"), { "content-length": "15" });
     assert.equal((await objects.read(target)).toString(), "synthetic-audio");
     assert.ok(read.isDone());
-    provider.get(`/${target}`).reply(200, Buffer.alloc(2097153));
+    provider.get(`/${target}`).reply(200, Buffer.alloc(4 * 1024 * 1024 + 1));
     await assert.rejects(objects.read(target));
     provider
       .get(`/${target}`)

@@ -1,3 +1,4 @@
+import { MAX_RECORDING_DURATION_MS } from "../../../packages/contracts/src/recording";
 import { switchProjectTab } from "../../services/navigation";
 import { flowView, savedRecordingStep } from "../../domain/interview-flow";
 import { optionalFollowupClient } from "../../services/optional-followup";
@@ -69,6 +70,8 @@ Page({
     hasOtherQuestions: false,
     state: "idle",
     timer: "00:00",
+    recordingLimitLabel: "",
+    recordingMaxMinutes: MAX_RECORDING_DURATION_MS / 60000,
     error: "",
     photo: "",
     photoContext: false,
@@ -461,7 +464,7 @@ Page({
           status: snapshot.message,
           localClips: snapshot.clips,
           reviewClip: this.reviewSelection(snapshot.clips),
-          timer: recordingTime(snapshot.clips, device.elapsedRecordingMs()),
+          timer: recordingTime([], device.elapsedRecordingMs()),
         });
         if (priorStep !== this.data.flowStep) this.scrollToTop();
         this.updateProcessingView();
@@ -469,10 +472,7 @@ Page({
           this.timerHandle = setInterval(() => {
             if (this.current(generation, context))
               this.setData({
-                timer: recordingTime(
-                  this.data.localClips,
-                  device.elapsedRecordingMs(),
-                ),
+                timer: recordingTime([], device.elapsedRecordingMs()),
               });
           }, 1000);
         if (snapshot.stage === "sealed") void this.refreshTasks();
@@ -1448,11 +1448,19 @@ Page({
       if (
         !Number.isSafeInteger(result.maxDurationMs) ||
         result.maxDurationMs < 1 ||
-        result.maxDurationMs > 300000
+        result.maxDurationMs > MAX_RECORDING_DURATION_MS
       )
         throw new Error("录音额度未确认，请重新查询");
       if (resume) device.resume();
-      else device.start(actualQuestionId, result.maxDurationMs);
+      else {
+        this.setData({
+          recordingLimitLabel: recordingTime(
+            [],
+            Math.ceil(result.maxDurationMs / 1000) * 1000,
+          ),
+        });
+        device.start(actualQuestionId, result.maxDurationMs);
+      }
     } catch (error) {
       if (generation === this.generation && dataMode() === "live") {
         if (

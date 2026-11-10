@@ -1,4 +1,5 @@
 import { ServiceUnavailableException } from "@nestjs/common";
+import { MAX_RECORDING_DURATION_MS } from "@timenook/contracts";
 import type { Prisma } from "@prisma/client";
 
 export const INTERNAL_PROFILE_VERSION = "internal-acceptance-v1";
@@ -42,7 +43,10 @@ export function internalSnapshot(version: string): Prisma.JsonObject {
         review: { state: "frozen", scope: "internal-acceptance" },
         systemRetriesChargeUserQuota: false,
         userQuotas: {
-          recordingPerClip: quantity(120, "seconds"),
+          recordingPerClip: quantity(
+            MAX_RECORDING_DURATION_MS / 1000,
+            "seconds",
+          ),
           recordingTotal: quantity(1200, "seconds"),
           photos: quantity(10, "count"),
           followUps: quantity(10, "count"),

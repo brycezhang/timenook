@@ -27,6 +27,10 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiProperty, ApiTags } from "@nestjs/swagger";
 import { IsInt, IsOptional, IsUUID, Matches, Max, Min } from "class-validator";
+import {
+  MAX_RECORDING_BYTES,
+  MAX_RECORDING_DURATION_MS,
+} from "@timenook/contracts";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { Prisma, RecordingIntent } from "@prisma/client";
 import Redis from "ioredis";
@@ -54,10 +58,10 @@ class ClipDto extends CollectionDto {
   @IsOptional()
   @IsUUID()
   actualQuestionId?: string;
-  @ApiProperty({ minimum: 1, maximum: 2097152 })
+  @ApiProperty({ minimum: 1, maximum: MAX_RECORDING_BYTES })
   @IsInt()
   @Min(1)
-  @Max(2097152)
+  @Max(MAX_RECORDING_BYTES)
   bytes!: number;
   @ApiProperty() @Matches(/^[a-f0-9]{64}$/) sha256!: string;
 }
@@ -491,13 +495,17 @@ export class Recordings implements OnModuleDestroy {
     );
     let verified: Awaited<ReturnType<typeof sealAudio>>;
     try {
-      verified = await sealAudio(this.objects, {
-        snapshotKey,
-        source: `staging/${id}.mp3`,
-        target: `sealed/${id}.mp3`,
-        bytes: existing.bytes,
-        sha256: existing.sha256,
-      });
+      verified = await sealAudio(
+        this.objects,
+        {
+          snapshotKey,
+          source: `staging/${id}.mp3`,
+          target: `sealed/${id}.mp3`,
+          bytes: existing.bytes,
+          sha256: existing.sha256,
+        },
+        MAX_RECORDING_DURATION_MS,
+      );
     } catch {
       throw new UnprocessableEntityException();
     }
@@ -516,7 +524,6 @@ export class Recordings implements OnModuleDestroy {
           usage = await this.usage(tx, projectId);
         if (
           verified.durationMs > quota.perClipMs ||
-          verified.durationMs > row.reservedMs ||
           usage.consumedMs +
             usage.reservedMs -
             row.reservedMs +

@@ -720,7 +720,7 @@ test("denied refresh and leaving share one asynchronous stop and save a paused o
   assert.equal(h.page.data.interview, null);
 });
 
-test("restoring the same interview derives elapsed time from saved local clips and adds only the current recording segment", async (t) => {
+test("the recording timer shows only the current segment after restoring a previous clip", async (t) => {
   const h = harness({ clock: { now: Date.parse("2026-10-24T01:00:00Z") } });
   t.after(() => h.page.onUnload());
   await ready(h);
@@ -755,8 +755,8 @@ test("restoring the same interview derives elapsed time from saved local clips a
   await showing;
   assert.equal(
     h.page.data.timer,
-    "00:01",
-    "restored local duration, excluding server totals and time spent away",
+    "00:00",
+    "restored clips do not count toward the next segment",
   );
   assert.equal(
     h.starts,
@@ -769,15 +769,15 @@ test("restoring the same interview derives elapsed time from saved local clips a
   h.advance(3000);
   assert.equal(
     h.page.data.timer,
-    "00:04",
-    "saved local duration plus current segment elapsed time",
+    "00:03",
+    "only the new segment contributes to the elapsed time",
   );
   await h.page.record();
   await tick();
   assert.equal(
     h.page.data.timer,
-    "00:02",
-    "stopped segments use actual native clip durations",
+    "00:00",
+    "the capture timer resets when the segment is saved",
   );
   assert.deepEqual(
     Array.from(h.page.data.localClips, (clip: any) => clip.actualQuestionId),
@@ -788,7 +788,7 @@ test("restoring the same interview derives elapsed time from saved local clips a
   const returning = h.page.onShow();
   respond(h.requests.shift(), { ...context, interviews: [interview] });
   await returning;
-  assert.equal(h.page.data.timer, "00:02");
+  assert.equal(h.page.data.timer, "00:00");
   assert.equal(h.starts, 2);
 });
 test("live recording page saves file and manifest before success and restores the same account's pending file after re-login", async () => {
@@ -2329,7 +2329,7 @@ test("stopping enters saving while the device finishes encoding and cannot resum
 });
 
 test("the page passes the remaining server budget to the native recording boundary and rejects a missing budget", async (t) => {
-  for (const maxDurationMs of [920, undefined]) {
+  for (const maxDurationMs of [920, 600_000, undefined]) {
     const h = harness();
     t.after(() => h.page.onUnload());
     await ready(h);
@@ -2345,7 +2345,12 @@ test("the page passes the remaining server budget to the native recording bounda
       201,
     );
     await starting;
-    assert.deepEqual(h.requestedDurations, maxDurationMs ? [920] : []);
+    assert.deepEqual(
+      h.requestedDurations,
+      maxDurationMs ? [maxDurationMs - 500] : [],
+    );
+    if (maxDurationMs === 600_000)
+      assert.equal(h.page.data.recordingLimitLabel, "10:00");
     if (!maxDurationMs) assert.match(h.page.data.status, /额度未确认/);
     h.page.onUnload();
   }
