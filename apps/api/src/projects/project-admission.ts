@@ -1,5 +1,28 @@
 import { NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import {
+  ACCEPTANCE_INPUT_QUOTAS,
+  ACCEPTANCE_PROVIDER_BUDGET,
+} from "./internal-profile";
+
+/** Apply current acceptance limits without changing the immutable order snapshot. */
+export function projectInputPolicy(
+  snapshot: Prisma.JsonObject,
+): Prisma.JsonObject | undefined {
+  const admission = snapshot.admission as Prisma.JsonObject | undefined;
+  const policy = admission?.d04 as Prisma.JsonObject | undefined;
+  if (
+    policy &&
+    (snapshot.scope === "paid-e2e" || snapshot.scope === "internal-acceptance")
+  )
+    return {
+      ...policy,
+      userQuotas: ACCEPTANCE_INPUT_QUOTAS,
+      providerBudget: ACCEPTANCE_PROVIDER_BUDGET,
+    };
+  return policy;
+}
+
 export async function readProjectAdmissionIn(
   tx: Prisma.TransactionClient,
   projectId: string,

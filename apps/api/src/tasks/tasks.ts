@@ -1,4 +1,7 @@
-import { readProjectAdmissionIn } from "../projects/project-admission";
+import {
+  projectInputPolicy,
+  readProjectAdmissionIn,
+} from "../projects/project-admission";
 import { PrivacyRights } from "../care/privacy-rights";
 import { Followups } from "../followups/followups";
 import { Books } from "../books/books";
@@ -213,8 +216,7 @@ export class ProductionTasks implements OnModuleDestroy {
   }
   private async budget(tx: Prisma.TransactionClient, projectId: string) {
     const { snapshot } = await readProjectAdmissionIn(tx, projectId);
-    const admission = snapshot.admission as Prisma.JsonObject | undefined;
-    const d04 = admission?.d04 as Prisma.JsonObject | undefined;
+    const d04 = projectInputPolicy(snapshot);
     const raw = d04?.providerBudget as Prisma.JsonObject | undefined;
     const count = (key: string, unit: string) => {
       const item = raw?.[key] as Prisma.JsonObject | undefined;

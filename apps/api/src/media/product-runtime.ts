@@ -53,7 +53,7 @@ export function readInternalMediaConfig(env: NodeJS.ProcessEnv): MediaConfig {
         maxTokens: 4096,
       },
       submissionReservationFen: 1,
-      maxSubmissions: 20,
+      maxSubmissions: 200,
       deadlineMs: 600000,
     },
   };

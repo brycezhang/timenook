@@ -1,4 +1,7 @@
-import { readProjectAdmissionIn } from "../projects/project-admission";
+import {
+  projectInputPolicy,
+  readProjectAdmissionIn,
+} from "../projects/project-admission";
 import { PrivacyRights } from "../care/privacy-rights";
 import { join } from "node:path";
 import { ProjectStreams } from "./project-streams";
@@ -197,8 +200,7 @@ export class Photos implements OnModuleDestroy {
     await this.participation.requireMaterialIn(tx, projectId, "originalPhotos");
     await this.participation.requireMaterialIn(tx, projectId, "derivedPhotos");
     const { snapshot } = await readProjectAdmissionIn(tx, projectId);
-    const admission = snapshot.admission as Prisma.JsonObject | undefined;
-    const d04 = admission?.d04 as Prisma.JsonObject | undefined;
+    const d04 = projectInputPolicy(snapshot);
     const quotas = d04?.userQuotas as Prisma.JsonObject | undefined;
     const photos = quotas?.photos as Prisma.JsonObject | undefined;
     if (

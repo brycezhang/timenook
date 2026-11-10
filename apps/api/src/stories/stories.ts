@@ -3,7 +3,10 @@ import {
   participationNotice,
 } from "../catalog/e2e-package";
 import { readSessionContextIn } from "../identity/identity-access";
-import { readProjectAdmissionIn } from "../projects/project-admission";
+import {
+  projectInputPolicy,
+  readProjectAdmissionIn,
+} from "../projects/project-admission";
 import {
   Injectable,
   Optional,
@@ -326,18 +329,18 @@ export class Stories {
       });
     }
     const { snapshot } = await readProjectAdmissionIn(tx, projectId),
-      admission = snapshot.admission as Prisma.JsonObject,
-      d04 = admission.d04 as Prisma.JsonObject,
+      d04 = projectInputPolicy(snapshot),
+      quotas = d04?.userQuotas as Prisma.JsonObject | undefined,
       quotaKind = body.baseVersion === 0 ? "organization" : "regeneration",
-      quota = (d04.userQuotas as Prisma.JsonObject)[
+      quota = quotas?.[
         quotaKind === "organization"
           ? "storyOrganizations"
           : "activeRegenerations"
-      ] as Prisma.JsonObject;
+      ] as Prisma.JsonObject | undefined;
     if (
-      (d04.review as Prisma.JsonObject).state !== "frozen" ||
-      d04.systemRetriesChargeUserQuota !== false ||
-      quota.unit !== "count" ||
+      (d04?.review as Prisma.JsonObject | undefined)?.state !== "frozen" ||
+      d04?.systemRetriesChargeUserQuota !== false ||
+      quota?.unit !== "count" ||
       !Number.isSafeInteger(quota.value) ||
       Number(quota.value) < 1
     )

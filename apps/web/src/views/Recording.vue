@@ -782,7 +782,7 @@ onUnmounted(() => {
             >想讲的话题<textarea
               v-model="customText"
               rows="3"
-              maxlength="500"
+              maxlength="2000"
               :disabled="busy || persistedDraft"
               placeholder="比如：小时候，家里最热闹的一天是什么样？"
             />

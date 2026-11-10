@@ -126,6 +126,13 @@ test("operator publishes the temporary one-fen package with normal public terms 
   const version = published.json().data;
   assert.equal(version.purpose, "e2e");
   assert.equal(version.price.value, 99900);
+  assert.deepEqual(
+    version.terms.find((term: { label: string }) => term.label === "记录额度"),
+    {
+      label: "记录额度",
+      text: "单段10分钟、总录音6小时、照片40张、追问90次、故事整理30次、主动重新整理30次。",
+    },
+  );
   assert.doesNotMatch(
     JSON.stringify(version.terms),
     /0\.01|受控|验收|商业待定/,

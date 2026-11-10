@@ -1,4 +1,7 @@
-import { readProjectAdmissionIn } from "../projects/project-admission";
+import {
+  projectInputPolicy,
+  readProjectAdmissionIn,
+} from "../projects/project-admission";
 import { ServiceUnavailableException } from "@nestjs/common";
 import { MAX_RECORDING_DURATION_MS } from "@timenook/contracts";
 import { Prisma } from "@prisma/client";
@@ -8,8 +11,7 @@ export async function recordingQuotaIn(
   projectId: string,
 ) {
   const { snapshot } = await readProjectAdmissionIn(tx, projectId);
-  const admission = snapshot.admission as Prisma.JsonObject | undefined;
-  const d04 = admission?.d04 as Prisma.JsonObject | undefined;
+  const d04 = projectInputPolicy(snapshot);
   const quotas = d04?.userQuotas as Prisma.JsonObject | undefined;
   const per = quotas?.recordingPerClip as Prisma.JsonObject | undefined,
     total = quotas?.recordingTotal as Prisma.JsonObject | undefined;
@@ -23,12 +25,8 @@ export async function recordingQuotaIn(
     Number(total.value) < 1
   )
     throw new ServiceUnavailableException();
-  const acceptance =
-    snapshot.scope === "paid-e2e" || snapshot.scope === "internal-acceptance";
   return {
-    perClipMs: acceptance
-      ? MAX_RECORDING_DURATION_MS
-      : Math.min(Number(per.value) * 1000, MAX_RECORDING_DURATION_MS),
+    perClipMs: Math.min(Number(per.value) * 1000, MAX_RECORDING_DURATION_MS),
     totalMs: Number(total.value) * 1000,
   };
 }

@@ -229,7 +229,7 @@ async function inclusion() {
       @submit.prevent="save"
     >
       <label class="field-label"
-        >故事标题<input v-model="title" required maxlength="120" /></label
+        >故事标题<input v-model="title" required maxlength="200" /></label
       ><label class="field-label"
         >故事正文<textarea v-model="body" required rows="16" />
       </label>

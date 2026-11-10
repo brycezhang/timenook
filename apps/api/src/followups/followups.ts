@@ -1,4 +1,7 @@
-import { readProjectAdmissionIn } from "../projects/project-admission";
+import {
+  projectInputPolicy,
+  readProjectAdmissionIn,
+} from "../projects/project-admission";
 import {
   Injectable,
   Inject,
@@ -272,13 +275,13 @@ export class Followups {
         const inputHash = hash(JSON.stringify(input));
         if (!finishReason) {
           const { snapshot } = await readProjectAdmissionIn(tx, projectId),
-            d04 = snapshot.admission as Prisma.JsonObject;
-          const policy = d04.d04 as Prisma.JsonObject,
-            quota = (policy.userQuotas as Prisma.JsonObject)
-              .followUps as Prisma.JsonObject;
+            policy = projectInputPolicy(snapshot),
+            quotas = policy?.userQuotas as Prisma.JsonObject | undefined,
+            quota = quotas?.followUps as Prisma.JsonObject | undefined;
           if (
-            (policy.review as Prisma.JsonObject).state !== "frozen" ||
-            quota.unit !== "count" ||
+            (policy?.review as Prisma.JsonObject | undefined)?.state !==
+              "frozen" ||
+            quota?.unit !== "count" ||
             !Number.isSafeInteger(quota.value)
           )
             throw new ServiceUnavailableException();
