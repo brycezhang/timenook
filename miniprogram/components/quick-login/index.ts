@@ -8,10 +8,10 @@ Component({
     visible: { type: Boolean, value: false },
     expectedUserId: { type: String, value: "" },
   },
-  data: { busy: false, agreed: false, status: "", generation: 0 },
+  data: { busy: false, agreed: false, consentConfirm: false, status: "", generation: 0 },
   observers: {
     visible(visible: boolean) {
-      if (visible) this.setData({ agreed: false, status: "" });
+      if (visible) this.setData({ agreed: false, consentConfirm: false, status: "" });
       else this.cancelPending();
     },
   },
@@ -29,6 +29,17 @@ Component({
     toggleAgreed() {
       if (!this.data.busy)
         this.setData({ agreed: !this.data.agreed, status: "" });
+    },
+    requestConsent() {
+      if (!this.data.busy) this.setData({ consentConfirm: true, status: "" });
+    },
+    cancelConsent() {
+      this.setData({ consentConfirm: false });
+    },
+    async continueLogin(e: { detail: { code?: string; errMsg?: string } }) {
+      if (!this.data.consentConfirm || this.data.busy || !this.data.visible) return;
+      this.setData({ agreed: true, consentConfirm: false });
+      await this.login(e);
     },
     async login(e: { detail: { code?: string; errMsg?: string } }) {
       if (this.data.busy || !this.data.agreed || !this.data.visible) return;

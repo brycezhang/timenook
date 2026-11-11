@@ -134,6 +134,35 @@ test("a signed-in home purchase goes directly to new-book without another login"
   assert.equal(h.requests.length, 0);
 });
 
+test("unchecked login offers consent and Continue authorizes without a second login tap", async () => {
+  const h = harness();
+  h.page.purchase();
+  h.quick.requestConsent();
+  assert.equal(h.quick.data.consentConfirm, true);
+  assert.equal(h.quick.data.agreed, false);
+  assert.equal(h.requests.length, 0);
+  const pending = h.quick.continueLogin(phoneEvent);
+  await tick();
+  h.respond();
+  await pending;
+  assert.deepEqual(h.routes, ["/pages/new-book/index"]);
+  assert.equal(h.quick.data.visible, false);
+});
+
+test("canceling consent and reading terms preserve the originating action without logging in", () => {
+  const h = harness("account");
+  h.page.purchase();
+  h.quick.requestConsent();
+  h.quick.cancelConsent();
+  assert.equal(h.quick.data.agreed, false);
+  assert.equal(h.quick.data.consentConfirm, false);
+  h.quick.terms();
+  assert.deepEqual(h.routes, ["/pages/terms/index"]);
+  assert.equal(h.page.loginDestination, "new-book");
+  assert.equal(h.quick.data.visible, true);
+  assert.equal(h.requests.length, 0);
+});
+
 test("declining phone access and closing the popup never advances the purchase", async () => {
   const h = harness();
   h.page.purchase();

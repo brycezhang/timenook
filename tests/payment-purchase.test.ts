@@ -425,7 +425,7 @@ test("release checkout keeps the created order on the same page and queries it a
   assert.equal(h.requests[0].url, base + "/orders/" + order.id);
   respond(h.requests.shift()!, nativeOrder);
   await action;
-  assert.equal(h.calls.at(-1), "/pages/order/index?id=" + order.id);
+  assert.equal(h.calls[h.calls.length - 1], "/pages/order/index?id=" + order.id);
 
   h.page.onHide();
   const shown = h.page.onShow();
@@ -443,8 +443,8 @@ test("release checkout keeps the created order on the same page and queries it a
     checkout: null,
   });
   await tick();
-  assert.equal(h.requests.at(-1)?.url, base + "/orders/" + order.id);
-  respond(h.requests.at(-1)!, paidNativeOrder);
+  assert.equal(h.requests[h.requests.length - 1]?.url, base + "/orders/" + order.id);
+  respond(h.requests[h.requests.length - 1]!, paidNativeOrder);
   await shown;
   assert.equal(h.page.data.hasOrderIntent, true);
   assert.equal(
