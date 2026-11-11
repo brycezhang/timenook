@@ -1,0 +1,5 @@
+{
+  "navigationStyle": "custom",
+  "navigationBarTitleText": "选择章节",
+  "usingComponents": { "tn-navigation": "/components/tn-navigation/index" }
+}

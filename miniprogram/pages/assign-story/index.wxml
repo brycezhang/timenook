@@ -1,0 +1,17 @@
+<tn-navigation title="选择章节" />
+<app-loading wx:if="{{pageLoading}}" variant="list" />
+<view wx:else class="tn-page with-dock assignment-page">
+  <view class="assignment-title tn-muted">{{title}}</view>
+  <view class="assignment-options">
+    <button wx:for="{{chapters}}" wx:key="key" class="assignment-option {{selected === item.key ? 'selected' : ''}}" bindtap="choose" data-id="{{item.key}}" disabled="{{busy}}" aria-pressed="{{selected === item.key}}">
+      <text class="assignment-number">{{item.number}}</text><text class="tn-grow">{{item.title}}</text><image wx:if="{{selected === item.key}}" class="tn-icon" src="/assets/icons/check.svg" />
+    </button>
+  </view>
+  <block wx:if="{{!chapters.length && !status}}"><view class="assignment-empty">当前没有章节</view><button class="tn-link" bindtap="directory">前往大纲目录新增章节</button></block>
+  <view class="assignment-actions" wx:if="{{assigned || excluded}}">
+    <button wx:if="{{assigned || excluded}}" class="tn-link" bindtap="unassign" disabled="{{busy}}">{{excluded ? '恢复为未归章' : '移出章节'}}</button>
+    <button wx:if="{{!excluded}}" class="tn-link" bindtap="exclude" disabled="{{busy}}">暂不入书</button>
+  </view>
+  <view wx:if="{{status}}" class="tn-error">{{status}}</view>
+  <view class="tn-dock"><button class="tn-button" bindtap="save" disabled="{{busy || !selected}}" loading="{{busy}}">确定章节</button></view>
+</view>

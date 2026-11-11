@@ -1,4 +1,23 @@
+<tn-navigation title="{{unassigned ? '未归章故事' : '故事'}}" />
 <app-loading wx:if="{{pageLoading}}" variant="list" />
-<block wx:else>
-<view class="s-page"><view class="s-title">已记录的故事</view><button wx:for="{{rows}}" wx:key="id" class="s-row" bindtap="open" data-id="{{item.id}}"><view class="s-grow"><view class="s-subtitle">{{item.title}}</view><view class="s-muted">{{item.state}}</view></view><text class="s-arrow">›</text></button><view class="s-empty" wx:if="{{!rows.length && !busy}}">从一件想说的往事开始。</view><view class="s-error">{{status}}</view><view class="s-dock"><button class="s-button" bindtap="record">再记一个故事</button></view></view>
-</block>
+<view wx:else class="tn-page {{unassigned ? '' : 'with-dock'}}">
+  <block wx:if="{{unassigned}}">
+    <view class="tn-muted unassigned-intro">随时可加入任一章节。</view>
+    <view wx:for="{{rows}}" wx:key="id" class="unassigned-card">
+      <button class="unassigned-title" bindtap="open" data-id="{{item.id}}">{{item.title}}</button>
+      <view class="unassigned-actions"><button class="tn-button tn-secondary" bindtap="assign" data-id="{{item.id}}" disabled="{{busy}}">选择章节</button><button class="tn-link" bindtap="exclude" data-id="{{item.id}}" disabled="{{busy}}">暂不入书</button></view>
+    </view>
+    <view wx:if="{{!rows.length && !status}}" class="stories-empty">没有待归章的故事</view>
+    <block wx:if="{{excludedRows.length}}"><view class="excluded-heading">暂不入书</view><view wx:for="{{excludedRows}}" wx:key="id" class="excluded-row"><button class="excluded-title tn-grow" bindtap="open" data-id="{{item.id}}">{{item.title}}</button><button class="tn-link" bindtap="assign" data-id="{{item.id}}">选择章节</button></view></block>
+  </block>
+  <block wx:else>
+    <view class="stories-summary"><text class="tn-muted">{{rows.length}} 个故事</text><button wx:if="{{unassignedCount}}" class="tn-link" bindtap="unassigned">未归章 {{unassignedCount}}<text>›</text></button></view>
+    <button wx:for="{{rows}}" wx:key="id" class="story-card" bindtap="open" data-id="{{item.id}}">
+      <image wx:if="{{item.image}}" class="story-card-photo" src="{{item.image}}" mode="aspectFill" />
+      <view class="story-card-copy"><view class="story-card-meta">{{item.state}}</view><view class="story-card-title">{{item.title}}</view><view class="story-card-excerpt">{{item.excerpt}}</view><view wx:if="{{item.duration}}" class="story-card-audio"><image src="/assets/icons/play.svg" />{{item.duration}} · 原声</view></view>
+    </button>
+    <view wx:if="{{!rows.length && !status}}" class="stories-empty-state"><view class="stories-empty-icon"><image src="/assets/icons/mic.svg" /></view><view class="stories-empty-heading">暂无故事</view></view>
+    <view class="tn-dock"><button class="tn-button" bindtap="record"><image class="tn-icon" src="/assets/icons/mic-light.svg" />再讲一个故事</button></view>
+  </block>
+  <view wx:if="{{status}}" class="tn-error">{{status}}</view><button wx:if="{{status}}" class="tn-link" bindtap="refresh">重新查询</button>
+</view>

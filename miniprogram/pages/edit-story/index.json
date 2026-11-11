@@ -1,3 +1,5 @@
 {
-  "navigationBarTitleText": "校对这段故事"
+  "navigationStyle": "custom",
+  "navigationBarTitleText": "编辑故事",
+  "usingComponents": { "tn-navigation": "/components/tn-navigation/index" }
 }
