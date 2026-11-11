@@ -1,21 +1,12 @@
-.order-step {
-  position: relative;
-  display: flex;
-  gap: 24rpx;
-  padding: 22rpx 0;
-  color: #9c9487;
-}
-.order-step .step-dot {
-  width: 20rpx;
-  height: 20rpx;
-  margin-top: 14rpx;
-  background: #ded8cc;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.order-step.active {
-  color: var(--olive);
-}
-.order-step.active .step-dot {
-  background: var(--olive);
-}
+@import "../../styles/purchase.wxss";
+.payment-page.with-dock { padding-bottom:calc(180px + env(safe-area-inset-bottom)); }
+.payment-spacer { height:22px;flex-shrink:0; }
+.payment-heading { display:flex;flex-direction:column;align-items:center;gap:20px;text-align:center; }
+.payment-icon { width:82px;height:82px;border-radius:26px;background:#edf0e7;display:flex;align-items:center;justify-content:center; }
+.payment-icon image { width:36px;height:36px; }
+.payment-heading-copy { display:flex;flex-direction:column;gap:9px; }
+.payment-heading-title { font-size:26px;line-height:1.3;letter-spacing:-.8px;font-weight:700; }
+.payment-card-spacer { height:8px;flex-shrink:0; }
+.payment-book-title { font-size:16px;line-height:1.5;font-weight:600;overflow-wrap:anywhere; }
+.payment-detail { display:flex;justify-content:space-between;color:#756859; }
+.payment-amount { color:#382c24;font-weight:600; }

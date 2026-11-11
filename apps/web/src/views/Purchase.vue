@@ -20,6 +20,7 @@ const catalog = ref<Awaited<ReturnType<typeof purchaseApi.catalog>> | null>(
 const bookTitle = ref("我的时光手记"),
   subjectName = ref(""),
   relationshipLabel = ref("家人");
+const purchaseKind = ref<"self" | "gift">("gift");
 const wechat = isWechatBrowser(),
   copied = ref(false);
 let generation = 0,
@@ -62,7 +63,11 @@ async function buy() {
   try {
     const input = {
       packageVersionId: catalog.value.version.id,
-      recipient: { relationshipLabel: relationshipLabel.value.trim() },
+      purchaseKind: purchaseKind.value,
+      recipient:
+        purchaseKind.value === "self"
+          ? { typeCode: "self", relationshipLabel: "自己" }
+          : { relationshipLabel: relationshipLabel.value.trim() },
       subjectName: subjectName.value.trim() || undefined,
       bookTitle: bookTitle.value.trim(),
       channel: alipayChannel(),
@@ -134,11 +139,17 @@ onUnmounted(() => {
         <p class="eyebrow">岁月成书套餐</p>
         <h2>人生故事书 · 首本一本</h2>
       </div>
-      <strong>¥999</strong>
+      <strong>¥{{ (catalog.version!.price.value / 100).toFixed(2) }}</strong>
     </div>
     <p class="muted">
       语音讲述、照片与故事整理、专属书稿及首本人生书。成书后再填写收货地址。
     </p>
+    <label
+      >送给谁<select v-model="purchaseKind">
+        <option value="gift">送给家人或朋友</option>
+        <option value="self">送给自己</option>
+      </select></label
+    >
     <label
       >书名<input
         v-model="bookTitle"
@@ -155,7 +166,7 @@ onUnmounted(() => {
         autocomplete="off"
         placeholder="这本书写谁的故事"
     /></label>
-    <label
+    <label v-if="purchaseKind === 'gift'"
       >与我的关系<input
         v-model="relationshipLabel"
         required
@@ -171,10 +182,16 @@ onUnmounted(() => {
     <button
       type="submit"
       class="button"
-      :disabled="busy || !bookTitle.trim() || !relationshipLabel.trim()"
+      :disabled="
+        busy ||
+        !bookTitle.trim() ||
+        (purchaseKind === 'gift' && !relationshipLabel.trim())
+      "
     >
       <span v-if="busy" class="spinner" />{{
-        busy ? "正在发起付款" : "支付宝付款 · ¥999"
+        busy
+          ? "正在发起付款"
+          : `支付宝付款 · ¥${(catalog.version!.price.value / 100).toFixed(2)}`
       }}
     </button>
   </form>
@@ -226,7 +243,8 @@ label {
   margin: 22px 0 0;
   font-weight: 500;
 }
-input {
+input,
+select {
   display: block;
   width: 100%;
   padding: 13px 14px;

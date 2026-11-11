@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from "vue";
-import { RouterLink, useRoute } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { auth } from "../session";
 import { workspace } from "../workspace";
 import {
@@ -9,7 +9,8 @@ import {
   submitAlipay,
   type PurchaseOrder,
 } from "../purchase-api";
-const route = useRoute(),
+const router = useRouter(),
+  route = useRoute(),
   order = ref<PurchaseOrder | null>(null),
   loading = ref(true),
   busy = ref(false),
@@ -29,6 +30,16 @@ async function load() {
     const result = await purchaseApi.get(String(route.params.orderId));
     if (generation === current) {
       order.value = result;
+      if (
+        result.state === "paid" &&
+        result.purchaseKind === "self" &&
+        result.project
+      ) {
+        await workspace.refresh();
+        if (generation === current)
+          await router.replace(`/projects/${result.project.id}`);
+        return;
+      }
       if (
         result.project &&
         !workspace.projects.value.some(
@@ -124,7 +135,7 @@ onUnmounted(() => {
   </p>
   <section v-if="order" class="panel payment-panel">
     <p class="eyebrow">{{ order.bookTitle }}</p>
-    <h2>人生故事书 · ¥999</h2>
+    <h2>人生故事书 · ¥{{ (order.listAmount / 100).toFixed(2) }}</h2>
     <template v-if="order.state === 'paid' && order.project"
       ><p>项目已开通，可以开始留下第一段故事。</p>
       <RouterLink class="button" :to="`/projects/${order.project.id}`"

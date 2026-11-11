@@ -407,6 +407,7 @@ model ProbeAiGeneration {
 
 // Local verification and ordinary merchant orders. Financial fields/snapshots are immutable.
 model PaymentOrder {
+  purchaseKind String @map("purchase_kind")
   firstCopyCancellationRequired Boolean @default(false) @map("first_copy_cancellation_required")
   productionFrozen Boolean @default(false) @map("production_frozen")
   creationState String @default("active") @map("creation_state")

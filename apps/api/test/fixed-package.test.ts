@@ -171,8 +171,10 @@ test("one-fen checkout is open to every buyer without an address and still rejec
   const buyer = await login();
   const offer = (await current(buyer.session.token)).json().data;
   const body = {
+    purchaseKind: "gift",
     packageVersionId: offer.version.id,
     recipient: { relationshipLabel: "本人" },
+    bookTitle: "我的时光故事",
   };
   const key = randomUUID();
   const headers = {
@@ -277,8 +279,10 @@ async function paidE2eProject() {
     url: "/v1/orders",
     headers,
     payload: {
+      purchaseKind: "gift",
       packageVersionId: offer.version.id,
       recipient: { relationshipLabel: "本人" },
+      bookTitle: "我的时光故事",
     },
   });
   assert.equal(created.statusCode, 201, created.body);
@@ -457,8 +461,10 @@ test("ordinary publication requires complete parameters and explicit operator co
       "idempotency-key": randomUUID(),
     },
     payload: {
+      purchaseKind: "gift",
       packageVersionId: offer.version.id,
       recipient: { relationshipLabel: "恩师" },
+      bookTitle: "恩师的时光故事",
     },
   });
   assert.equal(created.statusCode, 201, created.body);

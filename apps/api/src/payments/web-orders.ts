@@ -30,6 +30,7 @@ import {
   hash,
   conflict,
   idempotencyKey,
+  purchaseDetails,
 } from "./orders";
 import { AlipayService, type AlipayOrder } from "./alipay-service";
 class WebCreateOrderDto extends CreateOrderDto {
@@ -95,17 +96,7 @@ export class WebOrders {
         },
       });
       if (!version || !body.recipient) throw new BadRequestException();
-      const relationship = body.recipient.typeCode
-        ? await tx.recipientType.findFirst({
-            where: {
-              realm: version.realm,
-              code: body.recipient.typeCode,
-              active: true,
-            },
-          })
-        : null;
-      if (body.recipient.typeCode && !relationship)
-        throw new ConflictException();
+      const details = await purchaseDetails(tx, version.realm, body);
       return tx.paymentOrder.create({
         data: {
           id: randomUUID(),
@@ -122,16 +113,9 @@ export class WebOrders {
           isE2e: cfg.e2eAmountFen === 1,
           packageVersionId: version.id,
           packageSnapshot: version.snapshot as Prisma.InputJsonValue,
-          recipient: {
-            typeCode: relationship?.code ?? null,
-            relationshipLabel:
-              body.recipient.relationshipLabel?.trim() ||
-              relationship?.label ||
-              "讲述者",
-          },
+          ...details,
           template: JSON.parse(JSON.stringify(BUILTIN_TEMPLATE)),
           subjectName: body.subjectName?.trim() || null,
-          bookTitle: body.bookTitle?.trim() || "我的时光手记",
         },
       });
     });

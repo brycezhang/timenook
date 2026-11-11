@@ -161,6 +161,7 @@ async function project() {
   const buyer = await login();
   const order = data(
     await request("POST", "/v1/orders", buyer.token, {
+      purchaseKind: "gift",
       packageVersionId: packageId,
       recipient: { typeCode: "mentor", relationshipLabel: "恩师" },
       bookTitle: "私人标题不能泄露",

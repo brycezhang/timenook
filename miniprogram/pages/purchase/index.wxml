@@ -1,5 +1,11 @@
-<app-loading wx:if="{{mode === 'live' && loading && !packageVersionId}}" variant="book" />
-<block wx:else>
-<view class="s-page"><view class="s-title">{{bookTitle}}</view><view class="s-book"><view class="s-subtitle serif">{{bookTitle}}</view><view class="s-muted s-space">岁月成书</view></view><view class="s-subtitle">故事记录与整理</view><view class="s-muted">含首本纸质书 1 本</view><view class="s-row"><text>合计</text><text>¥{{packagePrice || '999.00'}}</text></view><view class="s-space"><view class="s-muted" wx:for="{{packageTerms}}" wx:key="label">{{item.label}}：{{item.text}}</view></view><button class="s-link" bindtap="privacy">使用条款与客服</button><view wx:if="{{!purchasable && !loading}}" class="s-muted">套餐暂未开放购买，请稍后再来。</view><view wx:if="{{catalogError || verificationError}}" class="s-error">{{catalogError || verificationError}}</view><button wx:if="{{catalogError}}" class="s-link" bindtap="onShow">重新查询</button><button wx:if="{{restoredOrder}}" class="s-link" bindtap="orders">查看这次购买的结果</button></view><view class="s-dock"><block wx:if="{{!loggedIn}}"><button class="s-button" bindtap="login">微信登录</button><view class="s-term">登录即表示同意<text bindtap="privacy">《使用条款》</text></view></block><button wx:else class="s-button" bindtap="pay" loading="{{verificationBusy}}" disabled="{{verificationBusy || loading || (!hasOrderIntent && !purchasable)}}">{{hasOrderIntent ? '查询购买结果' : '购买，开始记录'}}</button></view>
-
-</block>
+<tn-navigation title="确认购买"/>
+<view class="tn-page with-dock">
+ <view class="tn-card"><view class="purchase-book-row"><view class="mini-book"><text class="mini-title">{{bookTitle}}</text><text class="mini-subtitle">那些年，那些我们</text><image class="mini-photo" src="/assets/purchase-cover.jpg" mode="aspectFill"/><text class="mini-brand">时光故事</text></view><view class="purchase-book-copy"><view class="purchase-book-title">{{bookTitle}}</view><view class="purchase-tag">{{purchaseKind === 'self' ? '送给自己' : '送给' + relationship}}</view><view class="purchase-book-meta">时光故事 · 1 本实体书</view></view></view></view>
+ <view class="tn-card purchase-benefits"><view class="tn-row"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/mic.svg"/></view><text class="tn-grow">语音记录与故事整理</text></view><view class="tn-row"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/image.svg"/></view><text class="tn-grow">照片、文字与原声</text></view><view class="tn-row"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/package.svg"/></view><text class="tn-grow">完成书稿后寄送</text></view></view>
+ <view wx:if="{{loading && !packagePrice}}" class="purchase-skeleton line" aria-label="正在读取套餐价格"/>
+ <view wx:elif="{{packagePrice}}" class="purchase-total"><text>应付金额</text><view class="purchase-price">¥{{packagePrice}}</view></view>
+ <view wx:if="{{!loading && !purchasable && !hasOrderIntent && !error}}" class="tn-muted">套餐准备中，暂未开放购买</view>
+ <view wx:if="{{error}}" class="tn-error" role="alert">{{error}}<button wx:if="{{!packageVersionId}}" class="tn-link" bindtap="retry">重新加载</button></view>
+</view>
+<view class="tn-dock"><button class="tn-button" bindtap="pay" loading="{{busy}}" disabled="{{busy || loading || (!hasOrderIntent && !purchasable)}}">{{hasOrderIntent ? '查询购买结果' : '微信支付 ¥' + packagePrice}}</button></view>
+<quick-login visible="{{loginVisible}}" bind:success="loginSucceeded" bind:close="closeLogin"/>

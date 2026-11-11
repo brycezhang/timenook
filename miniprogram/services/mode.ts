@@ -25,6 +25,7 @@ export function livePageAllowed(page: string): boolean {
     "address",
     "account-link",
     "purchase",
+    "gift-recipient",
     "order",
     "invite",
     "welcome",

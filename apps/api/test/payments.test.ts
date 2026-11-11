@@ -126,7 +126,9 @@ async function login(who = "buyer", target = app) {
 }
 const command = () => ({
   packageVersionId: packageId,
+  purchaseKind: "gift",
   recipient: { typeCode: "mentor", relationshipLabel: "恩师" },
+  bookTitle: "我的时光手记",
 });
 function create(
   token: string,
@@ -204,6 +206,74 @@ test("buyer creates one frozen local order, replays it across restart, and canno
   } finally {
     await restarted.close();
   }
+});
+
+test("self purchase binds the buyer once and keeps its chosen title when payment query and callback race", async () => {
+  const token = await login("self-purchase");
+  const response = await create(token, randomUUID(), {
+    ...command(),
+    purchaseKind: "self",
+    recipient: { typeCode: "self", relationshipLabel: "自己" },
+    bookTitle: "我的远行与归来",
+  });
+  assert.equal(response.statusCode, 201, response.body);
+  const order = response.json().data;
+  assert.equal(order.purchaseKind, "self");
+  const headers = { authorization: `Bearer ${token}` };
+  const me = await app.inject({ method: "GET", url: "/v1/users/me", headers });
+  await app.inject({
+    method: "POST",
+    url: `/v1/orders/${order.id}/payment`,
+    headers: { ...headers, "idempotency-key": randomUUID() },
+    payload: {},
+  });
+  const transaction = paid(order.outTradeNo);
+  await Promise.all([
+    notify(transaction),
+    readOrder(token, order.id),
+    readOrder(token, order.id),
+  ]);
+  const result = (await readOrder(token, order.id)).json().data;
+  assert.equal(result.project.subject.boundUserId, me.json().data.id);
+  assert.equal(result.project.bookTitle, "我的远行与归来");
+  assert.equal(result.project.entitlement.copies, 1);
+  const repeated = (await readOrder(token, order.id)).json().data;
+  assert.equal(repeated.project.id, result.project.id);
+  assert.equal(repeated.project.entitlement.id, result.project.entitlement.id);
+  const membership = await app.inject({
+    method: "GET",
+    url: "/v1/participations",
+    headers,
+  });
+  assert.equal(membership.statusCode, 200, membership.body);
+  assert.equal(
+    membership
+      .json()
+      .data.projects.find(
+        (p: { projectId: string }) => p.projectId === result.project.id,
+      ).bookTitle,
+    "我的远行与归来",
+  );
+});
+
+test("purchase requires a relationship and title and never infers subject identity from custom text", async () => {
+  const token = await login("purchase-details");
+  for (const body of [
+    { ...command(), bookTitle: "   " },
+    { ...command(), recipient: {} },
+    { ...command(), purchaseKind: "self" },
+  ])
+    assert.equal(
+      (await create(token, randomUUID(), body as ReturnType<typeof command>))
+        .statusCode,
+      400,
+    );
+  const response = await create(token, randomUUID(), {
+    ...command(),
+    recipient: { relationshipLabel: "自己" },
+  } as ReturnType<typeof command>);
+  assert.equal(response.statusCode, 201, response.body);
+  assert.equal(response.json().data.purchaseKind, "gift");
 });
 
 test("payment prepare sends server frozen JSAPI fields and returns correctly signed mini-program parameters, with unknown submission recovered by original order query", async () => {
@@ -337,7 +407,7 @@ test("verified notification and active query concurrently activate exactly one p
   assert.equal(result.project.plan.revision, 1);
   assert.equal(
     result.project.plan.chapters[0].questions[0].text,
-    "有没有一个地方，你现在还想说说它的样子？",
+    "我出生在什么地方，家人怎样讲起我的出生？",
   );
   for (const response of results.slice(2))
     assert.equal(response.json().data.project.id, result.project.id);

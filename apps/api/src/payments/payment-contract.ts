@@ -24,6 +24,7 @@ class PaymentProjectDto {
   terms!: object;
 }
 export class PaymentOrderDto {
+  @ApiProperty({ enum: ["self", "gift"] }) purchaseKind!: string;
   @ApiProperty({ format: "uuid" }) id!: string;
   @ApiProperty() outTradeNo!: string;
   @ApiProperty({ enum: [99900] }) listAmount!: number;
@@ -32,6 +33,8 @@ export class PaymentOrderDto {
   @ApiProperty({ enum: ["CNY"] }) currency!: string;
   @ApiProperty({ enum: ["local-verification", "wechat"] }) mode!: string;
   @ApiProperty({ enum: ["pending", "paid", "closed"] }) state!: string;
+  @ApiProperty({ enum: ["pending", "unknown", "paid", "closed"] })
+  paymentStatus!: string;
   @ApiProperty({ format: "uuid" }) packageVersionId!: string;
   @ApiProperty({ type: Object }) recipient!: object;
   @ApiProperty({ type: Object }) template!: object;

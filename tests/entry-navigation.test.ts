@@ -188,20 +188,6 @@ test("a standalone login adapter returns home without orders or payment", async 
   assert.deepEqual(h.routes, ["/pages/home/index"]);
   assert.deepEqual(h.requests, []);
 });
-test("a direct new-book entry preserves its draft through the shared login adapter", async () => {
-  const h = await harness("new-book", [], false);
-  h.page.setData({ name: "妈妈 & 回忆", salutation: "妈妈" });
-  h.page.next();
-  const route = new URL(h.routes[0], "https://example.test");
-  assert.equal(route.pathname, "/pages/login/index");
-  const login = await harness("login", [], false);
-  login.page.onLoad(Object.fromEntries(route.searchParams));
-  login.page.loginSucceeded();
-  const destination = new URL(login.routes[0], "https://example.test");
-  assert.equal(destination.pathname, "/pages/purchase/index");
-  assert.equal(destination.searchParams.get("bookTitle"), "妈妈 & 回忆");
-  assert.equal(destination.searchParams.get("salutation"), "妈妈");
-});
 test("My shows an existing local session while validating it", async () => {
   const h = await harness("account", []);
   const pending = h.page.onShow();
