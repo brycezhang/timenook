@@ -17,7 +17,7 @@ import { projectOverviewClient } from "../../services/project-overview";
 import type {
   StoryView,
   StoryContext,
-  PhotoCollection,
+  PhotoMaterials,
 } from "../../../packages/contracts/src";
 function stage(story: StoryView | null) {
   const task = story?.task;
@@ -508,10 +508,10 @@ Page({
       const snapshot = story.revision
         ? story.revision.photoSnapshot
         : (
-            await sessionClient.request<PhotoCollection>(
-              `/projects/${this.projectId}/interviews/${story.interviewId}/photos`,
+            await sessionClient.request<PhotoMaterials | null>(
+              `/projects/${this.projectId}/interviews/${story.interviewId}/photo-materials`,
             )
-          ).snapshot;
+          );
       if (!current()) return;
       await clearPhotoPreviews();
       if (!current()) return;
@@ -529,7 +529,6 @@ Page({
           if (!asset) return;
           const image = await privatePhotoPreview(
             this.projectId,
-            story.interviewId,
             entry.photoId,
             asset,
             current,

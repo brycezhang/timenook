@@ -277,7 +277,6 @@ export class Books implements OnModuleDestroy {
           if (!asset) throw new ConflictException();
           return {
             id: p.photoId,
-            interviewId: story.interviewId,
             assetId: asset.id,
             sha256: asset.sha256,
             bytes: asset.bytes,
@@ -306,13 +305,24 @@ export class Books implements OnModuleDestroy {
         salutation: coverRow?.salutation ?? "",
         photoAssetId: coverRow?.photoAssetId ?? null,
       },
-      coverPhotoOptions = [
-        ...new Map(
-          eligible
-            .flatMap((story) => story.photos)
-            .map((photo) => [photo.assetId, photo]),
-        ).values(),
-      ],
+      coverPhotoOptions = (
+        await tx.photoAsset.findMany({
+          where: {
+            projectId,
+            kind: "print",
+            processingVersion: "t04-pixels-v1",
+          },
+          orderBy: { id: "asc" },
+        })
+      ).map((asset) => ({
+        id: asset.intentId,
+        assetId: asset.id,
+        sha256: asset.sha256,
+        bytes: asset.bytes,
+        caption: "",
+        width: asset.width,
+        height: asset.height,
+      })),
       coverPhoto =
         coverPhotoOptions.find(
           (photo) => photo.assetId === cover.photoAssetId,

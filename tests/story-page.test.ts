@@ -87,12 +87,12 @@ function harness(
       },
       removeStorageSync: (key: string) => storage.delete(key),
       request: (o: any) => {
-        if (o.url.endsWith(`/interviews/${interviewId}/photos`)) {
+        if (o.url.endsWith(`/interviews/${interviewId}/photo-materials`)) {
           photoRequests.push(o);
           o.success({
             statusCode: 200,
             data: {
-              data: { snapshot: options.photoSnapshot ?? null, photos: [] },
+              data: options.photoSnapshot ?? null,
               meta: { requestId: "synthetic-photo-context" },
             },
           });

@@ -873,8 +873,6 @@ model RecordingCommand {
 model PhotoIntent {
  id String @id @db.Uuid
  projectId String @map("project_id") @db.Uuid
- interviewId String @map("interview_id") @db.Uuid
- actualQuestionId String @map("actual_question_id") @db.Uuid
  clientPhotoId String @map("client_photo_id") @db.Uuid
  subjectId String @map("subject_id") @db.Uuid
  operatorUserId String @map("operator_user_id") @db.Uuid
@@ -891,7 +889,6 @@ model PhotoIntent {
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@unique([projectId,clientPhotoId])
  @@unique([projectId,id])
- @@unique([projectId,interviewId,id])
  @@map("photo_intents")
 }
 

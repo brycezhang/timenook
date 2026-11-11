@@ -5,7 +5,6 @@ import { auth } from "../session";
 import { WebApiError } from "../api";
 const props = defineProps<{
   projectId: string;
-  interviewId: string;
   photoId: string;
   asset: { id: string; bytes: number; sha256: string };
   alt: string;
@@ -32,7 +31,7 @@ async function load() {
   controller = new AbortController();
   try {
     const blob = await fetchVerifiedBlob(
-      `/projects/${props.projectId}/interviews/${props.interviewId}/photos/${props.photoId}/assets/${props.asset.id}/content`,
+      `/projects/${props.projectId}/photos/${props.photoId}/assets/${props.asset.id}/content`,
       props.asset,
       controller.signal,
     );
@@ -50,7 +49,7 @@ async function load() {
   }
 }
 watch(
-  () => [props.projectId, props.interviewId, props.photoId, props.asset.id],
+  () => [props.projectId, props.photoId, props.asset.id],
   () => void load(),
   { immediate: true },
 );

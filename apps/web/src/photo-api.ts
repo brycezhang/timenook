@@ -2,15 +2,17 @@ import type {
   PhotoCollection,
   PhotoMaterials,
   ProbeUploadForm,
-  StoryPhoto,
+  ProjectPhoto,
 } from "../../../packages/contracts/src";
 import { memberRequest, projectApi } from "./project-api";
 import { auth } from "./session";
 import { WebApiError } from "./api";
 import { audioDigest } from "./recording-store";
 
-const base = (projectId: string, interviewId: string) =>
-  `/projects/${encodeURIComponent(projectId)}/interviews/${encodeURIComponent(interviewId)}/photos`;
+const base = (projectId: string) =>
+  `/projects/${encodeURIComponent(projectId)}/photos`;
+const materials = (projectId: string, interviewId: string) =>
+  `/projects/${encodeURIComponent(projectId)}/interviews/${encodeURIComponent(interviewId)}/photo-materials`;
 export interface PendingPhoto {
   id: string;
   file: File;
@@ -20,46 +22,42 @@ export interface PendingPhoto {
   error: string;
 }
 export const photoApi = {
-  list: (projectId: string, interviewId: string) =>
-    memberRequest<PhotoCollection>(base(projectId, interviewId)),
+  list: (projectId: string) => memberRequest<PhotoCollection>(base(projectId)),
+  materials: (projectId: string, interviewId: string) =>
+    memberRequest<PhotoMaterials | null>(materials(projectId, interviewId)),
   snapshot: (projectId: string, interviewId: string, snapshotId: string) =>
     memberRequest<PhotoMaterials | null>(
-      `${base(projectId, interviewId)}/materials/${encodeURIComponent(snapshotId)}`,
+      `${materials(projectId, interviewId)}/${encodeURIComponent(snapshotId)}`,
     ),
   revise: (
     projectId: string,
     interviewId: string,
-    snapshot: PhotoMaterials,
+    snapshot: PhotoMaterials | null,
     entries: { photoId: string; caption: string }[],
   ) =>
     memberRequest<PhotoMaterials>(
-      `${base(projectId, interviewId)}/materials`,
+      materials(projectId, interviewId),
       {
-        expectedRevision: snapshot.revision,
+        expectedRevision: snapshot?.revision ?? 0,
         entries,
       },
       crypto.randomUUID(),
     ),
-  release: (projectId: string, interviewId: string, photoId: string) =>
-    memberRequest<StoryPhoto>(
-      `${base(projectId, interviewId)}/${photoId}/release`,
+  release: (projectId: string, photoId: string) =>
+    memberRequest<ProjectPhoto>(
+      `${base(projectId)}/${photoId}/release`,
       {},
       crypto.randomUUID(),
     ),
-  async upload(
-    projectId: string,
-    interviewId: string,
-    photo: PendingPhoto,
-    current: () => boolean,
-  ) {
-    const path = base(projectId, interviewId);
+  async upload(projectId: string, photo: PendingPhoto, current: () => boolean) {
+    const path = base(projectId);
     let remote = photo.serverId
-      ? await memberRequest<StoryPhoto>(
+      ? await memberRequest<ProjectPhoto>(
           `${path}/${photo.serverId}/status`,
           {},
           crypto.randomUUID(),
         )
-      : await memberRequest<StoryPhoto>(
+      : await memberRequest<ProjectPhoto>(
           path,
           {
             clientPhotoId: photo.id,
@@ -72,7 +70,6 @@ export const photoApi = {
       if (!current()) throw new DOMException("Upload superseded", "AbortError");
       if (
         remote.projectId !== projectId ||
-        remote.interviewId !== interviewId ||
         remote.clientPhotoId !== photo.id ||
         remote.bytes !== photo.file.size ||
         remote.sha256 !== photo.sha256 ||
@@ -93,7 +90,7 @@ export const photoApi = {
       verify();
       await uploadPhoto(form, photo.file);
       verify();
-      remote = await memberRequest<StoryPhoto>(
+      remote = await memberRequest<ProjectPhoto>(
         `${path}/${remote.id}/seal`,
         {},
         crypto.randomUUID(),

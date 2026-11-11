@@ -240,7 +240,7 @@ async function loadPhoto(photo: BookPhoto) {
   const token = mediaSequence;
   try {
     const blob = await fetchVerifiedBlob(
-      `/projects/${projectId.value}/interviews/${photo.interviewId}/photos/${photo.id}/assets/${photo.assetId}/content`,
+      `/projects/${projectId.value}/photos/${photo.id}/assets/${photo.assetId}/content`,
       photo,
       mediaController.signal,
     );

@@ -407,6 +407,10 @@ Page({
     go("interview");
   },
   photo() {
+    if (dataMode() === "live") {
+      go("photos", `projectId=${this.projectId}`);
+      return;
+    }
     const p = required();
     if (!p.consent) {
       go("welcome");
