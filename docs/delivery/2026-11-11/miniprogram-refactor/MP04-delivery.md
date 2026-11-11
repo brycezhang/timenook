@@ -30,7 +30,7 @@
 - 多人完整流程按当前统一目录规则，先验证自由讲述未归章，再调用真实 `/plan` 归章后继续编辑、PDF 与制作提交。未恢复旧自动归入首章逻辑。
 - 原生控制器：`gifts-members-page` 和 `entry-navigation` 共 20 个场景通过，覆盖同一自购书双入口、三分类、待付款隔离、自定义关系、登录不自动接受、失效状态和购买者分享权限。
 - 真实 HTTPS Web：`family-invitation.test.mjs` 在 Chromium／WebKit 通过 2 个场景，实际 Vue 页面登录、必填校验、加入和服务端关系／分类持久化。
-- contracts build、API 测试编译、前端与 Web 类型检查、Web 构建通过。正式小程序构建与 `check-native --built` 的 31 页 WXML／WXSS 编译通过。
+- contracts build、API 测试编译、前端与 Web 类型检查、Web 构建通过。合入最新集成分支（含 MP03 原生页）后，前端类型检查、正式小程序构建与 `check-native --built` 的 34 页 WXML／WXSS 编译通过。
 - 新增 [原生联调 API 夹具](evidence/MP04/harness/api.cjs) 已启动并正常清理；数据库独立 schema、循环地址、临时身份／令牌位于 Git 忽略的 `test-results/mp04-native/fixture.json`（0600），不写入证据或源码。
 
 ## 解锁后继续
