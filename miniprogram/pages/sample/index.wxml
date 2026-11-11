@@ -1,0 +1,7 @@
+<tn-navigation title="样书预览" brand="{{false}}"/>
+<view class="tn-page with-dock sample-page">
+ <image class="sample-book" src="/assets/storybook-example.jpg" mode="widthFix" aria-label="示例书籍实物效果"/>
+ <view class="tn-card"><text class="tn-eyebrow">样书节选</text><view class="tn-heading">记得那年夏天</view><image class="sample-landscape" src="/assets/sample-landscape.jpg" mode="aspectFill" aria-label="旅行风景示例照片"/><view class="sample-story">小时候，最盼望的就是放暑假。院子里的树影很长，父亲常带着我们去河边，一走就是整个下午。</view></view>
+</view>
+<view class="tn-dock"><button class="tn-button" bindtap="purchase"><image class="tn-icon" src="/assets/icons/gift-white.svg"/>送出一份礼物</button></view>
+<quick-login id="quick-login" visible="{{loginVisible}}" bindsuccess="loginSucceeded" bindclose="closeLogin"/>

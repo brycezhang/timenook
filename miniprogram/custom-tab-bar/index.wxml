@@ -1,4 +1,4 @@
 <view class="tabs">
-  <button class="tab {{selected === 'home' ? 'active' : ''}}" data-page="home" bindtap="switchTab"><image class="icon" src="/assets/icons/book-open.svg"/><text>时光故事</text></button>
-  <button class="tab {{selected === 'account' ? 'active' : ''}}" data-page="account" bindtap="switchTab"><image class="icon" src="/assets/icons/user.svg"/><text>我的</text></button>
+  <button class="tab {{selected === 'home' ? 'active' : ''}}" data-page="home" bindtap="switchTab"><image class="icon" src="/assets/icons/modern-book{{selected === 'home' ? '' : '-muted'}}.svg"/><text>时光故事</text></button>
+  <button class="tab {{selected === 'account' ? 'active' : ''}}" data-page="account" bindtap="switchTab"><image class="icon" src="/assets/icons/modern-user{{selected === 'account' ? '' : '-muted'}}.svg"/><text>我的</text></button>
 </view>

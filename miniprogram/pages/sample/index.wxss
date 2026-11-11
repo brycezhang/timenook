@@ -1,0 +1,4 @@
+page { background: #fff; }
+.sample-book { width: 100%; height: auto; border-radius: 20px; }
+.sample-landscape { width: 100%; height: 170px; border-radius: 18px; }
+.sample-story { font-family: Georgia, "Songti SC", serif; font-size: 17px; line-height: 1.95; }

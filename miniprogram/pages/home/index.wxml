@@ -1,3 +1,4 @@
+<tn-navigation title="{{overview ? '故事书首页' : '首页'}}" brand="{{true}}"/>
 <view wx:if="{{overview}}" class="s-page with-tabs">
  <view class="project-heading"><text class="s-muted">当前项目</text><button class="s-link" bindtap="switchProject">切换项目 ⇄</button></view>
  <view class="s-title">{{overview.bookTitle}}</view>
@@ -10,15 +11,18 @@
 </view>
 <app-loading wx:elif="{{pageLoading || busy}}" variant="project" />
 <view wx:elif="{{status}}" class="s-page"><view class="s-error">{{status}}</view><button class="s-button" bindtap="refresh">重新打开</button></view>
-<view wx:else class="landing">
- <view class="landing-hero"><image src="/assets/home-family.jpg" mode="aspectFill"/><view class="landing-copy"><view class="serif">送给重要的人，<text>一本关于TA自己的书</text></view><view class="landing-sub">把散落的时光，变成一本温暖的书</view></view></view>
- <view class="benefits"><view><image src="/assets/icons/mic.svg"/><text>只需要说
-不需要写</text><view>像聊天一样轻松</view></view><view><image src="/assets/icons/image.svg"/><text>照片与声音
-一起珍藏</text><view>让回忆更完整</view></view><view><image src="/assets/icons/book-open.svg"/><text>把一生故事
-变成一本书</text><view>留给最爱的人</view></view></view>
- <view class="landing-note serif">有些爱，值得被认真记录。</view><button wx:if="{{!loggedIn}}" class="s-link" bindtap="login">已有项目？微信登录</button><button class="s-term" bindtap="terms">私密记录 · 家人一起完成 · 原声随书珍藏</button>
- <view class="purchase-dock"><button class="purchase-card" bindtap="purchase"><image src="/assets/sample-book.jpg" mode="aspectFill"/><view><view><text class="amount">999</text> 元 <text class="included">含1本实体书</text></view><view class="purchase-label">开始做一本书 →</view></view></button></view>
+<view wx:else class="tn-page landing">
+ <view class="landing-intro"><text class="tn-eyebrow">时光故事书</text><button class="tn-link sample-trigger" bindtap="sample">看看样书<image class="sample-arrow" src="/assets/icons/modern-arrow-right.svg"/></button></view>
+ <view class="landing-headline"><view>送给重要的人</view><view>一本专属时光故事书</view></view>
+ <view class="tn-muted landing-sub">把散落的时光，变成一本温暖的书</view>
+ <view class="landing-photo"><image src="/assets/storybook-example.jpg" mode="aspectFill"/><text>书籍效果示例</text></view>
+ <view class="landing-benefits">
+  <view><image src="/assets/icons/modern-mic.svg"/><view class="landing-benefit-title">只需要说<view>不需要写</view></view><text>自动整理成文</text></view>
+  <view><image src="/assets/icons/modern-image.svg"/><view class="landing-benefit-title">照片与原声<view>一起珍藏</view></view><text>原声随时回听</text></view>
+  <view><image src="/assets/icons/modern-book.svg"/><view class="landing-benefit-title">把时光故事<view>做成实体书</view></view><text>留给最爱的人</text></view>
+ </view>
 </view>
-<view wx:if="{{!nativeTabs}}" class="tabs"><button class="tab active"><image class="icon" src="/assets/icons/book-open.svg"/>岁月成书</button><button class="tab" bindtap="account"><image class="icon" src="/assets/icons/user.svg"/>我的</button></view>
+<view wx:if="{{!overview && !pageLoading && !busy && !status}}" class="tn-dock above-tabs landing-dock tn-surface"><view class="landing-price"><text>时光故事 · 含首本实体书</text><text class="landing-amount">¥999</text></view><button class="tn-button gift-trigger" bindtap="purchase"><image class="tn-icon" src="/assets/icons/gift-white.svg"/>送出一份礼物</button></view>
+<view wx:if="{{!nativeTabs}}" class="tabs"><button class="tab active"><image class="icon" src="/assets/icons/modern-book.svg"/>时光故事</button><button class="tab" bindtap="account"><image class="icon" src="/assets/icons/modern-user.svg"/>我的</button></view>
 
-<quick-login visible="{{loginVisible}}" bindsuccess="loginSucceeded" bindclose="closeLogin"/>
+<quick-login id="quick-login" visible="{{loginVisible}}" bindsuccess="loginSucceeded" bindclose="closeLogin"/>

@@ -2,5 +2,6 @@
   "navigationBarTitleText": "时光故事",
   "usingComponents": {
     "quick-login": "../../components/quick-login/index"
-  }
+  },
+  "navigationStyle": "custom"
 }

@@ -6,3 +6,5 @@
 .navigation-back::after { border: 0; }
 .navigation-back image { width: 22px; height: 22px; }
 .navigation-title { flex: 1; min-width: 0; font-size: 17px; font-weight: 600; line-height: 1.4; letter-spacing: -.3px; overflow-wrap: anywhere; }
+
+.navigation-title.compact-title { font-size: 15px; }

@@ -1,6 +1,7 @@
 /* Current native design. Opt into tn-* surfaces while individual modules ship. */
 .tn-surface, .tn-page { background: #fff; color: #382c24; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 15px; line-height: 1.7; }
 .tn-page { min-height: 100vh; padding: 22px 22px calc(26px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 22px; }
+@media (max-height: 740px) { .tn-page { gap: 16px; padding-top: 18px; } }
 .tn-page.with-tabs { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
 .tn-page.with-dock { padding-bottom: calc(112px + env(safe-area-inset-bottom)); }
 .tn-heading { font-size: 22px; line-height: 1.4; font-weight: 600; }
@@ -20,5 +21,5 @@
 .tn-field { display: flex; flex-direction: column; gap: 9px; font-size: 14px; font-weight: 600; }
 .tn-input { width: 100%; height: 52px; min-height: 52px; border: 1px solid #ded4c6; border-radius: 14px; padding: 13px 14px; background: #fff; color: #382c24; font-size: 16px; line-height: 1.5; font-weight: 400; }
 .tn-dock { position: fixed; bottom: 0; left: 0; right: 0; z-index: 4; background: #fff; border-top: 1px solid #ded4c6; padding: 14px 22px calc(20px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; }
-.tn-dock.above-tabs { bottom: calc(74px + env(safe-area-inset-bottom)); padding-bottom: 20px; }
+.tn-dock.above-tabs { bottom: calc(70px + env(safe-area-inset-bottom)); padding-bottom: 20px; }
 .tn-error { color: #984b39; font-size: 14px; line-height: 1.7; }

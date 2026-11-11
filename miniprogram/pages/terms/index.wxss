@@ -1,7 +1,6 @@
-.terms {
-  font-size: 36rpx;
-  line-height: 1.9;
-}
-.terms .s-subtitle {
-  margin-bottom: 18rpx;
-}
+page { background: #fff; }
+page { background: #fff; }
+.terms { gap: 8px; font-size: 15px; line-height: 1.9; }
+.terms-heading { font-size: 19px; line-height: 1.5; font-weight: 600; margin-top: 12px; }
+.terms-heading:first-child { margin-top: 0; }
+.terms .tn-button { margin-top: 16px; }

@@ -1,17 +1,27 @@
 # MP01 公共界面与登录契约
 
-当前工程接口已可供后续模块使用；MP01 全部画板、真实微信手机号及真机结果分别验收，不以此文档视为完成。
+后续模块可以直接使用本契约。原生运行和外部待验见 [MP01 交付记录](MP01-evidence.md)。
 
-- 页面继续使用原生导航栏。全局导航和两 Tab 已采用白底／橄榄绿；普通页面在页面 JSON 声明功能标题。
-- `miniprogram/styles/modern.wxss` 由 app.wxss 导入。页面以 `tn-page` 选择新版样式；白底、22px 边距和正文 15px。容器 `tn-card`、标题 `tn-heading`、次文 `tn-muted`、列表 `tn-row`／`tn-icon-tile`／`tn-grow`，表单 `tn-field`／`tn-input`。
-- 原生按钮使用 `tn-button`，次按钮追加 `tn-secondary`；轻操作 `tn-link`，图标按钮 `tn-icon-button`，图标 `tn-icon`。按钮高度至少 52px，图标点击至少 44px。
-- 固定操作区 `tn-dock` 配合 `tn-page with-dock`；Tab 页底部操作追加 `above-tabs`，正文预留自身操作区空间；底部安全区由样式保留。已有原生 Tab 路由仍使用 navigation.ts 的 switchProjectTab/showProjectTab。
-- `quick-login` 属性继续为 `visible`、可选 `expectedUserId`；事件 `success` 携带真实 `user`，`close` 仅取消。发起页保存待继续操作，只有 success 后再导航／执行；登录本身不建单、不付款、不接受邀请／礼物。
-- 未勾选时普通登录按钮打开“继续登录表示同意协议”，其中“继续”原生 button 自带 `getPhoneNumber|agreePrivacyAuthorization`。该授权回调确认同意并直接提交登录；取消不提交同意。勾选后直接使用同一原生授权按钮。查看条款使用 navigateTo，返回保留组件及发起操作。
-- 现有 sessionClient 的微信登录、账号恢复、昵称更新和退出接口不变；不新增会话模型、模拟账号或兼容接口。
+## 页面与控件
 
-此里程碑：登录／首页账号／支付页面定向测试 20 项、前端类型检查通过。支付测试 Array.at 已改为 ES2020 可用的末项下标访问。原生运行、设计对照与完整票据证据继续在 MP01 后续记录补齐。
+- 页面 JSON 设置 `navigationStyle: "custom"`，最前放 `<tn-navigation title="章节内容"/>`。Tab 页用 `brand="{{true}}"`，标题为当前功能（公开首页为「首页」）；`back` 默认 true。组件在 app.json 全局注册。正文不重复同名标题。
+- 导航保留 68px 应用页头，读取真实状态栏高度和胶囊区域。左侧品牌／返回与功能标题对齐设计；320px 长于八字的标题使用15px，避免胶囊遮挡和孤字换行。返回走实际页面栈，无上一页时回首页。
+- `styles/modern.wxss` 由 app.wxss 导入。`tn-page` 白底、22px 边距、15px 正文；短屏高度不超过740px时上边距18px、间距16px。`tn-card`、`tn-heading`、`tn-muted`、`tn-row`、`tn-icon-tile`、`tn-grow`、`tn-field`、`tn-input` 可复用。
+- `tn-button` 至少52px；追加 `tn-secondary` 为次操作。轻操作 `tn-link`；图标按钮 `tn-icon-button` 至少44px；图标 `tn-icon`。
+- 固定操作用 `tn-dock`，页面加 `with-dock` 并按自身内容预留空间。Tab 页操作追加 `above-tabs`。自定义两 Tab 为图标文字横排、70px加真实安全区；使用 navigation.ts 的 switchProjectTab/showProjectTab，不能 navigateTo Tab 页。
+- Main 和 Sample 使用公开、明确标注的样书素材。它们不是账号项目数据。Main 当前套餐价由 MP02 接真实 offer 后替换。
 
-## 页头对齐修正
+## 登录与账号
 
-原画布使用左侧品牌／返回和功能标题，不能以原生居中标题代替。新版页面须在 JSON 使用 `navigationStyle: "custom"`，并注册／使用 `tn-navigation`（`/components/tn-navigation/index`，最终由 app.json 全局注册）：页面最前放 `<tn-navigation title="章节内容"/>`；Tab 页使用 `brand="{{true}}"`。`back` 默认 true，可按页面设置 false。组件保留 68px 应用页头，读取微信状态栏高度和胶囊区域留白；系统状态栏、胶囊不属于可绘制设计。正文无需再放重复功能标题。导航随页面固定，返回使用真实页面栈，无上一页时回首页。
+```xml
+<quick-login id="quick-login" visible="{{loginVisible}}"
+  bindsuccess="loginSucceeded" bindclose="closeLogin"/>
+```
+
+属性为 `visible`、可选 `expectedUserId`；`success` 的 detail.user 是 API 返回账号；`close` 只取消。发起页保存待继续操作，只有 success 才继续导航／刷新。登录本身不建单、不付款、不接受邀请或领取礼物。稳定 id 同时用于官方原生自动化选择组件。
+
+未勾选时普通登录按钮打开「继续登录表示同意协议」，其中「继续」是自带 `getPhoneNumber|agreePrivacyAuthorization` 的原生 button；其回调确认同意并直接提交登录。取消不提交同意。已勾选直接用同一授权接口。条款使用 navigateTo，返回保留组件和发起页。
+
+首页、样书、我的、新购、付款、邀请、原声入口使用这一组件。新购保留表单；付款登录后重新读取订单且不自动付款；邀请登录后须明确接受。发布包移除独立 login 页面，开发 account-link 等调试入口不进入发布包。
+
+sessionClient 的真实登录／恢复／昵称更新／退出接口保持原路径。共享 `Account` 新增 `maskedPhone?: string | null`；微信和网页账号响应均由同一映射返回，例如 `131****1234`，不暴露原始号码。`sessionClient.maskedPhone()` 读取真实账号缓存；退出及恢复失败立即清空显示。无数据库模型变更。

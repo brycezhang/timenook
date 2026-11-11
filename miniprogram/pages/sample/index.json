@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "样书预览",
+  "usingComponents": {
+    "quick-login": "../../components/quick-login/index"
+  },
+  "navigationStyle": "custom"
+}

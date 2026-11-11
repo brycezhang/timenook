@@ -2,5 +2,6 @@
   "navigationBarTitleText": "我的",
   "usingComponents": {
     "quick-login": "../../components/quick-login/index"
-  }
+  },
+  "navigationStyle": "custom"
 }

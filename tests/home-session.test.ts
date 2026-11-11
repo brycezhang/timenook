@@ -25,6 +25,7 @@ interface HomePage {
     status: string;
     mode: string;
     nickname: string;
+    maskedPhone: string;
     editing: boolean;
   };
   editNickname(): void;
@@ -83,6 +84,7 @@ function pageHarness() {
 const user = {
   id: "11111111-1111-4111-8111-111111111111",
   nickname: "用户1234",
+  maskedPhone: "138****1234",
 };
 const loginResponse = {
   user,
@@ -155,6 +157,7 @@ test("returning during logout preserves the pending exit and clears the nickname
   assert.equal(page.data.busy, true);
   assert.equal(page.data.loggedIn, false);
   assert.equal(page.data.nickname, "");
+  assert.equal(page.data.maskedPhone, "");
   respond(revocation, 204);
   await logout;
   assert.equal(page.data.busy, false);
@@ -185,6 +188,7 @@ test("an older foreground restore cannot overwrite the next account after logout
   const nextUser = {
     id: "44444444-4444-4444-8444-444444444444",
     nickname: "新用户",
+    maskedPhone: "131****5678",
   };
   signIn(storage, {
     ...loginResponse,

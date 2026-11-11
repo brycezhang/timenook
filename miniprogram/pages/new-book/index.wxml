@@ -1,2 +1,4 @@
 <view class="s-page"><view class="s-muted">开始一个新项目</view><view class="s-title s-space">给这本书<text>
 </text>起个名字。</view><label class="s-field">书名<input class="s-input" value="{{name}}" data-field="name" bindinput="input" maxlength="80" placeholder="例如：妈妈的一生"/></label><label class="s-field">书中的称呼（选填）<input class="s-input" value="{{salutation}}" data-field="salutation" bindinput="input" maxlength="40" placeholder="例如：妈妈、老陈、我"/></label><view class="s-muted s-space">可以为自己记录，也可以邀请家人一起完成。</view></view><view class="s-dock"><button class="s-button" bindtap="next" disabled="{{!name}}">下一步</button></view>
+
+<quick-login id="quick-login" visible="{{loginVisible}}" bindsuccess="loginSucceeded" bindclose="closeLogin"/>

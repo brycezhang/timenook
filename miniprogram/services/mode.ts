@@ -11,6 +11,7 @@ export function setDataMode(mode: DataMode): void {
 export function livePageAllowed(page: string): boolean {
   return [
     "home",
+    "sample",
     "login",
     "projects",
     "new-book",

@@ -1,5 +1,7 @@
 # TimeNook 项目上下文
 
+2026-11-11 MP01 入口与账号已实现：公开首页／样书、共享底部登录、我的昵称与脱敏手机号、完整八节条款和左侧自定义页头／横排两Tab。原canvas同步未勾选可点、继续即同意和窄屏标题。六张主责画板完成真实DevTools 390×844、320×568对照；身份API用真实本地PostgreSQL/Redis，微信供应商边界仍为fixture。真实手机号成功授权与真机另记，未部署或上传。后续模块使用[共享契约](docs/delivery/2026-11-11/miniprogram-refactor/MP01-ui-contract.md)，[运行证据与外部待验](docs/delivery/2026-11-11/miniprogram-refactor/MP01-evidence.md)。
+
 2026-11-11 用户已授权按最新业务流程与设计完整重构小程序，要求 UI 和交互逐画板对齐；开发阶段前后端与数据库可以破坏性更新，不做旧版本兼容。已在 `codex/miniprogram-modern-refactor` 整理[12 张模块票及实施规格](docs/delivery/2026-11-11/miniprogram-refactor/README.md)，[71 张画板对应表](docs/delivery/2026-11-11/miniprogram-refactor/DESIGN-MAP.md)已覆盖无遗漏。用户已确认拆分与验收方式，[父规格 #166](https://github.com/brycezhang/timenook/issues/166) 与 12 张子票及原生阻塞关系已发布，MP01（#167）开始实施；所有原生验收仍为待验证。当前基线 CI 的支付测试 `Array.at` 类型错误纳入首票修复，最新登录同意提示需同步原画布与小程序。
 
 2026-11-11 登录协议交互按最新备注调整：未勾选时登录按钮可点击，点击后提示「继续登录表示同意协议」，点击「继续」即确认同意并直接继续微信手机号登录，无需返回勾选或再次点击登录；取消不提交，已勾选直接登录。已同步业务流程、PRD、设计说明及差异清单。本次只修改文档，原画布交互和小程序代码待同步。

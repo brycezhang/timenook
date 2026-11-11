@@ -1,20 +1,20 @@
 <view wx:if="{{visible}}" class="quick-login-mask" catchtouchmove="preventMove">
- <view class="quick-login-sheet tn-surface" role="dialog" aria-modal="true" aria-label="微信手机号登录">
-  <view class="quick-login-heading"><view class="tn-heading">微信手机号登录</view><button class="tn-icon-button quick-login-close" bindtap="close" disabled="{{busy}}" aria-label="关闭登录">×</button></view>
-  <view class="tn-muted">授权微信绑定的手机号，登录后继续。</view>
-  <view class="quick-login-agreement">
-   <button class="quick-login-check" bindtap="toggleAgreed" aria-role="checkbox" aria-checked="{{agreed}}" aria-label="我已阅读并同意使用条款与隐私说明" disabled="{{busy}}"><text class="quick-login-box {{agreed ? 'checked' : ''}}">{{agreed ? '✓' : ''}}</text></button>
-   <view class="quick-login-terms">我已阅读并同意 <button bindtap="terms">《使用条款与隐私说明》</button></view>
-  </view>
-  <button wx:if="{{agreed}}" class="tn-button quick-login-submit" open-type="getPhoneNumber|agreePrivacyAuthorization" bindgetphonenumber="login" loading="{{busy}}" disabled="{{busy}}">微信手机号登录</button>
-  <button wx:else class="tn-button quick-login-submit" bindtap="requestConsent">微信手机号登录</button>
+ <view class="quick-login-sheet tn-surface" role="dialog" aria-modal="true" aria-label="{{consentConfirm ? '继续登录表示同意协议' : '微信手机号登录'}}">
+  <view class="quick-login-heading"><view class="tn-heading">{{consentConfirm ? '继续登录表示同意协议' : '微信手机号登录'}}</view><button class="tn-icon-button quick-login-close" bindtap="close" disabled="{{busy}}" aria-label="关闭登录"><image class="tn-icon" src="/assets/icons/modern-close.svg"/></button></view>
+  <block wx:if="{{!consentConfirm}}">
+   <view class="tn-muted">授权微信绑定的手机号，登录后继续。</view>
+   <view class="quick-login-agreement">
+    <button class="quick-login-check" bindtap="toggleAgreed" aria-role="checkbox" aria-checked="{{agreed}}" aria-label="我已阅读并同意使用条款与隐私说明" disabled="{{busy}}"><text class="quick-login-box {{agreed ? 'checked' : ''}}">{{agreed ? '✓' : ''}}</text></button>
+    <view class="quick-login-terms">我已阅读并同意 <button bindtap="terms">《使用条款与隐私说明》</button></view>
+   </view>
+   <button wx:if="{{agreed}}" class="tn-button quick-login-submit" open-type="getPhoneNumber|agreePrivacyAuthorization" bindgetphonenumber="login" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/phone-white.svg"/>微信手机号登录</button>
+   <button wx:else class="tn-button quick-login-submit" bindtap="requestConsent"><image class="tn-icon" src="/assets/icons/phone-white.svg"/>微信手机号登录</button>
+  </block>
+  <block wx:else>
+   <button class="quick-consent-terms tn-link" bindtap="terms">《使用条款与隐私说明》</button>
+   <button class="tn-button quick-consent-continue" open-type="getPhoneNumber|agreePrivacyAuthorization" bindgetphonenumber="continueLogin">继续</button>
+   <button class="tn-link quick-consent-cancel" bindtap="cancelConsent">取消</button>
+  </block>
   <view wx:if="{{status}}" class="tn-error">{{status}}</view>
- </view>
- <view wx:if="{{consentConfirm}}" class="quick-consent-mask">
-  <view class="quick-consent-dialog tn-surface" role="dialog" aria-modal="true" aria-label="同意协议并继续登录">
-   <view class="tn-heading">继续登录表示同意协议</view>
-   <button class="quick-consent-terms" bindtap="terms">《使用条款与隐私说明》</button>
-   <view class="quick-consent-actions"><button class="tn-button tn-secondary" bindtap="cancelConsent">取消</button><button class="tn-button quick-consent-continue" open-type="getPhoneNumber|agreePrivacyAuthorization" bindgetphonenumber="continueLogin">继续</button></view>
-  </view>
  </view>
 </view>

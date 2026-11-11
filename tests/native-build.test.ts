@@ -272,9 +272,9 @@ test("release package excludes website and probe routes and ignores stored demo 
     path.join(root, "pages/home/index.wxml"),
     "utf8",
   );
-  assert.match(homeMarkup, /class="landing-hero"/);
-  assert.match(homeMarkup, /class="benefits"/);
-  assert.match(homeMarkup, /含1本实体书/);
+  assert.match(homeMarkup, /class="landing-photo"/);
+  assert.match(homeMarkup, /class="landing-benefits"/);
+  assert.match(homeMarkup, /含首本实体书/);
   assert.match(homeMarkup, /bindtap="account"/);
   assert.doesNotMatch(homeMarkup, /bindtap="(?:orders|participation|logout)"/);
   const home = await app.open("pages/home/index", false);

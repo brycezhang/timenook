@@ -1,1 +1,4 @@
-{ "navigationBarTitleText": "使用条款" }
+{
+  "navigationBarTitleText": "使用条款与隐私说明",
+  "navigationStyle": "custom"
+}

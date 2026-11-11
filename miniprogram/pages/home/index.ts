@@ -132,6 +132,9 @@ Page({
     const p = this.data.overview;
     if (p?.canInvite) go("invite", `projectId=${p.projectId}`);
   },
+  sample() {
+    go("sample");
+  },
   terms() {
     go("terms");
   },

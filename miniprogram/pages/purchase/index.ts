@@ -34,6 +34,7 @@ Page({
     mode: dataMode(),
     bookTitle: "",
     loggedIn: false,
+    loginVisible: false,
     localVerification: PAYMENT_VERIFICATION_BUILD,
     packageVersionId: "",
     verificationBusy: false,
@@ -269,9 +270,14 @@ Page({
   },
   // @development-only:end
   login() {
-    wx.redirectTo({
-      url: `/pages/login/index?next=purchase&bookTitle=${encodeURIComponent(this.data.bookTitle)}&salutation=${encodeURIComponent(this.requestedRecipient)}`,
-    });
+    this.setData({ loginVisible: true });
+  },
+  closeLogin() {
+    this.setData({ loginVisible: false });
+  },
+  loginSucceeded() {
+    this.setData({ loginVisible: false, loggedIn: true });
+    void this.onShow();
   },
   async checkout(localOnly = false) {
     if (dataMode() !== "live" || this.data.verificationBusy) return;

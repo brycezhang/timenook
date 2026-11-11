@@ -25,6 +25,7 @@ export type WechatLoginProfile = Pick<
 export interface Account {
   id: string;
   nickname?: string | null;
+  maskedPhone?: string | null;
 }
 export interface LoginResult {
   user: Account;

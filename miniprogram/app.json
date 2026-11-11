@@ -1,6 +1,7 @@
 {
   "pages": [
     "pages/home/index",
+    "pages/sample/index",
     "pages/login/index",
     "pages/account-link/index",
     "pages/purchase/index",
@@ -49,7 +50,9 @@
     ]
   },
   "usingComponents": {
-    "app-loading": "/components/app-loading/index"
+    "app-loading": "/components/app-loading/index",
+    "quick-login": "/components/quick-login/index",
+    "tn-navigation": "/components/tn-navigation/index"
   },
   "window": {
     "navigationBarTitleText": "时光故事",

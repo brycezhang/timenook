@@ -27,3 +27,5 @@
   <view class="s-muted">此入口对应纸书中的故事版本，后续改稿不会替换纸书原声。</view>
 </view>
 </block>
+
+<quick-login id="quick-login" visible="{{loginVisible}}" bindsuccess="loginSucceeded" bindclose="closeLogin"/>

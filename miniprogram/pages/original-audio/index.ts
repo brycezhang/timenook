@@ -27,6 +27,7 @@ Page({
     entry: null as BookAudioEntryView | null,
     busy: false,
     loggedIn: false,
+    loginVisible: false,
     status: "",
     paused: false,
     position: 0,
@@ -187,7 +188,14 @@ Page({
   },
   login() {
     if (!this.data.busy && this.entryId)
-      wx.navigateTo({ url: "/pages/login/index?next=back" });
+      this.setData({ loginVisible: true });
+  },
+  closeLogin() {
+    this.setData({ loginVisible: false });
+  },
+  loginSucceeded() {
+    this.setData({ loginVisible: false, loggedIn: true });
+    return this.refresh();
   },
   async logout() {
     this.deny("正在退出登录");

@@ -10,22 +10,18 @@ Page({
     busy: false,
     status: "",
     loggedIn: false,
+    loginVisible: false,
     expired: false,
   },
   token: "",
   generation: 0,
   joining: false,
-  resumeJoin: false,
   onLoad(q) {
     this.token = q.token ?? "";
     setDataMode("live");
   },
   async onShow() {
     if (this.joining) return;
-    if (this.resumeJoin) {
-      this.resumeJoin = false;
-      if (sessionClient.context()) return this.accept();
-    }
     const n = ++this.generation;
     this.setData({
       busy: true,
@@ -52,8 +48,7 @@ Page({
   async accept() {
     if (this.data.busy || !this.data.invitation) return;
     if (!sessionClient.context()) {
-      this.resumeJoin = true;
-      go("login", "next=back");
+      this.setData({ loginVisible: true });
       return;
     }
     this.joining = true;
@@ -72,6 +67,12 @@ Page({
       this.joining = false;
       this.setData({ busy: false, loggedIn: !!sessionClient.context() });
     }
+  },
+  closeLogin() {
+    this.setData({ loginVisible: false });
+  },
+  loginSucceeded() {
+    this.setData({ loginVisible: false, loggedIn: true });
   },
   terms() {
     go("terms");

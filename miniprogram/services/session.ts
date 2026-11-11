@@ -468,6 +468,9 @@ export class SessionClient {
     return result;
   }
 
+  maskedPhone(): string {
+    return this.stored()?.user.maskedPhone ?? "";
+  }
   nickname(): string {
     return this.stored()?.user.nickname ?? "";
   }

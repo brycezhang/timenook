@@ -1,6 +1,21 @@
 import { BadRequestException, ConflictException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
+import type { Account } from "@timenook/contracts";
+
+export function accountView(user: {
+  id: string;
+  nickname: string | null;
+  phoneNumber: string | null;
+}): Account {
+  return {
+    id: user.id,
+    nickname: user.nickname,
+    maskedPhone: user.phoneNumber
+      ? user.phoneNumber.slice(3, 6) + "****" + user.phoneNumber.slice(-4)
+      : null,
+  };
+}
 
 /** Web MVP accepts mainland numbers; only verified proofs reach account lookup. */
 export function mainlandPhone(value: string): string {

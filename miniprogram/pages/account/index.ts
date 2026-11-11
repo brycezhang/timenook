@@ -9,6 +9,7 @@ Page({
     busy: false,
     status: "",
     nickname: "",
+    maskedPhone: "",
     editing: false,
     loginVisible: false,
   },
@@ -21,6 +22,7 @@ Page({
     this.setData({
       loggedIn: !!sessionClient.context(),
       nickname: sessionClient.nickname(),
+      maskedPhone: sessionClient.maskedPhone(),
     });
     try {
       const user = await sessionClient.restore();
@@ -28,6 +30,7 @@ Page({
         this.setData({
           loggedIn: !!user,
           nickname: user?.nickname ?? "",
+          maskedPhone: user?.maskedPhone ?? "",
           status: "",
         });
     } catch (e) {
@@ -35,6 +38,7 @@ Page({
         this.setData({
           loggedIn: false,
           nickname: "",
+          maskedPhone: "",
           status: e instanceof Error ? e.message : "请重新登录",
         });
     }
@@ -84,6 +88,7 @@ Page({
       busy: true,
       loggedIn: false,
       nickname: "",
+      maskedPhone: "",
       editing: false,
       status: "",
     });
@@ -105,11 +110,14 @@ Page({
       this.setData({ loginVisible: true });
     }
   },
-  loginSucceeded(e: { detail: { user: { nickname?: string | null } } }) {
+  loginSucceeded(e: {
+    detail: { user: { nickname?: string | null; maskedPhone?: string | null } };
+  }) {
     this.setData({
       loginVisible: false,
       loggedIn: true,
       nickname: e.detail.user.nickname ?? "",
+      maskedPhone: e.detail.user.maskedPhone ?? "",
       status: "",
     });
     if (this.loginDestination === "new-book") go("new-book");

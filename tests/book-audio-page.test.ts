@@ -256,11 +256,11 @@ test("scanned audio returns from the shared phone login without losing its entry
   h.page.onLoad({ entryId });
   await h.page.onShow();
   h.page.login();
-  assert.deepEqual(h.routes, ["/pages/login/index?next=back"]);
+  assert.deepEqual(h.routes, []);
+  assert.equal(h.page.data.loginVisible, true);
   assert.equal(h.loginCalls.length, 0);
-  h.page.onHide();
   h.storage.set(`timenook.session.v1:${base}`, structuredClone(login));
-  const returning = h.page.onShow();
+  const returning = h.page.loginSucceeded();
   await tick();
   assert.equal(h.requests[0].url, `${base}/book-audio/${entryId}`);
   h.respond(0, view());
