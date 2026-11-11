@@ -68,7 +68,6 @@ onUnmounted(() => {
       v-else-if="photo"
       class="project-cover-photo"
       :project-id="projectId"
-      :interview-id="photo.interviewId"
       :photo-id="photo.id"
       :asset="{ id: photo.assetId, bytes: photo.bytes, sha256: photo.sha256 }"
       alt="故事书封面照片"

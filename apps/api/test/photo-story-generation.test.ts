@@ -32,7 +32,8 @@ test(
         },
       ),
     );
-    const path = `/v1/projects/${p.projectId}/interviews/${interview.id}/photos`;
+    const path = `/v1/projects/${p.projectId}/photos`;
+    const materials = `/v1/projects/${p.projectId}/interviews/${interview.id}/photo-materials`;
     const image = await sharp({
       create: { width: 960, height: 640, channels: 3, background: "#e54334" },
     })
@@ -71,8 +72,8 @@ test(
       200,
     );
     const snapshot = fixture.data(
-      await fixture.request("POST", `${path}/materials`, p.narrator.token, {
-        expectedRevision: collection.snapshot.revision,
+      await fixture.request("POST", materials, p.narrator.token, {
+        expectedRevision: 0,
         entries: [{ photoId: photo.id, caption: "一家人在老院子里" }],
       }),
     );
@@ -108,7 +109,7 @@ test(
       "一家人在老院子里",
     );
     fixture.data(
-      await fixture.request("POST", `${path}/materials`, p.narrator.token, {
+      await fixture.request("POST", materials, p.narrator.token, {
         expectedRevision: snapshot.revision,
         entries: [{ photoId: photo.id, caption: "之后补写的新说明" }],
       }),

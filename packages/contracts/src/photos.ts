@@ -1,8 +1,6 @@
-export interface StoryPhoto {
+export interface ProjectPhoto {
   id: string;
   projectId: string;
-  interviewId: string;
-  actualQuestionId: string;
   clientPhotoId: string;
   bytes: number;
   sha256: string;
@@ -44,7 +42,6 @@ export interface PhotoMaterials {
   }[];
 }
 export interface PhotoCollection {
-  photos: StoryPhoto[];
-  snapshot: PhotoMaterials | null;
+  photos: ProjectPhoto[];
   usage: { reservedCount: number; consumedCount: number };
 }

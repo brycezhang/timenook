@@ -73,7 +73,7 @@ test("all historical payloads and owned files disappear while minimum version an
   data(
     await request(
       "POST",
-      `/v1/projects/${p.projectId}/interviews/${p.interviewId}/photos/${photos.entries[0].photoId}/crop`,
+      `/v1/projects/${p.projectId}/interviews/${p.interviewId}/photo-materials/${photos.entries[0].photoId}/crop`,
       p.narrator.token,
       {
         expectedRevision: photos.revision,

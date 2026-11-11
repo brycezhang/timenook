@@ -276,7 +276,6 @@ test("an unauthorized private photo download crossing local expiresAt clears the
   const photoId = "55555555-5555-4555-8555-555555555555";
   const pending = client.downloadPhoto(
     identity.user.id,
-    identity.session.id,
     photoId,
     "66666666-6666-4666-8666-666666666666",
   );
@@ -328,7 +327,6 @@ test("an in-flight upload 401 at local expiresAt invalidates its owned identity 
   await assert.rejects(
     client.downloadPhoto(
       identity.user.id,
-      identity.session.id,
       "55555555-5555-4555-8555-555555555555",
       "66666666-6666-4666-8666-666666666666",
     ),
@@ -364,7 +362,6 @@ for (const transport of ["request", "download", "upload"] as const) {
         : transport === "download"
           ? client.downloadPhoto(
               identity.user.id,
-              identity.session.id,
               "55555555-5555-4555-8555-555555555555",
               "66666666-6666-4666-8666-666666666666",
             )
@@ -419,7 +416,6 @@ test("a previous account's delayed photo-download 401 cannot clear the newer log
   await client.login(phoneProfile);
   const pending = client.downloadPhoto(
     identity.user.id,
-    identity.session.id,
     "55555555-5555-4555-8555-555555555555",
     "66666666-6666-4666-8666-666666666666",
   );
@@ -459,7 +455,6 @@ test("session invalidation delivers the download result despite a failed view li
   client.onInvalidated((context) => events.push(context));
   const pending = client.downloadPhoto(
     identity.user.id,
-    identity.session.id,
     "55555555-5555-4555-8555-555555555555",
     "66666666-6666-4666-8666-666666666666",
   );
@@ -480,7 +475,6 @@ test("a failed device session removal cannot reuse the rejected token and a succ
   await client.login(phoneProfile);
   const pending = client.downloadPhoto(
     identity.user.id,
-    identity.session.id,
     photo,
     asset,
   );
@@ -501,7 +495,7 @@ test("a failed device session removal cannot reuse the rejected token and a succ
     status: 401,
   });
   await assert.rejects(
-    client.downloadPhoto(identity.user.id, identity.session.id, photo, asset),
+    client.downloadPhoto(identity.user.id, photo, asset),
     { code: "UNAUTHENTICATED", status: 401 },
   );
   await assert.rejects(

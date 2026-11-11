@@ -21,7 +21,7 @@ import type {
   ProductionTaskView,
   RecordingContext,
   RecordingInterview,
-  PhotoCollection,
+  PhotoMaterials,
 } from "../../../packages/contracts/src";
 import type { ProbeLocalClip } from "../../../packages/contracts/src/audio-probe";
 import { questions, samples, touch } from "../../domain/model";
@@ -495,13 +495,13 @@ Page({
       this.data.interview?.id === interviewId;
     this.setData({ photosLoading: true, photoError: "", recordingPhotos: [] });
     try {
-      const collection = await sessionClient.request<PhotoCollection>(
-        `/projects/${this.projectId}/interviews/${interviewId}/photos`,
+      const collection = await sessionClient.request<PhotoMaterials | null>(
+        `/projects/${this.projectId}/interviews/${interviewId}/photo-materials`,
       );
       if (!current()) return;
       await clearPhotoPreviews();
       if (!current()) return;
-      const entries = collection.snapshot?.entries ?? [];
+      const entries = collection?.entries ?? [];
       this.setData({
         recordingPhotos: entries.map((entry) => ({
           photoId: entry.photoId,
@@ -515,7 +515,6 @@ Page({
           if (!asset) return;
           const image = await privatePhotoPreview(
             this.projectId,
-            interviewId,
             entry.photoId,
             asset,
             current,

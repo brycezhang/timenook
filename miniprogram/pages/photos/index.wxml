@@ -1,4 +1,38 @@
-<app-loading wx:if="{{pageLoading}}" variant="list" />
-<block wx:else>
-<view class="s-page"><view class="s-title">照片与说明</view><view class="s-muted" wx:if="{{!rows.length}}">给故事添一张照片。</view><view class="s-space"><sort-list items="{{rows}}" editable disabled="{{busy}}" bindopen="showPhoto" bindcaption="editCaption" bindreorder="sort" /></view><view wx:for="{{photos}}" wx:key="clientPhotoId" wx:if="{{item.state!=='sealed'}}" class="s-card"><image wx:if="{{item.path}}" src="{{item.path}}" mode="aspectFit" class="s-cover" /><app-loading wx:if="{{item.state==='uploading' || item.state==='verifying' || item.state==='saving'}}" variant="spinner" /><view class="s-muted">{{item.state==='failed'||item.state==='save-error'?'上传未完成，请重试':'正在上传照片…'}}</view><button wx:if="{{item.state==='failed'||item.state==='local'}}" class="s-link" data-id="{{item.clientPhotoId}}" bindtap="upload">重新上传</button><button wx:if="{{item.state==='save-error'}}" class="s-link" data-id="{{item.clientPhotoId}}" bindtap="retrySave">重新保存照片</button></view><button class="s-button secondary s-space" bindtap="choose" disabled="{{busy}}">添加照片</button><view class="s-error">{{status}}</view><view class="s-dock"><button class="s-button" bindtap="back" disabled="{{busy}}" loading="{{busy}}">完成，返回故事</button></view></view>
-</block>
+<tn-navigation title="{{selection ? '选择照片' : '项目照片'}}" />
+<view class="tn-page photos-page {{selection ? 'with-dock' : ''}}">
+  <app-loading wx:if="{{pageLoading}}" variant="list" />
+  <block wx:else>
+    <view wx:if="{{!rows.length && !photos.length && !status}}" class="photo-empty">
+      <view class="photo-empty-icon"><image class="tn-icon" src="/assets/icons/image.svg" /></view>
+      <view class="photo-empty-title">暂无照片</view>
+      <button class="tn-button photo-add-empty" bindtap="choose" disabled="{{busy}}" loading="{{busy}}">添加照片</button>
+    </view>
+    <view wx:if="{{rows.length}}" class="photo-grid">
+      <view wx:for="{{rows}}" wx:key="id" class="photo-item">
+        <button class="photo-tile {{item.selected ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="select" bindlongpress="preview" disabled="{{busy}}" aria-label="{{item.title}}">
+          <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" />
+          <app-loading wx:elif="{{item.imageLoading}}" variant="spinner" />
+          <view wx:else class="photo-unavailable">照片暂未加载</view>
+          <view wx:if="{{item.selected}}" class="photo-check">✓</view>
+        </button>
+        <text class="photo-caption">{{item.title}}</text>
+        <input wx:if="{{selection && item.selected}}" class="tn-input photo-caption-input" value="{{captions[item.id]}}" data-id="{{item.id}}" bindinput="caption" maxlength="1000" placeholder="添加照片说明" />
+      </view>
+      <button class="photo-add" bindtap="choose" disabled="{{busy}}"><text class="photo-plus">＋</text><text>添加照片</text></button>
+    </view>
+    <view wx:for="{{photos}}" wx:key="clientPhotoId" class="tn-card photo-pending">
+      <image wx:if="{{item.path}}" src="{{item.path}}" mode="aspectFit" />
+      <app-loading wx:if="{{item.state === 'saving' || item.state === 'uploading' || item.state === 'verifying'}}" variant="spinner" />
+      <view wx:if="{{item.state === 'failed' || item.state === 'save-error'}}" class="tn-muted">照片上传未完成</view>
+      <button wx:if="{{item.state === 'failed' || item.state === 'local'}}" class="tn-link" data-id="{{item.clientPhotoId}}" bindtap="upload">重试上传</button>
+      <button wx:if="{{item.state === 'save-error'}}" class="tn-link" data-id="{{item.clientPhotoId}}" bindtap="retrySave">重新保存照片</button>
+      <button wx:if="{{item.state === 'failed' && item.serverId}}" class="tn-link" data-id="{{item.clientPhotoId}}" bindtap="release">取消上传</button>
+    </view>
+    <view wx:if="{{selectedId && !selection}}" class="tn-card photo-selected">
+      <view class="photo-selected-heading"><text>{{selectedTitle}}</text><button class="tn-link" data-id="{{selectedId}}" bindtap="preview">查看照片</button></view>
+      <button class="tn-button" bindtap="recordPhoto" disabled="{{busy}}" loading="{{busy}}"><image class="tn-icon" src="/assets/icons/mic.svg" />讲讲这张照片</button>
+    </view>
+    <view wx:if="{{status}}" class="photo-error">{{status}}<button class="tn-link" bindtap="onShow" disabled="{{busy}}">重新读取</button></view>
+    <view wx:if="{{selection}}" class="tn-dock"><button class="tn-button" bindtap="done" disabled="{{busy || photos.length}}" loading="{{busy}}">完成选择{{selectedIds.length ? '（' + selectedIds.length + '）' : ''}}</button></view>
+  </block>
+</view>
