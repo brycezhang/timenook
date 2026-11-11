@@ -2,6 +2,7 @@ import type {
   PersonalPlan,
   PlanQuestionState,
 } from "../../../packages/contracts/src";
+import { questionSession } from "../../services/question-recommendations";
 import { storyClient } from "../../services/stories";
 import { personalPlanClient } from "../../services/personal-plan";
 import { startOutlineAnswer } from "../../services/outline";
@@ -111,6 +112,10 @@ Page({
         ],
         this.plan.preferences.blockedTopics,
       );
+      if (state === "later")
+        questionSession(this.projectId).defer(`outline:${this.key}`);
+      else if (state === "ready")
+        questionSession(this.projectId).restore(`outline:${this.key}`);
       wx.navigateBack();
     } catch (e) {
       this.setData({ status: e instanceof Error ? e.message : "未能保存" });

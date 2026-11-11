@@ -58,6 +58,10 @@ class StartInterviewDto {
   @IsString()
   @MaxLength(120)
   questionKey?: string;
+  @ApiProperty({ required: false, format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  familyQuestionId?: string;
   @ApiProperty({ required: false, enum: ["photo", "free-narration"] })
   @IsOptional()
   @IsIn(["photo", "free-narration"])
@@ -193,6 +197,7 @@ export class Interviews implements OnModuleDestroy {
               clientInterviewId: body.clientInterviewId,
               expectedPlanRevision: body.expectedPlanRevision,
               questionKey: body.questionKey,
+              familyQuestionId: body.familyQuestionId,
               starterKind: body.starterKind,
               selfWritten: body.selfWritten
                 ? {
@@ -225,6 +230,7 @@ export class Interviews implements OnModuleDestroy {
               expectedPlanRevision: body.expectedPlanRevision,
               capturedBy: actor.operatorUserId,
               questionKey: body.questionKey,
+              familyQuestionId: body.familyQuestionId,
               starterKind: body.starterKind,
               selfWritten: body.selfWritten,
             },
