@@ -19,5 +19,5 @@ async function stop(code=0){if(stopping)return;stopping=true;await api.stopBookF
  const state=path.join(dir,'session.json');
  await fs.writeFile(state,JSON.stringify({projectId:p.projectId,base:'http://127.0.0.1:3422/v1',session:{user:{id:p.narrator.id},session:{id:p.narrator.sessionId,token:p.narrator.token,expiresAt:new Date(Date.now()+3600000).toISOString()}}}),{mode:0o600});
  console.log(JSON.stringify({ready:true,projectId:p.projectId,base:'http://127.0.0.1:3422/v1',privateSessionFile:state}));
- process.on('SIGTERM',stop);process.on('SIGINT',stop);
+ process.on('SIGTERM',()=>void stop());process.on('SIGINT',()=>void stop());
 })().catch(async()=>{console.error('MP05 fixture startup failed');await stop(1);});
