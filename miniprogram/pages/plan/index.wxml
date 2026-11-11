@@ -1,4 +1,0 @@
-<app-loading wx:if="{{pageLoading}}" variant="list" />
-<block wx:else>
-<view class="s-page"><view class="s-title">话题管理</view><view class="s-muted">点话题可以修改，拖动把手调整顺序。</view><view wx:for="{{groups}}" wx:key="id" class="s-space"><view class="s-subtitle">{{item.title}}</view><view class="s-space"><sort-list items="{{item.rows}}" data-chapter="{{item.id}}" disabled="{{busy}}" bindopen="open" bindreorder="reorder" /></view></view><view class="s-error">{{status}}</view><view class="s-dock"><button class="s-button" bindtap="add" disabled="{{busy}}">添加话题</button></view></view>
-</block>

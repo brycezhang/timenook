@@ -84,19 +84,11 @@ export class ProjectPlans {
             createdBy: command.createdBy,
             content: json(template.content),
             contentHash,
+            directoryHash: directoryHash(template.content),
           },
         });
         await tx.interviewPreferences.create({
           data: { projectId: command.projectId },
-        });
-        await tx.planDirectoryVersion.create({
-          data: {
-            projectId: command.projectId,
-            version: 1,
-            chapters: [],
-            contentHash: hash([]),
-            createdBy: command.createdBy,
-          },
         });
       }
       const project = await tx.project.findUniqueOrThrow({
@@ -152,31 +144,8 @@ export class ProjectPlans {
     },
     transaction?: Prisma.TransactionClient,
   ): Promise<ProjectPlan> {
-    validateWrite(command.projectId, command.createdBy);
-    validateVersion(command.expectedVersion);
-    validateContent(command.content);
-    command = { ...command };
-    const content = structuredClone(command.content);
-    const revise = async (tx: Prisma.TransactionClient) => {
-      const updated = await tx.project.updateMany({
-        where: {
-          id: command.projectId,
-          currentRevision: command.expectedVersion,
-        },
-        data: { currentRevision: { increment: 1 } },
-      });
-      if (updated.count !== 1) throw new ProjectPlanError("VERSION_CONFLICT");
-      await tx.planRevision.create({
-        data: {
-          projectId: command.projectId,
-          revision: command.expectedVersion + 1,
-          createdBy: command.createdBy,
-          content: json(content),
-          contentHash: hash(content),
-        },
-      });
-      return readPlan(tx, command.projectId);
-    };
+    const revise = (tx: Prisma.TransactionClient) =>
+      reviseProjectPlanIn(tx, command);
     return transaction
       ? revise(transaction)
       : this.database.$transaction(revise);
@@ -186,77 +155,7 @@ export class ProjectPlans {
     projectId: string,
     tx: Prisma.TransactionClient,
   ): Promise<PlanDirectory> {
-    validateProjectId(projectId);
-    await tx.$queryRaw`SELECT id FROM projects WHERE id=${projectId}::uuid FOR UPDATE`;
-    const row = await tx.planDirectoryVersion.findFirst({
-      where: { projectId },
-      orderBy: { version: "desc" },
-    });
-    if (!row) throw new ProjectPlanError("PROJECT_NOT_FOUND");
-    return {
-      version: row.version,
-      contentHash: row.contentHash,
-      chapters: row.chapters as unknown as PlanDirectory["chapters"],
-    };
-  }
-  async reviseDirectory(
-    command: {
-      projectId: string;
-      expectedVersion: number;
-      createdBy: string;
-      chapters: PlanDirectory["chapters"];
-    },
-    tx: Prisma.TransactionClient,
-  ): Promise<PlanDirectory> {
-    validateWrite(command.projectId, command.createdBy);
-    validateVersion(command.expectedVersion);
-    if (!Array.isArray(command.chapters))
-      throw new ProjectPlanError("INVALID_COMMAND");
-    const keys = new Set<string>(),
-      stories = new Set<string>();
-    for (const chapter of command.chapters) {
-      record(chapter, ["key", "title", "storyRefs"]);
-      if (
-        !nonempty(chapter.key) ||
-        !nonempty(chapter.title) ||
-        !stringList(chapter.storyRefs) ||
-        keys.has(chapter.key)
-      )
-        throw new ProjectPlanError("INVALID_COMMAND");
-      keys.add(chapter.key);
-      for (const ref of chapter.storyRefs) {
-        if (stories.has(ref)) throw new ProjectPlanError("INVALID_COMMAND");
-        stories.add(ref);
-      }
-    }
-    const current = await this.directory(command.projectId, tx);
-    if (current.version !== command.expectedVersion)
-      throw new ProjectPlanError("VERSION_CONFLICT");
-    const contentHash = hash(command.chapters);
-    if (current.contentHash === contentHash) return current;
-    await tx.planDirectoryVersion.create({
-      data: {
-        projectId: command.projectId,
-        version: current.version + 1,
-        contentHash,
-        createdBy: command.createdBy,
-        chapters: JSON.parse(JSON.stringify(command.chapters)),
-      },
-    });
-    return {
-      version: current.version + 1,
-      contentHash,
-      chapters: structuredClone(command.chapters),
-    };
-  }
-  async assertDirectoryVersion(
-    projectId: string,
-    expectedVersion: number,
-    tx: Prisma.TransactionClient,
-  ): Promise<void> {
-    validateVersion(expectedVersion);
-    if ((await this.directory(projectId, tx)).version !== expectedVersion)
-      throw new ProjectPlanError("VERSION_CONFLICT");
+    return planDirectory(await readPlan(tx, projectId));
   }
 
   async captureActualQuestion(
@@ -368,6 +267,16 @@ export class ProjectPlans {
           questionKey: command.questionKey,
           starterKind: command.starterKind,
           snapshot: JSON.parse(JSON.stringify(snapshot)),
+          source: {
+            kind: command.questionKey ? "plan" : command.starterKind!,
+            ...(command.questionKey
+              ? {
+                  chapterKey: plan.chapters.find((ch) =>
+                    ch.questions.some((q) => q.key === command.questionKey),
+                  )!.key,
+                }
+              : {}),
+          },
           ...(custom
             ? {
                 source: JSON.parse(
@@ -375,6 +284,15 @@ export class ProjectPlans {
                     kind: command.followupSource ? "follow-up" : "self-written",
                     ...command.followupSource,
                     input: custom,
+                    ...(custom.rewritesQuestionKey
+                      ? {
+                          chapterKey: plan.chapters.find((ch) =>
+                            ch.questions.some(
+                              (q) => q.key === custom.rewritesQuestionKey,
+                            ),
+                          )!.key,
+                        }
+                      : {}),
                     ...(original
                       ? {
                           rewritesQuestionKey: custom.rewritesQuestionKey,
@@ -422,6 +340,7 @@ export class ProjectPlans {
       orderBy: { version: "asc" },
     });
     return {
+      answers: await planAnswers(tx, projectId),
       actualQuestions: (
         await tx.actualPlanQuestion.findMany({
           where: { projectId },
@@ -624,7 +543,7 @@ async function initializeTemplate(
   };
 }
 
-async function readPlan(
+export async function readPlan(
   tx: Prisma.TransactionClient,
   projectId: string,
   revisionNumber?: number,
@@ -728,19 +647,29 @@ function validateContent(value: unknown): asserts value is PlanContent {
   const content = record(value, ["chapters", "starters"]);
   if (!Array.isArray(content.chapters) || !Array.isArray(content.starters))
     throw new ProjectPlanError("INVALID_PLAN");
+  if (content.chapters.length > 64) throw new ProjectPlanError("INVALID_PLAN");
+  const storyRefs = new Set<string>();
   const chapters = new Set<string>();
   const questions = new Set<string>();
   for (const value of content.chapters) {
-    const chapter = record(value, ["key", "title", "questions"]);
+    const chapter = record(value, ["key", "title", "questions", "storyRefs"]);
     if (
       !nonempty(chapter.key) ||
       chapters.has(chapter.key) ||
       !nonempty(chapter.title) ||
-      !Array.isArray(chapter.questions)
+      !Array.isArray(chapter.questions) ||
+      !stringList(chapter.storyRefs) ||
+      chapter.title.length > 120 ||
+      chapter.key.length > 120
     ) {
       throw new ProjectPlanError("INVALID_PLAN");
     }
     chapters.add(chapter.key);
+    for (const id of chapter.storyRefs as string[]) {
+      validateProjectId(id);
+      if (storyRefs.has(id)) throw new ProjectPlanError("INVALID_PLAN");
+      storyRefs.add(id);
+    }
     for (const value of chapter.questions) {
       const question = record(value, [
         "key",
@@ -755,6 +684,7 @@ function validateContent(value: unknown): asserts value is PlanContent {
         !nonempty(question.key) ||
         questions.has(question.key) ||
         !nonempty(question.text) ||
+        question.text.length > 2000 ||
         !nonempty(question.intent) ||
         !stringList(question.optionalContext) ||
         !stringList(question.sensitivityTags) ||
@@ -779,4 +709,169 @@ function validateContent(value: unknown): asserts value is PlanContent {
     starters.add(starter.kind);
   }
   if (starters.size !== 2) throw new ProjectPlanError("INVALID_PLAN");
+}
+
+export function directoryHash(content: PlanContent) {
+  return hash(
+    content.chapters.map(({ key, title, storyRefs }) => ({
+      key,
+      title,
+      storyRefs,
+    })),
+  );
+}
+
+export function planDirectory(plan: ProjectPlan): PlanDirectory {
+  const chapters = plan.chapters.map(({ key, title, storyRefs }) => ({
+    key,
+    title,
+    storyRefs,
+  }));
+  return { version: plan.revision, chapters, contentHash: hash(chapters) };
+}
+
+// Current associations are derived from the same plan; actual question snapshots never change.
+export async function planAnswers(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+) {
+  const [plan, stories, interviews, actual] = await Promise.all([
+    readPlan(tx, projectId),
+    tx.story.findMany({
+      where: { projectId, currentRevisionId: { not: null } },
+    }),
+    tx.interview.findMany({ where: { projectId } }),
+    tx.actualPlanQuestion.findMany({ where: { projectId } }),
+  ]);
+  return stories.flatMap((story) => {
+    const interview = interviews.find((row) => row.id === story.interviewId);
+    const question = actual.find(
+      (row) => row.id === interview?.actualQuestionId,
+    );
+    const source = question?.source as { rewritesQuestionKey?: string } | null;
+    const questionKey = question?.questionKey ?? source?.rewritesQuestionKey;
+    return questionKey
+      ? [
+          {
+            questionKey,
+            storyId: story.id,
+            chapterKey:
+              plan.chapters.find((ch) => ch.storyRefs.includes(story.id))
+                ?.key ?? null,
+          },
+        ]
+      : [];
+  });
+}
+
+export async function reviseProjectPlanIn(
+  tx: Prisma.TransactionClient,
+  command: {
+    projectId: string;
+    expectedVersion: number;
+    createdBy: string;
+    content: PlanContent;
+  },
+): Promise<ProjectPlan> {
+  validateWrite(command.projectId, command.createdBy);
+  validateVersion(command.expectedVersion);
+  validateContent(command.content);
+  await tx.$queryRaw`SELECT id FROM projects WHERE id=${command.projectId}::uuid FOR UPDATE`;
+  const previous = await readPlan(tx, command.projectId);
+  if (previous.revision !== command.expectedVersion)
+    throw new ProjectPlanError("VERSION_CONFLICT");
+  const content = structuredClone(command.content);
+  const answers = await planAnswers(tx, command.projectId);
+  const questionChapter = (chapters: PlanContent["chapters"], key: string) =>
+    chapters.find((ch) => ch.questions.some((q) => q.key === key));
+  const included = new Set(
+    (
+      await tx.story.findMany({
+        where: { projectId: command.projectId, included: true },
+        select: { id: true },
+      })
+    ).map((s) => s.id),
+  );
+  for (const answer of answers) {
+    if (!included.has(answer.storyId)) continue;
+    const before = questionChapter(previous.chapters, answer.questionKey);
+    let after = questionChapter(content.chapters, answer.questionKey);
+    const destination = content.chapters.find((ch) =>
+      ch.storyRefs.includes(answer.storyId),
+    );
+    if (before && after && before.key !== after.key) {
+      // Moving an answered question moves its saved stories atomically.
+      for (const chapter of content.chapters)
+        chapter.storyRefs = chapter.storyRefs.filter(
+          (id) => id !== answer.storyId,
+        );
+      after.storyRefs.push(answer.storyId);
+    } else if (
+      after &&
+      destination &&
+      destination.key !== answer.chapterKey &&
+      destination.key !== after.key
+    ) {
+      const question = after.questions.find(
+        (q) => q.key === answer.questionKey,
+      )!;
+      after.questions = after.questions.filter(
+        (q) => q.key !== answer.questionKey,
+      );
+      destination.questions.push(question);
+    }
+  }
+  validateContent(content);
+  const refs = content.chapters.flatMap((ch) => ch.storyRefs);
+  if (
+    refs.length &&
+    (await tx.story.count({
+      where: {
+        projectId: command.projectId,
+        id: { in: refs },
+        included: true,
+        currentRevisionId: { not: null },
+      },
+    })) !== refs.length
+  )
+    throw new ProjectPlanError("INVALID_PLAN");
+  if (hash(content) === previous.contentHash) return previous;
+  await tx.project.update({
+    where: { id: command.projectId },
+    data: { currentRevision: { increment: 1 } },
+  });
+  await tx.planRevision.create({
+    data: {
+      projectId: command.projectId,
+      revision: previous.revision + 1,
+      createdBy: command.createdBy,
+      content: json(content),
+      contentHash: hash(content),
+      directoryHash: directoryHash(content),
+    },
+  });
+  return readPlan(tx, command.projectId);
+}
+
+export async function placeStoryIn(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  storyId: string,
+  chapterKey: string | null,
+  createdBy: string,
+) {
+  const plan = await readPlan(tx, projectId);
+  const content = {
+    chapters: structuredClone(plan.chapters),
+    starters: plan.starters,
+  };
+  for (const chapter of content.chapters)
+    chapter.storyRefs = chapter.storyRefs.filter((id) => id !== storyId);
+  content.chapters.find((ch) => ch.key === chapterKey)?.storyRefs.push(storyId);
+  return reviseProjectPlanIn(tx, {
+    projectId,
+    expectedVersion: plan.revision,
+    createdBy,
+    content,
+  });
 }

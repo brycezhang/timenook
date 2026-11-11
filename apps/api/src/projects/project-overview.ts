@@ -82,7 +82,9 @@ export class ProjectOverview {
       ),
     );
     const confirmed = stories.filter((s) => s.revision).length,
-      included = stories.filter((s) => s.revision && s.included).length,
+      included = stories.filter(
+        (s) => s.revision && s.included && s.chapter,
+      ).length,
       pending = stories.filter((s) => !s.revision).length;
     const failed = stories.some(
         (s) =>

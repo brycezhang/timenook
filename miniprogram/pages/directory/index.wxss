@@ -1,13 +1,1 @@
-.chapter-body {
-  width: 100%;
-  font-size: 42rpx;
-  line-height: 1.9;
-  padding: 26rpx 0;
-  min-height: 360rpx;
-}
-.story-add {
-  color: #46563c;
-  min-width: 140rpx;
-  min-height: 100rpx;
-  font-size: 34rpx;
-}
+@import "../../styles/outline.wxss";

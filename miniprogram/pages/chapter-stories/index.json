@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "本章故事",
-  "usingComponents": { "sort-list": "/components/sort-list/index" }
+  "usingComponents": {
+    "sort-list": "/components/sort-list/index"
+  }
 }

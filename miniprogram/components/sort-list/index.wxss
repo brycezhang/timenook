@@ -78,3 +78,14 @@
   background: #eee9df;
   border-radius: 8px;
 }
+
+.sort-copy { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.sort-subtitle { font-size: 12px; color: #756859; font-weight: 400; }
+.modern { border: 1px solid #ded4c6; border-radius: 18px; background: #fff; min-height: 96px; margin-bottom: 12px; padding: 6px 10px; gap: 4px; }
+.modern .sort-content { padding: 5px 4px; gap: 12px; background: #fff; }
+.modern .sort-title { font-size: 16px; font-weight: 600; line-height: 1.5; }
+.modern .sort-number { font-size: 20px; min-width: 23px; }
+.modern .sort-handle { width: 44px; min-height: 56px; border: 0; color: #756859; }
+.modern .sort-handle > text { font-size: 25px; line-height: 1.2; }
+.modern .sort-handle .sort-hint { font-size: 10px; }
+.modern .sort-action { padding: 8px 4px; font-size: 13px; min-width: 44px; color: #756859; background: #fff; }

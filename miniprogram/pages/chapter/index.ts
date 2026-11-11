@@ -1,5 +1,6 @@
-import type { BookContext, StoryView } from "../../../packages/contracts/src";
-import { bookClient } from "../../services/books";
+import type { PersonalPlan, StoryView } from "../../../packages/contracts/src";
+import { personalPlanClient } from "../../services/personal-plan";
+import { paymentKey } from "../../services/payments";
 import { storyClient } from "../../services/stories";
 import { sessionClient } from "../../services/session";
 import {
@@ -17,10 +18,11 @@ Page({
     pageLoading: true,
     status: "",
     dirty: false,
+    existing: false,
   },
   projectId: "",
   key: "",
-  context: null as BookContext | null,
+  context: null as PersonalPlan | null,
   stories: [] as StoryView[],
   generation: 0,
   owner: "",
@@ -41,6 +43,7 @@ Page({
     });
     this.projectId = q.projectId || "";
     this.key = decodeURIComponent(q.chapter || "");
+    this.setData({ existing: !!this.key });
   },
   async onShow() {
     if (this.data.dirty && this.owner === sessionClient.context()) return;
@@ -48,18 +51,20 @@ Page({
     this.owner = sessionClient.context();
     this.setData({ busy: true, pageLoading: !this.context, status: "" });
     try {
-      const c = await bookClient.read(this.projectId);
-      const chapter = c.directory.chapters.find((x) => x.key === this.key);
-      if (!chapter) throw new Error("章节已不存在，请返回目录");
+      const c = await personalPlanClient.read(this.projectId);
+      const chapter = c.chapters.find((x) => x.key === this.key);
+      if (!chapter && this.key) throw new Error("章节已不存在，请返回目录");
       const stories = await Promise.all(
-        chapter.storyRefs.map((id) => storyClient.read(this.projectId, id)),
+        (chapter?.storyRefs || []).map((id) =>
+          storyClient.read(this.projectId, id),
+        ),
       );
       if (n !== this.generation || this.owner !== sessionClient.context())
         return;
       this.context = c;
       this.stories = stories;
       this.setData({
-        title: chapter.title,
+        title: chapter?.title || "",
         rows: stories.map((s) => ({
           id: s.id,
           title: s.revision?.title || "故事",
@@ -121,17 +126,39 @@ Page({
           this.stories = this.stories.map((x) => (x.id === s.id ? updated : x));
         }
       }
-      const chapter = this.context.directory.chapters.find(
-        (x) => x.key === this.key,
-      )!;
-      if (chapter.title !== this.data.title.trim())
-        this.context = await bookClient.reviseDirectory(
+      if (!this.key) {
+        this.key = `chapter-${paymentKey()}`;
+        this.context = await personalPlanClient.revise(
           this.projectId,
-          this.context.directory.version,
-          this.context.directory.chapters.map((x) =>
-            x.key === this.key ? { ...x, title: this.data.title.trim() } : x,
-          ),
+          this.context.revision,
+          {
+            chapters: [
+              ...this.context.chapters,
+              {
+                key: this.key,
+                title: this.data.title.trim(),
+                questions: [],
+                storyRefs: [],
+              },
+            ],
+            starters: this.context.starters,
+          },
         );
+      } else if (
+        this.context.chapters.find((x) => x.key === this.key)?.title !==
+        this.data.title.trim()
+      ) {
+        this.context = await personalPlanClient.revise(
+          this.projectId,
+          this.context.revision,
+          {
+            chapters: this.context.chapters.map((x) =>
+              x.key === this.key ? { ...x, title: this.data.title.trim() } : x,
+            ),
+            starters: this.context.starters,
+          },
+        );
+      }
       this.setData({ dirty: false });
       markEditing(false);
       return true;
@@ -148,7 +175,10 @@ Page({
     if (await this.persist()) wx.navigateBack();
   },
   async choose() {
-    if ((!this.data.dirty || (await this.persist())) && !this.data.busy)
+    if (
+      ((this.key && !this.data.dirty) || (await this.persist())) &&
+      !this.data.busy
+    )
       go(
         "chapter-stories",
         `projectId=${this.projectId}&chapter=${encodeURIComponent(this.key)}`,
@@ -164,10 +194,13 @@ Page({
         if (!r.confirm || !this.context) return;
         this.setData({ busy: true });
         try {
-          await bookClient.reviseDirectory(
+          await personalPlanClient.revise(
             this.projectId,
-            this.context.directory.version,
-            this.context.directory.chapters.filter((x) => x.key !== this.key),
+            this.context.revision,
+            {
+              chapters: this.context.chapters.filter((x) => x.key !== this.key),
+              starters: this.context.starters,
+            },
           );
           markEditing(false);
           wx.navigateBack();

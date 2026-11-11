@@ -54,32 +54,36 @@ test("a new project starts with neutral questions plus photo and free narration"
   assert.equal(plan.revision, 1);
   assert.deepEqual(plan.sourceTemplate, {
     id: "timenook-default",
-    version: 1,
+    version: 2,
     contentHash: plan.sourceTemplate.contentHash,
     reviewStatus: "unreviewed-test-only",
   });
   assert.match(plan.sourceTemplate.contentHash, /^[a-f0-9]{64}$/);
   assert.deepEqual(
     plan.chapters.map((chapter) => chapter.title),
-    ["记得的地方", "生活里的片段", "想留下的话"],
+    [
+      "我的童年",
+      "求学与成长",
+      "初入社会",
+      "亲密关系与家庭",
+      "时光转折与重要经历",
+      "现在的我与想留下的话",
+    ],
   );
   assert.equal(
     plan.chapters[0].questions[0].text,
-    "有没有一个地方，你现在还想说说它的样子？",
+    "我出生在什么地方，家人怎样讲起我的出生？",
   );
   assert.equal(
     plan.chapters[0].questions[0].intent,
-    "从本人选择的地点回忆一个具体场景",
+    "由主讲人回忆自己的真实经历",
   );
   assert.deepEqual(
     plan.starters.map((starter) => starter.kind),
     ["photo", "free-narration"],
   );
   assert.deepEqual(plan.preferences, { version: 1, blockedTopics: [] });
-  assert.doesNotMatch(
-    JSON.stringify(plan.chapters),
-    /丈夫|妻子|孩子|结婚|退休|职业/,
-  );
+  assert.ok(plan.chapters.every((chapter) => chapter.questions.length === 10));
 });
 
 test("repeated and concurrent project creation restores one durable plan after restart", async () => {
@@ -203,7 +207,7 @@ test("a code release preserves each old project's personal revision and blocked 
   });
   assert.notEqual(personal.contentHash, original.contentHash);
   const nextRelease = structuredClone(BUILTIN_TEMPLATE);
-  nextRelease.version = 2;
+  nextRelease.version = 3;
   nextRelease.content.chapters[0].title = "新版默认章节";
   const upgraded = new ProjectPlans(databaseUrl, nextRelease);
   try {
@@ -211,7 +215,7 @@ test("a code release preserves each old project's personal revision and blocked 
       ...command,
       projectId: randomUUID(),
     });
-    assert.equal(fresh.sourceTemplate.version, 2);
+    assert.equal(fresh.sourceTemplate.version, 3);
     assert.notEqual(
       fresh.sourceTemplate.contentHash,
       original.sourceTemplate.contentHash,
@@ -294,7 +298,7 @@ test("template identity uses canonical content and captures the code release at 
       projectId: randomUUID(),
       createdBy: "synthetic-initiator",
     });
-    assert.equal(project.chapters[0].title, "记得的地方");
+    assert.equal(project.chapters[0].title, "我的童年");
   } finally {
     await release.close();
   }

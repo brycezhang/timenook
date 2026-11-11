@@ -1,5 +1,10 @@
 <app-loading wx:if="{{pageLoading}}" variant="list" />
-<block wx:else>
-<view class="s-page"><view class="s-title">{{title}}</view><view class="s-muted">共 {{rows.length}} 个章节</view><view class="s-space"><sort-list id="chapters" items="{{rows}}" numbered disabled="{{busy}}" bindopen="open" bindreorder="reorder" /></view><button class="s-button secondary" bindtap="add" disabled="{{busy}}">添加章节</button><view class="s-error" wx:if="{{status}}">{{status}}</view><view class="s-dock"><button class="s-button" bindtap="done">完成，返回我的书</button></view></view>
-
-</block>
+<view wx:else class="tn-page with-dock directory-page">
+  <view class="tn-muted">拖动右侧调整章节顺序</view>
+  <view class="outline-between"><text class="tn-muted">{{rows.length}} 章 · {{storyCount}} 篇故事</text><button class="tn-link" bindtap="add" disabled="{{busy}}">＋ 新增章节</button></view>
+  <button wx:if="{{unassigned}}" class="unassigned-card" bindtap="unassigned"><text>{{unassigned}} 篇故事未归章</text><text>›</text></button>
+  <sort-list id="chapters" items="{{rows}}" numbered modern disabled="{{busy}}" bindopen="open" bindreorder="reorder" />
+  <view wx:if="{{!rows.length}}" class="outline-empty">暂无章节，可添加自己的章节</view>
+  <view wx:if="{{status}}" class="tn-error">{{status}}</view>
+  <view class="tn-dock"><button class="tn-button" bindtap="book">查看书稿</button><button class="tn-link" bindtap="free" disabled="{{busy}}">自由讲述</button></view>
+</view>

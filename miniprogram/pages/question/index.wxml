@@ -1,0 +1,5 @@
+<app-loading wx:if="{{pageLoading}}" variant="story" />
+<view wx:else class="tn-page with-dock"><view class="outline-between"><text class="outline-badge">大纲问题</text><button class="tn-link" bindtap="edit">编辑</button></view><view class="outline-title question-text">{{text}}</view><view class="tn-muted">{{chapter}} · {{state}}</view>
+<button wx:if="{{storyId}}" class="outline-card" bindtap="story"><view class="outline-card-title">查看回答故事 ›</view></button>
+<view wx:else class="question-actions"><button class="tn-link" data-state="later" bindtap="state" disabled="{{busy}}">稍后回答</button><button class="tn-link" data-state="{{state==='已跳过'?'ready':'skipped'}}" bindtap="state" disabled="{{busy}}">{{state==='已跳过'?'恢复问题':'跳过问题'}}</button></view>
+<view class="tn-error" wx:if="{{status}}">{{status}}</view><view wx:if="{{!storyId}}" class="tn-dock"><button class="tn-button" bindtap="answer" disabled="{{busy}}" loading="{{busy}}">开始回答</button></view></view>

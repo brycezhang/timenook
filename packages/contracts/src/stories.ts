@@ -71,6 +71,8 @@ export interface StoryRevisionView {
   origin: "ai" | "participant";
 }
 export interface StoryView {
+  chapter: { key: string; title: string } | null;
+  questionKey: string | null;
   included?: boolean;
   canEdit?: boolean;
   confirmation?: {

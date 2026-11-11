@@ -1,0 +1,3 @@
+@import "../../styles/outline.wxss";
+.question-text { font-size:26px; line-height:1.55; }
+.question-actions { display:flex; justify-content:space-between; gap:12px; }
