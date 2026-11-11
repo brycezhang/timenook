@@ -1,0 +1,33 @@
+[
+  {
+    "name": "six native pages 390",
+    "passed": false,
+    "error": "Page book not ready"
+  },
+  {
+    "name": "six native pages 390",
+    "passed": false,
+    "error": "Command failed: wechatide -c Codex automation_element_action --project /var/folders/7t/xgv_t04j7k74jfdhdh1p41tr0000gn/T/timenook-native-mp05-wHp5fn --selector sort-list >>> #open-childhood --action tap --wait-for-selector sort-list >>> #open-childhood\n[wechatide] skill-call: client=Codex tool=automation_element_action\n"
+  },
+  {
+    "name": "five chapter pages 390",
+    "passed": true
+  },
+  {
+    "name": "five chapter pages 390",
+    "passed": true
+  },
+  {
+    "name": "native chapter title and body, question edit and actual interview entry persist",
+    "passed": false,
+    "error": "准备好就开始说，结束后先保存到本机"
+  },
+  {
+    "name": "native title/body/question save followed by captured-question interview verified",
+    "passed": true
+  },
+  {
+    "name": "native cross-chapter add moves saved story and its answered question together",
+    "passed": true
+  }
+]

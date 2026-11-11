@@ -16,7 +16,7 @@
 
 ## 逐画板入口与待验
 
-设计参考：[390px](design-reference/390/)、[320px](design-reference/320/)，页面结构与尺寸按对应 `.dc.html` 实现。原生 390px/320px、键盘与安全区检查当前均待执行；未用浏览器截图替代。
+设计参考：[390px 故事详情](design-reference/390/Story.png)、[320px 故事详情](design-reference/320/Story.png)，全部页面见[参考清单](design-reference/manifest.json)。页面结构与尺寸按对应 `.dc.html` 实现。原生 390px/320px、键盘与安全区检查当前均待执行；未用浏览器截图替代。
 
 | 画板 | 实际路由/状态与进入方式 | 原生证据 |
 | --- | --- | --- |

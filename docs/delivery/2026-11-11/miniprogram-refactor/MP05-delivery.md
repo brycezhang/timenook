@@ -25,19 +25,39 @@
 - 已运行真实 PDF 内容测试：空章省略、照片与说明、按故事绑定原声码、分页；未来问题修改保持固定版本、实际目录修改使当前输入过期。PDF 测试使用已校验字体及合成输入。
 - 排除故事后封面保留新增真实 API 回归通过（目录测试 3/3）。
 
-## 原生设计对照
+## 原生设计对照（仍待完整验收）
 
-待填写本轮微信开发者工具 390×844 / 320×568 原生截图与操作结果。设计参考来自 `designs/timenook-modern-2026-11-10/project/` 对应六画板和 [390px](design-reference/390/BookDirectory.png)／[320px](design-reference/320/BookDirectory.png) 固定截图；数据使用隔离数据库的合成项目、真实 HTTP 业务接口。微信身份供应商、声音与图片输入为明确测试替身，不代表外部验收。
+已合入 MP01 最终页头与 Tab（`dbc58f4`），在微信开发者工具 `2.02.2609250` / 基础库 `3.17.5`、真实 iPhone 12/13(Pro) 390×844 设备配置验证。`wx.getWindowInfo().windowWidth` 为 390；官方 `simulator_screenshot` 输出保留原生设备外框，PNG 是 602×1300，没有 CSS 宽度模拟或截图缩放。每张截图均为隔离真实数据库项目；身份供应商、音频与 AI 为合成 fixture。真实入口曾逐步点击首页「我的书」→「章节目录」→章节，后续页面通过真实按钮和原生返回操作。
 
-## 交接与外部待验
+| 画板           | 390px 原生截图与观察                                                                                            | 320px |
+| -------------- | --------------------------------------------------------------------------------------------------------------- | ----- |
+| BookDirectory  | [截图](evidence/MP05/native/BookDirectory-390.png)：六章、未归章提示、总数包含未归章，整章排序入口              | 待验  |
+| ChapterOutline | [截图](evidence/MP05/native/ChapterOutline-390.png)：章节身份、问题/故事切换、已回答状态、编辑入口              | 待验  |
+| QuestionDetail | [截图](evidence/MP05/native/QuestionDetail-390.png)：真实问题、章节、稍后/跳过/移除、开始回答                   | 待验  |
+| QuestionEdit   | [截图](evidence/MP05/native/QuestionEdit-390.png)：已修正文案字体继承粗体；题目及必选章节                       | 待验  |
+| ChapterEdit    | [截图](evidence/MP05/native/ChapterEdit-390.png)：已修正原生输入垂直偏移、正文粗体和底色；章名/正文均已实际保存 | 待验  |
+| ChapterStories | [截图](evidence/MP05/native/ChapterStories-390.png)：已修正摘要间距；章内故事与可加入列表使用实际业务数据       | 待验  |
 
-旧 `scripts/test-native-design.cjs` 仍含删除前的 `/book/directory` mock，已交 MP12 更新全链路脚本；不用于本票原生验收。未执行部署、上传、提审、真实购买或实物制作。iOS／Android 微信真机和真实录音供应商结果由相应验收记录另行确认。
+运行中使用三篇明确合成故事；截图中故事数和题目状态相对画稿的差别来自真实测试数据。固定页头为微信状态栏、胶囊与底部安全区保留原生空间。设计参考在 `design-reference/{390,320}`。
 
+已经通过的原生操作：
 
-### 恢复原生验证
+- 输入章节名称和正文 → 保存 → 返回章节 → 真实 API 再读取确认修改。
+- 输入问题文字 → 保存 → 开始回答 → [录音准备页](evidence/MP05/native/QuestionToRecording-390.png)。真实访谈记录 `childhood-03`、修改后的文字及 `source.chapterKey=childhood`；没有打开真实麦克风。
+- 点击故事「移到本章」→ [目标章故事](evidence/MP05/native/CrossChapterStory-390.png) → [目标章已回答问题](evidence/MP05/native/CrossChapterQuestion-390.png)，API 核对故事只归一章、问题同步移动；通过同一公开界面移回也已验证。
 
-MP01 当前独占 DevTools，MP05 尚未启动开发者工具或 3422 fixture。待协调释放后，在 MP05 worktree 执行 `node --env-file=.env /tmp/mp05-native-driver.cjs`（交互终端）。脚本使用现有 API 测试 fixture，新建隔离 PostgreSQL schema／Redis 前缀，提供 `127.0.0.1:3422/v1` 真实 HTTP 服务；在临时正式构建中仅替换 API 地址并关闭本机域名检查，不替换业务网络。
+[运行清单](evidence/MP05/manifest.json)、[官方 CLI 操作记录](evidence/MP05/cli-actions.jsonl)和[步骤记录](evidence/MP05/cli-results.json)保留当前证据。早期脚本失败是混用持久 SDK 与 CLI、选择器能力和访谈提示文案判断问题，均已识别；不将这些脚本错误计作产品通过或失败。
 
-终端出现 READY 后：先 `device` 读取实际宽度，选择 iPhone 12/13(Pro) 的 390×844 机型，`capture` 采集六页；切换「录音布局 320×568」后再 `capture`。每次进入目录重新装入 API 签发的隔离测试会话以适应 VM 重载；截图通过官方 `simulator_screenshot`，仍须核对 PNG 尺寸并逐页对照。再回 390 执行 `verify`（章节改名、问题编辑、选择题目开录）、`drag`（章节与故事原生触摸排序）、`move`（移出、加入、跨章移动及问题关系）。结束用 `quit` 关闭本次临时项目并清理隔离 fixture，不触碰他人窗口。
+**尚未完成**：320×568 六页、GUI 真实拖章/拖故事、组件内「移出」后加入，以及最终全部画板验收。CUA 明确返回 Mac 已锁屏且自动解锁失败，已请用户手动解锁；没有反复重试或绕过。390 截图与已通过操作不代表本票全部原生验收完成。
 
-脚本尚未实际运行，选择器、真实窗口切换与布局结果均待现场确认；失败应修复后补齐六画板记录。工作目录保留 own node_modules、已生成 Prisma、已编译 dist-test、release 包和安全的本地 `.env` 链接。
+## 恢复验证与交接
+
+当前真实 API 进程仍在 3422（交互会话 74870），项目 `dc001005-887c-461f-ba16-6d7ef3c00514`。原生临时项目和 evidence 位于 `/var/folders/7t/xgv_t04j7k74jfdhdh1p41tr0000gn/T/timenook-native-mp05-wHp5fn`；已保留 API 签发的合成用户会话。没有输出令牌、登录 code 或私人资料。此项目尚无照片资产，可供 MP07 后续上传验证。
+
+当前可用 CLI helper 是 `/tmp/mp05-native-cli.cjs`，独立操作脚本 `/tmp/mp05-native-move.cjs`。可移植副本在 [harness](evidence/MP05/harness/native.cjs)：设置 `TIMENOOK_NATIVE_PROJECT` 和 `TIMENOOK_NATIVE_PROJECT_ID`，使用 `directory()` 后截图；用 CUA 点击 sort-list 的章节，再运行 `chapter` 采集五个章内页面。CLI 的选择器不能进入该自定义组件，不再混用另一持久 SDK 连接。页面级按钮已提供稳定 ID/class，输入/点击继续使用官方工具。
+
+解锁后，先读取原生页面和实际宽度；从底部设备菜单选择「录音布局 320×568」，等待重载与真实首页就绪，继续六页截图与差异处理。回 390 后，在 GUI 拖动章节和故事的右侧手柄，逐次读取真实 `/plan` 验证顺序；点击组件内「移出」再加入并核对持久化。全部结束再记录完成及清理本次 fixture。不要再调用旧 `/tmp/mp05-native-driver.cjs` 的原生操作命令；该进程只保留 API 服务，最终可 `quit` 清理并关闭该进程。
+
+新建同类隔离服务可参考 [API harness](evidence/MP05/harness/api.cjs)，会把合成登录态写入系统临时目录的 0600 文件；该重建入口仅做语法检查，当前验收仍使用已有进程。工作目录保留独立 node_modules、Prisma、dist-test、release 包和安全本地 `.env` 链接。
+
+旧 `scripts/test-native-design.cjs` 含删除前的 `/book/directory` mock，已交 MP12 更新全链路脚本，不用于本票验收。未执行部署、上传、提审、真实购买或实物制作。iOS／Android 微信真机、真实录音供应商结果由相应验收记录另行确认。

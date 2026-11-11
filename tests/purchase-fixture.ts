@@ -109,6 +109,7 @@ export async function purchasePage(
       navigateTo: ({ url }: { url: string }) => routes.push(url),
       switchTab: ({ url }: { url: string }) => routes.push(url),
       showToast() {},
+      hideShareMenu() {},
     },
   });
   return { page, requests, routes, payments, storage };
