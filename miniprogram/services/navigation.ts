@@ -1,3 +1,4 @@
+import { resetQuestionSession } from "./question-recommendations";
 import { dataMode } from "./mode";
 import { projectOverviewClient } from "./project-overview";
 
@@ -8,6 +9,7 @@ export function isProjectTab(page: string): page is ProjectTab {
 }
 
 export function switchProjectTab(page: ProjectTab, projectId = "") {
+  if (page === "account" || projectId) resetQuestionSession();
   // switchTab cannot carry a query. The existing selection is scoped to the
   // current authenticated session and is read again by cached tab pages.
   if (dataMode() === "live" && projectId)

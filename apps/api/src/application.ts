@@ -59,6 +59,10 @@ import {
   RecordingObjectsController,
   RECORDING_OBJECTS,
 } from "./media/recordings";
+import {
+  FamilyQuestionService,
+  FamilyQuestionsController,
+} from "./projects/family-questions";
 import { Interviews, InterviewsController } from "./projects/interviews";
 import {
   PersonalPlans,
@@ -522,7 +526,11 @@ export async function createApplication(
           ]
         : []),
       ...(config.participation || config.acceptance
-        ? [PersonalPlanController, InterviewsController]
+        ? [
+            PersonalPlanController,
+            InterviewsController,
+            FamilyQuestionsController,
+          ]
         : []),
       ...(config.recording || config.acceptance
         ? [ProjectOverviewController]
@@ -690,6 +698,7 @@ export async function createApplication(
       Participation,
       Gifts,
       PersonalPlans,
+      FamilyQuestionService,
       Interviews,
       AdminAccess,
       Catalog,

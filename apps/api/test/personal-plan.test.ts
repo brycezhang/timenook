@@ -668,3 +668,116 @@ test("authorized plan edits and subject decisions roll back with their actual ca
 after(async () => {
   await closePrivacyFixture(config);
 });
+
+test("family text questions retain original author, optional chapter and remain unanswered after interview creation", async () => {
+  const p = await joinedProject();
+  const url = `/v1/projects/${p.projectId}/family-questions`;
+  const outsider = await login();
+  assert.equal((await request("GET", url, outsider.token)).statusCode, 403);
+  assert.equal(
+    (
+      await request("POST", url, p.buyer.token, {
+        clientQuestionId: randomUUID(),
+        text: "小时候最喜欢什么？",
+        chapterKey: null,
+      })
+    ).statusCode,
+    400,
+  );
+  data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/member-profile`,
+      p.buyer.token,
+      { relationship: "女儿" },
+    ),
+  );
+  const created = data(
+    await request("POST", url, p.buyer.token, {
+      clientQuestionId: randomUUID(),
+      text: "小时候最喜欢什么？",
+      chapterKey: null,
+    }),
+  );
+  assert.equal(created.authorId, p.buyer.id);
+  assert.equal(created.authorRelationship, "女儿");
+  assert.equal(created.chapterKey, null);
+  assert.equal(created.story, null);
+  const edited = data(
+    await request("POST", `${url}/${created.id}`, p.narrator.token, {
+      expectedVersion: created.version,
+      text: "小时候最喜欢在哪里玩？",
+      chapterKey: null,
+    }),
+  );
+  assert.equal(edited.authorId, created.authorId);
+  assert.equal(edited.authorNickname, created.authorNickname);
+  assert.equal(edited.authorRelationship, "女儿");
+  data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/member-profile`,
+      p.buyer.token,
+      { relationship: "朋友" },
+    ),
+  );
+  const plan = data(
+    await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token),
+    200,
+  );
+  const interview = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/interviews`,
+      p.narrator.token,
+      {
+        clientInterviewId: randomUUID(),
+        expectedPlanRevision: plan.revision,
+        familyQuestionId: created.id,
+      },
+    ),
+  );
+  assert.equal(interview.actualQuestion.capturedBy, p.narrator.id);
+  assert.deepEqual(interview.actualQuestion.source, {
+    kind: "family",
+    familyQuestionId: created.id,
+    authorId: created.authorId,
+    authorNickname: created.authorNickname,
+    authorRelationship: "女儿",
+  });
+  assert.equal(interview.actualQuestion.snapshot.text, edited.text);
+  const listed = data(await request("GET", url, p.buyer.token), 200);
+  assert.equal(listed.questions[0].state, "ready");
+  assert.equal(listed.questions[0].story, null);
+  const skipped = data(
+    await request("POST", `${url}/${created.id}/state`, p.narrator.token, {
+      expectedVersion: edited.version,
+      state: "skipped",
+    }),
+  );
+  assert.equal(skipped.state, "skipped");
+  const restored = data(
+    await request("POST", `${url}/${created.id}/state`, p.narrator.token, {
+      expectedVersion: skipped.version,
+      state: "ready",
+    }),
+  );
+  data(
+    await request("POST", `${url}/${created.id}/remove`, p.buyer.token, {
+      expectedVersion: restored.version,
+    }),
+  );
+  assert.deepEqual(
+    data(await request("GET", url, p.buyer.token), 200).questions,
+    [],
+  );
+  const resumed = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/interviews/${interview.id}`,
+      p.narrator.token,
+    ),
+    200,
+  );
+  assert.equal(resumed.actualQuestion.snapshot.text, edited.text);
+});

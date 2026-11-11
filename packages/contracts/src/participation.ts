@@ -7,6 +7,7 @@ export interface ProjectMembership {
   state: "active";
   categories: GiftCategory[];
   isSelfGift: boolean;
+  giftState: "unissued" | "unclaimed" | "claimed" | null;
   giverNickname: string;
   giftRelationship: string | null;
   storyCount: number;

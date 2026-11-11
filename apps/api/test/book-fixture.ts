@@ -505,7 +505,10 @@ export function syntheticAudio(seconds: 1 | 0.5 = 1) {
 export async function interview(
   p: Awaited<ReturnType<typeof joinedProject>>,
   ai = true,
-  source: { questionKey: string } | { starterKind: "free-narration" } = {
+  source:
+    | { questionKey: string }
+    | { starterKind: "free-narration" }
+    | { familyQuestionId: string } = {
     starterKind: "free-narration",
   },
 ) {
@@ -555,7 +558,10 @@ export async function sealedClip(
 
 export async function readyStory(
   existing?: Awaited<ReturnType<typeof joinedProject>>,
-  source: { questionKey: string } | { starterKind: "free-narration" } = {
+  source:
+    | { questionKey: string }
+    | { starterKind: "free-narration" }
+    | { familyQuestionId: string } = {
     questionKey: "childhood-01",
   },
 ) {

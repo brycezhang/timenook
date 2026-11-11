@@ -1176,13 +1176,29 @@ export class Stories {
       const source = actual.source as {
         chapterKey?: string;
         rewritesQuestionKey?: string;
+        familyQuestionId?: string;
       } | null;
       const key = actual.questionKey ?? source?.rewritesQuestionKey;
+      const family = source?.familyQuestionId
+        ? await tx.familyQuestion.findFirst({
+            where: {
+              id: source.familyQuestionId,
+              projectId: story.projectId,
+              removed: false,
+            },
+          })
+        : null;
       const chapter =
         (key
           ? plan.chapters.find((ch) => ch.questions.some((q) => q.key === key))
           : undefined) ??
-        plan.chapters.find((ch) => ch.key === source?.chapterKey);
+        plan.chapters.find(
+          (ch) =>
+            ch.key ===
+            (source?.familyQuestionId
+              ? family?.chapterKey
+              : source?.chapterKey),
+        );
       if (chapter)
         await placeStoryIn(
           tx,

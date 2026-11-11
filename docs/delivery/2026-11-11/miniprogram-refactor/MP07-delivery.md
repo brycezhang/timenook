@@ -23,4 +23,11 @@
 
 ## 原生设计与外部验收
 
-主责画板为 `Photos`；390px/320px 原生截图与实际点击流程正在补齐。真实手机相册/相机、微信账号、OSS 和麦克风验收仍另记；本票未部署、未上传体验包、未提审。
+主责画板为 `Photos`。已在真实 DevTools iPhone 12/13(Pro) 配置确认 `wx.getWindowInfo().windowWidth=390`，以实际 API/PostgreSQL/Redis 完成空相册→添加三张图片→选图→从照片开始讲述；[持久化结果](evidence/MP07/photo-recording-result.json)核对项目含三张照片，新采访只关联选中的一张。未启动麦克风。登录、相册选择和图片输入为明确测试夹具，图片实际经过微信本机保存、HTTP 上传、后端处理、下载与 hash 校验。
+
+- [390px 项目照片](evidence/MP07/native/Photos-390.png)：两列、150px 高照片、22px 页面内边距、添加卡片与设计对照无溢出。测试素材来自仓库公共示例，照片标题显示真实默认名称。
+- [空相册](evidence/MP07/native/PhotosEmpty-390.png)、[选中照片](evidence/MP07/native/PhotoSelected-390.png)、[照片进入讲述](evidence/MP07/native/PhotoToRecording-390.png)。最后一张仅证明采访与照片传递，录音页的最终视觉由 MP09 更新。
+
+早期自动化选择使用缓存文件作为临时文件，微信 `saveFile` 返回 permission denied；改用真实 `wx.downloadFile` 产生的临时文件后完整上传成功，未修改产品逻辑绕过。原 MP05 fixture 进程已结束，本次重建隔离服务后运行；连接失败不计作业务失败或通过。
+
+仍待 320px、最终首页照片数入口和系统图片查看器验证；Mac 锁屏尚未解除，不将 390px 局部结果计为整票完成。真实手机相册/相机、微信账号、OSS 和麦克风验收仍另记；本票未部署、未上传体验包、未提审。
