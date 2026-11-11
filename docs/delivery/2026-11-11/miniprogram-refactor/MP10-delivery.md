@@ -15,9 +15,9 @@
 ## 已执行检查
 
 - 真实 loopback PostgreSQL/Redis：`book-cover-draft`、`outline-directory`、`book-audio`、`book-pdf` 共 24 项通过。覆盖封面三字段同次提交与失败回滚、订单书名不变、版本冲突、章节顺序／空章、未归章、真实 PDF 页数与 hash、二维码授权，以及改稿后旧原声和照片不变。
-- `book-page`、`cover-page`、`senior-flow`、`book-audio-page`、`native-build` 共 49 项通过。覆盖选图零写入、取消零写入、保存与未知结果重试、就绪稿入口、系统打开失败／再试、下载完整性、权限失效与临时文件清理、暂停和拖动。后续局部调整轮询与下载失败状态后，受影响书稿／原声 35 项再次通过；合入当前 integration 后，封面／目录 API 4 项、书稿／封面／原声控制器 37 项通过。
+- `book-page`、`cover-page`、`senior-flow`、`book-audio-page`、`native-build` 共 49 项通过。覆盖选图零写入、取消零写入、保存与未知结果重试、就绪稿入口、系统打开失败／再试、下载完整性、权限失效与临时文件清理、暂停和拖动。后续局部调整轮询与下载失败状态后，受影响书稿／原声 35 项再次通过；合入阶段性 integration 后，封面／目录 API 4 项通过；最终合入 integration `7f15afb`（含 MP06）后，书稿／封面／原声控制器及 release 包检查 41 项通过。
 - Chromium／WebKit `tests/web-mvp/book.test.mjs` 两条完整路径通过：项目照片封面、保存、六章初始目录与追加章节、真实 PDF 下载、冻结原声、退出后私有访问撤销。短信／照片／录音供应商边界仍使用 fixture。
-- 共享 contracts 构建、API 测试编译、前端与网页类型检查、34 页 release 包及 Web 构建通过。工作树独立安装依赖、生成 Prisma；本机环境配置与字体缓存不进入 Git。
+- 共享 contracts 构建、API 测试编译、前端与网页类型检查、最终 37 页 release 包及 Web 构建通过。工作树独立安装依赖、生成 Prisma；本机环境配置与字体缓存不进入 Git。
 - [真实 PDF 渲染记录](evidence/MP10/pdf/manifest.json)及 [封面](evidence/MP10/pdf/page-001.png)、[目录](evidence/MP10/pdf/page-002.png)、[故事和原声码](evidence/MP10/pdf/page-003.png)、[照片说明](evidence/MP10/pdf/page-004.png)、[制作说明](evidence/MP10/pdf/page-005.png)均来自真实 Worker 生成的五页 PDF，已逐页目视检查字号、留白、完整文字和图片，无溢出或裁切。红色图片与标题、音频、供应商响应均为明确合成夹具。原 PDF 在本工作树忽略目录 `output/pdf/mp10/cover-photo/book.pdf`，不是线上用户资料。
 - API 重现命令（`apps/api` 目录）：`node --env-file=../../.env --test --test-concurrency=1 --test-timeout=120000 dist-test/test/book-cover-draft.test.js dist-test/test/outline-directory.test.js dist-test/test/book-audio.test.js dist-test/test/book-pdf.test.js`。隔离 schema、Redis namespace 和工作目录已由 fixture 清理。
 
