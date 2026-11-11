@@ -1,0 +1,11 @@
+<tn-navigation title="{{editing?'编辑问题':'提出问题'}}" />
+<app-loading wx:if="{{pageLoading}}" variant="story" />
+<view wx:else class="tn-page with-dock family-page">
+  <text wx:if="{{!editing}}" class="family-badge">{{bookTitle}}</text>
+  <view wx:if="{{needsRelationship}}" class="tn-field"><view>你是主讲人的谁 <text class="optional">必选</text></view><view class="relation-grid"><button wx:for="{{relations}}" wx:key="*this" data-value="{{item}}" class="relation {{relationship===item?'selected':''}}" bindtap="relationship">{{item}}</button></view><view wx:if="{{relationship==='自定义'}}" class="tn-field">自定义关系<input class="tn-input" maxlength="32" data-field="customRelationship" value="{{customRelationship}}" bindinput="input" placeholder="例如：姐姐、朋友" cursor-spacing="150" /></view></view>
+  <view wx:elif="{{source && !editing}}" class="family-source">提问人：{{source}}</view>
+  <view class="tn-field">问题<textarea class="question-input" maxlength="2000" value="{{text}}" data-field="text" bindinput="input" placeholder="写下想问主讲人的问题" cursor-spacing="160" /></view>
+  <view class="tn-field"><view>所属章节 <text class="optional">选填</text></view><picker range="{{chapters}}" range-key="title" value="{{chapterIndex}}" bindchange="chapter"><view class="tn-input chapter-picker"><text>{{chapters[chapterIndex].title}}</text><text>⌄</text></view></picker></view>
+  <view wx:if="{{status}}" class="tn-error">{{status}}</view>
+</view>
+<view class="tn-dock"><button class="tn-button" disabled="{{busy || !canSave}}" loading="{{busy}}" bindtap="save">{{editing?'保存问题':'发布问题'}}</button></view>

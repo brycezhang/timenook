@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { build } from "esbuild";
+import { offer } from "./purchase-fixture";
 
 const phoneEvent = {
   detail: { code: "synthetic-phone-code", errMsg: "getPhoneNumber:ok" },
@@ -75,8 +76,30 @@ async function harness(
           });
           return;
         }
+        const extra =
+          route === "/packages/current"
+            ? offer
+            : route.endsWith("/plan")
+              ? {
+                  projectId: route.split("/")[2],
+                  revision: 1,
+                  chapters: [],
+                  starters: [],
+                  preferences: { version: 1, blockedTopics: [] },
+                  questionStates: [],
+                  actualQuestions: [],
+                  answers: [],
+                  subjectDecision: "member",
+                  accessExpiresAt: null,
+                }
+              : route.endsWith("/family-questions")
+                ? { projectId: route.split("/")[2], questions: [] }
+                : route.endsWith("/book")
+                  ? {}
+                  : undefined;
         const data =
-          route === "/users/me"
+          extra ??
+          (route === "/users/me"
             ? session.user
             : route === "/sessions/wechat"
               ? session
@@ -105,7 +128,7 @@ async function harness(
                         summary: {},
                         nextStep: "record",
                       }
-                    : undefined;
+                    : undefined);
         assert.ok(data, `unexpected request: ${route}`);
         const complete = () =>
           options.success({
