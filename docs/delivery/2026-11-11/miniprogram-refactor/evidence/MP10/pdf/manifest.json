@@ -1,0 +1,29 @@
+{
+  "scope": "synthetic fixture rendered by the real API/worker PDF pipeline",
+  "templateVersion": "t20-a5-v4",
+  "pageCount": 5,
+  "pdf": {
+    "file": "book.pdf",
+    "sha256": "2cf9f1999156d156d75567d5c553440ad76df8cd81161ad12f826adb6a9c75c2"
+  },
+  "renderer": {
+    "playwright": "1.58.2",
+    "chromium": "145.0.7632.6",
+    "node": "v22.23.4",
+    "template": "t20-a5-v4",
+    "templateSha256": "f7fc88357042b15920c1a5b4e16231f96ee30e374c8ac312c075282f5149f8d0"
+  },
+  "productionReady": false,
+  "source": "apps/api/test/book-pdf.test.ts: cover settings freeze an allowed salutation and photo",
+  "checks": [
+    "A5 page dimensions",
+    "PDF sha256 and byte length",
+    "complete title and salutation",
+    "readonly chapter and story directory on page 2",
+    "authorized fixed original-audio QR",
+    "full photograph and caption",
+    "all five rendered pages visually inspected"
+  ],
+  "nativeViewer": "pending WeChat DevTools and physical device",
+  "fixtureNotes": "Book title is a test literal. Red rectangle is a synthetic image, audio and supplier responses are isolated fixtures."
+}

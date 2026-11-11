@@ -67,6 +67,10 @@ for (const engine of [chromium, webkit])
       await page
         .getByRole("button", { name: "管理入书故事", exact: true })
         .click();
+      assert.equal(
+        await page.getByRole("textbox", { name: /^章节名称 / }).count(),
+        6,
+      );
       await page.getByRole("button", { name: "添加章节", exact: true }).click();
       await page.getByLabel("章节名称 7", { exact: true }).fill("后来的日子");
       await page

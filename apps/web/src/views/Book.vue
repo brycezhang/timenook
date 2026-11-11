@@ -181,7 +181,7 @@ function accept(
   }
   if (resetDirectory) {
     directoryBaseVersion = value.directory.version;
-    chapters.value = structuredClone(plan.value?.chapters ?? []);
+    chapters.value = JSON.parse(JSON.stringify(plan.value?.chapters ?? []));
     savedDirectory.value = JSON.stringify(chapters.value);
   }
   if (!fixedId.value) displayed.value = value.current;
