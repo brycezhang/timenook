@@ -84,8 +84,8 @@ const stories = computed(
       (story) =>
         (filter.value === "all" ||
           (filter.value === "included"
-            ? story.included && story.revision
-            : !story.included || !story.revision)) &&
+            ? story.included && story.chapter && story.revision
+            : !story.included || !story.chapter || !story.revision)) &&
         `${storyTitle(story)} ${story.revision?.paragraphs.map((p) => p.text).join(" ") ?? ""}`.includes(
           query.value.trim(),
         ),

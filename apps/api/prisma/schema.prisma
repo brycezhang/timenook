@@ -104,13 +104,13 @@ model Project {
   currentPlan           PlanRevision           @relation("CurrentPlan", fields: [id, currentRevision], references: [projectId, revision], onDelete: NoAction, onUpdate: NoAction)
   preferences           InterviewPreferences?
   preferenceDecisions   PlanPreferenceDecision[]
-  directoryVersions     PlanDirectoryVersion[]
   members               ProjectMember[]
 
   @@map("projects")
 }
 
 model PlanRevision {
+  directoryHash String? @map("directory_hash") @db.Char(64)
   projectId   String    @map("project_id") @db.Uuid
   revision    Int
   content     Json?
@@ -761,16 +761,6 @@ model ActualPlanQuestion {
   @@map("actual_plan_questions")
 }
 
-model PlanDirectoryVersion {
-  projectId String @map("project_id") @db.Uuid
-  version Int
-  chapters Json?
-  contentHash String @map("content_hash") @db.Char(64)
-  createdBy String @map("created_by")
-  project Project @relation(fields: [projectId], references: [id])
-  @@id([projectId, version])
-  @@map("plan_directory_versions")
-}
 
 model Interview {
   id String @id @db.Uuid

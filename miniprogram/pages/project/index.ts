@@ -309,7 +309,7 @@ Page({
       );
   },
   plan() {
-    go("plan", `projectId=${this.projectId}`);
+    go("directory", `projectId=${this.projectId}`);
   },
   settings() {
     go("settings", `projectId=${this.projectId}`);

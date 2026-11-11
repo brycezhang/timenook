@@ -14,47 +14,61 @@ import {
   overview,
   tick,
 } from "./helpers/senior-page";
-test("chapter directory saves drag order and opens the direct editor", async () => {
+function outline() {
+  const c = context();
+  return {
+    projectId,
+    revision: 4,
+    chapters: [
+      ...c.directory.chapters,
+      { key: "future", title: "未来", storyRefs: [] },
+    ].map((ch) => ({ ...ch, questions: [] })),
+    starters: [],
+    preferences: { version: 1, blockedTopics: [] },
+    questionStates: [],
+    actualQuestions: [],
+    answers: [],
+    subjectDecision: "member",
+    accessExpiresAt: null,
+  };
+}
+test("chapter directory saves the unified order and opens chapter content", async () => {
   const h = harness("directory");
   h.page.onLoad({ projectId });
   const pending = h.page.onShow();
-  const c = context();
-  c.directory.chapters.push({ key: "future", title: "未来", storyRefs: [] });
-  h.respond(0, c);
+  const p = outline();
+  h.respond(0, p);
   h.respond(1, overview());
   await pending;
   h.page.reorder({ detail: { ids: ["future", "home"] } });
   assert.deepEqual(
-    Array.from(h.requests[2].data.chapters, (x: any) => x.key),
+    Array.from(h.requests[2].data.content.chapters, (x: any) => x.key),
     ["future", "home"],
   );
-  h.respond(2, {
-    ...c,
-    directory: {
-      ...c.directory,
-      version: 5,
-      chapters: [c.directory.chapters[1], c.directory.chapters[0]],
-    },
-  });
+  assert.match(h.requests[2].url, /\/plan$/);
+  h.respond(2, { ...p, revision: 5, chapters: [p.chapters[1], p.chapters[0]] });
   await tick();
   h.page.open({ detail: { id: "home" } });
-  assert.match(h.routes[0], /pages\/chapter\/index/);
-  h.page.onHide();
+  assert.match(h.routes[0], /pages\/chapter-outline\/index/);
 });
 test("choosing a story moves it out of its former chapter and presents one selected row", async () => {
   const h = harness("chapter-stories");
   h.page.onLoad({ projectId, chapter: "future" });
-  const c = context();
-  c.directory.chapters.push({ key: "future", title: "未来", storyRefs: [] });
+  const p = outline(),
+    c = context();
+  c.directory.chapters = p.chapters;
   const pending = h.page.onShow();
   h.respond(0, c);
+  h.respond(1, p);
   await pending;
   assert.equal(h.page.data.available[0].elsewhere, true);
   h.page.add({ currentTarget: { dataset: { id: storyId } } });
-  const chapters = h.requests[1].data.chapters;
+  const chapters = h.requests[2].data.content.chapters;
   assert.equal(chapters[0].storyRefs.length, 0);
   assert.equal(chapters[1].storyRefs[0], storyId);
-  h.respond(1, { ...c, directory: { ...c.directory, version: 5, chapters } });
+  h.respond(2, { ...p, revision: 5, chapters });
+  await tick();
+  h.respond(3, { ...c, directory: { ...c.directory, version: 5, chapters } });
   await tick();
   assert.equal(h.page.data.selected.length, 1);
   assert.equal(h.page.data.available.length, 0);

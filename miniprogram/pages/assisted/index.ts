@@ -454,7 +454,7 @@ Page({
     if (this.projectId) go("deletion-status", `projectId=${this.projectId}`);
   },
   plan() {
-    go("plan", `projectId=${this.projectId}`);
+    go("directory", `projectId=${this.projectId}`);
   },
   back() {
     go("welcome", `projectId=${this.projectId}`);

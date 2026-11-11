@@ -57,13 +57,6 @@ export const ERASURE_REGISTRY = [
     owner: "r.project_id",
   },
   {
-    table: "plan_directory_versions",
-    category: "activeData",
-    columns: ["chapters"],
-    keys: ["project_id", "version"],
-    owner: "r.project_id",
-  },
-  {
     table: "actual_plan_questions",
     category: "activeData",
     columns: ["snapshot", "source"],

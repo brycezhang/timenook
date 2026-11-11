@@ -1,5 +1,7 @@
 <app-loading wx:if="{{pageLoading}}" variant="story" />
-<block wx:else>
-<view class="s-page"><label class="s-field">章节名称<input class="s-input" value="{{title}}" bindinput="title" maxlength="80" /></label><button class="s-row" bindtap="choose" disabled="{{busy}}"><text>本章故事（{{rows.length}}）</text><text class="s-arrow">›</text></button><view wx:if="{{!rows.length && !busy}}" class="s-empty">本章还没有故事，先选择要放进来的故事。</view><view class="s-space" wx:for="{{rows}}" wx:key="id"><view class="s-subtitle">{{item.title}}</view><textarea class="chapter-body" value="{{item.body}}" data-id="{{item.id}}" bindinput="body" maxlength="-1" auto-height adjust-position cursor-spacing="130" /></view><button class="s-link" bindtap="remove" disabled="{{busy}}">移除章节</button><view class="s-error" wx:if="{{status}}">{{status}}</view><view class="s-dock"><button class="s-button" loading="{{busy}}" disabled="{{busy}}" bindtap="save">保存，返回目录</button></view></view>
-
-</block>
+<view wx:else class="tn-page with-dock"><label class="tn-field">章节名称<input class="tn-input" value="{{title}}" bindinput="title" maxlength="120" placeholder="输入章节名称" /></label>
+<button class="chapter-story-link" bindtap="choose" disabled="{{busy}}"><text>本章故事 · {{rows.length}} 篇</text><text class="tn-arrow">›</text></button>
+<view wx:if="{{!rows.length}}" class="outline-empty">本章暂无故事</view>
+<label wx:for="{{rows}}" wx:key="id" class="tn-field"><text>{{index + 1}}　{{item.title}}</text><textarea class="chapter-body" value="{{item.body}}" data-id="{{item.id}}" bindinput="body" maxlength="-1" auto-height adjust-position cursor-spacing="130" /></label>
+<button wx:if="{{existing}}" class="tn-link outline-danger" bindtap="remove" disabled="{{busy}}">移除章节</button>
+<view class="tn-error" wx:if="{{status}}">{{status}}</view><view class="tn-dock"><button class="tn-button" loading="{{busy}}" disabled="{{busy}}" bindtap="save">保存章节</button></view></view>

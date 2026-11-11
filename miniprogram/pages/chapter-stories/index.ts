@@ -1,4 +1,8 @@
-import type { BookContext } from "../../../packages/contracts/src";
+import type {
+  BookContext,
+  PersonalPlan,
+} from "../../../packages/contracts/src";
+import { personalPlanClient } from "../../services/personal-plan";
 import { bookClient } from "../../services/books";
 import { sessionClient } from "../../services/session";
 type Row = { id: string; title: string; elsewhere?: boolean };
@@ -12,6 +16,7 @@ Page({
     status: "",
   },
   projectId: "",
+  plan: null as PersonalPlan | null,
   key: "",
   context: null as BookContext | null,
   generation: 0,
@@ -24,7 +29,11 @@ Page({
       owner = sessionClient.context();
     this.setData({ busy: true, pageLoading: !this.context, status: "" });
     try {
-      const c = await bookClient.read(this.projectId);
+      const [c, plan] = await Promise.all([
+        bookClient.read(this.projectId),
+        personalPlanClient.read(this.projectId),
+      ]);
+      this.plan = plan;
       if (n === this.generation && owner === sessionClient.context())
         this.apply(c);
     } catch (e) {
@@ -67,23 +76,27 @@ Page({
     });
   },
   async persist(ids: string[]) {
-    if (this.data.busy || !this.context) return;
+    if (this.data.busy || !this.context || !this.plan) return;
     const c = this.context,
       n = this.generation,
       owner = sessionClient.context();
     this.setData({ busy: true, status: "" });
     try {
-      const updated = await bookClient.reviseDirectory(
+      this.plan = await personalPlanClient.revise(
         this.projectId,
-        c.directory.version,
-        c.directory.chapters.map((x) => ({
-          ...x,
-          storyRefs:
-            x.key === this.key
-              ? ids
-              : x.storyRefs.filter((id) => !ids.includes(id)),
-        })),
+        this.plan.revision,
+        {
+          chapters: this.plan.chapters.map((x) => ({
+            ...x,
+            storyRefs:
+              x.key === this.key
+                ? ids
+                : x.storyRefs.filter((id) => !ids.includes(id)),
+          })),
+          starters: this.plan.starters,
+        },
       );
+      const updated = await bookClient.read(this.projectId);
       if (n === this.generation && owner === sessionClient.context())
         this.apply(updated);
     } catch (e) {

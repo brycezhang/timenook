@@ -494,7 +494,14 @@ export function syntheticAudio(seconds: 1 | 0.5 = 1) {
 export async function interview(
   p: Awaited<ReturnType<typeof joinedProject>>,
   ai = true,
+  source: { questionKey: string } | { starterKind: "free-narration" } = {
+    starterKind: "free-narration",
+  },
 ) {
+  const plan = data(
+    await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token),
+    200,
+  );
   return data(
     await request(
       "POST",
@@ -502,8 +509,8 @@ export async function interview(
       p.narrator.token,
       {
         clientInterviewId: randomUUID(),
-        expectedPlanRevision: 1,
-        starterKind: "free-narration",
+        expectedPlanRevision: plan.revision,
+        ...source,
       },
     ),
   );
@@ -537,9 +544,12 @@ export async function sealedClip(
 
 export async function readyStory(
   existing?: Awaited<ReturnType<typeof joinedProject>>,
+  source: { questionKey: string } | { starterKind: "free-narration" } = {
+    questionKey: "childhood-01",
+  },
 ) {
   const p = existing ?? (await joinedProject()),
-    i = await interview(p);
+    i = await interview(p, true, source);
   await sealedClip(p, i.id);
   await sealedClip(p, i.id);
   const tasks = data(

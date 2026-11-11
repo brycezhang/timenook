@@ -1,6 +1,7 @@
 type Row = {
   id: string;
   title: string;
+  subtitle?: string;
   image?: string;
   imageLoading?: boolean;
 };
@@ -8,6 +9,7 @@ Component({
   properties: {
     items: { type: Array, value: [] as Row[] },
     numbered: Boolean,
+    modern: Boolean,
     actionLabel: String,
     editable: Boolean,
     disabled: Boolean,

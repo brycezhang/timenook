@@ -1875,7 +1875,7 @@ Page({
     );
   },
   manageTopics() {
-    go("plan", `projectId=${this.projectId}`);
+    go("directory", `projectId=${this.projectId}`);
   },
   async finish() {
     if (dataMode() === "live") {
