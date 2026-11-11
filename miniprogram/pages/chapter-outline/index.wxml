@@ -4,9 +4,9 @@
   <view class="outline-between"><text class="outline-badge">第 {{number}} 章</text><button class="tn-link" bindtap="edit"><image class="outline-small-icon" src="/assets/icons/pencil.svg" />编辑章节</button></view>
   <view class="outline-title">{{title}}</view>
   <view class="outline-tabs"><button class="question-tab {{tab==='questions'?'selected':''}}" data-tab="questions" bindtap="tab">问题 · {{questions.length}}</button><button class="story-tab {{tab==='stories'?'selected':''}}" data-tab="stories" bindtap="tab">故事 · {{stories.length}}</button></view>
-  <block wx:if="{{tab==='questions'}}"><view class="outline-list" wx:if="{{!sorting}}"><button wx:for="{{questions}}" wx:key="id" class="outline-card" id="question-{{item.id}}" data-id="{{item.id}}" bindtap="question"><view class="outline-source"><text>大纲问题</text><text>{{item.state}}</text></view><view class="outline-card-title">{{item.text}}</view></button></view>
-  <sort-list wx:else items="{{questions}}" modern disabled="{{busy}}" bindreorder="reorder" />
-  <view wx:if="{{!questions.length}}" class="outline-empty">本章暂无问题</view><button wx:if="{{questions.length>1}}" class="tn-link" bindtap="sort">{{sorting?'完成排序':'调整问题顺序'}}</button></block>
+  <block wx:if="{{tab==='questions'}}"><view class="outline-list" wx:if="{{!sorting}}"><button wx:for="{{questions}}" wx:key="id" class="outline-card" id="question-{{item.id}}" data-id="{{item.id}}" data-kind="{{item.kind}}" bindtap="question"><view class="outline-source"><text>{{item.source}}</text><text>{{item.state}}</text></view><view class="outline-card-title">{{item.text}}</view></button></view>
+  <sort-list wx:else items="{{outlineQuestions}}" modern disabled="{{busy}}" bindreorder="reorder" />
+  <view wx:if="{{!questions.length}}" class="outline-empty">本章暂无问题</view><button wx:if="{{outlineQuestions.length>1}}" class="tn-link" bindtap="sort">{{sorting?'完成排序':'调整大纲问题顺序'}}</button><button class="tn-link" bindtap="askFamily">＋ 向主讲人提问</button></block>
   <block wx:else><button wx:for="{{stories}}" wx:key="id" class="outline-card" data-id="{{item.id}}" bindtap="story"><view class="outline-card-title">{{item.title}}</view></button><view wx:if="{{!stories.length}}" class="outline-empty">本章暂无故事，选择问题开始讲述</view></block>
   <view wx:if="{{status}}" class="tn-error">{{status}}</view>
   <view class="tn-dock"><button wx:if="{{tab==='questions'}}" class="tn-button" bindtap="add">＋ 新增大纲问题</button><button wx:else class="tn-button" bindtap="manage">管理本章故事</button></view>

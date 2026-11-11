@@ -1,0 +1,9 @@
+<tn-navigation title="家人提问" />
+<app-loading wx:if="{{pageLoading}}" variant="list" />
+<view wx:else class="tn-page with-dock family-page">
+  <view class="family-tabs"><button class="{{tab==='pending'?'selected':''}}" data-tab="pending" bindtap="tab">待回答</button><button class="{{tab==='answered'?'selected':''}}" data-tab="answered" bindtap="tab">已回答</button><button class="{{tab==='skipped'?'selected':''}}" data-tab="skipped" bindtap="tab">已跳过</button></view>
+  <view class="family-list"><button wx:for="{{questions}}" wx:key="id" class="family-card" data-id="{{item.id}}" bindtap="open"><view class="family-card-meta"><text class="family-card-source">{{item.source}}</text><text wx:if="{{item.state==='later' && !item.story}}" class="family-later">稍后回答</text></view><view class="family-text">{{item.text}}</view><view class="family-meta"><text>{{item.chapter}}</text></view></button></view>
+  <view wx:if="{{!questions.length && !status}}" class="family-empty">{{emptyLabel}}</view>
+  <view wx:if="{{status}}" class="tn-error">{{status}}<button class="tn-link" bindtap="onShow">重新读取</button></view>
+</view>
+<view class="tn-dock"><button class="tn-button" bindtap="add">＋ 提出问题</button></view>
