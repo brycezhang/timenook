@@ -1,6 +1,6 @@
 # MP09 语音讲述、照片与可靠保存
 
-范围：[#175](https://github.com/brycezhang/timenook/issues/175)。基于集成 `e68b332`，消费 MP01 公共界面、MP06 家人题/大纲题采访输入、MP07 项目照片和 MP08 同故事补录契约。七个画板对应功能已本地实现，原生逐画板与真机验收待执行；未部署、上传体验版或操作真实资料。
+范围：[#175](https://github.com/brycezhang/timenook/issues/175)。基于集成 `e68b332`，消费 MP01 公共界面、MP06 家人题/大纲题采访输入、MP07 项目照片和 MP08 同故事补录契约。实施提交 `36e8c2a`，收尾已合入当时最新集成 `7f15afb`（合并提交 `786c4ca`，包含 MP06 原生导航修复、MP10 书稿阶段及邀请图压缩）。七个画板对应功能已本地实现，原生逐画板与真机验收待执行；未部署、上传体验版或操作真实资料。
 
 ## 可操作路径
 
@@ -21,8 +21,8 @@
 
 - 页面公开控制器 21 项通过：家人来源、直接准备、换题/自由讲述、所有起点照片与移除、异步暂停→照片→原片段继续、同故事补录/新草稿隔离、手动结束/十分钟原生到时自动保存、真实进度回调、未知封存恢复、原生文件持久化失败恢复、麦克风设置、保存离开、原生卸载、权限/账号变化及跨项目迟到保存。硬件与 HTTP 响应为明确隔离夹具，不代表微信原生运行通过。
 - 真实 PostgreSQL/Redis 的 `interview-recording.test.ts` 与 `project-member-recording.test.ts` 共 17 项通过：真实 MP3 校验/时长、封存幂等、并发/剩余额度、原片段原问题、跨项目约束及两段录音自动形成同一故事。ASR、模型与 OSS 外部边界为隔离供应商，不等于真实供应商验收。
-- 65 项相关录音转换、故事回听/补录、项目照片、会话与正式包回归通过；首次正式包体积断言因基线邀请图超过原预算失败，root 已在 `0b84e2b` 压缩原图，同步最新集成后仅补验受影响构建。
-- `pnpm typecheck:frontend` 与 `pnpm build:miniprogram` 通过（34 个正式页面）；先独立构建 contracts，再生成本工作树 Prisma client 并编译 API 测试。仅使用本机 PostgreSQL/Redis 与随机隔离 schema/prefix，未共享可变 node_modules/Prisma 目录。
+- 65 项相关录音转换、故事回听/补录、项目照片、会话与正式包回归通过；首次正式包体积断言因基线邀请图超过原预算失败，root 已在 `0b84e2b` 压缩原图，合入 `7f15afb` 后补验 21 项录音页面与 4 项正式包检查，25 项全部通过，原包体积失败已消除。
+- `pnpm typecheck:frontend` 与 `pnpm build:miniprogram` 通过（合入集成后 37 个正式页面）；先独立构建 contracts，再生成本工作树 Prisma client 并编译 API 测试。仅使用本机 PostgreSQL/Redis 与随机隔离 schema/prefix，未共享可变 node_modules/Prisma 目录。
 
 可复现命令（仓库根）：
 
