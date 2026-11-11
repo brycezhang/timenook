@@ -162,6 +162,7 @@ model TermsAcceptance {
 }
 
 model ProjectMember {
+  relationship String? @db.VarChar(32)
   projectId String @map("project_id") @db.Uuid
   userId String @map("user_id") @db.Uuid
   invitationId String? @map("invitation_id") @db.Uuid

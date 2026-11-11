@@ -59,6 +59,7 @@ for (const engine of [chromium, webkit])
             `/v1/invitations/${invite.token}/accept`,
             p.narrator.token,
             {
+              relationship: "家人",
               termsVersion: TERMS_VERSION,
             },
           ),
