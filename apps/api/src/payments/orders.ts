@@ -43,6 +43,7 @@ import {
 } from "@nestjs/swagger";
 import {
   IsUUID,
+  IsIn,
   IsOptional,
   IsString,
   Length,
@@ -72,6 +73,9 @@ class RecipientDto {
   relationshipLabel?: string;
 }
 export class CreateOrderDto {
+  @ApiProperty({ enum: ["self", "gift"] })
+  @IsIn(["self", "gift"])
+  purchaseKind!: "self" | "gift";
   @ApiProperty() @IsUUID() packageVersionId!: string;
   @ApiProperty({ type: RecipientDto })
   @ValidateNested()
@@ -83,12 +87,50 @@ export class CreateOrderDto {
   @Length(1, 40)
   @Matches(/^[^\u0000-\u001f\u007f<>]+$/)
   subjectName?: string;
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty()
   @IsString()
   @Length(1, 80)
   @Matches(/^[^\u0000-\u001f\u007f<>]+$/)
-  bookTitle?: string;
+  bookTitle!: string;
+}
+
+// The purchase kind is an explicit frozen choice; display text never grants
+// the buyer the subject identity. Both payment adapters use this validation.
+export async function purchaseDetails(
+  tx: Prisma.TransactionClient,
+  realm: string,
+  body: CreateOrderDto,
+) {
+  const bookTitle = body.bookTitle?.trim();
+  if (!bookTitle || !body.recipient) throw new BadRequestException();
+  if (body.purchaseKind === "self") {
+    if (
+      body.recipient.typeCode !== "self" ||
+      body.recipient.relationshipLabel !== "自己"
+    )
+      throw new BadRequestException();
+    return {
+      purchaseKind: "self",
+      bookTitle,
+      recipient: { typeCode: "self", relationshipLabel: "自己" },
+    };
+  }
+  if (body.purchaseKind !== "gift" || body.recipient.typeCode === "self")
+    throw new BadRequestException();
+  const relationship = body.recipient.typeCode
+    ? await tx.recipientType.findFirst({
+        where: { realm, code: body.recipient.typeCode, active: true },
+      })
+    : null;
+  if (body.recipient.typeCode && !relationship) throw new ConflictException();
+  const relationshipLabel =
+    body.recipient.relationshipLabel?.trim() || relationship?.label;
+  if (!relationshipLabel) throw new BadRequestException();
+  return {
+    purchaseKind: "gift",
+    bookTitle,
+    recipient: { typeCode: relationship?.code ?? null, relationshipLabel },
+  };
 }
 export const PAYMENT_FETCH = Symbol("PAYMENT_FETCH");
 export class EmptyPaymentCommand {}
@@ -205,28 +247,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       const isE2e = version.purpose === "e2e";
       if (isE2e && !this.config.checkoutE2e?.enabled)
         throw new ForbiddenException();
-      if (!body.recipient) throw new BadRequestException();
-      const relationship = body.recipient.typeCode
-        ? await tx.recipientType.findFirst({
-            where: {
-              realm:
-                this.config.environment === "production"
-                  ? "production"
-                  : "local",
-              code: body.recipient.typeCode,
-              active: true,
-            },
-          })
-        : null;
-      if (body.recipient.typeCode && !relationship)
-        throw new ConflictException();
-      const recipient = {
-        typeCode: relationship?.code ?? null,
-        relationshipLabel:
-          body.recipient.relationshipLabel?.trim() ||
-          relationship?.label ||
-          "讲述者",
-      };
+      const details = await purchaseDetails(tx, version.realm, body);
       const order = await tx.paymentOrder.create({
         data: {
           id: randomUUID(),
@@ -244,10 +265,9 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
           mode: this.mode(),
           packageVersionId: version.id,
           packageSnapshot: version.snapshot as Prisma.InputJsonValue,
-          recipient,
+          ...details,
           template: json(BUILTIN_TEMPLATE),
           subjectName: body.subjectName?.trim() || null,
-          bookTitle: body.bookTitle?.trim() || "我的时光手记",
         },
       });
       return order;
@@ -440,8 +460,13 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
   }
   async get(authorization: string | undefined, id: string) {
     const order = await this.owned(authorization, id);
-    if (order.state !== "paid") await this.refresh(order);
-    return this.view(await this.owned(authorization, id));
+    let paymentStatus = order.state;
+    if (order.state !== "paid") paymentStatus = await this.refresh(order);
+    const view = await this.view(await this.owned(authorization, id));
+    return {
+      ...view,
+      paymentStatus: view.state === "paid" ? "paid" : paymentStatus,
+    };
   }
   async list(authorization?: string) {
     const cfg = this.enabled();
@@ -502,6 +527,8 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       provider: order.provider,
       channel: order.channel,
       state: order.state,
+      paymentStatus: order.state,
+      purchaseKind: order.purchaseKind,
       packageVersionId: order.packageVersionId,
       materialsUnavailable: deleted,
       recipient: deleted
@@ -521,9 +548,10 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
               subject: {
                 id: subject.id,
                 name: subject.name,
+                boundUserId: subject.boundUserId,
                 consent: "not_granted",
               },
-              bookTitle: order.bookTitle,
+              bookTitle: project.bookTitle,
               recipient: order.recipient,
               plan: await this.plans.getProjectPlan(project.id),
               terms: await this.terms.read(project.id),
@@ -627,10 +655,16 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
           );
           await tx.project.update({
             where: { id: projectId },
-            data: { orderId: order.id },
+            data: { orderId: order.id, bookTitle: order.bookTitle },
           });
           await tx.projectSubject.create({
-            data: { id: randomUUID(), projectId, name: order.subjectName },
+            data: {
+              id: randomUUID(),
+              projectId,
+              name: order.subjectName,
+              boundUserId: order.purchaseKind === "self" ? order.buyerId : null,
+              bindingVersion: order.purchaseKind === "self" ? 1 : 0,
+            },
           });
           await tx.firstCopyEntitlement.create({
             data: { id: randomUUID(), orderId: order.id, projectId },
@@ -664,20 +698,29 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
         where: { orderId: order.id },
       }))
     )
-      return;
-    const transaction = await new WechatPay(cfg, this.paymentFetch).query(
-      order.outTradeNo,
-    );
+      return order.state;
+    let transaction;
+    try {
+      transaction = await new WechatPay(cfg, this.paymentFetch).query(
+        order.outTradeNo,
+      );
+    } catch {
+      return "unknown";
+    }
     if (transaction) {
       this.validateBinding(order, transaction);
-      if (transaction.trade_state === "SUCCESS")
+      if (transaction.trade_state === "SUCCESS") {
         await this.applyVerifiedPayment(order, transaction);
-      else if (transaction.trade_state === "CLOSED")
+        return "paid";
+      } else if (transaction.trade_state === "CLOSED") {
         await this.database.paymentOrder.updateMany({
           where: { id: order.id, state: "pending" },
           data: { state: "closed" },
         });
+        return "closed";
+      } else if (transaction.trade_state === "NOTPAY") return "pending";
     }
+    return "unknown";
   }
   async notification(raw: string, headers: Headers) {
     const cfg = this.enabled();

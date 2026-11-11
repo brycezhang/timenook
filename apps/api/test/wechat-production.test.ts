@@ -272,8 +272,10 @@ test("ordinary merchant and controlled acceptance retain internal projects and n
       url: "/v1/orders",
       headers: { "idempotency-key": "t29-purchase-preview" },
       payload: {
+        purchaseKind: "gift",
         packageVersionId: randomUUID(),
         recipient: {},
+        bookTitle: "时光故事",
       },
     });
     assert.equal(
@@ -482,6 +484,7 @@ test("ordinary merchant signed notifications and active queries share durable pa
         data: {
           id: randomUUID(),
           buyerId: buyer.user.id,
+          purchaseKind: "gift",
           appId,
           openId: "isolated-buyer",
           merchantId,

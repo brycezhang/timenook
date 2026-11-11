@@ -21,6 +21,8 @@ const order = {
   currency: "CNY",
   mode: "local-verification",
   state: "pending",
+  paymentStatus: "pending",
+  purchaseKind: "gift",
   recipient: { typeCode: null, relationshipLabel: "讲述者" },
   bookTitle: "我的时光手记",
   project: null,
