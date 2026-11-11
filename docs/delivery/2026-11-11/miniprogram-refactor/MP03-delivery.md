@@ -18,9 +18,10 @@
 - 真实 PostgreSQL/Redis：`apps/api/test/designated-gifts.test.ts` 四项通过。覆盖服务器号码比较、验证不自动加入、六个并发领取、重复进入、非购买者/自购拒绝、改号/重发失效、新购买者会话恢复当前卡片、原项目/首本权益唯一。
 - 同一真实隔离项目由购买者先生成两段原声、项目照片和实际 PDF；领取前后，两名成员从正式受保护 HTTP 路径读回完全相同的字节，授权版本保持不变。
 - 正式 care 核验删除路径清除了称呼、手机号、token、tokenHash、领取账号；旧卡不可打开，数据库拒绝重写已删除字段。支付与项目壳保留。
-- 页面控制器/共用登录：`tests/gifts-page.test.ts` 与 `tests/quick-login.test.ts` 共 12 项通过，覆盖生成与分享路径、关闭登录、同意提示、错误账号切换、明确领取、原书重开及账号切换后迟到响应。
+- 页面控制器/共用登录：`tests/gifts-page.test.ts` 与 `tests/quick-login.test.ts` 共 13 项通过，覆盖生成与分享路径、关闭登录、同意提示、错误账号切换、明确领取、原书重开、账号切换后迟到响应及条款返回刷新期间完成授权。后者曾被旧刷新中的 loading 状态挡住，现由新登录独立发起验证。
 - `pnpm typecheck:frontend`、API typecheck/build、`pnpm build:miniprogram`、`pnpm check:native` 通过。wcc/wcsc 编译了 37 个源码页面；正式包包含 34 个发布页面。新页面没有状态选择器或样例业务数据。
 - API 测试使用随机 schema/Redis prefix，结束后清理；外部微信、支付、ASR/整理与本地对象存储为现有隔离提供方夹具，不代表供应商、手机号授权、实付或真机验收。PDF 使用项目固定字体并核验 hash；首次工作树未带字体缓存，补齐后实际 PDF 测试通过。
+- 合入集成 `f248eb9`（含 MP04 成员关系与三分类契约）后，重新生成本工作树 Prisma；四项礼物 API、13 项前端/登录、前端类型检查及正式包构建通过。
 
 复现：先在仓库根执行 `pnpm db:generate && pnpm --filter @timenook/contracts build && pnpm --filter @timenook/api exec tsc -p tsconfig.test.json`；然后在 `apps/api` 中执行 `node --env-file=../../.env --test --test-timeout=120000 dist-test/test/designated-gifts.test.js`。`.env` 必须只指向获授权的隔离 PostgreSQL/Redis。字体准备使用 `pnpm setup:print-font`。
 
@@ -41,4 +42,4 @@
 
 已备好[官方原生自动化续跑脚本](evidence/MP03/harness/native.cjs)：复用仓库 `createRun`、真实 API 和两个隔离提供方账号，不设置页面业务数据。脚本在一次性正式包副本中仅替换 API base 与外部 `wx.login` 授权证明；截图用 `wechatide simulator_screenshot`，每张记录真实 `wx.getWindowInfo().windowWidth`，未覆盖全部 16 张不会报通过。
 
-解锁并取得窗口后，按 wechatide/automator skill 检查运行状态；在仓库根启动 `node --env-file=.env docs/delivery/2026-11-11/miniprogram-refactor/evidence/MP03/harness/native.cjs`。API 为 loopback 3423；终端 `paths` 查看一次性项目与证据目录。设备选择“iPhone 12/13 Pro”（390）或“录音布局320×568”（320），每个宽度输入 `capture`，两次完成后 `quit` 会断开官方工具并清理 API/schema/Redis。随后人工检查截图、字体、键盘、安全区和返回路径，把结果写回本记录；真实微信好友分享与手机号码授权仍单列待验。
+解锁并取得窗口后，按 wechatide/automator skill 检查运行状态；先执行上述 API 编译及 `pnpm build:miniprogram`，再在仓库根启动 `node --env-file=.env docs/delivery/2026-11-11/miniprogram-refactor/evidence/MP03/harness/native.cjs`。API 为 loopback 3423；终端 `paths` 查看一次性项目与证据目录。设备选择“iPhone 12/13 Pro”（390）或“录音布局320×568”（320），每个宽度输入 `capture`，两次完成后 `quit` 会断开官方工具并清理 API/schema/Redis。随后人工检查截图、字体、键盘、安全区和返回路径，把结果写回本记录；真实微信好友分享与手机号码授权仍单列待验。

@@ -130,7 +130,10 @@ Page({
     }
   },
   loginSucceeded() {
-    this.setData({ loginVisible: false });
+    // A terms-page return may still be refreshing the anonymous card. The new
+    // account must verify immediately, independent of that older read.
+    ++this.generation;
+    this.setData({ loginVisible: false, loading: false, busy: false });
     return this.verify();
   },
   closeLogin() {

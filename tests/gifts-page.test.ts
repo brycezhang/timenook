@@ -124,19 +124,42 @@ test("wrong phone cannot claim, switching account returns to verification, and o
   assert.equal(h.page.data.screen, "verify");
   assert.equal(h.page.data.currentMaskedPhone, "");
   const reread = h.page.onShow();
-  h.requests
-    .shift()!
-    .success?.({
-      statusCode: 404,
-      data: { error: { code: "NOT_FOUND" }, meta: {} },
-      header: {},
-      cookies: [],
-      errMsg: "ok",
-    } as any);
+  h.requests.shift()!.success?.({
+    statusCode: 404,
+    data: { error: { code: "NOT_FOUND" }, meta: {} },
+    header: {},
+    cookies: [],
+    errMsg: "ok",
+  } as any);
   await reread;
   assert.equal(h.page.data.screen, "invalid");
   assert.equal(h.page.data.gift, null);
   assert.equal(h.page.data.projectId, "");
+});
+
+test("phone login while the card refreshes after returning from terms still verifies the new account", async () => {
+  const h = await purchasePage("gift-claim", new Map());
+  h.page.onLoad({ token });
+  const loading = h.page.onShow();
+  respond(h.requests.shift()!, gift);
+  await loading;
+  await h.page.verify();
+  h.page.onHide();
+  const refresh = h.page.onShow();
+  const oldPreview = h.requests.shift()!;
+  h.storage.set(`timenook.session.v1:${base}`, login);
+  const verified = h.page.loginSucceeded();
+  assert.equal(h.requests[0]?.url, `${base}/gifts/${token}/verification`);
+  respond(h.requests.shift()!, {
+    state: "ready",
+    gift,
+    currentMaskedPhone: gift.maskedPhone,
+  });
+  await verified;
+  respond(oldPreview, gift);
+  await refresh;
+  assert.equal(h.page.data.screen, "accept");
+  assert.equal(h.page.data.loading, false);
 });
 
 test("a claimed card reopens the same book for its owner and a changed account cannot receive a late claim result", async () => {
