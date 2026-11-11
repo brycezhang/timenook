@@ -1,0 +1,12 @@
+<tn-navigation title="问题详情" />
+<app-loading wx:if="{{pageLoading}}" variant="story" />
+<view wx:else class="tn-page {{question && !question.story?'with-dock':''}} family-page">
+  <block wx:if="{{question}}"><view class="family-between"><text class="family-badge">{{state}}</text><button class="tn-link" bindtap="edit"><image class="question-small-icon" src="/assets/icons/pencil.svg"/>编辑问题</button></view>
+  <view class="question-source">{{source}}</view><view class="question-title">{{question.text}}</view><text class="family-badge">{{chapter}}</text>
+  <button wx:if="{{question.story}}" class="family-answer" bindtap="story"><view class="tn-grow family-answer-body"><view class="family-answer-label">回答故事</view><view class="family-text">{{question.story.title}}</view></view><text class="tn-arrow">›</text></button>
+  <view wx:elif="{{question.state!=='skipped'}}" class="family-actions"><button class="tn-link" data-state="later" bindtap="state" disabled="{{busy}}">稍后回答</button><button class="tn-link" data-state="skipped" bindtap="state" disabled="{{busy}}">跳过问题</button></view>
+  <button wx:else class="tn-link" data-state="ready" bindtap="state" disabled="{{busy}}">恢复到待回答</button>
+  <button class="tn-link" bindtap="remove" disabled="{{busy}}">移除问题</button></block>
+  <view wx:if="{{status}}" class="tn-error">{{status}}<button class="tn-link" bindtap="onShow">重新读取</button></view>
+</view>
+<view wx:if="{{question && !question.story}}" class="tn-dock"><button class="tn-button" bindtap="answer" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/mic-light.svg"/>开始回答</button></view>

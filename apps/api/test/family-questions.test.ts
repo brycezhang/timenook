@@ -18,6 +18,14 @@ test("a family answer becomes a saved unassigned story, follows chapter moves, a
   );
   const saved = await f.readyStory(p, { familyQuestionId: question.id });
   assert.equal(saved.story.chapter, null);
+  await f.projectPhoto(p);
+  const overview = f.data(
+    await f.request("GET", `${base}/overview`, p.narrator.token),
+    200,
+  );
+  assert.equal(overview.summary.confirmed, 1);
+  assert.equal(overview.summary.photos, 1);
+  assert.equal(overview.summary.audioMinutes, 0);
   question = f.data(
     await f.request("GET", `${questions}/${question.id}`, p.buyer.token),
     200,

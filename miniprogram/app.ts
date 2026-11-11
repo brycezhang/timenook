@@ -1,6 +1,10 @@
+import { resetQuestionSession } from "./services/question-recommendations";
 import { AUDIO_PROBE_BUILD } from "./config";
 import { dataMode, livePageAllowed } from "./services/mode";
 App({
+  onHide() {
+    resetQuestionSession();
+  },
   onShow(options) {
     if (
       dataMode() === "live" &&

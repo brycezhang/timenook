@@ -1,4 +1,13 @@
-import type { PersonalPlan, StoryView } from "../../../packages/contracts/src";
+import {
+  familyQuestionClient,
+  familyQuestionSource,
+  familyQuestionState,
+} from "../../services/family-questions";
+import type {
+  FamilyQuestion,
+  PersonalPlan,
+  StoryView,
+} from "../../../packages/contracts/src";
 import { personalPlanClient } from "../../services/personal-plan";
 import { projectOverviewClient } from "../../services/project-overview";
 import { sessionClient } from "../../services/session";
@@ -14,8 +23,11 @@ Page({
       title: string;
       text: string;
       state: string;
+      kind: "outline" | "family";
+      source: string;
     }[],
     stories: [] as { id: string; title: string }[],
+    outlineQuestions: [] as { id: string; title: string }[],
     busy: false,
     pageLoading: true,
     status: "",
@@ -24,6 +36,7 @@ Page({
   key: "",
   plan: null as PersonalPlan | null,
   stories: [] as StoryView[],
+  family: [] as FamilyQuestion[],
   generation: 0,
   onLoad(q) {
     this.projectId = q.projectId || "";
@@ -34,12 +47,14 @@ Page({
       owner = sessionClient.context();
     this.setData({ busy: true, pageLoading: !this.plan, status: "" });
     try {
-      const [plan, overview] = await Promise.all([
+      const [plan, overview, family] = await Promise.all([
         personalPlanClient.read(this.projectId),
         projectOverviewClient.read(this.projectId),
+        familyQuestionClient.list(this.projectId),
       ]);
       if (n !== this.generation || owner !== sessionClient.context()) return;
       this.stories = overview.stories;
+      this.family = family.questions;
       this.apply(plan);
     } catch (e) {
       if (n === this.generation)
@@ -61,22 +76,37 @@ Page({
     this.setData({
       title: c.title,
       number: String(plan.chapters.indexOf(c) + 1).padStart(2, "0"),
-      questions: c.questions.map((q) => ({
-        id: q.key,
-        title: q.text,
-        text: q.text,
-        state: plan.answers.some((a) => a.questionKey === q.key)
-          ? "已回答"
-          : {
-              later: "稍后回答",
-              skipped: "已跳过",
-              "not-applicable": "不适用",
-              ready: "待回答",
-            }[
-              plan.questionStates.find((s) => s.questionKey === q.key)?.state ||
-                "ready"
-            ],
-      })),
+      outlineQuestions: c.questions.map((q) => ({ id: q.key, title: q.text })),
+      questions: [
+        ...c.questions.map((q) => ({
+          kind: "outline" as const,
+          source: "大纲问题",
+          id: q.key,
+          title: q.text,
+          text: q.text,
+          state: plan.answers.some((a) => a.questionKey === q.key)
+            ? "已回答"
+            : {
+                later: "稍后回答",
+                skipped: "已跳过",
+                "not-applicable": "不适用",
+                ready: "待回答",
+              }[
+                plan.questionStates.find((s) => s.questionKey === q.key)
+                  ?.state || "ready"
+              ],
+        })),
+        ...this.family
+          .filter((q) => q.chapterKey === this.key)
+          .map((q) => ({
+            id: q.id,
+            kind: "family" as const,
+            source: familyQuestionSource(q),
+            title: q.text,
+            text: q.text,
+            state: familyQuestionState(q),
+          })),
+      ],
       stories: c.storyRefs.map((id) => ({
         id,
         title: this.stories.find((s) => s.id === id)?.revision?.title || "故事",
@@ -88,8 +118,10 @@ Page({
   },
   question(e: WechatMiniprogram.TouchEvent) {
     go(
-      "question",
-      `projectId=${this.projectId}&key=${encodeURIComponent(e.currentTarget.dataset.id)}`,
+      e.currentTarget.dataset.kind === "family"
+        ? "family-question"
+        : "question",
+      `projectId=${this.projectId}&${e.currentTarget.dataset.kind === "family" ? "id" : "key"}=${encodeURIComponent(e.currentTarget.dataset.id)}`,
     );
   },
   story(e: WechatMiniprogram.TouchEvent) {
@@ -107,6 +139,12 @@ Page({
   add() {
     go(
       "question-edit",
+      `projectId=${this.projectId}&chapter=${encodeURIComponent(this.key)}`,
+    );
+  },
+  askFamily() {
+    go(
+      "family-question-edit",
       `projectId=${this.projectId}&chapter=${encodeURIComponent(this.key)}`,
     );
   },

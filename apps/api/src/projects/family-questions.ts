@@ -85,12 +85,18 @@ export class FamilyQuestionService {
       familyAnswersIn(tx, projectId),
     ]);
     const answer = answers.find((a) => a.questionId === id);
-    const story = answer
-      ? await tx.storyRevision.findUniqueOrThrow({
-          where: { id: answer.revisionId },
-          select: { title: true },
-        })
-      : null;
+    const canReadStory = await this.participation.materialAvailableIn(
+      tx,
+      projectId,
+      "confirmedStories",
+    );
+    const story =
+      answer && canReadStory
+        ? await tx.storyRevision.findUniqueOrThrow({
+            where: { id: answer.revisionId },
+            select: { title: true },
+          })
+        : null;
     return {
       id,
       projectId,
@@ -106,7 +112,7 @@ export class FamilyQuestionService {
         : (plan.chapters.find((c) => c.key === row.chapterKey)?.key ?? null),
       createdAt: row.createdAt.toISOString(),
       story: answer
-        ? { id: answer.storyId, title: story!.title ?? "故事" }
+        ? { id: answer.storyId, title: story?.title ?? "故事" }
         : null,
     };
   }
