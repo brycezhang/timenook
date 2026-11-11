@@ -545,7 +545,8 @@
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/HomeEmpty.png",
-      "design320": "design-reference/320/HomeEmpty.png"
+      "design320": "design-reference/320/HomeEmpty.png",
+      "implementationEvidence": "MP06-delivery.md"
     },
     {
       "board": "HomeActive.dc.html",
@@ -561,14 +562,15 @@
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/HomeActive.png",
-      "design320": "design-reference/320/HomeActive.png"
+      "design320": "design-reference/320/HomeActive.png",
+      "implementationEvidence": "MP06-delivery.md"
     },
     {
       "board": "FamilyQuestions.dc.html",
       "title": "01 项目成员｜家人提问 · 待回答",
       "group": "family",
       "ticket": "MP06",
-      "target": "family-questions（新增）",
+      "target": "family-questions",
       "state": "家人题列表",
       "entry": "首页→家人提问",
       "interaction": "状态筛选、文字提问、问题详情",
@@ -577,14 +579,15 @@
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/FamilyQuestions.png",
-      "design320": "design-reference/320/FamilyQuestions.png"
+      "design320": "design-reference/320/FamilyQuestions.png",
+      "implementationEvidence": "MP06-delivery.md"
     },
     {
       "board": "FamilyQuestionsEmpty.dc.html",
       "title": "02 项目成员｜家人提问 · 暂无问题",
       "group": "family",
       "ticket": "MP06",
-      "target": "family-questions（新增）",
+      "target": "family-questions",
       "state": "暂无家人题",
       "entry": "空书→家人提问",
       "interaction": "空态与提问入口",
@@ -593,14 +596,15 @@
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/FamilyQuestionsEmpty.png",
-      "design320": "design-reference/320/FamilyQuestionsEmpty.png"
+      "design320": "design-reference/320/FamilyQuestionsEmpty.png",
+      "implementationEvidence": "MP06-delivery.md"
     },
     {
       "board": "FamilyQuestionNew.dc.html",
       "title": "03 项目成员｜提出问题 · 仅文字",
       "group": "family",
       "ticket": "MP06",
-      "target": "family-question-edit（新增）",
+      "target": "family-question-edit",
       "state": "文字提问",
       "entry": "家人列表／某章→提问",
       "interaction": "关系补填、可选章、发布和取消",
@@ -609,14 +613,15 @@
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/FamilyQuestionNew.png",
-      "design320": "design-reference/320/FamilyQuestionNew.png"
+      "design320": "design-reference/320/FamilyQuestionNew.png",
+      "implementationEvidence": "MP06-delivery.md"
     },
     {
       "board": "FamilyQuestionDetail.dc.html",
       "title": "04 主讲人及协助家人｜家人问题 · 待回答",
       "group": "family",
       "ticket": "MP06",
-      "target": "family-question（新增）",
+      "target": "family-question",
       "state": "待回答／稍后／跳过",
       "entry": "首页／列表→家人题",
       "interaction": "作者来源、回答、稍后、跳过及恢复",
@@ -625,14 +630,15 @@
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/FamilyQuestionDetail.png",
-      "design320": "design-reference/320/FamilyQuestionDetail.png"
+      "design320": "design-reference/320/FamilyQuestionDetail.png",
+      "implementationEvidence": "MP06-delivery.md"
     },
     {
       "board": "FamilyQuestionAnswered.dc.html",
       "title": "05 项目成员｜家人问题 · 已回答",
       "group": "family",
       "ticket": "MP06",
-      "target": "family-question（新增）",
+      "target": "family-question",
       "state": "已回答",
       "entry": "已回答列表→问题",
       "interaction": "原作者、关联故事整卡入口",
@@ -641,7 +647,8 @@
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/FamilyQuestionAnswered.png",
-      "design320": "design-reference/320/FamilyQuestionAnswered.png"
+      "design320": "design-reference/320/FamilyQuestionAnswered.png",
+      "implementationEvidence": "MP06-delivery.md"
     },
     {
       "board": "Photos.dc.html",

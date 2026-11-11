@@ -63,11 +63,7 @@ export const familyQuestionClient = {
     );
   },
 };
-export function familyQuestionSource(
-  question: Pick<FamilyQuestion, "authorNickname" | "authorRelationship">,
-) {
-  return `${question.authorRelationship} · ${question.authorNickname}的提问`;
-}
+export { familyQuestionSource } from "./family-question-source";
 export function familyQuestionState(question: FamilyQuestion) {
   return question.story
     ? "已回答"

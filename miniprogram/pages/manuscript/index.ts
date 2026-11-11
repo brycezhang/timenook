@@ -3,12 +3,16 @@ import { bookClient } from "../../services/books";
 import { sessionClient, ApiFailure } from "../../services/session";
 import { watchProjectAccess } from "../../services/project-access";
 import { go } from "../../services/store";
+import { previewBookPhoto } from "../../services/book-editor";
+import { clearPhotoPreviews } from "../../services/story-photos";
 Page({
   data: {
     version: null as BookVersionView | null,
     busy: false,
     pageLoading: true,
     status: "",
+    coverImage: "",
+    openFailed: false,
   },
   projectId: "",
   versionId: "",
@@ -38,7 +42,24 @@ Page({
     );
     await this.perform(async (n, owner) => {
       const v = await bookClient.readVersion(this.projectId, this.versionId);
-      if (this.current(n, owner)) this.setData({ version: v });
+      if (!this.current(n, owner)) return;
+      this.setData({ version: v, openFailed: false });
+      const photo = v.coverPhotoAccess.allowed ? v.snapshot.cover.photo : null;
+      if (photo) {
+        try {
+          const image = await previewBookPhoto(this.projectId, photo, () =>
+            this.current(n, owner),
+          );
+          if (!this.current(n, owner)) {
+            await clearPhotoPreviews([image]);
+            return;
+          }
+          void clearPhotoPreviews([this.data.coverImage].filter(Boolean));
+          this.setData({ coverImage: image });
+        } catch {
+          /* The validated PDF remains readable without its separate thumbnail. */
+        }
+      }
     });
   },
   removeFile(path: string) {
@@ -52,7 +73,13 @@ Page({
     ++this.generation;
     this.removeFile(this.file);
     this.file = "";
-    this.setData({ version: null, busy: false, pageLoading: false });
+    void clearPhotoPreviews([this.data.coverImage].filter(Boolean));
+    this.setData({
+      version: null,
+      coverImage: "",
+      busy: false,
+      pageLoading: false,
+    });
   },
   onUnload() {
     this.stopSession?.();
@@ -87,11 +114,15 @@ Page({
     return this.perform(async (generation: number, owner: string) => {
       this.removeFile(this.file);
       this.file = "";
-      const result = await sessionClient.downloadBook(
-        this.projectId,
-        version.id,
-      );
+      const result = await sessionClient
+        .downloadBook(this.projectId, version.id)
+        .catch((error) => {
+          if (this.current(generation, owner))
+            this.setData({ openFailed: true });
+          throw error;
+        });
       const path = result.tempFilePath;
+      let opened = false;
       try {
         if (!this.current(generation, owner)) return;
         if (result.statusCode !== 200)
@@ -120,10 +151,14 @@ Page({
             fail: () => reject(new Error("无法打开PDF，请重新下载")),
           }),
         );
+        opened = true;
         if (this.current(generation, owner))
-          this.setData({ status: `已打开第${version.version}版完整 PDF` });
+          this.setData({ openFailed: false, status: "" });
+      } catch (error) {
+        if (this.current(generation, owner)) this.setData({ openFailed: true });
+        throw error;
       } finally {
-        if (this.file !== path || !this.current(generation, owner)) {
+        if (!opened || this.file !== path || !this.current(generation, owner)) {
           this.removeFile(path);
           if (this.file === path) this.file = "";
         }
@@ -132,10 +167,11 @@ Page({
   },
 
   print() {
+    if (this.data.version?.state !== "ready") return;
     go("print", `projectId=${this.projectId}`);
   },
   edit() {
-    go("directory", `projectId=${this.projectId}`);
+    go("book", `projectId=${this.projectId}`);
   },
   refresh() {
     void this.onShow();

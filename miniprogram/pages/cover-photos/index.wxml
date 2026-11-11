@@ -1,5 +1,9 @@
+<tn-navigation title="选择封面照片" />
 <app-loading wx:if="{{pageLoading}}" variant="list" />
-<block wx:else>
-<view class="s-page"><view class="s-title">用一张照片做封面</view><button class="photo-none {{!selected?'chosen':''}}" data-id="" bindtap="choose">{{!selected?'✓　':''}}不用照片，保留文字封面</button><view class="s-muted s-space" wx:if="{{!rows.length && !busy}}">暂时没有可用照片。可以先到故事里添加照片。</view><view class="photo-grid"><button class="photo-option {{selected===item.id?'chosen':''}}" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="choose"><image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" /><view wx:else class="photo-loading"><app-loading wx:if="{{busy}}" variant="photo" /><text wx:else>照片暂未加载</text></view><view>{{selected===item.id?'✓ 已选择':'选择这张'}}</view></button></view><view class="s-error">{{status}}</view><view class="s-dock"><button class="s-button" disabled="{{busy}}" loading="{{busy}}" bindtap="save">使用这个封面</button></view></view>
-
-</block>
+<view wx:else class="tn-page with-dock photo-picker">
+  <button class="photo-none {{!selected ? 'chosen' : ''}}" data-id="" bindtap="choose"><text>不用照片</text><image wx:if="{{!selected}}" class="tn-icon" src="/assets/icons/check.svg" /></button>
+  <view wx:if="{{!rows.length && !busy}}" class="tn-muted">暂时没有项目照片。</view>
+  <view class="photo-grid"><button wx:for="{{rows}}" wx:key="id" class="photo-option {{selected === item.id ? 'chosen' : ''}}" data-id="{{item.id}}" bindtap="choose" aria-label="{{selected === item.id ? '已选照片' : '选择照片'}}"><image wx:if="{{item.image}}" class="photo-image" src="{{item.image}}" mode="aspectFill" /><view wx:else class="photo-loading"><app-loading variant="photo" /></view><view wx:if="{{selected === item.id}}" class="photo-check"><image src="/assets/icons/check-light.svg" /></view></button></view>
+  <view wx:if="{{status}}" class="tn-error">{{status}}</view>
+  <view class="tn-dock"><button class="tn-button" bindtap="save" loading="{{busy}}" disabled="{{busy}}">使用这张照片</button></view>
+</view>

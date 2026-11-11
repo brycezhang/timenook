@@ -1,4 +1,7 @@
-import type { BookContext } from "../../../packages/contracts/src";
+import type {
+  BookContext,
+  ProjectOverview,
+} from "../../../packages/contracts/src";
 import { bookClient } from "../../services/books";
 import { projectOverviewClient } from "../../services/project-overview";
 import { sessionClient } from "../../services/session";
@@ -7,6 +10,7 @@ import { previewBookPhoto } from "../../services/book-editor";
 import { clearPhotoPreviews } from "../../services/story-photos";
 import { watchProjectAccess } from "../../services/project-access";
 import { go } from "../../services/store";
+import { switchProjectTab } from "../../services/navigation";
 Page({
   data: {
     context: null as BookContext | null,
@@ -17,8 +21,16 @@ Page({
     pageLoading: true,
     status: "",
     dirty: false,
+    screen: "overview",
+    ready: false,
+    rendering: false,
+    storyCount: 0,
+    photoCount: 0,
+    unassignedCount: 0,
   },
   projectId: "",
+  project: null as ProjectOverview | null,
+  coverAssetId: "",
   generation: 0,
   timer: undefined as ReturnType<typeof setTimeout> | undefined,
   intent: null as { hash: string; key: string } | null,
@@ -52,6 +64,8 @@ Page({
     ++this.generation;
     if (this.timer) clearTimeout(this.timer);
     void clearPhotoPreviews([this.data.coverImage].filter(Boolean));
+    this.project = null;
+    this.coverAssetId = "";
     this.setData({
       context: null,
       coverImage: "",
@@ -74,12 +88,20 @@ Page({
         projectOverviewClient.read(this.projectId),
       ]);
       if (n !== this.generation || owner !== sessionClient.context()) return;
+      this.project = p;
       this.setData({ title: p.bookTitle });
       this.accept(c);
-      const photo =
-        c.coverPhotoOptions.find((x) => x.assetId === c.cover.photoAssetId) ||
-        c.current?.snapshot.cover.photo;
-      if (photo) {
+      const photo = c.draftAccess.allowed
+        ? c.coverPhotoOptions.find((x) => x.assetId === c.cover.photoAssetId)
+        : c.current?.coverPhotoAccess.allowed
+          ? c.current.snapshot.cover.photo
+          : null;
+      if (photo?.assetId !== this.coverAssetId) {
+        void clearPhotoPreviews([this.data.coverImage].filter(Boolean));
+        this.coverAssetId = photo?.assetId || "";
+        this.setData({ coverImage: "" });
+      }
+      if (photo && !this.data.coverImage) {
         try {
           const path = await previewBookPhoto(
             this.projectId,
@@ -107,35 +129,66 @@ Page({
         });
       }
     } finally {
-      if (n === this.generation)
+      if (n === this.generation) {
         this.setData({ busy: false, pageLoading: false });
+        this.poll();
+      }
     }
+  },
+  poll() {
+    if (this.timer) clearTimeout(this.timer);
+    if (this.data.rendering && this.data.context)
+      this.timer = setTimeout(() => void this.refresh(), 3000);
   },
   accept(c: BookContext) {
     const v = c.current,
-      dirty = !!v && v.inputHash !== c.inputHash;
+      dirty = !!v && (v.inputHash !== c.inputHash || v.state === "obsolete"),
+      ready = !!v && v.state === "ready" && !dirty,
+      rendering = !!v && ["queued", "rendering"].includes(v.state) && !dirty,
+      selected = new Set(c.directory.chapters.flatMap((ch) => ch.storyRefs)),
+      included = c.eligibleStories.filter((story) => selected.has(story.id));
+    const photos = new Set(
+      this.project?.stories
+        .filter((s) => selected.has(s.id))
+        .flatMap(
+          (s) => s.revision?.photoSnapshot?.entries.map((p) => p.photoId) || [],
+        ),
+    );
     this.setData({
       context: c,
       dirty,
-      stateLabel: !v
-        ? "还未生成书稿"
-        : dirty
-          ? "内容已更新，请生成新版"
-          : v.state === "ready"
-            ? "电子书已生成"
-            : v.state === "failed"
-              ? "这次生成没有完成"
-              : v.state === "obsolete"
-                ? "请生成新版书稿"
-                : "正在排版成书",
+      ready,
+      rendering,
+      storyCount: included.length,
+      photoCount: photos.size,
+      unassignedCount: c.eligibleStories.filter((s) => !selected.has(s.id))
+        .length,
+      screen: dirty
+        ? "changed"
+        : v?.state === "failed"
+          ? "failed"
+          : !v && !c.eligibleStories.length
+            ? "empty"
+            : "overview",
+      stateLabel: dirty
+        ? "书稿待更新"
+        : ready
+          ? `PDF 已生成 · V${v!.version}`
+          : rendering
+            ? "正在生成 PDF"
+            : v?.state === "failed"
+              ? "书稿生成失败"
+              : "尚未生成 PDF",
     });
     if (this.timer) clearTimeout(this.timer);
-    if (v && ["queued", "rendering"].includes(v.state))
-      this.timer = setTimeout(() => void this.refresh(), 3000);
   },
   async generate() {
     const c = this.data.context;
-    if (this.data.busy || !c?.inputHash) return;
+    if (this.data.busy || !c?.inputHash || this.data.rendering) return;
+    if (!this.data.storyCount) {
+      this.directory();
+      return;
+    }
     const n = this.generation,
       owner = sessionClient.context();
     this.setData({ busy: true, status: "" });
@@ -156,7 +209,10 @@ Page({
             e instanceof Error ? e.message : "生成结果未确认，请查询后重试",
         });
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      if (n === this.generation) {
+        this.setData({ busy: false });
+        this.poll();
+      }
     }
   },
   cover() {
@@ -167,11 +223,21 @@ Page({
   },
   manuscript() {
     const v = this.data.context?.current;
-    if (v?.state === "ready")
+    if (this.data.ready && v)
       go("manuscript", `projectId=${this.projectId}&versionId=${v.id}`);
+    else if (this.data.dirty) this.setData({ screen: "changed" });
   },
   print() {
-    go("print", `projectId=${this.projectId}`);
+    if (this.data.ready) go("print", `projectId=${this.projectId}`);
+  },
+  showOverview() {
+    this.setData({ screen: "overview" });
+  },
+  unassigned() {
+    go("stories", `projectId=${this.projectId}&filter=unassigned`);
+  },
+  projectHome() {
+    switchProjectTab("home", this.projectId);
   },
   production() {
     go("production", `projectId=${this.projectId}`);

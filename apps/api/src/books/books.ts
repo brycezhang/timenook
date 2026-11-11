@@ -98,6 +98,15 @@ class SaveBookCoverDto {
   @Min(0)
   @Max(2147483646)
   expectedVersion!: number;
+  @ApiProperty({ minimum: 0 })
+  @IsInt()
+  @Min(0)
+  @Max(2147483646)
+  expectedMetadataVersion!: number;
+  @ApiProperty({ maxLength: 120 })
+  @IsString()
+  @MaxLength(120)
+  title!: string;
   @ApiProperty({ maxLength: 120 })
   @IsString()
   @MaxLength(120)
@@ -167,7 +176,7 @@ export class Books implements OnModuleDestroy {
       },
       storageScope: probeStorageScope(this.config.recording),
       outputStore: c?.storageRoot,
-      template: "t20-a5-v3",
+      template: "t20-a5-v4",
       chromium: "145.0.7632.6",
       fontSha256:
         "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
@@ -346,7 +355,7 @@ export class Books implements OnModuleDestroy {
         title:
           project.bookTitle ??
           String(admission.snapshot.bookTitle ?? "资料已删除"),
-        template: "t20-a5-v3",
+        template: "t20-a5-v4",
         version: cover.version,
         salutation: cover.salutation,
         photo: coverPhoto,
@@ -863,8 +872,13 @@ export class Books implements OnModuleDestroy {
           return this.contextIn(tx, projectId, actor.accessExpiresAt);
         }
         const draft = await this.inputIn(tx, projectId);
-        if (draft.cover.version !== body.expectedVersion)
+        if (
+          draft.cover.version !== body.expectedVersion ||
+          draft.project.metadataVersion !== body.expectedMetadataVersion
+        )
           throw new ConflictException();
+        const title = body.title.trim();
+        if (!title) throw new BadRequestException("请填写书名");
         if (
           body.photoAssetId &&
           !draft.coverPhotoOptions.some(
@@ -873,9 +887,16 @@ export class Books implements OnModuleDestroy {
         )
           throw new BadRequestException();
         const salutation = body.salutation.trim();
+        const titleChanged = title !== draft.snapshot.cover.title;
         const changed =
+          titleChanged ||
           salutation !== draft.cover.salutation ||
           body.photoAssetId !== draft.cover.photoAssetId;
+        if (titleChanged)
+          await tx.project.update({
+            where: { id: projectId },
+            data: { bookTitle: title, metadataVersion: { increment: 1 } },
+          });
         if (changed)
           await tx.bookCoverVersion.create({
             data: {

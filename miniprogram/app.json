@@ -36,7 +36,10 @@
     "pages/story-audio/index",
     "pages/chapter-outline/index",
     "pages/question/index",
-    "pages/question-edit/index"
+    "pages/question-edit/index",
+    "pages/family-questions/index",
+    "pages/family-question/index",
+    "pages/family-question-edit/index"
   ],
   "tabBar": {
     "custom": true,

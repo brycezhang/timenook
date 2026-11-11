@@ -62,6 +62,7 @@ test("later stays excluded across rounds until a new entry, while answered and s
   ];
   assert.equal(session.update(plan, questions)!.key, "later");
   session.defer("family:later");
+  session.restore("family:later");
   for (let n = 0; n < 8; n++) assert.equal(session.next()!.kind, "outline");
   assert.equal(
     new QuestionRecommendations(() => 0).update(plan, questions)!.key,

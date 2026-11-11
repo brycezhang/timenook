@@ -520,6 +520,7 @@ for (const engine of [chromium, webkit])
             `/v1/projects/${p.projectId}/book/cover`,
             p.narrator.token,
             {
+              ...(await books.coverMetadata(p.projectId, p.buyer.token)),
               expectedVersion: 0,
               salutation: "家人改写的新寄语",
               photoAssetId: null,

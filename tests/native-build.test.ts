@@ -271,7 +271,8 @@ test("release package excludes website and probe routes and ignores stored demo 
   );
   assert.match(homeMarkup, /class="landing-photo"/);
   assert.match(homeMarkup, /class="landing-benefits"/);
-  assert.match(homeMarkup, /含首本实体书/);
+  assert.match(homeMarkup, /offerLabel/);
+  assert.match(homeMarkup, /offer.purchasable/);
   assert.match(homeMarkup, /bindtap="account"/);
   assert.doesNotMatch(homeMarkup, /bindtap="(?:orders|participation|logout)"/);
   const home = await app.open("pages/home/index", false);

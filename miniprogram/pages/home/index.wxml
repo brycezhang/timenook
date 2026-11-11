@@ -1,13 +1,13 @@
 <tn-navigation title="{{overview ? '故事书首页' : '首页'}}" brand="{{true}}"/>
-<view wx:if="{{overview}}" class="s-page with-tabs">
- <view class="project-heading"><text class="s-muted">当前项目</text><button class="s-link" bindtap="switchProject">切换项目 ⇄</button></view>
- <view class="s-title">{{overview.bookTitle}}</view>
- <view class="s-book"><text class="s-subtitle serif">{{overview.bookTitle}}</text><text class="s-muted s-space">时光故事 · 岁月成书</text></view>
- <button wx:if="{{overview.canInvite}}" class="s-link" bindtap="invite">邀请一起记录</button>
- <view class="s-card s-space"><view class="s-subtitle">{{overview.canRecord ? '今天，想聊些什么？' : '故事仍然为你保留'}}</view><view class="s-muted s-space">{{overview.canRecord ? '从一段难忘的往事开始。' : '当前项目暂不能新增或制作，可切换其他项目继续记录。已有资料仍可查看。'}}</view><button wx:if="{{overview.canRecord}}" class="s-button s-space" bindtap="record">开始讲述</button></view>
- <button class="s-row" bindtap="stories"><text>已记录的故事 · {{overview.stories.length}}</text><text class="s-arrow">›</text></button>
- <button class="s-row book-entry" bindtap="book"><text>我的书 · 预览与印刷</text><text class="s-arrow">›</text></button>
- <view wx:if="{{status}}" class="s-error">{{status}}<button class="s-link" bindtap="refresh">重新读取</button></view>
+<view wx:if="{{overview}}" class="tn-page with-tabs home-page">
+ <view class="home-between"><text class="home-badge">与家人一起记录</text><button class="tn-link" bindtap="switchProject">切换故事书</button></view>
+ <button class="home-book-entry" bindtap="book"><view class="tn-grow"><view class="home-title-row"><text class="home-title">{{overview.bookTitle}}</text><text class="tn-arrow">›</text></view><view class="home-caption">{{giftCaption}}</view></view><view class="home-cover"><text>时光故事</text><image wx:if="{{coverImage}}" src="{{coverImage}}" mode="aspectFill"/><view wx:else class="home-cover-title">{{overview.bookTitle}}</view></view></button>
+ <view class="home-statistics"><button bindtap="stories"><text class="home-number">{{overview.summary.confirmed}}</text><text>个故事</text></button><button bindtap="photos"><text class="home-number">{{overview.summary.photos}}</text><text>张照片</text></button><view><text class="home-number">{{overview.summary.audioMinutes}}</text><text>分钟原声</text></view></view>
+ <button class="home-family" bindtap="family"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/message-circle.svg"/></view><view class="tn-grow"><view class="home-family-title">家人提问</view><view class="home-family-meta">{{familyPending}} 个问题待回答</view></view><text class="tn-arrow">›</text></button>
+ <view class="home-question"><view class="home-between"><text class="home-source">{{question?question.source:'自由讲述'}}</text><button class="tn-link" bindtap="nextQuestion" disabled="{{starting}}">换一个</button></view><view class="home-question-text">{{question?question.text:'今天，想聊些什么？'}}</view><button class="tn-button home-start-narration" bindtap="record" disabled="{{!overview.canRecord || starting}}" loading="{{starting}}"><image class="tn-icon" src="/assets/icons/mic-light.svg"/>开始讲述</button><button class="tn-link" bindtap="directory"><image class="home-small-icon" src="/assets/icons/list.svg"/>从大纲目录选题</button></view>
+ <button wx:if="{{overview.canInvite}}" class="tn-link" bindtap="invite">＋ 邀请家人</button>
+ <view wx:if="{{!overview.canRecord}}" class="tn-muted">当前暂不能新增讲述，已有故事仍可查看。</view>
+ <view wx:if="{{status}}" class="tn-error">{{status}}<button class="tn-link" bindtap="refresh">重新读取</button></view>
 </view>
 <app-loading wx:elif="{{pageLoading || busy}}" variant="project" />
 <view wx:elif="{{status}}" class="s-page"><view class="s-error">{{status}}</view><button class="s-button" bindtap="refresh">重新打开</button></view>
@@ -22,7 +22,7 @@
   <view><image src="/assets/icons/modern-book.svg"/><view class="landing-benefit-title">把时光故事<view>做成实体书</view></view><text>留给最爱的人</text></view>
  </view>
 </view>
-<view wx:if="{{!overview && !pageLoading && !busy && !status}}" class="tn-dock above-tabs landing-dock tn-surface"><view class="landing-price"><text>时光故事 · 含首本实体书</text><text class="landing-amount">¥999</text></view><button class="tn-button gift-trigger" bindtap="purchase"><image class="tn-icon" src="/assets/icons/gift-white.svg"/>送出一份礼物</button></view>
+<view wx:if="{{!overview && !pageLoading && !busy && !status}}" class="tn-dock above-tabs landing-dock tn-surface"><view class="landing-price"><text>{{offerLabel}}</text><text wx:if="{{price}}" class="landing-amount">¥{{price}}</text></view><view wx:if="{{offerError}}" class="tn-error">{{offerError}}<button class="tn-link" bindtap="loadOffer">重试</button></view><button class="tn-button gift-trigger" bindtap="purchase" disabled="{{offerLoading || !offer.purchasable}}" loading="{{offerLoading}}"><image class="tn-icon" src="/assets/icons/gift-white.svg"/>{{offerLoading?'正在加载':offer.purchasable?'送出一份礼物':'暂不可购买'}}</button></view>
 <view wx:if="{{!nativeTabs}}" class="tabs"><button class="tab active"><image class="icon" src="/assets/icons/modern-book.svg"/>时光故事</button><button class="tab" bindtap="account"><image class="icon" src="/assets/icons/modern-user.svg"/>我的</button></view>
 
 <quick-login id="quick-login" visible="{{loginVisible}}" bindsuccess="loginSucceeded" bindclose="closeLogin"/>
