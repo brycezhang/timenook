@@ -1,0 +1,159 @@
+{
+  "version": 1,
+  "parent": {
+    "number": 166,
+    "id": 6327442583,
+    "url": "https://github.com/brycezhang/timenook/issues/166",
+    "title": "[小程序重构] 时光故事新版业务与 71 张画板原生对齐"
+  },
+  "integrationBranch": "codex/miniprogram-modern-refactor",
+  "implementationBase": "149b1b6",
+  "tickets": [
+    {
+      "module": "MP01",
+      "number": 167,
+      "id": 6327443616,
+      "url": "https://github.com/brycezhang/timenook/issues/167",
+      "title": "[MP01] 公开入口、登录与我的",
+      "file": "tickets/MP01-entry-login.md",
+      "blockedBy": []
+    },
+    {
+      "module": "MP02",
+      "number": 168,
+      "id": 6327444473,
+      "url": "https://github.com/brycezhang/timenook/issues/168",
+      "title": "[MP02] 统一购买、付款与送给自己",
+      "file": "tickets/MP02-purchase-self-gift.md",
+      "blockedBy": [
+        "MP01"
+      ]
+    },
+    {
+      "module": "MP03",
+      "number": 169,
+      "id": 6327445301,
+      "url": "https://github.com/brycezhang/timenook/issues/169",
+      "title": "[MP03] 指定手机号发卡与领取礼物",
+      "file": "tickets/MP03-designated-gift.md",
+      "blockedBy": [
+        "MP02"
+      ]
+    },
+    {
+      "module": "MP04",
+      "number": 170,
+      "id": 6327446181,
+      "url": "https://github.com/brycezhang/timenook/issues/170",
+      "title": "[MP04] 礼物三分类、切换故事书与家人邀请",
+      "file": "tickets/MP04-gifts-members.md",
+      "blockedBy": [
+        "MP03"
+      ]
+    },
+    {
+      "module": "MP05",
+      "number": 171,
+      "id": 6327446904,
+      "url": "https://github.com/brycezhang/timenook/issues/171",
+      "title": "[MP05] 六章大纲目录与问题管理",
+      "file": "tickets/MP05-outline-directory.md",
+      "blockedBy": [
+        "MP01"
+      ]
+    },
+    {
+      "module": "MP06",
+      "number": 173,
+      "id": 6327448470,
+      "url": "https://github.com/brycezhang/timenook/issues/173",
+      "title": "[MP06] 家人提问、混合推荐与故事书首页",
+      "file": "tickets/MP06-family-recommendation.md",
+      "blockedBy": [
+        "MP04",
+        "MP05",
+        "MP07"
+      ]
+    },
+    {
+      "module": "MP07",
+      "number": 172,
+      "id": 6327447708,
+      "url": "https://github.com/brycezhang/timenook/issues/172",
+      "title": "[MP07] 项目照片与从照片开始讲述",
+      "file": "tickets/MP07-project-photos.md",
+      "blockedBy": [
+        "MP01"
+      ]
+    },
+    {
+      "module": "MP08",
+      "number": 174,
+      "id": 6327449206,
+      "url": "https://github.com/brycezhang/timenook/issues/174",
+      "title": "[MP08] 故事编辑、回听与随时归章",
+      "file": "tickets/MP08-stories-assignment.md",
+      "blockedBy": [
+        "MP05",
+        "MP07"
+      ]
+    },
+    {
+      "module": "MP09",
+      "number": 175,
+      "id": 6327449944,
+      "url": "https://github.com/brycezhang/timenook/issues/175",
+      "title": "[MP09] 语音讲述、照片操作与可靠保存",
+      "file": "tickets/MP09-voice-recording.md",
+      "blockedBy": [
+        "MP06",
+        "MP07",
+        "MP08"
+      ]
+    },
+    {
+      "module": "MP10",
+      "number": 176,
+      "id": 6327450708,
+      "url": "https://github.com/brycezhang/timenook/issues/176",
+      "title": "[MP10] 封面编辑、真实 PDF 与扫码回听",
+      "file": "tickets/MP10-book-pdf.md",
+      "blockedBy": [
+        "MP07",
+        "MP08"
+      ]
+    },
+    {
+      "module": "MP11",
+      "number": 177,
+      "id": 6327451652,
+      "url": "https://github.com/brycezhang/timenook/issues/177",
+      "title": "[MP11] 制作、收货地址与寄送状态",
+      "file": "tickets/MP11-print-delivery.md",
+      "blockedBy": [
+        "MP10"
+      ]
+    },
+    {
+      "module": "MP12",
+      "number": 178,
+      "id": 6327452639,
+      "url": "https://github.com/brycezhang/timenook/issues/178",
+      "title": "[MP12] 全量原生对照验收与旧实现清理",
+      "file": "tickets/MP12-full-native-acceptance.md",
+      "blockedBy": [
+        "MP01",
+        "MP02",
+        "MP03",
+        "MP04",
+        "MP05",
+        "MP06",
+        "MP07",
+        "MP08",
+        "MP09",
+        "MP10",
+        "MP11"
+      ]
+    }
+  ]
+}
