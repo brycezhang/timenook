@@ -6,7 +6,7 @@
  <button wx:if="{{overview.canInvite}}" class="s-link" bindtap="invite">邀请一起记录</button>
  <view class="s-card s-space"><view class="s-subtitle">{{overview.canRecord ? '今天，想聊些什么？' : '故事仍然为你保留'}}</view><view class="s-muted s-space">{{overview.canRecord ? '从一段难忘的往事开始。' : '当前项目暂不能新增或制作，可切换其他项目继续记录。已有资料仍可查看。'}}</view><button wx:if="{{overview.canRecord}}" class="s-button s-space" bindtap="record">开始讲述</button></view>
  <button class="s-row" bindtap="stories"><text>已记录的故事 · {{overview.stories.length}}</text><text class="s-arrow">›</text></button>
- <button class="s-row" bindtap="book"><text>我的书 · 预览与印刷</text><text class="s-arrow">›</text></button>
+ <button class="s-row book-entry" bindtap="book"><text>我的书 · 预览与印刷</text><text class="s-arrow">›</text></button>
  <view wx:if="{{status}}" class="s-error">{{status}}<button class="s-link" bindtap="refresh">重新读取</button></view>
 </view>
 <app-loading wx:elif="{{pageLoading || busy}}" variant="project" />
