@@ -1,3 +1,4 @@
+<tn-navigation title="大纲目录" />
 <app-loading wx:if="{{pageLoading}}" variant="list" />
 <view wx:else class="tn-page with-dock directory-page">
   <view class="tn-muted">拖动右侧调整章节顺序</view>

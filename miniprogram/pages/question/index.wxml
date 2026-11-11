@@ -1,3 +1,4 @@
+<tn-navigation title="大纲问题" />
 <app-loading wx:if="{{pageLoading}}" variant="story" />
 <view wx:else class="tn-page with-dock"><view class="outline-between"><text class="outline-badge">大纲问题</text><button class="tn-link" bindtap="edit">编辑</button></view><view class="outline-title question-text">{{text}}</view><view class="tn-muted">{{chapter}} · {{state}}</view>
 <button wx:if="{{storyId}}" class="outline-card" bindtap="story"><view class="outline-card-title">查看回答故事 ›</view></button>

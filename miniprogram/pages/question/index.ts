@@ -67,6 +67,8 @@ Page({
   },
   onHide() {
     ++this.generation;
+    this.plan = null;
+    this.setData({ text: "", chapter: "", storyId: "", busy: false });
   },
   edit() {
     go(

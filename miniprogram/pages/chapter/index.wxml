@@ -1,3 +1,4 @@
+<tn-navigation title="编辑章节" />
 <app-loading wx:if="{{pageLoading}}" variant="story" />
 <view wx:else class="tn-page with-dock"><label class="tn-field">章节名称<input class="tn-input" value="{{title}}" bindinput="title" maxlength="120" placeholder="输入章节名称" /></label>
 <button class="chapter-story-link" bindtap="choose" disabled="{{busy}}"><text>本章故事 · {{rows.length}} 篇</text><text class="tn-arrow">›</text></button>

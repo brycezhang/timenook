@@ -59,6 +59,8 @@ Page({
   },
   onHide() {
     ++this.generation;
+    this.plan = null;
+    this.setData({ rows: [], storyCount: 0, unassigned: 0, busy: false });
   },
   open(e: WechatMiniprogram.CustomEvent<{ id: string }>) {
     go(

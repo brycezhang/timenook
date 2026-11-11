@@ -1,6 +1,8 @@
 {
   "navigationBarTitleText": "编辑大纲问题",
   "usingComponents": {
-    "sort-list": "/components/sort-list/index"
-  }
+    "sort-list": "/components/sort-list/index",
+    "tn-navigation": "/components/tn-navigation/index"
+  },
+  "navigationStyle": "custom"
 }

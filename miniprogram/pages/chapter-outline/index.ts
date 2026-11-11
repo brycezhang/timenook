@@ -51,6 +51,8 @@ Page({
   },
   onHide() {
     ++this.generation;
+    this.plan = null;
+    this.setData({ questions: [], stories: [], title: "", busy: false });
   },
   apply(plan: PersonalPlan) {
     const c = plan.chapters.find((c) => c.key === this.key);
