@@ -13,7 +13,11 @@ import { verifiedPhone } from "./wechat-profile-fixture";
 import { USER_TERMS_VERSION } from "@timenook/contracts";
 import { randomUUID } from "node:crypto";
 import { callback, paid } from "./payment-fixture";
-import { app } from "./book-fixture";
+import { app, readyStory, projectPhoto, config } from "./book-fixture";
+import { readFileSync } from "node:fs";
+import { ProductionTasks } from "../src/tasks/tasks";
+import { paymentAdmin } from "./payment-admin-fixture";
+import { Deletions } from "../src/care/deletions";
 
 before(startBookFixture);
 after(stopBookFixture);
@@ -32,8 +36,9 @@ test("a gift verifies the account phone, requires explicit acceptance, and opens
   );
   assert.equal(gift.version, 1);
   assert.equal(gift.state, "unclaimed");
+  const anotherBuyerSession = await login(p.buyer.who);
   const recovered = data(
-    await request("GET", `${base}/gift`, p.buyer.token),
+    await request("GET", `${base}/gift`, anotherBuyerSession.token),
     200,
   );
   assert.equal(
@@ -232,5 +237,179 @@ test("only the purchaser can issue; correcting the phone invalidates the old car
       )
     ).statusCode,
     403,
+  );
+});
+
+test("claim preserves the purchaser's prepared recordings, project photos, and frozen PDF for both members", async () => {
+  const snapshot = JSON.parse(
+    readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
+  );
+  snapshot.d01.minPages = 1;
+  snapshot.d01.bleedMm = 0;
+  const draftId = randomUUID(),
+    packageId = randomUUID();
+  await db.packageDraft.create({
+    data: { id: draftId, realm: "local", ...snapshot },
+  });
+  await db.packageVersion.create({
+    data: {
+      id: packageId,
+      realm: "local",
+      purpose: "local_preview",
+      draftId,
+      draftRevision: 1,
+      snapshot,
+      publicOffer: {
+        title: "赠礼素材合成套餐",
+        price: { value: 99900, unit: "fen", currency: "CNY" },
+      },
+    },
+  });
+  const purchased = await project(packageId);
+  const p = await readyStory({ ...purchased, narrator: purchased.buyer });
+  const photo = await projectPhoto(p);
+  const base = `/v1/projects/${p.projectId}`;
+  const before = data(
+    await request("GET", `${base}/participation`, p.buyer.token),
+    200,
+  );
+  const context = data(
+    await request("GET", `${base}/book`, p.buyer.token),
+    200,
+  );
+  const book = data(
+    await request("POST", `${base}/book/versions`, p.buyer.token, {
+      expectedInputHash: context.inputHash,
+    }),
+    202,
+  );
+  await app.get(ProductionTasks).run(book.task.id);
+  const bookStatus = data(
+    await request("GET", `${base}/book/versions/${book.id}`, p.buyer.token),
+    200,
+  );
+  assert.equal(bookStatus.state, "ready", JSON.stringify(bookStatus.task));
+  const pdfPath = `${base}/book/versions/${book.id}/pdf`;
+  const pdfBefore = await request("GET", pdfPath, p.buyer.token);
+  assert.equal(pdfBefore.statusCode, 200, pdfBefore.body);
+  const clips = data(
+    await request("GET", `${base}/interviews/${p.interviewId}`, p.buyer.token),
+    200,
+  );
+  const clipPath = `${base}/interviews/${p.interviewId}/clips/${clips.clips[0].id}/content`;
+  const audioBefore = await request("GET", clipPath, p.buyer.token);
+  assert.equal(audioBefore.statusCode, 200);
+  const photoPath = `${base}/photos/${photo.id}/assets/${photo.assets.find((a: { kind: string }) => a.kind === "original").id}/content`;
+  const photoBefore = await request("GET", photoPath, p.buyer.token);
+  assert.equal(photoBefore.statusCode, 200);
+  const recipient = await login();
+  const card = data(
+    await request("POST", `${base}/gift`, p.buyer.token, {
+      recipientName: "恩师",
+      recipientPhone: verifiedPhone("synthetic-timenook", recipient.who),
+    }),
+  );
+  data(
+    await request("POST", `/v1/gifts/${card.token}/claim`, recipient.token, {
+      termsVersion: USER_TERMS_VERSION,
+    }),
+  );
+  for (const member of [p.buyer, recipient]) {
+    const after = data(
+      await request("GET", `${base}/participation`, member.token),
+      200,
+    );
+    assert.equal(after.accessEpoch, before.accessEpoch);
+    assert.equal(after.bindingVersion, before.bindingVersion);
+    for (const [path, prior] of [
+      [clipPath, audioBefore],
+      [photoPath, photoBefore],
+      [pdfPath, pdfBefore],
+    ] as const) {
+      const response = await request("GET", path, member.token);
+      assert.equal(response.statusCode, 200, path);
+      assert.deepEqual(
+        response.rawPayload,
+        prior.rawPayload,
+        "claim keeps the original prepared material usable",
+      );
+    }
+  }
+  const originalOrder = data(
+    await request("GET", `/v1/orders/${p.orderId}`, p.buyer.token),
+    200,
+  );
+  assert.equal(originalOrder.project.id, p.projectId);
+  assert.equal(
+    await db.firstCopyEntitlement.count({ where: { projectId: p.projectId } }),
+    1,
+  );
+  assert.equal(await db.project.count({ where: { orderId: p.orderId } }), 1);
+});
+
+test("verified project erasure clears gift phone, name, card secret and claimant identity and prevents restoration", async () => {
+  const p = await project(),
+    recipient = await login();
+  const base = `/v1/projects/${p.projectId}`;
+  const card = data(
+    await request("POST", `${base}/gift`, p.buyer.token, {
+      recipientName: "私人收礼人",
+      recipientPhone: verifiedPhone("synthetic-timenook", recipient.who),
+    }),
+  );
+  data(
+    await request("POST", `/v1/gifts/${card.token}/claim`, recipient.token, {
+      termsVersion: USER_TERMS_VERSION,
+    }),
+  );
+  const state = data(
+    await request("GET", `${base}/participation`, recipient.token),
+    200,
+  );
+  const opened = data(
+    await request("POST", `${base}/care-requests`, recipient.token, {
+      kind: "delete",
+      expectedBindingVersion: state.bindingVersion,
+    }),
+  );
+  const headers = await paymentAdmin(config, app, ["care:write", "audit:read"]);
+  data(
+    await app.inject({
+      method: "POST",
+      url: `/v1/admin/care-requests/${opened.id}/verify`,
+      headers: { ...headers, "idempotency-key": randomUUID() },
+      payload: {
+        expectedBindingVersion: state.bindingVersion,
+        expectedAccessEpoch: state.accessEpoch,
+        noticeVersion: "synthetic-d08-v1",
+        evidenceRef: "synthetic:赠礼删除核验",
+      },
+    }),
+  );
+  await app.get(Deletions).reconcile(p.projectId);
+  const row = await db.projectGift.findUniqueOrThrow({
+    where: { projectId: p.projectId },
+  });
+  for (const field of [
+    "recipientName",
+    "recipientPhone",
+    "token",
+    "tokenHash",
+    "claimedByUserId",
+  ] as const)
+    assert.equal(row[field], null, field);
+  assert.equal(
+    (await request("GET", `/v1/gifts/${card.token}`)).statusCode,
+    404,
+  );
+  assert.equal(
+    (await request("GET", `${base}/gift`, p.buyer.token)).statusCode,
+    403,
+  );
+  await assert.rejects(
+    db.projectGift.update({
+      where: { projectId: p.projectId },
+      data: { recipientName: "不能恢复" },
+    }),
   );
 });

@@ -1,4 +1,9 @@
-<view wx:if="{{visible}}" class="quick-login-mask" catchtouchmove="preventMove">
+<view wx:if="{{visible && embedded && !consentConfirm}}" class="quick-login-embedded tn-surface">
+ <view class="quick-login-agreement"><button class="quick-login-check" bindtap="toggleAgreed" aria-role="checkbox" aria-checked="{{agreed}}" aria-label="我已阅读并同意使用条款与隐私说明" disabled="{{busy}}"><text class="quick-login-box {{agreed ? 'checked' : ''}}">{{agreed ? '✓' : ''}}</text></button><view class="quick-login-terms">我已阅读并同意 <button bindtap="terms">《使用条款与隐私说明》</button></view></view>
+ <view wx:if="{{status}}" class="tn-error">{{status}}</view>
+ <view class="tn-dock"><button wx:if="{{agreed}}" class="tn-button quick-login-submit" open-type="getPhoneNumber|agreePrivacyAuthorization" bindgetphonenumber="login" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/phone-white.svg"/>授权微信手机号</button><button wx:else class="tn-button quick-login-submit" bindtap="requestConsent"><image class="tn-icon" src="/assets/icons/phone-white.svg"/>授权微信手机号</button></view>
+</view>
+<view wx:if="{{visible && (!embedded || consentConfirm)}}" class="quick-login-mask" catchtouchmove="preventMove">
  <view class="quick-login-sheet tn-surface" role="dialog" aria-modal="true" aria-label="{{consentConfirm ? '继续登录表示同意协议' : '微信手机号登录'}}">
   <view class="quick-login-heading"><view class="tn-heading">{{consentConfirm ? '继续登录表示同意协议' : '微信手机号登录'}}</view><button class="tn-icon-button quick-login-close" bindtap="close" disabled="{{busy}}" aria-label="关闭登录"><image class="tn-icon" src="/assets/icons/modern-close.svg"/></button></view>
   <block wx:if="{{!consentConfirm}}">

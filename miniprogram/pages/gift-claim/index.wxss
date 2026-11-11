@@ -1,0 +1,12 @@
+@import "../../styles/gifts.wxss";
+.gift-cover-wrap { padding:16px 0;display:flex;justify-content:center; }
+.gift-cover.mini-book { width:178px;height:248px;border-left-width:9px;padding:22px 15px;gap:14px; }
+.gift-cover .mini-title { font-size:20px;line-height:1.4;max-height:84px; }
+.gift-cover .mini-subtitle { font-size:9px; }
+.gift-cover .mini-photo { height:117px;flex:1;min-height:45px; }
+.gift-cover .mini-brand { font-size:8px; }
+.gift-recipient-name { font-size:17px;font-weight:600; }
+.gift-phone-caption { display:flex;gap:8px;align-items:center;font-size:12px;color:#756859; }
+.gift-phone-caption image { width:16px;height:16px; }
+.gift-accept-title { font-size:16px;font-weight:600;overflow-wrap:anywhere; }
+.gift-claimed-title { font-size:19px;font-weight:600;overflow-wrap:anywhere; }

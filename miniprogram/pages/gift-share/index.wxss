@@ -1,0 +1,9 @@
+@import "../../styles/gifts.wxss";
+.gift-share-page.with-dock { padding-bottom:calc(178px + env(safe-area-inset-bottom)); }
+.gift-card { border-radius:26px;background:#fff;color:#46563c;border:1px solid #ded4c6;overflow:hidden;box-shadow:0 14px 28px #46563c20; }
+.gift-card-copy { padding:24px;display:flex;flex-direction:column;gap:12px; }
+.gift-card-brand { font-size:11px;letter-spacing:2px;opacity:.7; }
+.gift-card-title { font-size:29px;line-height:1.35;font-weight:700; }
+.gift-card-to { font-size:13px;opacity:.8; }
+.gift-card-image { width:100%;height:185px;display:block; }
+.gift-share-status { display:flex;gap:8px;align-items:center;justify-content:space-between;font-size:13px;color:#756859; }
