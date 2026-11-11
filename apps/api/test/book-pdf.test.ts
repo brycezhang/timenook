@@ -32,6 +32,7 @@ import {
   data,
   readyStory,
   storyPhoto,
+  projectPhoto,
   restartBookApplication,
   state,
 } from "./book-fixture";
@@ -516,16 +517,42 @@ test("the actual directory omits empty chapters and the full long manuscript ret
   const p = await confirmedStory(undefined, true, true),
     second = await confirmedStory(p),
     base = `/v1/projects/${p.projectId}/book`;
-  const initial = data(await request("GET", base, p.narrator.token), 200);
+  const initial = data(
+    await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token),
+    200,
+  );
   data(
-    await request("POST", base + "/directory", p.narrator.token, {
-      expectedVersion: initial.directory.version,
-      chapters: [
-        { key: "empty", title: "不应补写的空章节", storyRefs: [] },
-        { key: "later", title: "后来的日子", storyRefs: [second.story.id] },
-        { key: "childhood", title: "家门前的红墙", storyRefs: [p.story.id] },
-      ],
-    }),
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/plan`,
+      p.narrator.token,
+      {
+        expectedVersion: initial.revision,
+        content: {
+          starters: initial.starters,
+          chapters: [
+            {
+              key: "empty",
+              title: "不应补写的空章节",
+              storyRefs: [],
+              questions: [],
+            },
+            {
+              key: "later",
+              title: "后来的日子",
+              storyRefs: [second.story.id],
+              questions: [],
+            },
+            {
+              key: "childhood",
+              title: "家门前的红墙",
+              storyRefs: [p.story.id],
+              questions: [],
+            },
+          ],
+        },
+      },
+    ),
   );
   const contextBeforeCover = data(
       await request("GET", base, p.narrator.token),
@@ -611,14 +638,30 @@ test("future questions preserve a frozen book while actual directory changes obs
   );
   assert.equal(same.state, "queued");
   assert.equal(same.snapshotHash, book.snapshotHash);
-  assert.equal(same.snapshot.plan.revision, 1);
-  const changed = data(
-    await request("POST", base + "/book/directory", p.narrator.token, {
-      expectedVersion: ctx.directory.version,
-      chapters: [
-        { key: "my-days", title: "我的那些日子", storyRefs: [p.story.id] },
-      ],
+  assert.equal(same.snapshot.plan.revision, plan.revision);
+  const currentPlan = data(
+    await request("GET", base + "/plan", p.narrator.token),
+    200,
+  );
+  data(
+    await request("POST", base + "/plan", p.narrator.token, {
+      expectedVersion: currentPlan.revision,
+      content: {
+        starters: currentPlan.starters,
+        chapters: [
+          {
+            key: "my-days",
+            title: "我的那些日子",
+            storyRefs: [p.story.id],
+            questions: [],
+          },
+        ],
+      },
     }),
+  );
+  const changed = data(
+    await request("GET", base + "/book", p.narrator.token),
+    200,
   );
   assert.equal(changed.current.state, "obsolete");
   assert.equal(
@@ -636,7 +679,7 @@ test("future questions preserve a frozen book while actual directory changes obs
     202,
   );
   assert.equal(next.version, 2);
-  assert.equal(next.snapshot.plan.revision, 2);
+  assert.equal(next.snapshot.plan.revision, currentPlan.revision + 1);
   assert.equal(next.snapshot.chapters[0].title, "我的那些日子");
   assert.equal(
     next.snapshot.chapters[0].stories[0].entry.id,
@@ -1074,6 +1117,29 @@ test("a valid4500-character participant note is complete across actual PDF pages
   await preserveReviewBook(book.id, "participant-note");
 });
 
+test("a zero-story project can choose its uploaded project photo for the cover", async () => {
+  const p = await joinedProject();
+  const photo = await projectPhoto(p);
+  const base = `/v1/projects/${p.projectId}/book`;
+  const context = data(await request("GET", base, p.narrator.token), 200);
+  assert.deepEqual(context.eligibleStories, []);
+  assert.equal(context.coverPhotoOptions.length, 1);
+  assert.equal(context.coverPhotoOptions[0].id, photo.id);
+  const chosen = data(
+    await request("POST", `${base}/cover`, p.buyer.token, {
+      expectedVersion: 0,
+      salutation: "家人的故事",
+      photoAssetId: context.coverPhotoOptions[0].assetId,
+    }),
+  );
+  assert.equal(chosen.cover.photoAssetId, context.coverPhotoOptions[0].assetId);
+  const photos = data(
+    await request("GET", `/v1/projects/${p.projectId}/photos`, p.buyer.token),
+    200,
+  );
+  assert.deepEqual(photos.usage, { reservedCount: 0, consumedCount: 1 });
+});
+
 test("cover settings freeze an allowed salutation and photo and invalidate an earlier book on optimistic change", async () => {
   const p = await confirmedStory(undefined, true, false, undefined, {
       portrait: true,
@@ -1087,7 +1153,7 @@ test("cover settings freeze an allowed salutation and photo and invalidate an ea
   });
   assert.equal(context.coverPhotoOptions.length, 1);
   const photo = context.coverPhotoOptions[0];
-  assert.equal(photo.interviewId, p.interviewId);
+  assert.equal("interviewId" in photo, false);
   assert.ok(photo.bytes > 0);
   const before = data(
       await request("POST", base + "/versions", p.narrator.token, {

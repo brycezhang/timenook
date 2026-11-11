@@ -230,15 +230,22 @@ test("a standalone login adapter returns home without orders or payment", async 
 });
 test("a direct new-book entry preserves its draft in the shared login sheet", async () => {
   const h = await harness("new-book", [], false);
-  h.page.setData({ name: "妈妈 & 回忆", salutation: "妈妈" });
+  h.page.chooseRelationship({
+    currentTarget: { dataset: { relationship: "妈妈" } },
+  });
+  h.page.input({
+    currentTarget: { dataset: { field: "bookTitle" } },
+    detail: { value: "妈妈 & 回忆" },
+  });
   h.page.next();
   assert.deepEqual(h.routes, []);
   assert.equal(h.page.data.loginVisible, true);
+  h.storage.set(`timenook.session.v1:${base}`, session);
   h.page.loginSucceeded();
   const destination = new URL(h.routes[0], "https://example.test");
   assert.equal(destination.pathname, "/pages/purchase/index");
   assert.equal(destination.searchParams.get("bookTitle"), "妈妈 & 回忆");
-  assert.equal(destination.searchParams.get("salutation"), "妈妈");
+  assert.equal(destination.searchParams.get("relationship"), "妈妈");
 });
 test("My shows an existing local session while validating it", async () => {
   const h = await harness("account", []);

@@ -1,0 +1,4 @@
+@import "../../styles/purchase.wxss";
+.purchase-total { display:flex;align-items:center;justify-content:space-between;padding:0 2px; }
+.purchase-price { font-size:28px;font-weight:600;letter-spacing:-1px; }
+.purchase-benefits .tn-row { cursor:default; }

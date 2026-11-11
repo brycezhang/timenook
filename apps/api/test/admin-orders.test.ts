@@ -92,6 +92,7 @@ before(async () => {
     data: orderIds.map((id, i) => ({
       id,
       buyerId,
+      purchaseKind: "gift",
       appId: "synthetic-orders",
       openId: "buyer",
       merchantId: "synthetic",

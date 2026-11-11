@@ -2,7 +2,6 @@ import type {
   BookContext,
   BookVersionView,
   BookConfirmationContext,
-  PlanDirectory,
 } from "../../packages/contracts/src";
 import { sessionClient } from "./session";
 import { paymentKey } from "./payments";
@@ -149,20 +148,6 @@ export const bookClient = {
       await sessionClient.request<BookVersionView>(
         `/projects/${projectId}/book/versions/${id}/retry`,
         { key, data: {} },
-      ),
-      projectId,
-    );
-  },
-  async reviseDirectory(
-    projectId: string,
-    expectedVersion: number,
-    chapters: PlanDirectory["chapters"],
-  ) {
-    validProject(projectId);
-    return context(
-      await sessionClient.request<BookContext>(
-        `/projects/${projectId}/book/directory`,
-        { key: paymentKey(), data: { expectedVersion, chapters } },
       ),
       projectId,
     );

@@ -178,7 +178,7 @@ test("native tab handlers use cached tab navigation and the package supplies its
   }
 });
 
-test("built new-book preserves an encoded user title and salutation", async () => {
+test("built new-book preserves an encoded user title and relationship", async () => {
   const app = await harness("live");
   app.storage.set("timenook.session.v1:https://example.test/api/v1", {
     user: { id: "11111111-1111-4111-8111-111111111111" },
@@ -190,13 +190,10 @@ test("built new-book preserves an encoded user title and salutation", async () =
   });
   const p = await app.open("pages/new-book/index");
   p.input({
-    currentTarget: { dataset: { field: "name" } },
+    currentTarget: { dataset: { field: "bookTitle" } },
     detail: { value: "妈妈的一生 & 回忆" },
   });
-  p.input({
-    currentTarget: { dataset: { field: "salutation" } },
-    detail: { value: "妈妈" },
-  });
+  p.chooseRelationship({ currentTarget: { dataset: { relationship: "妈妈" } } });
   p.next();
   const [route, query] = app.route().slice(1).split("?");
   const purchase = await app.open(route, false);
@@ -204,7 +201,7 @@ test("built new-book preserves an encoded user title and salutation", async () =
     Object.fromEntries(query.split("&").map((pair) => pair.split("="))),
   );
   assert.equal(purchase.data.bookTitle, "妈妈的一生 & 回忆");
-  assert.equal(purchase.requestedRecipient, "妈妈");
+  assert.equal(purchase.data.relationship, "妈妈");
 });
 
 test("release package excludes website and probe routes and ignores stored demo mode", async () => {
@@ -295,11 +292,11 @@ test("release package excludes website and probe routes and ignores stored demo 
   assert.equal(invite.copyInvitation, undefined);
   const order = await app.open("pages/order/index", false);
   assert.equal(typeof order.retryPayment, "function");
-  assert.equal(typeof order.closeOrder, "function");
+  assert.equal(typeof order.restoreOrders, "function");
   const markup = await readFile(
     path.join(root, "pages/order/index.wxml"),
     "utf8",
   );
   assert.match(markup, /bindtap="retryPayment"/);
-  assert.match(markup, /bindtap="closeOrder"/);
+  assert.match(markup, /bindtap="restoreOrders"/);
 });

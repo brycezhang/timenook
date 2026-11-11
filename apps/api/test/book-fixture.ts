@@ -391,6 +391,7 @@ export async function project(versionId = packageId) {
   const buyer = await login();
   const order = data(
     await request("POST", "/v1/orders", buyer.token, {
+      purchaseKind: "gift",
       packageVersionId: versionId,
       recipient: { typeCode: "mentor", relationshipLabel: "恩师" },
       bookTitle: "私人标题不能泄露",
@@ -494,7 +495,14 @@ export function syntheticAudio(seconds: 1 | 0.5 = 1) {
 export async function interview(
   p: Awaited<ReturnType<typeof joinedProject>>,
   ai = true,
+  source: { questionKey: string } | { starterKind: "free-narration" } = {
+    starterKind: "free-narration",
+  },
 ) {
+  const plan = data(
+    await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token),
+    200,
+  );
   return data(
     await request(
       "POST",
@@ -502,8 +510,8 @@ export async function interview(
       p.narrator.token,
       {
         clientInterviewId: randomUUID(),
-        expectedPlanRevision: 1,
-        starterKind: "free-narration",
+        expectedPlanRevision: plan.revision,
+        ...source,
       },
     ),
   );
@@ -537,9 +545,12 @@ export async function sealedClip(
 
 export async function readyStory(
   existing?: Awaited<ReturnType<typeof joinedProject>>,
+  source: { questionKey: string } | { starterKind: "free-narration" } = {
+    questionKey: "childhood-01",
+  },
 ) {
   const p = existing ?? (await joinedProject()),
-    i = await interview(p);
+    i = await interview(p, true, source);
   await sealedClip(p, i.id);
   await sealedClip(p, i.id);
   const tasks = data(
@@ -597,17 +608,16 @@ export async function readyStory(
   return { ...p, interviewId: i.id, story: current };
 }
 
-export async function storyPhoto(
-  p: Awaited<ReturnType<typeof readyStory>>,
-  caption: string,
+export async function projectPhoto(
+  p: Awaited<ReturnType<typeof joinedProject>>,
   pixels = { width: 120, height: 80 },
 ) {
   const bytes = await sharp({
-      create: { ...pixels, channels: 3, background: "#e54334" },
-    })
-      .jpeg()
-      .toBuffer(),
-    base = `/v1/projects/${p.projectId}/interviews/${p.interviewId}/photos`;
+    create: { ...pixels, channels: 3, background: "#e54334" },
+  })
+    .jpeg()
+    .toBuffer();
+  const base = `/v1/projects/${p.projectId}/photos`;
   const photo = data(
     await request("POST", base, p.narrator.token, {
       clientPhotoId: randomUUID(),
@@ -622,11 +632,21 @@ export async function storyPhoto(
     (await formUpload(app, form, bytes, {}, p.narrator.token)).statusCode,
     204,
   );
-  data(await request("POST", `${base}/${photo.id}/seal`, p.narrator.token, {}));
-  const collection = data(await request("GET", base, p.narrator.token), 200);
   return data(
-    await request("POST", `${base}/materials`, p.narrator.token, {
-      expectedRevision: collection.snapshot?.revision ?? 0,
+    await request("POST", `${base}/${photo.id}/seal`, p.narrator.token, {}),
+  );
+}
+export async function storyPhoto(
+  p: Awaited<ReturnType<typeof readyStory>>,
+  caption: string,
+  pixels = { width: 120, height: 80 },
+) {
+  const photo = await projectPhoto(p, pixels);
+  const materials = `/v1/projects/${p.projectId}/interviews/${p.interviewId}/photo-materials`;
+  const snapshot = data(await request("GET", materials, p.narrator.token), 200);
+  return data(
+    await request("POST", materials, p.narrator.token, {
+      expectedRevision: snapshot?.revision ?? 0,
       entries: [{ photoId: photo.id, caption }],
     }),
   );

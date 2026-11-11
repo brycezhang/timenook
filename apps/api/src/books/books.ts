@@ -32,7 +32,6 @@ import {
   IsInt,
   Min,
   Max,
-  IsArray,
   Matches,
   IsString,
   MaxLength,
@@ -56,14 +55,13 @@ import type {
   BookSnapshot,
   BookStory,
   BookVersionView,
-  PlanDirectory,
   PhotoMaterials,
   BookCoverSettings,
   BookConfirmationContext,
 } from "@timenook/contracts";
 import { API_CONFIG, ApiConfig } from "../config";
 import { Participation } from "../identity/participation";
-import { ProjectPlans, ProjectPlanError } from "../projects/project-plans";
+import { ProjectPlans } from "../projects/project-plans";
 import { ProjectServiceTerms } from "../projects/service-terms";
 import { readProjectAdmissionIn } from "../projects/project-admission";
 import { readSessionContextIn } from "../identity/identity-access";
@@ -109,12 +107,7 @@ class SaveBookCoverDto {
   @IsUUID()
   photoAssetId!: string | null;
 }
-class BookDirectoryDto {
-  @ApiProperty() @IsInt() @Min(1) @Max(2147483646) expectedVersion!: number;
-  @ApiProperty({ type: [Object] })
-  @IsArray()
-  chapters!: PlanDirectory["chapters"];
-}
+
 class ConfirmBookContentDto {
   @ApiProperty({ enum: ["narrator", "initiator"] })
   @IsIn(["narrator", "initiator"])
@@ -284,7 +277,6 @@ export class Books implements OnModuleDestroy {
           if (!asset) throw new ConflictException();
           return {
             id: p.photoId,
-            interviewId: story.interviewId,
             assetId: asset.id,
             sha256: asset.sha256,
             bytes: asset.bytes,
@@ -302,17 +294,8 @@ export class Books implements OnModuleDestroy {
         entry: null,
       });
     }
-    const chapters =
-      stored.version === 1 && !stored.chapters.length && eligible.length
-        ? [
-            {
-              key: "life-stories",
-              title: "我的故事",
-              storyRefs: eligible.map((s) => s.id),
-            },
-          ]
-        : stored.chapters;
-    const directory = { ...stored, chapters, contentHash: digest(chapters) };
+    const chapters = stored.chapters;
+    const directory = stored;
     const coverRow = await tx.bookCoverVersion.findFirst({
         where: { projectId },
         orderBy: { version: "desc" },
@@ -322,13 +305,24 @@ export class Books implements OnModuleDestroy {
         salutation: coverRow?.salutation ?? "",
         photoAssetId: coverRow?.photoAssetId ?? null,
       },
-      coverPhotoOptions = [
-        ...new Map(
-          eligible
-            .flatMap((story) => story.photos)
-            .map((photo) => [photo.assetId, photo]),
-        ).values(),
-      ],
+      coverPhotoOptions = (
+        await tx.photoAsset.findMany({
+          where: {
+            projectId,
+            kind: "print",
+            processingVersion: "t04-pixels-v1",
+          },
+          orderBy: { id: "asc" },
+        })
+      ).map((asset) => ({
+        id: asset.intentId,
+        assetId: asset.id,
+        sha256: asset.sha256,
+        bytes: asset.bytes,
+        caption: "",
+        width: asset.width,
+        height: asset.height,
+      })),
       coverPhoto =
         coverPhotoOptions.find(
           (photo) => photo.assetId === cover.photoAssetId,
@@ -386,7 +380,10 @@ export class Books implements OnModuleDestroy {
     const inputHash = digest({
       cover: snapshot.cover,
       metadataVersion: project.metadataVersion,
-      directory,
+      directory: {
+        contentHash: directory.contentHash,
+        chapters: directory.chapters,
+      },
       chapters: actual,
       specification: snapshot.specification,
       provenance: snapshot.provenance,
@@ -541,10 +538,17 @@ export class Books implements OnModuleDestroy {
     accessEpoch: number,
   ) {
     const snapshot = row.snapshot as unknown as BookSnapshot;
-    const directory = await tx.planDirectoryVersion.findFirstOrThrow({
-      where: { projectId: row.projectId },
-      orderBy: { version: "desc" },
-      select: { version: true, contentHash: true },
+    const project = await tx.project.findUniqueOrThrow({
+      where: { id: row.projectId },
+    });
+    const directory = await tx.planRevision.findUniqueOrThrow({
+      where: {
+        projectId_revision: {
+          projectId: row.projectId,
+          revision: project.currentRevision,
+        },
+      },
+      select: { directoryHash: true },
     });
     const cover = await tx.bookCoverVersion.findFirst({
       where: { projectId: row.projectId },
@@ -562,33 +566,19 @@ export class Books implements OnModuleDestroy {
         story.included ? story.currentRevisionId : null,
       ]),
     );
-    let currentDirectory = {
+    const currentDirectory = {
       ...snapshot.directory,
-      version: directory.version,
-      contentHash: directory.contentHash,
+      contentHash: directory.directoryHash,
     };
-    if (directory.version === 1 && snapshot.directory.version === 1) {
-      const chapters = [
-        {
-          key: "life-stories",
-          title: "我的故事",
-          storyRefs: stories
-            .filter((story) => story.included && story.currentRevisionId)
-            .map((story) => story.id),
-        },
-      ];
-      currentDirectory = {
-        ...currentDirectory,
-        chapters,
-        contentHash: digest(chapters),
-      };
-    }
     // entry locators are added only after the original input hash is computed.
     // Immutable versions/counters still reveal real changes after payload erasure.
     return digest({
       cover: { ...snapshot.cover, version: cover?.version ?? 0 },
       metadataVersion,
-      directory: currentDirectory,
+      directory: {
+        contentHash: currentDirectory.contentHash,
+        chapters: currentDirectory.chapters,
+      },
       chapters: snapshot.chapters.map((chapter) => ({
         ...chapter,
         stories: chapter.stories.map((story) => ({
@@ -1058,79 +1048,6 @@ export class Books implements OnModuleDestroy {
       },
     );
   }
-  directory(
-    projectId: string,
-    body: BookDirectoryDto,
-    authorization?: string,
-    key?: string,
-  ) {
-    key = this.key(key);
-    return this.participation.withPlanAccess(
-      projectId,
-      authorization,
-      undefined,
-      async (tx, actor) => {
-        await this.sourceTerms(tx, projectId);
-        const where = {
-            projectId,
-            actorId: actor.userId,
-            action: "directory",
-            key: key!,
-          },
-          requestHash = digest(body),
-          prior = await tx.bookCommand.findUnique({
-            where: { projectId_actorId_action_key: where },
-          });
-        if (prior) {
-          if (prior.requestHash !== requestHash) throw new ConflictException();
-          return this.contextIn(tx, projectId, actor.accessExpiresAt);
-        }
-        if (
-          body.chapters.length > 64 ||
-          body.chapters.some(
-            (c) =>
-              typeof c?.key !== "string" ||
-              c.key.length > 120 ||
-              typeof c.title !== "string" ||
-              c.title.length > 120 ||
-              !Array.isArray(c.storyRefs) ||
-              c.storyRefs.length > 128,
-          )
-        )
-          throw new BadRequestException();
-        for (const id of body.chapters.flatMap((c) => c.storyRefs))
-          if (
-            typeof id !== "string" ||
-            !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(
-              id,
-            ) ||
-            !(await tx.story.findFirst({ where: { projectId, id } }))
-          )
-            throw new BadRequestException();
-        try {
-          await this.plans.reviseDirectory(
-            { ...body, projectId, createdBy: actor.userId },
-            tx,
-          );
-        } catch (error) {
-          if (error instanceof ProjectPlanError) {
-            if (error.code === "VERSION_CONFLICT")
-              throw new ConflictException();
-            throw new BadRequestException();
-          }
-          throw error;
-        }
-        await tx.bookCommand.create({
-          data: {
-            ...where,
-            requestHash,
-            resultId: String(body.expectedVersion + 1),
-          },
-        });
-        return this.contextIn(tx, projectId, actor.accessExpiresAt);
-      },
-    );
-  }
   read(projectId: string, id: string, authorization?: string) {
     return this.participation.withPlanAccess(
       projectId,
@@ -1542,24 +1459,7 @@ export class BooksController {
       meta: { requestId: req.id },
     };
   }
-  @Post("directory")
-  @Header("Cache-Control", "no-store")
-  @ApiHeader({ name: "Idempotency-Key", required: true })
-  async directory(
-    @Param("id", new ParseUUIDPipe()) id: string,
-    @Body() body: BookDirectoryDto,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.books.directory(
-        id,
-        body,
-        req.headers.authorization,
-        req.headers["idempotency-key"] as string,
-      ),
-      meta: { requestId: req.id },
-    };
-  }
+
   @Post("versions")
   @HttpCode(202)
   @Header("Cache-Control", "no-store")

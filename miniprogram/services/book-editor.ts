@@ -62,7 +62,6 @@ export const previewBookPhoto = (
 ) =>
   privatePhotoPreview(
     projectId,
-    photo.interviewId,
     photo.id,
     { id: photo.assetId, sha256: photo.sha256, bytes: photo.bytes },
     current,

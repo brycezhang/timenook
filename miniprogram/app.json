@@ -7,7 +7,6 @@
     "pages/purchase/index",
     "pages/invite/index",
     "pages/welcome/index",
-    "pages/plan/index",
     "pages/interview/index",
     "pages/photos/index",
     "pages/story/index",
@@ -31,7 +30,9 @@
     "pages/cover-photos/index",
     "pages/address/index",
     "pages/story-audio/index",
-    "pages/topic/index"
+    "pages/chapter-outline/index",
+    "pages/question/index",
+    "pages/question-edit/index"
   ],
   "tabBar": {
     "custom": true,

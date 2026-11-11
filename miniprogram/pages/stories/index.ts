@@ -11,9 +11,11 @@ Page({
     status: "",
   },
   projectId: "",
+  filter: "",
   generation: 0,
   onLoad(q) {
     this.projectId = q.projectId || "";
+    this.filter = q.filter || "";
   },
   onShow() {
     void this.refresh();
@@ -37,18 +39,24 @@ Page({
         s.revision
           ? s.included === false
             ? "暂不入书"
-            : "已入书"
+            : s.chapter?.title || "未归章"
           : s.task?.state === "no_content"
             ? "已有录音，待补充"
             : s.task?.state === "failed"
               ? "整理未完成"
               : "正在整理";
       this.setData({
-        rows: p.stories.map((s) => ({
-          id: s.id,
-          title: s.revision?.title || "新记录的故事",
-          state: label(s),
-        })),
+        rows: p.stories
+          .filter(
+            (s) =>
+              this.filter !== "unassigned" ||
+              (s.revision && s.included !== false && !s.chapter),
+          )
+          .map((s) => ({
+            id: s.id,
+            title: s.revision?.title || "新记录的故事",
+            state: label(s),
+          })),
       });
     } catch (e) {
       if (n === this.generation)

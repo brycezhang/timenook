@@ -2371,7 +2371,7 @@ test("photo narration displays its private photos while recording and paused, th
   const photoRequest = h.requests.shift();
   assert.equal(
     photoRequest.url,
-    `${base}/projects/${projectId}/interviews/${interviewId}/photos`,
+    `${base}/projects/${projectId}/interviews/${interviewId}/photo-materials`,
   );
   const entry = {
     photoId: "77777777-7777-4777-8777-777777777777",
@@ -2386,12 +2386,10 @@ test("photo narration displays its private photos while recording and paused, th
     ],
   };
   respond(photoRequest, {
-    snapshot: {
-      entries: [
-        entry,
-        { ...entry, photoId: "99999999-9999-4999-8999-999999999999" },
-      ],
-    },
+    entries: [
+      entry,
+      { ...entry, photoId: "99999999-9999-4999-8999-999999999999" },
+    ],
   });
   await tick();
   assert.equal(h.downloads.length, 2);
@@ -2434,22 +2432,20 @@ test("photo narration discards a preview that finishes downloading after leaving
   });
   await showing;
   respond(h.requests.shift(), {
-    snapshot: {
-      entries: [
-        {
-          photoId: "77777777-7777-4777-8777-777777777777",
-          caption: "照片",
-          assets: [
-            {
-              id: "88888888-8888-4888-8888-888888888888",
-              kind: "preview",
-              bytes: 6480,
-              sha256: "b".repeat(64),
-            },
-          ],
-        },
-      ],
-    },
+    entries: [
+      {
+        photoId: "77777777-7777-4777-8777-777777777777",
+        caption: "照片",
+        assets: [
+          {
+            id: "88888888-8888-4888-8888-888888888888",
+            kind: "preview",
+            bytes: 6480,
+            sha256: "b".repeat(64),
+          },
+        ],
+      },
+    ],
   });
   await tick();
   assert.equal(h.downloads.length, 1);

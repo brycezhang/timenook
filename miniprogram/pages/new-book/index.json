@@ -1,1 +1,1 @@
-{ "navigationBarTitleText": "新购一本书" }
+{"navigationStyle":"custom","navigationBarTitleText":"购买礼物","usingComponents":{"tn-navigation":"/components/tn-navigation/index","quick-login":"/components/quick-login/index"}}

@@ -3,7 +3,6 @@ import type { PlanDirectory } from "./index";
 export interface BookPhoto {
   /** Product photo ID, used with the authenticated Media gateway. */
   id: string;
-  interviewId: string;
   assetId: string;
   sha256: string;
   bytes: number;

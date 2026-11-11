@@ -292,7 +292,7 @@ async function inclusion() {
         @click="inclusion"
       >
         <span v-if="busy" class="spinner" /><Icon name="book" :size="18" />{{
-          story.included ? "移出书稿" : "编入书稿"
+          story.included ? "暂不入书" : "恢复为未归章"
         }}</button
       ><RouterLink
         class="button"

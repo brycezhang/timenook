@@ -15,6 +15,7 @@
    <button wx:if="{{participation.role === 'narrator'}}" class="btn" bindtap="participate">选择资料用途，开始讲述</button>
    <view class="note section">由讲述者本人决定资料用途后，就可以开始留下声音。</view>
   </block>
+  <button wx:if="{{participation.canRead}}" class="link" bindtap="photo">项目照片<image class="icon small" src="/assets/icons/image.svg"/></button>
   <button wx:if="{{participation.canRead}}" class="link" bindtap="plan">个人大纲与问题<image class="icon small" src="/assets/icons/chevron-right.svg"/></button>
  </view>
  <view wx:if="{{recentInterview || localRecoveryIds.length}}" class="section resume-card">

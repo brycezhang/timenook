@@ -1,5 +1,6 @@
 import type { ProjectPlan } from "./index";
 export interface PaymentOrderView {
+  purchaseKind: "self" | "gift";
   id: string;
   outTradeNo: string;
   listAmount: 99900;
@@ -8,6 +9,7 @@ export interface PaymentOrderView {
   currency: "CNY";
   mode: "local-verification" | "wechat";
   state: "pending" | "paid" | "closed";
+  paymentStatus: "pending" | "unknown" | "paid" | "closed";
   packageVersionId: string;
   recipient: { typeCode: string | null; relationshipLabel: string };
   subjectName: string | null;
@@ -19,7 +21,12 @@ export interface PaymentOrderView {
   };
   project: null | {
     id: string;
-    subject: { id: string; name: string | null; consent: "not_granted" };
+    subject: {
+      id: string;
+      name: string | null;
+      boundUserId: string | null;
+      consent: "not_granted";
+    };
     bookTitle: string;
     recipient: PaymentOrderView["recipient"];
     plan: ProjectPlan;
@@ -32,10 +39,11 @@ export interface PaymentOrderView {
   };
 }
 export interface CreateOrderCommand {
+  purchaseKind: "self" | "gift";
   packageVersionId: string;
   recipient: { typeCode?: string; relationshipLabel?: string };
   subjectName?: string;
-  bookTitle?: string;
+  bookTitle: string;
 }
 export interface MiniPaymentParameters {
   timeStamp: string;

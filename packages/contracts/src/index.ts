@@ -52,6 +52,7 @@ export interface PlanChapter {
   key: string;
   title: string;
   questions: PlanQuestion[];
+  storyRefs: string[];
 }
 
 export interface PlanContent {
@@ -106,6 +107,11 @@ export interface PersonalPlan extends ProjectPlan {
   subjectDecision: "member" | "self" | "assisted" | null;
   decisionSessionId: string | null;
   actualQuestions: ActualPlanQuestion[];
+  answers: {
+    questionKey: string;
+    storyId: string;
+    chapterKey: string | null;
+  }[];
   questionStates: PlanQuestionState[];
   preferenceHistory: PlanPreferenceDecision[];
   accessExpiresAt: string | null;
@@ -125,6 +131,7 @@ export interface ActualPlanQuestion {
     | { text: string; intent: string };
   source?: {
     kind: "plan" | "photo" | "free-narration" | "self-written" | "follow-up";
+    chapterKey?: string;
     rewritesQuestionKey?: string;
     generationTaskId?: string;
     original?: PlanQuestion | Record<string, unknown>;
@@ -132,7 +139,7 @@ export interface ActualPlanQuestion {
   answerRef: string | null;
 }
 
-// Book freezes this independent token; future-question edits do not change it.
+// Read-only projection of the unified project plan, frozen by each book.
 export interface PlanDirectory {
   version: number;
   contentHash: string;

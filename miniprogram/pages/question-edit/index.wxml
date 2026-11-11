@@ -1,0 +1,3 @@
+<tn-navigation title="编辑问题" />
+<app-loading wx:if="{{pageLoading}}" variant="story" />
+<view wx:else class="tn-page with-dock"><label class="tn-field">问题<textarea class="outline-textarea" value="{{text}}" bindinput="input" maxlength="2000" placeholder="写下想聊的问题" adjust-position cursor-spacing="130" /></label><view class="tn-field">所属章节 · 必选<picker mode="selector" range="{{chapters}}" value="{{chapterIndex}}" bindchange="chapter"><view class="tn-input outline-between"><text>{{chapters[chapterIndex]||'请先添加章节'}}</text><text>⌄</text></view></picker></view><view class="tn-error" wx:if="{{status}}">{{status}}</view><view class="tn-dock"><button class="tn-button" bindtap="save" disabled="{{busy}}" loading="{{busy}}">保存问题</button></view></view>

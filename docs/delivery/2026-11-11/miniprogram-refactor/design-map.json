@@ -3,7 +3,7 @@
   "designCommit": "149b1b6",
   "designBoardCount": 71,
   "status": "accepted",
-  "supplement": "latest-login-consent-confirmation",
+  "supplement": "login-consent-confirmation,current-terms,narrow-home-title",
   "boards": [
     {
       "board": "Main.dc.html",
@@ -17,7 +17,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/Main.png",
+      "design320": "design-reference/320/Main.png"
     },
     {
       "board": "Sample.dc.html",
@@ -31,7 +33,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/Sample.png",
+      "design320": "design-reference/320/Sample.png"
     },
     {
       "board": "Login.dc.html",
@@ -45,7 +49,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/Login.png",
+      "design320": "design-reference/320/Login.png"
     },
     {
       "board": "MyGuest.dc.html",
@@ -59,7 +65,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/MyGuest.png",
+      "design320": "design-reference/320/MyGuest.png"
     },
     {
       "board": "MyAccount.dc.html",
@@ -73,7 +81,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/MyAccount.png",
+      "design320": "design-reference/320/MyAccount.png"
     },
     {
       "board": "Terms.dc.html",
@@ -87,7 +97,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/Terms.png",
+      "design320": "design-reference/320/Terms.png"
     },
     {
       "board": "NewGift.dc.html",
@@ -101,7 +113,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/NewGift.png",
+      "design320": "design-reference/320/NewGift.png"
     },
     {
       "board": "SelfGift.dc.html",
@@ -115,7 +129,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/SelfGift.png",
+      "design320": "design-reference/320/SelfGift.png"
     },
     {
       "board": "Checkout.dc.html",
@@ -129,7 +145,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/Checkout.png",
+      "design320": "design-reference/320/Checkout.png"
     },
     {
       "board": "PaymentPending.dc.html",
@@ -143,7 +161,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/PaymentPending.png",
+      "design320": "design-reference/320/PaymentPending.png"
     },
     {
       "board": "PaymentUnknown.dc.html",
@@ -157,7 +177,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/PaymentUnknown.png",
+      "design320": "design-reference/320/PaymentUnknown.png"
     },
     {
       "board": "GiftReady.dc.html",
@@ -171,7 +193,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/GiftReady.png",
+      "design320": "design-reference/320/GiftReady.png"
     },
     {
       "board": "GiftRecipient.dc.html",
@@ -185,7 +209,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/GiftRecipient.png",
+      "design320": "design-reference/320/GiftRecipient.png"
     },
     {
       "board": "GiftShare.dc.html",
@@ -199,7 +225,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/GiftShare.png",
+      "design320": "design-reference/320/GiftShare.png"
     },
     {
       "board": "GiftOpen.dc.html",
@@ -213,7 +241,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/GiftOpen.png",
+      "design320": "design-reference/320/GiftOpen.png"
     },
     {
       "board": "GiftVerify.dc.html",
@@ -227,7 +257,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/GiftVerify.png",
+      "design320": "design-reference/320/GiftVerify.png"
     },
     {
       "board": "GiftMismatch.dc.html",
@@ -241,7 +273,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/GiftMismatch.png",
+      "design320": "design-reference/320/GiftMismatch.png"
     },
     {
       "board": "GiftAccept.dc.html",
@@ -255,7 +289,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/GiftAccept.png",
+      "design320": "design-reference/320/GiftAccept.png"
     },
     {
       "board": "GiftInvalid.dc.html",
@@ -269,7 +305,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/GiftInvalid.png",
+      "design320": "design-reference/320/GiftInvalid.png"
     },
     {
       "board": "GiftClaimed.dc.html",
@@ -283,7 +321,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/GiftClaimed.png",
+      "design320": "design-reference/320/GiftClaimed.png"
     },
     {
       "board": "MyProjects.dc.html",
@@ -297,7 +337,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/MyProjects.png",
+      "design320": "design-reference/320/MyProjects.png"
     },
     {
       "board": "MyGiftsReceived.dc.html",
@@ -311,7 +353,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/MyGiftsReceived.png",
+      "design320": "design-reference/320/MyGiftsReceived.png"
     },
     {
       "board": "MyGiftsParticipating.dc.html",
@@ -325,7 +369,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/MyGiftsParticipating.png",
+      "design320": "design-reference/320/MyGiftsParticipating.png"
     },
     {
       "board": "SwitchProject.dc.html",
@@ -339,7 +385,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/SwitchProject.png",
+      "design320": "design-reference/320/SwitchProject.png"
     },
     {
       "board": "InviteShare.dc.html",
@@ -353,7 +401,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/InviteShare.png",
+      "design320": "design-reference/320/InviteShare.png"
     },
     {
       "board": "InviteJoin.dc.html",
@@ -367,7 +417,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/InviteJoin.png",
+      "design320": "design-reference/320/InviteJoin.png"
     },
     {
       "board": "BookDirectory.dc.html",
@@ -381,7 +433,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookDirectory.png",
+      "design320": "design-reference/320/BookDirectory.png"
     },
     {
       "board": "ChapterOutline.dc.html",
@@ -395,7 +449,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/ChapterOutline.png",
+      "design320": "design-reference/320/ChapterOutline.png"
     },
     {
       "board": "QuestionDetail.dc.html",
@@ -409,7 +465,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/QuestionDetail.png",
+      "design320": "design-reference/320/QuestionDetail.png"
     },
     {
       "board": "QuestionEdit.dc.html",
@@ -423,7 +481,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/QuestionEdit.png",
+      "design320": "design-reference/320/QuestionEdit.png"
     },
     {
       "board": "ChapterEdit.dc.html",
@@ -437,7 +497,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/ChapterEdit.png",
+      "design320": "design-reference/320/ChapterEdit.png"
     },
     {
       "board": "ChapterStories.dc.html",
@@ -451,7 +513,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/ChapterStories.png",
+      "design320": "design-reference/320/ChapterStories.png"
     },
     {
       "board": "HomeEmpty.dc.html",
@@ -465,7 +529,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/HomeEmpty.png",
+      "design320": "design-reference/320/HomeEmpty.png"
     },
     {
       "board": "HomeActive.dc.html",
@@ -479,7 +545,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/HomeActive.png",
+      "design320": "design-reference/320/HomeActive.png"
     },
     {
       "board": "FamilyQuestions.dc.html",
@@ -493,7 +561,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/FamilyQuestions.png",
+      "design320": "design-reference/320/FamilyQuestions.png"
     },
     {
       "board": "FamilyQuestionsEmpty.dc.html",
@@ -507,7 +577,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/FamilyQuestionsEmpty.png",
+      "design320": "design-reference/320/FamilyQuestionsEmpty.png"
     },
     {
       "board": "FamilyQuestionNew.dc.html",
@@ -521,7 +593,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/FamilyQuestionNew.png",
+      "design320": "design-reference/320/FamilyQuestionNew.png"
     },
     {
       "board": "FamilyQuestionDetail.dc.html",
@@ -535,7 +609,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/FamilyQuestionDetail.png",
+      "design320": "design-reference/320/FamilyQuestionDetail.png"
     },
     {
       "board": "FamilyQuestionAnswered.dc.html",
@@ -549,7 +625,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/FamilyQuestionAnswered.png",
+      "design320": "design-reference/320/FamilyQuestionAnswered.png"
     },
     {
       "board": "Photos.dc.html",
@@ -563,7 +641,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/Photos.png",
+      "design320": "design-reference/320/Photos.png"
     },
     {
       "board": "Stories.dc.html",
@@ -577,7 +657,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/Stories.png",
+      "design320": "design-reference/320/Stories.png"
     },
     {
       "board": "Story.dc.html",
@@ -591,7 +673,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/Story.png",
+      "design320": "design-reference/320/Story.png"
     },
     {
       "board": "StoryEdit.dc.html",
@@ -605,7 +689,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/StoryEdit.png",
+      "design320": "design-reference/320/StoryEdit.png"
     },
     {
       "board": "StoryProcessing.dc.html",
@@ -619,7 +705,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/StoryProcessing.png",
+      "design320": "design-reference/320/StoryProcessing.png"
     },
     {
       "board": "StoryFailed.dc.html",
@@ -633,7 +721,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/StoryFailed.png",
+      "design320": "design-reference/320/StoryFailed.png"
     },
     {
       "board": "StoryUnassigned.dc.html",
@@ -647,7 +737,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/StoryUnassigned.png",
+      "design320": "design-reference/320/StoryUnassigned.png"
     },
     {
       "board": "UnassignedStories.dc.html",
@@ -661,7 +753,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/UnassignedStories.png",
+      "design320": "design-reference/320/UnassignedStories.png"
     },
     {
       "board": "AssignStory.dc.html",
@@ -675,7 +769,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/AssignStory.png",
+      "design320": "design-reference/320/AssignStory.png"
     },
     {
       "board": "RecordReady.dc.html",
@@ -689,7 +785,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/RecordReady.png",
+      "design320": "design-reference/320/RecordReady.png"
     },
     {
       "board": "RecordReadyPhoto.dc.html",
@@ -703,7 +801,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/RecordReadyPhoto.png",
+      "design320": "design-reference/320/RecordReadyPhoto.png"
     },
     {
       "board": "Recording.dc.html",
@@ -717,7 +817,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/Recording.png",
+      "design320": "design-reference/320/Recording.png"
     },
     {
       "board": "RecordPaused.dc.html",
@@ -731,7 +833,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/RecordPaused.png",
+      "design320": "design-reference/320/RecordPaused.png"
     },
     {
       "board": "Upload.dc.html",
@@ -745,7 +849,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/Upload.png",
+      "design320": "design-reference/320/Upload.png"
     },
     {
       "board": "UploadFailed.dc.html",
@@ -759,7 +865,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/UploadFailed.png",
+      "design320": "design-reference/320/UploadFailed.png"
     },
     {
       "board": "RecordBlocked.dc.html",
@@ -773,7 +881,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/RecordBlocked.png",
+      "design320": "design-reference/320/RecordBlocked.png"
     },
     {
       "board": "BookEmpty.dc.html",
@@ -787,7 +897,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookEmpty.png",
+      "design320": "design-reference/320/BookEmpty.png"
     },
     {
       "board": "BookOverview.dc.html",
@@ -801,7 +913,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookOverview.png",
+      "design320": "design-reference/320/BookOverview.png"
     },
     {
       "board": "BookCover.dc.html",
@@ -815,7 +929,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookCover.png",
+      "design320": "design-reference/320/BookCover.png"
     },
     {
       "board": "BookReader.dc.html",
@@ -829,7 +945,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookReader.png",
+      "design320": "design-reference/320/BookReader.png"
     },
     {
       "board": "PdfDocument.dc.html",
@@ -843,7 +961,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/PdfDocument.png",
+      "design320": "design-reference/320/PdfDocument.png"
     },
     {
       "board": "BookChanged.dc.html",
@@ -857,7 +977,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookChanged.png",
+      "design320": "design-reference/320/BookChanged.png"
     },
     {
       "board": "BookGenerateFailed.dc.html",
@@ -871,7 +993,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookGenerateFailed.png",
+      "design320": "design-reference/320/BookGenerateFailed.png"
     },
     {
       "board": "ReaderFailed.dc.html",
@@ -885,7 +1009,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/ReaderFailed.png",
+      "design320": "design-reference/320/ReaderFailed.png"
     },
     {
       "board": "OriginalAudio.dc.html",
@@ -899,7 +1025,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/OriginalAudio.png",
+      "design320": "design-reference/320/OriginalAudio.png"
     },
     {
       "board": "BookAddress.dc.html",
@@ -913,7 +1041,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookAddress.png",
+      "design320": "design-reference/320/BookAddress.png"
     },
     {
       "board": "BookPrintConfirm.dc.html",
@@ -927,7 +1057,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookPrintConfirm.png",
+      "design320": "design-reference/320/BookPrintConfirm.png"
     },
     {
       "board": "BookProduction.dc.html",
@@ -941,7 +1073,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookProduction.png",
+      "design320": "design-reference/320/BookProduction.png"
     },
     {
       "board": "BookShipped.dc.html",
@@ -955,7 +1089,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookShipped.png",
+      "design320": "design-reference/320/BookShipped.png"
     },
     {
       "board": "BookDelivered.dc.html",
@@ -969,7 +1105,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookDelivered.png",
+      "design320": "design-reference/320/BookDelivered.png"
     },
     {
       "board": "BookCancelled.dc.html",
@@ -983,7 +1121,9 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/BookCancelled.png",
+      "design320": "design-reference/320/BookCancelled.png"
     },
     {
       "board": "PrintUnknown.dc.html",
@@ -997,7 +1137,10 @@
       "native320": null,
       "native390": null,
       "interactionEvidence": null,
-      "result": "pending"
+      "result": "pending",
+      "design390": "design-reference/390/PrintUnknown.png",
+      "design320": "design-reference/320/PrintUnknown.png"
     }
-  ]
+  ],
+  "referenceManifest": "design-reference/manifest.json"
 }

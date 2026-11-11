@@ -1,3 +1,1 @@
-{
-  "navigationBarTitleText": "我的订单"
-}
+{"navigationStyle":"custom","navigationBarTitleText":"确认付款结果","usingComponents":{"tn-navigation":"/components/tn-navigation/index","quick-login":"/components/quick-login/index"}}

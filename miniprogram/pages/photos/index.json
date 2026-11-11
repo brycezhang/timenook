@@ -1,4 +1,5 @@
 {
-  "navigationBarTitleText": "照片与说明",
-  "usingComponents": { "sort-list": "/components/sort-list/index" }
+  "navigationBarTitleText": "项目照片",
+  "navigationStyle": "custom",
+  "usingComponents": { "tn-navigation": "/components/tn-navigation/index" }
 }

@@ -1,3 +1,1 @@
-{
-  "navigationBarTitleText": "为爱，开启一本书"
-}
+{"navigationStyle":"custom","navigationBarTitleText":"确认购买","usingComponents":{"tn-navigation":"/components/tn-navigation/index","quick-login":"/components/quick-login/index"}}

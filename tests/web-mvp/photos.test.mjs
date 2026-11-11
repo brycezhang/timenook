@@ -117,7 +117,7 @@ for (const engine of [chromium, webkit])
           page.getByRole("img", { name: "故事照片 1", exact: true }),
         ).toBeVisible();
         await page
-          .getByRole("link", { name: "看着照片讲一讲", exact: true })
+          .getByRole("button", { name: "看着照片讲一讲", exact: true })
           .click();
         await expect(page.getByRole("img", { name: /^故事照片 / })).toHaveCount(
           2,

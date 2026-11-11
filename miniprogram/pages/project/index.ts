@@ -309,7 +309,7 @@ Page({
       );
   },
   plan() {
-    go("plan", `projectId=${this.projectId}`);
+    go("directory", `projectId=${this.projectId}`);
   },
   settings() {
     go("settings", `projectId=${this.projectId}`);
@@ -407,6 +407,10 @@ Page({
     go("interview");
   },
   photo() {
+    if (dataMode() === "live") {
+      go("photos", `projectId=${this.projectId}`);
+      return;
+    }
     const p = required();
     if (!p.consent) {
       go("welcome");

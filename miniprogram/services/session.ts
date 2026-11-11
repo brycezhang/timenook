@@ -195,18 +195,17 @@ export class SessionClient {
 
   async downloadPhoto(
     projectId: string,
-    interviewId: string,
     photoId: string,
     assetId: string,
   ) {
     if (
-      ![projectId, interviewId, photoId, assetId].every((id) =>
+      ![projectId, photoId, assetId].every((id) =>
         /^[a-f0-9-]{36}$/.test(id),
       )
     )
       throw new ApiFailure("INVALID_RESPONSE");
     return this.downloadContent(
-      `/projects/${projectId}/interviews/${interviewId}/photos/${photoId}/assets/${assetId}/content`,
+      `/projects/${projectId}/photos/${photoId}/assets/${assetId}/content`,
     );
   }
   async downloadRecording(

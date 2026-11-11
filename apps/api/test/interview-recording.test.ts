@@ -167,6 +167,7 @@ async function project(versionId = packageId) {
   const buyer = await login();
   const order = data(
     await request("POST", "/v1/orders", buyer.token, {
+      purchaseKind: "gift",
       packageVersionId: versionId,
       recipient: { typeCode: "mentor", relationshipLabel: "恩师" },
       bookTitle: "私人标题不能泄露",
@@ -765,31 +766,9 @@ test("a near-ten-minute MP3 fits the upload, database and seal limits", async ()
   const p = await joinedProject();
   const i = await interview(p);
   const base = `/v1/projects/${p.projectId}/interviews/${i.id}/clips`;
-  const encoded = spawnSync(
-    process.env.FFMPEG_PATH ?? "ffmpeg",
-    [
-      "-v",
-      "error",
-      "-f",
-      "lavfi",
-      "-i",
-      "sine=frequency=440:sample_rate=16000",
-      "-t",
-      "599.85",
-      "-ac",
-      "1",
-      "-b:a",
-      "48k",
-      "-write_xing",
-      "0",
-      "-f",
-      "mp3",
-      "pipe:1",
-    ],
-    { maxBuffer: 4 * 1024 * 1024, timeout: 15000 },
-  );
-  assert.equal(encoded.status, 0, encoded.stderr?.toString());
-  const audio = encoded.stdout;
+  // The 48 kbps fixture contains 576 ms of MP3 frames. Repeating it
+  // produces 599.616 seconds without requiring encoders in the audio validator.
+  const audio = Buffer.concat(Array(1041).fill(syntheticAudio(0.5)));
   assert.ok(audio.length > 2 * 1024 * 1024);
   const sha256 = createHash("sha256").update(audio).digest("hex");
   const intent = data(

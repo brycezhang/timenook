@@ -5,7 +5,8 @@ import type {
   BookContext,
   BookVersionView,
   BookPhoto,
-  PlanDirectory,
+  PlanChapter,
+  PersonalPlan,
 } from "../../../../packages/contracts/src";
 import { bookApi } from "../book-api";
 import { projectApi, projectError, type ProjectOverview } from "../project-api";
@@ -24,6 +25,7 @@ const projectId = computed(() =>
 const fixedId = computed(() =>
   typeof route.query.version === "string" ? route.query.version : "",
 );
+const plan = ref<PersonalPlan | null>(null);
 const context = ref<BookContext | null>(null),
   overview = ref<ProjectOverview | null>(null),
   displayed = ref<BookVersionView | null>(null);
@@ -34,7 +36,7 @@ const loading = ref(true),
 const title = ref(""),
   salutation = ref(""),
   photoAssetId = ref<string | null>(null),
-  chapters = ref<PlanDirectory["chapters"]>([]);
+  chapters = ref<PlanChapter[]>([]);
 const savedCover = ref(""),
   savedDirectory = ref("");
 const coverEditor = ref(false),
@@ -179,7 +181,7 @@ function accept(
   }
   if (resetDirectory) {
     directoryBaseVersion = value.directory.version;
-    chapters.value = structuredClone(value.directory.chapters);
+    chapters.value = structuredClone(plan.value?.chapters ?? []);
     savedDirectory.value = JSON.stringify(chapters.value);
   }
   if (!fixedId.value) displayed.value = value.current;
@@ -197,14 +199,16 @@ async function load(initial = false) {
   if (initial) loading.value = true;
   error.value = "";
   try {
-    const [value, project] = await Promise.all([
+    const [value, project, outline] = await Promise.all([
       bookApi.context(projectId.value),
       projectApi.overview(projectId.value),
+      projectApi.plan(projectId.value),
     ]);
     if (token !== sequence) return;
     const resetCover = initial || !coverDirty.value,
       resetDirectory = initial || !directoryDirty.value;
     overview.value = project;
+    plan.value = outline;
     accept(value, resetCover, resetDirectory);
     if (fixedId.value) {
       const version = await bookApi.version(projectId.value, fixedId.value);
@@ -236,7 +240,7 @@ async function loadPhoto(photo: BookPhoto) {
   const token = mediaSequence;
   try {
     const blob = await fetchVerifiedBlob(
-      `/projects/${projectId.value}/interviews/${photo.interviewId}/photos/${photo.id}/assets/${photo.assetId}/content`,
+      `/projects/${projectId.value}/photos/${photo.id}/assets/${photo.assetId}/content`,
       photo,
       mediaController.signal,
     );
@@ -302,11 +306,16 @@ async function saveDirectory() {
   const token = ++sequence;
   clearTimeout(timer);
   try {
-    const value = await bookApi.directory(
+    if (!plan.value) return;
+    plan.value = await projectApi.revisePlan(
       projectId.value,
       directoryBaseVersion,
-      JSON.parse(JSON.stringify(chapters.value)),
+      {
+        chapters: JSON.parse(JSON.stringify(chapters.value)),
+        starters: plan.value.starters,
+      },
     );
+    const value = await bookApi.context(projectId.value);
     if (token !== sequence) return;
     accept(value, false, true);
     notice.value = "目录已保存";
@@ -337,6 +346,7 @@ function addChapter() {
     key: crypto.randomUUID(),
     title: `第${chapters.value.length + 1}章`,
     storyRefs: [],
+    questions: [],
   });
 }
 let generatedInput = "",

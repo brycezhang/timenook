@@ -1,3 +1,4 @@
+import { readPlan, placeStoryIn } from "../projects/project-plans";
 import {
   E2E_NOTICE_VERSION,
   participationNotice,
@@ -612,69 +613,8 @@ export class Stories {
           where: { id },
           data: { included: body.included },
         });
-        const directory = await tx.planDirectoryVersion.findFirst({
-          where: { projectId },
-          orderBy: { version: "desc" },
-        });
-        if (directory && story.included !== body.included) {
-          const chapters = structuredClone(directory.chapters) as unknown as {
-            key: string;
-            title: string;
-            storyRefs: string[];
-          }[];
-          if (body.included && story.currentRevisionId) {
-            if (!chapters.length)
-              chapters.push({
-                key: "life-stories",
-                title: "我的故事",
-                storyRefs: [],
-              });
-            if (!chapters.some((c) => c.storyRefs.includes(id)))
-              chapters[0].storyRefs.push(id);
-          } else
-            chapters.forEach((c) => {
-              c.storyRefs = c.storyRefs.filter((ref) => ref !== id);
-            });
-          await tx.planDirectoryVersion.create({
-            data: {
-              projectId,
-              version: directory.version + 1,
-              chapters,
-              contentHash: hash(JSON.stringify(chapters)),
-              createdBy: actor.userId,
-            },
-          });
-          if (!body.included) {
-            const cover = await tx.bookCoverVersion.findFirst({
-              where: { projectId },
-              orderBy: { version: "desc" },
-            });
-            // A cover sourced from a removed story must not leave an invalid book input.
-            const revision = story.currentRevisionId
-              ? await tx.storyRevision.findUnique({
-                  where: { id: story.currentRevisionId },
-                })
-              : null;
-            const photos = revision?.photoSnapshot as unknown as {
-              entries?: { assets: { id: string }[] }[];
-            } | null;
-            if (
-              cover?.photoAssetId &&
-              photos?.entries?.some((p) =>
-                p.assets.some((a) => a.id === cover.photoAssetId),
-              )
-            )
-              await tx.bookCoverVersion.create({
-                data: {
-                  projectId,
-                  version: cover.version + 1,
-                  salutation: cover.salutation,
-                  photoAssetId: null,
-                  createdBy: actor.userId,
-                },
-              });
-          }
-        }
+        if (story.included !== body.included && !body.included)
+          await placeStoryIn(tx, projectId, id, null, actor.userId);
         return this.view(tx, projectId, id);
       },
     );
@@ -1226,35 +1166,31 @@ export class Stories {
     });
     if (updated.count !== 1) throw new ConflictException();
     if (!story.currentRevisionId && story.included) {
-      const directory = await tx.planDirectoryVersion.findFirst({
-        where: { projectId: story.projectId },
-        orderBy: { version: "desc" },
+      const interview = await tx.interview.findUniqueOrThrow({
+        where: { id: story.interviewId },
       });
-      if (directory) {
-        const chapters = structuredClone(directory.chapters) as unknown as {
-          key: string;
-          title: string;
-          storyRefs: string[];
-        }[];
-        if (!chapters.length)
-          chapters.push({
-            key: "life-stories",
-            title: "我的故事",
-            storyRefs: [],
-          });
-        if (!chapters.some((c) => c.storyRefs.includes(story.id))) {
-          chapters[0].storyRefs.push(story.id);
-          await tx.planDirectoryVersion.create({
-            data: {
-              projectId: story.projectId,
-              version: directory.version + 1,
-              chapters,
-              contentHash: hash(JSON.stringify(chapters)),
-              createdBy: command.command?.operatorId ?? "story-generation",
-            },
-          });
-        }
-      }
+      const actual = await tx.actualPlanQuestion.findUniqueOrThrow({
+        where: { id: interview.actualQuestionId },
+      });
+      const plan = await readPlan(tx, story.projectId);
+      const source = actual.source as {
+        chapterKey?: string;
+        rewritesQuestionKey?: string;
+      } | null;
+      const key = actual.questionKey ?? source?.rewritesQuestionKey;
+      const chapter =
+        (key
+          ? plan.chapters.find((ch) => ch.questions.some((q) => q.key === key))
+          : undefined) ??
+        plan.chapters.find((ch) => ch.key === source?.chapterKey);
+      if (chapter)
+        await placeStoryIn(
+          tx,
+          story.projectId,
+          story.id,
+          chapter.key,
+          command.command?.operatorId ?? "story-generation",
+        );
     }
     return revision;
   }
@@ -1348,6 +1284,18 @@ export class Stories {
       subject = await tx.projectSubject.findUniqueOrThrow({
         where: { projectId },
       });
+    const currentPlan = canReadQuestions ? await readPlan(tx, projectId) : null;
+    const currentChapter = currentPlan?.chapters.find((ch) =>
+      ch.storyRefs.includes(story.id),
+    );
+    const sourceInterview = canReadQuestions
+      ? await tx.interview.findUnique({ where: { id: story.interviewId } })
+      : null;
+    const sourceQuestion = sourceInterview
+      ? await tx.actualPlanQuestion.findUnique({
+          where: { id: sourceInterview.actualQuestionId },
+        })
+      : null;
     const generation = await tx.storyGeneration.findFirst({
       where: { storyId: id, ...(taskId ? { taskId } : {}) },
       orderBy: { userSubmittedAt: "desc" },
@@ -1365,6 +1313,14 @@ export class Stories {
       : [];
     return {
       ...story,
+      chapter: currentChapter
+        ? { key: currentChapter.key, title: currentChapter.title }
+        : null,
+      questionKey:
+        sourceQuestion?.questionKey ??
+        (sourceQuestion?.source as { rewritesQuestionKey?: string } | null)
+          ?.rewritesQuestionKey ??
+        null,
       decision:
         privateContent && story.currentRevisionId
           ? await tx.storyDecision

@@ -174,13 +174,21 @@ function call(
     ...(payload === undefined ? {} : { payload: payload as any }),
   });
 }
-async function create(channel = "alipay_page", key = randomUUID()) {
+async function create(
+  channel = "alipay_page",
+  key = randomUUID(),
+  kind = "gift",
+) {
   const r = await call(
     "POST",
     "",
     {
+      purchaseKind: kind,
       packageVersionId: packageId,
-      recipient: { relationshipLabel: "妈妈" },
+      recipient:
+        kind === "self"
+          ? { typeCode: "self", relationshipLabel: "自己" }
+          : { relationshipLabel: "妈妈" },
       bookTitle: "妈妈的一生",
       channel,
     },
@@ -239,8 +247,10 @@ test("web buyer without WeChat can buy the canonical package and receive one rea
 });
 test("browser cannot choose the amount or bypass CSRF and desktop/mobile channels stay frozen", async () => {
   const body = {
+    purchaseKind: "gift",
     packageVersionId: packageId,
-    recipient: {},
+    recipient: { relationshipLabel: "家人" },
+    bookTitle: "家人的故事",
     channel: "alipay_wap",
   };
   assert.equal(
@@ -269,6 +279,26 @@ test("browser cannot choose the amount or bypass CSRF and desktop/mobile channel
   assert.equal(
     (await call("GET", `/${order.id}`, undefined, stranger)).statusCode,
     404,
+  );
+});
+
+test("Alipay self purchase uses the same single project and subject binding as WeChat", async () => {
+  const order = await create("alipay_page", randomUUID(), "self");
+  await call("POST", `/${order.id}/payment`, {});
+  const row = [...remote.values()].find((row) => row.biz_ref_id === order.id)!;
+  Object.assign(row, { status: "paid", settled_at: "2026-11-08T01:02:03Z" });
+  const responses = await Promise.all([
+    call("GET", `/${order.id}`),
+    call("GET", `/${order.id}`),
+  ]);
+  const result = responses[0].json().data;
+  assert.equal(result.purchaseKind, "self");
+  assert.equal(result.project.subject.boundUserId, buyer.user.id);
+  assert.equal(result.project.bookTitle, "妈妈的一生");
+  assert.equal(responses[1].json().data.project.id, result.project.id);
+  assert.equal(
+    responses[1].json().data.project.entitlement.id,
+    result.project.entitlement.id,
   );
 });
 test("mismatched remote financial and business fields never deliver a project", async () => {
@@ -405,8 +435,10 @@ test("only explicit server-owned Alipay acceptance config can charge one fen and
       url: "/v1/web/orders",
       headers,
       payload: {
+        purchaseKind: "gift",
         packageVersionId: packageId,
-        recipient: {},
+        recipient: { relationshipLabel: "家人" },
+        bookTitle: "家人的故事",
         channel: "alipay_page",
       },
     });
@@ -416,8 +448,10 @@ test("only explicit server-owned Alipay acceptance config can charge one fen and
       url: "/v1/web/orders",
       headers: { ...headers, "idempotency-key": randomUUID() },
       payload: {
+        purchaseKind: "gift",
         packageVersionId: e2eId,
-        recipient: {},
+        recipient: { relationshipLabel: "家人" },
+        bookTitle: "家人的故事",
         channel: "alipay_page",
       },
     });

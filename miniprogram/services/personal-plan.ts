@@ -17,6 +17,7 @@ function validate(plan: PersonalPlan, projectId: string): PersonalPlan {
       (c) =>
         typeof c.key === "string" &&
         typeof c.title === "string" &&
+        Array.isArray(c.storyRefs) &&
         Array.isArray(c.questions) &&
         c.questions.every(
           (q) => typeof q.key === "string" && typeof q.text === "string",
@@ -28,6 +29,7 @@ function validate(plan: PersonalPlan, projectId: string): PersonalPlan {
     !Array.isArray(plan.preferences.blockedTopics) ||
     !Array.isArray(plan.questionStates) ||
     !Array.isArray(plan.actualQuestions) ||
+    !Array.isArray(plan.answers) ||
     !["member", "self", "assisted", null].includes(plan.subjectDecision) ||
     (plan.accessExpiresAt !== null &&
       !Number.isFinite(Date.parse(plan.accessExpiresAt)))
