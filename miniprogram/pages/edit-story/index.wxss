@@ -1,7 +1,19 @@
+.tn-field {
+  font-size: 13px;
+}
 .story-editor {
+  box-sizing: border-box;
   width: 100%;
-  min-height: 700rpx;
-  font-size: 42rpx;
+  min-height: 350px;
+  border: 1px solid #ded4c6;
+  border-radius: 16px;
+  background: #fff;
+  color: #382c24;
+  font-size: 16px;
   line-height: 1.9;
-  padding: 24rpx 0;
+  font-weight: 400;
+  padding: 16px;
+}
+.edit-note {
+  font-size: 12px;
 }

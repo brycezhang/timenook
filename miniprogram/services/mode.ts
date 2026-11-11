@@ -37,6 +37,7 @@ export function livePageAllowed(page: string): boolean {
     "photos",
     "story",
     "edit-story",
+    "assign-story",
     "book",
     "manuscript",
     "print",

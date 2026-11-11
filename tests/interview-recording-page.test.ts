@@ -2563,8 +2563,8 @@ for (const entry of newStoryEntries) {
     await showing;
     assert.equal(
       h.page.data.flowStep,
-      "choose",
-      "new story must show topic selection",
+      entry.name === "stories" ? "prepare" : "choose",
+      "new story enters its requested preparation without restoring the old upload result",
     );
     assert.equal(h.page.data.uploadSucceeded, false);
     assert.equal(h.page.data.interview, null);
