@@ -164,6 +164,7 @@ function harness(
       },
       getAccountInfoSync: () => ({ miniProgram: { appId: "synthetic-app" } }),
       navigateTo: (o: any) => navigation.push(o),
+      switchTab: (o: any) => navigation.push(o),
       reLaunch: (o: any) => navigation.push(o),
       showToast: () => {},
     },
@@ -200,6 +201,41 @@ function harness(
     },
   };
 }
+
+test("story placement and supplement entries preserve the selected project and story interview", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await showAudioStory(h);
+  h.page.assignStory();
+  assert.equal(
+    h.navigation.pop().url,
+    `/pages/assign-story/index?projectId=${projectId}&storyId=${storyId}`,
+  );
+  h.page.recoverInterview();
+  assert.equal(
+    h.navigation.pop().url,
+    `/pages/interview/index?projectId=${projectId}&interviewId=${interviewId}&prepare=1`,
+  );
+  h.page.returnToProject();
+  assert.equal(h.navigation.pop().url, "/pages/home/index");
+  assert.ok([...h.storage.values()].includes(projectId));
+});
+
+test("failed transcription dependencies expose recovery while retaining the saved original audio", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  h.page.onLoad({ projectId, storyId });
+  const showing = h.page.onShow();
+  await turn();
+  const value = story();
+  value.task.errorCode = "DEPENDENCY_FAILED" as any;
+  value.task.sources = [source] as any;
+  h.respond(0, value);
+  await showing;
+  assert.equal(h.page.data.displayState, "failed");
+  assert.equal(h.page.data.failureTitle, "录音识别未完成");
+  assert.equal(h.page.data.liveAudioSources[0].clipId, source.clipId);
+});
 const turn = () => new Promise<void>((r) => setImmediate(r));
 function story(state = "waiting_inputs", version = 0) {
   return {

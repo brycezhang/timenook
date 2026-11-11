@@ -1,1 +1,5 @@
-{ "navigationBarTitleText": "已记录的故事" }
+{
+  "navigationStyle": "custom",
+  "navigationBarTitleText": "故事",
+  "usingComponents": { "tn-navigation": "/components/tn-navigation/index" }
+}
