@@ -32,6 +32,7 @@ import {
   data,
   readyStory,
   storyPhoto,
+  projectPhoto,
   restartBookApplication,
   state,
 } from "./book-fixture";
@@ -1074,6 +1075,29 @@ test("a valid4500-character participant note is complete across actual PDF pages
   await preserveReviewBook(book.id, "participant-note");
 });
 
+test("a zero-story project can choose its uploaded project photo for the cover", async () => {
+  const p = await joinedProject();
+  const photo = await projectPhoto(p);
+  const base = `/v1/projects/${p.projectId}/book`;
+  const context = data(await request("GET", base, p.narrator.token), 200);
+  assert.deepEqual(context.eligibleStories, []);
+  assert.equal(context.coverPhotoOptions.length, 1);
+  assert.equal(context.coverPhotoOptions[0].id, photo.id);
+  const chosen = data(
+    await request("POST", `${base}/cover`, p.buyer.token, {
+      expectedVersion: 0,
+      salutation: "家人的故事",
+      photoAssetId: context.coverPhotoOptions[0].assetId,
+    }),
+  );
+  assert.equal(chosen.cover.photoAssetId, context.coverPhotoOptions[0].assetId);
+  const photos = data(
+    await request("GET", `/v1/projects/${p.projectId}/photos`, p.buyer.token),
+    200,
+  );
+  assert.deepEqual(photos.usage, { reservedCount: 0, consumedCount: 1 });
+});
+
 test("cover settings freeze an allowed salutation and photo and invalidate an earlier book on optimistic change", async () => {
   const p = await confirmedStory(undefined, true, false, undefined, {
       portrait: true,
@@ -1087,7 +1111,7 @@ test("cover settings freeze an allowed salutation and photo and invalidate an ea
   });
   assert.equal(context.coverPhotoOptions.length, 1);
   const photo = context.coverPhotoOptions[0];
-  assert.equal(photo.interviewId, p.interviewId);
+  assert.equal("interviewId" in photo, false);
   assert.ok(photo.bytes > 0);
   const before = data(
       await request("POST", base + "/versions", p.narrator.token, {

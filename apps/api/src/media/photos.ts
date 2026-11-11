@@ -115,11 +115,10 @@ export class Photos implements OnModuleDestroy {
   private async intent(
     tx: Prisma.TransactionClient,
     projectId: string,
-    interviewId: string,
     id: string,
   ) {
     const row = await tx.photoIntent.findFirst({
-      where: { projectId, interviewId, id, storageScope: this.scope },
+      where: { projectId, id, storageScope: this.scope },
     });
     if (!row) throw new NotFoundException();
     return row;
@@ -127,12 +126,11 @@ export class Photos implements OnModuleDestroy {
   private async productionIntent(
     tx: Prisma.TransactionClient,
     projectId: string,
-    interviewId: string,
     id: string,
   ) {
     await this.participation.requireMaterialIn(tx, projectId, "originalPhotos");
     await this.participation.requireMaterialIn(tx, projectId, "derivedPhotos");
-    return this.intent(tx, projectId, interviewId, id);
+    return this.intent(tx, projectId, id);
   }
   private sameActor(
     row: Pick<
@@ -163,8 +161,6 @@ export class Photos implements OnModuleDestroy {
     return {
       id: row.id,
       projectId: row.projectId,
-      interviewId: row.interviewId,
-      actualQuestionId: row.actualQuestionId,
       clientPhotoId: row.clientPhotoId,
       bytes: row.bytes,
       sha256: row.sha256,
@@ -215,7 +211,6 @@ export class Photos implements OnModuleDestroy {
 
   create(
     projectId: string,
-    interviewId: string,
     body: PhotoDto,
     authorization?: string,
     key?: string,
@@ -227,21 +222,10 @@ export class Photos implements OnModuleDestroy {
       async (tx, actor) => {
         await claimRecordingCommand(tx, projectId, actor.operatorUserId, key, {
           kind: "photo",
-          interviewId,
           clientPhotoId: body.clientPhotoId,
           bytes: body.bytes,
           sha256: body.sha256,
         });
-        const interview = await tx.interview.findFirst({
-          where: { projectId, id: interviewId },
-        });
-        if (!interview) throw new NotFoundException();
-        if (
-          interview.subjectId !== actor.subjectId ||
-          interview.bindingVersion !== actor.bindingVersion ||
-          interview.accessEpoch !== actor.accessEpoch
-        )
-          throw new ForbiddenException();
         const prior = await tx.photoIntent.findUnique({
           where: {
             projectId_clientPhotoId: {
@@ -252,7 +236,6 @@ export class Photos implements OnModuleDestroy {
         });
         if (prior) {
           if (
-            prior.interviewId !== interviewId ||
             prior.bytes !== body.bytes ||
             prior.sha256 !== body.sha256 ||
             prior.storageScope !== this.scope
@@ -269,8 +252,6 @@ export class Photos implements OnModuleDestroy {
           data: {
             id: randomUUID(),
             projectId,
-            interviewId,
-            actualQuestionId: interview.actualQuestionId,
             ...actor,
             clientPhotoId: body.clientPhotoId,
             bytes: body.bytes,
@@ -285,7 +266,6 @@ export class Photos implements OnModuleDestroy {
   }
   status(
     projectId: string,
-    interviewId: string,
     id: string,
     body: CollectionDto,
     authorization?: string,
@@ -295,7 +275,7 @@ export class Photos implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        const row = await this.intent(tx, projectId, interviewId, id);
+        const row = await this.intent(tx, projectId, id);
         this.sameActor(row, actor);
         return this.view(tx, row);
       },
@@ -304,7 +284,6 @@ export class Photos implements OnModuleDestroy {
   }
   async form(
     projectId: string,
-    interviewId: string,
     id: string,
     body: CollectionDto,
     authorization?: string,
@@ -314,7 +293,7 @@ export class Photos implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        const row = await this.productionIntent(tx, projectId, interviewId, id);
+        const row = await this.productionIntent(tx, projectId, id);
         this.sameActor(row, actor);
         if (row.state !== "pending") throw new ConflictException();
         return row;
@@ -334,10 +313,7 @@ export class Photos implements OnModuleDestroy {
         authorization,
         body.assistedSessionId,
         async (tx, actor) =>
-          this.sameActor(
-            await this.productionIntent(tx, projectId, interviewId, id),
-            actor,
-          ),
+          this.sameActor(await this.productionIntent(tx, projectId, id), actor),
       );
       return form;
     }
@@ -357,7 +333,6 @@ export class Photos implements OnModuleDestroy {
       `${this.config.redisKeyPrefix ?? "timenook"}:photo:upload:${digest(capability)}`,
       JSON.stringify({
         projectId,
-        interviewId,
         id,
         bytes: row.bytes,
         key,
@@ -407,7 +382,6 @@ export class Photos implements OnModuleDestroy {
         const row = await this.productionIntent(
           tx,
           permission.projectId,
-          permission.interviewId,
           permission.id,
         );
         this.sameActor(row, actor);
@@ -474,7 +448,6 @@ export class Photos implements OnModuleDestroy {
   }
   async seal(
     projectId: string,
-    interviewId: string,
     id: string,
     body: CollectionDto,
     authorization?: string,
@@ -484,7 +457,7 @@ export class Photos implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        const row = await this.productionIntent(tx, projectId, interviewId, id);
+        const row = await this.productionIntent(tx, projectId, id);
         this.sameActor(row, actor);
         return row;
       },
@@ -492,16 +465,13 @@ export class Photos implements OnModuleDestroy {
     );
     if (existing.state === "released") throw new ConflictException();
     if (existing.state === "sealed")
-      return this.status(projectId, interviewId, id, body, authorization);
+      return this.status(projectId, id, body, authorization);
     const owned = await this.participation.withCollectionAccess(
       projectId,
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        this.sameActor(
-          await this.productionIntent(tx, projectId, interviewId, id),
-          actor,
-        );
+        this.sameActor(await this.productionIntent(tx, projectId, id), actor);
         return this.ownedPhotoRun(tx, projectId, id);
       },
     );
@@ -526,7 +496,7 @@ export class Photos implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        const row = await this.productionIntent(tx, projectId, interviewId, id);
+        const row = await this.productionIntent(tx, projectId, id);
         this.sameActor(row, actor);
         if (row.state === "sealed") return this.view(tx, row);
         if (row.state !== "pending") throw new ConflictException();
@@ -556,27 +526,12 @@ export class Photos implements OnModuleDestroy {
           where: { id },
           data: { state: "sealed", reservedCount: 0, consumedCount: 1 },
         });
-        const prior = await this.readSnapshot(tx, projectId, interviewId);
-        await this.appendSnapshot(
-          tx,
-          projectId,
-          interviewId,
-          actor.operatorUserId,
-          [
-            ...(prior?.entries.map((e) => ({
-              photoId: e.photoId,
-              caption: e.caption ?? "",
-            })) ?? []),
-            { photoId: id, caption: "" },
-          ],
-        );
         return this.view(tx, sealed);
       },
     );
   }
   authorizeContent(
     projectId: string,
-    interviewId: string,
     id: string,
     kind: string,
     authorization?: string,
@@ -589,15 +544,9 @@ export class Photos implements OnModuleDestroy {
       authorization,
       undefined,
       async (tx) => {
-        const row = await this.intent(tx, projectId, interviewId, id);
+        const row = await this.intent(tx, projectId, id);
         if (row.state !== "sealed") throw new ConflictException();
         const terms = await this.terms.read(projectId, tx);
-        const snapshot = await this.readSnapshot(tx, projectId, interviewId);
-        const selected = snapshot?.entries
-          .find((e) => e.photoId === id)
-          ?.assets.find(
-            (a) => a.kind === (kind === "thumbnail" ? "preview" : kind),
-          );
         const asset = await tx.photoAsset.findFirst({
           where: {
             projectId,
@@ -605,7 +554,7 @@ export class Photos implements OnModuleDestroy {
             ...(assetId
               ? { id: assetId }
               : {
-                  id: selected?.id,
+                  processingVersion: "t04-pixels-v1",
                   kind: kind === "thumbnail" ? "preview" : kind,
                 }),
           },
@@ -629,7 +578,6 @@ export class Photos implements OnModuleDestroy {
   }
   async content(
     projectId: string,
-    interviewId: string,
     id: string,
     kind: string,
     authorization?: string,
@@ -638,14 +586,7 @@ export class Photos implements OnModuleDestroy {
     if (!["original", "preview", "thumbnail", "print"].includes(kind))
       throw new NotFoundException();
     const authorized = () =>
-      this.authorizeContent(
-        projectId,
-        interviewId,
-        id,
-        kind,
-        authorization,
-        assetId,
-      );
+      this.authorizeContent(projectId, id, kind, authorization, assetId);
     const asset = await authorized();
     let bytes: Buffer;
     try {
@@ -731,7 +672,7 @@ export class Photos implements OnModuleDestroy {
     const current = await this.readSnapshot(tx, projectId, interviewId);
     const refs = [];
     for (const [position, e] of entries.entries()) {
-      const photo = await this.intent(tx, projectId, interviewId, e.photoId);
+      const photo = await this.intent(tx, projectId, e.photoId);
       if (photo.state !== "sealed") throw new ConflictException();
       const assets = await tx.photoAsset.findMany({
         where: { projectId, intentId: e.photoId },
@@ -784,7 +725,29 @@ export class Photos implements OnModuleDestroy {
       });
     return this.readSnapshot(tx, projectId, interviewId, id);
   }
-  list(projectId: string, interviewId: string, authorization?: string) {
+  list(projectId: string, authorization?: string) {
+    return this.participation.withPlanAccess(
+      projectId,
+      authorization,
+      undefined,
+      async (tx) => ({
+        photos: await Promise.all(
+          (
+            await tx.photoIntent.findMany({
+              where: {
+                projectId,
+                storageScope: this.scope,
+                state: { not: "released" },
+              },
+              orderBy: { createdAt: "asc" },
+            })
+          ).map((photo) => this.view(tx, photo)),
+        ),
+        usage: await this.usage(tx, projectId),
+      }),
+    );
+  }
+  materials(projectId: string, interviewId: string, authorization?: string) {
     return this.participation.withPlanAccess(
       projectId,
       authorization,
@@ -796,61 +759,11 @@ export class Photos implements OnModuleDestroy {
           }))
         )
           throw new NotFoundException();
-        return {
-          photos: await Promise.all(
-            (
-              await tx.photoIntent.findMany({
-                where: { projectId, interviewId, storageScope: this.scope },
-                orderBy: { createdAt: "asc" },
-              })
-            ).map((p) => this.view(tx, p)),
-          ),
-          snapshot: await this.readSnapshot(tx, projectId, interviewId),
-          usage: await this.usage(tx, projectId),
-        };
+        return this.readSnapshot(tx, projectId, interviewId);
       },
     );
   }
 
-  context(
-    projectId: string,
-    interviewId: string,
-    body: CollectionDto,
-    authorization?: string,
-  ) {
-    return this.participation.withCollectionAccess(
-      projectId,
-      authorization,
-      body.assistedSessionId,
-      async (tx, actor) => {
-        const interview = await tx.interview.findFirst({
-          where: { projectId, id: interviewId },
-        });
-        if (!interview) throw new NotFoundException();
-        this.sameActor(
-          { ...interview, operatorUserId: actor.operatorUserId },
-          actor,
-        );
-        const rows = await tx.photoIntent.findMany({
-          where: {
-            projectId,
-            interviewId,
-            operatorUserId: actor.operatorUserId,
-            bindingVersion: actor.bindingVersion,
-            accessEpoch: actor.accessEpoch,
-            storageScope: this.scope,
-          },
-          orderBy: { createdAt: "asc" },
-        });
-        return {
-          photos: await Promise.all(rows.map((row) => this.view(tx, row))),
-          snapshot: null,
-          usage: await this.usage(tx, projectId),
-        };
-      },
-      "existing",
-    );
-  }
   snapshot(
     projectId: string,
     interviewId: string,
@@ -949,8 +862,7 @@ export class Photos implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        const row = await this.productionIntent(tx, projectId, interviewId, id);
-        this.sameActor(row, actor);
+        const row = await this.productionIntent(tx, projectId, id);
         if (row.state !== "sealed") throw new ConflictException();
         await claimRecordingCommand(tx, projectId, actor.operatorUserId, key, {
           kind: "photo-crop",
@@ -976,6 +888,8 @@ export class Photos implements OnModuleDestroy {
             ),
           };
         const current = await this.readSnapshot(tx, projectId, interviewId);
+        if (!current?.entries.some((entry) => entry.photoId === id))
+          throw new NotFoundException();
         if (current?.revision !== body.expectedRevision) {
           if (
             current?.revision === body.expectedRevision + 1 &&
@@ -1021,10 +935,7 @@ export class Photos implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        this.sameActor(
-          await this.productionIntent(tx, projectId, interviewId, id),
-          actor,
-        );
+        this.sameActor(await this.productionIntent(tx, projectId, id), actor);
         const replay = await tx.photoSnapshot.findFirst({
           where: {
             projectId,
@@ -1090,7 +1001,6 @@ export class Photos implements OnModuleDestroy {
 
   release(
     projectId: string,
-    interviewId: string,
     id: string,
     body: CollectionDto,
     authorization?: string,
@@ -1100,7 +1010,7 @@ export class Photos implements OnModuleDestroy {
       authorization,
       body.assistedSessionId,
       async (tx, actor) => {
-        const row = await this.intent(tx, projectId, interviewId, id);
+        const row = await this.intent(tx, projectId, id);
         this.sameActor(row, actor);
         if (row.state === "sealed") throw new ConflictException();
         return this.view(
@@ -1119,7 +1029,7 @@ export class Photos implements OnModuleDestroy {
     await this.terms.close();
   }
 }
-@Controller("v1/projects/:id/interviews/:interviewId/photos")
+@Controller("v1/projects/:id")
 @ApiTags("Story photos")
 @ApiBearerAuth()
 export class PhotosController {
@@ -1127,17 +1037,34 @@ export class PhotosController {
     private readonly streams: ProjectStreams,
     private readonly photos: Photos,
   ) {}
-  @Get() @Header("Cache-Control", "no-store") async list(
+  @Get("photos") @Header("Cache-Control", "no-store") async list(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.photos.list(id, req.headers.authorization),
+      meta: { requestId: req.id },
+    };
+  }
+  @Get("interviews/:interviewId/photo-materials")
+  @Header("Cache-Control", "no-store")
+  async materials(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Param("interviewId", new ParseUUIDPipe()) interview: string,
     @Req() req: FastifyRequest,
   ) {
     return {
-      data: await this.photos.list(id, interview, req.headers.authorization),
+      data: await this.photos.materials(
+        id,
+        interview,
+        req.headers.authorization,
+      ),
       meta: { requestId: req.id },
     };
   }
-  @Post("materials") @Header("Cache-Control", "no-store") async revise(
+  @Post("interviews/:interviewId/photo-materials")
+  @Header("Cache-Control", "no-store")
+  async revise(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Param("interviewId", new ParseUUIDPipe()) interview: string,
     @Body() body: MaterialsDto,
@@ -1154,7 +1081,7 @@ export class PhotosController {
       meta: { requestId: req.id },
     };
   }
-  @Get("materials/:snapshotId")
+  @Get("interviews/:interviewId/photo-materials/:snapshotId")
   @Header("Cache-Control", "no-store")
   async snapshot(
     @Param("id", new ParseUUIDPipe()) id: string,
@@ -1173,7 +1100,9 @@ export class PhotosController {
     };
   }
 
-  @Post(":photoId/crop") @Header("Cache-Control", "no-store") async crop(
+  @Post("interviews/:interviewId/photo-materials/:photoId/crop")
+  @Header("Cache-Control", "no-store")
+  async crop(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Param("interviewId", new ParseUUIDPipe()) interview: string,
     @Param("photoId", new ParseUUIDPipe()) photo: string,
@@ -1192,9 +1121,8 @@ export class PhotosController {
       meta: { requestId: req.id },
     };
   }
-  @Get(":photoId/assets/:assetId/content") async asset(
+  @Get("photos/:photoId/assets/:assetId/content") async asset(
     @Param("id", new ParseUUIDPipe()) id: string,
-    @Param("interviewId", new ParseUUIDPipe()) interview: string,
     @Param("photoId", new ParseUUIDPipe()) photo: string,
     @Param("assetId", new ParseUUIDPipe()) asset: string,
     @Req() req: FastifyRequest,
@@ -1203,7 +1131,6 @@ export class PhotosController {
     const fence = await this.streams.userFence(id, req.headers.authorization);
     const result = await this.photos.content(
       id,
-      interview,
       photo,
       "print",
       req.headers.authorization,
@@ -1222,7 +1149,6 @@ export class PhotosController {
           () =>
             this.photos.authorizeContent(
               id,
-              interview,
               photo,
               "print",
               req.headers.authorization,
@@ -1234,9 +1160,10 @@ export class PhotosController {
       );
   }
 
-  @Post(":photoId/release") @Header("Cache-Control", "no-store") async release(
+  @Post("photos/:photoId/release")
+  @Header("Cache-Control", "no-store")
+  async release(
     @Param("id", new ParseUUIDPipe()) id: string,
-    @Param("interviewId", new ParseUUIDPipe()) interview: string,
     @Param("photoId", new ParseUUIDPipe()) photo: string,
     @Body() body: CollectionDto,
     @Req() req: FastifyRequest,
@@ -1244,7 +1171,6 @@ export class PhotosController {
     return {
       data: await this.photos.release(
         id,
-        interview,
         photo,
         body,
         req.headers.authorization,
@@ -1253,32 +1179,14 @@ export class PhotosController {
     };
   }
 
-  @Post("context") @Header("Cache-Control", "no-store") async context(
+  @Post("photos") @Header("Cache-Control", "no-store") async create(
     @Param("id", new ParseUUIDPipe()) id: string,
-    @Param("interviewId", new ParseUUIDPipe()) interview: string,
-    @Body() body: CollectionDto,
-    @Req() req: FastifyRequest,
-  ) {
-    return {
-      data: await this.photos.context(
-        id,
-        interview,
-        body,
-        req.headers.authorization,
-      ),
-      meta: { requestId: req.id },
-    };
-  }
-  @Post() @Header("Cache-Control", "no-store") async create(
-    @Param("id", new ParseUUIDPipe()) id: string,
-    @Param("interviewId", new ParseUUIDPipe()) interview: string,
     @Body() body: PhotoDto,
     @Req() req: FastifyRequest,
   ) {
     return {
       data: await this.photos.create(
         id,
-        interview,
         body,
         req.headers.authorization,
         req.headers["idempotency-key"] as string | undefined,
@@ -1286,9 +1194,10 @@ export class PhotosController {
       meta: { requestId: req.id },
     };
   }
-  @Post(":photoId/status") @Header("Cache-Control", "no-store") async status(
+  @Post("photos/:photoId/status")
+  @Header("Cache-Control", "no-store")
+  async status(
     @Param("id", new ParseUUIDPipe()) id: string,
-    @Param("interviewId", new ParseUUIDPipe()) interview: string,
     @Param("photoId", new ParseUUIDPipe()) photo: string,
     @Body() body: CollectionDto,
     @Req() req: FastifyRequest,
@@ -1296,7 +1205,6 @@ export class PhotosController {
     return {
       data: await this.photos.status(
         id,
-        interview,
         photo,
         body,
         req.headers.authorization,
@@ -1304,45 +1212,32 @@ export class PhotosController {
       meta: { requestId: req.id },
     };
   }
-  @Post(":photoId/upload") @Header("Cache-Control", "no-store") async form(
+  @Post("photos/:photoId/upload")
+  @Header("Cache-Control", "no-store")
+  async form(
     @Param("id", new ParseUUIDPipe()) id: string,
-    @Param("interviewId", new ParseUUIDPipe()) interview: string,
     @Param("photoId", new ParseUUIDPipe()) photo: string,
     @Body() body: CollectionDto,
     @Req() req: FastifyRequest,
   ) {
     return {
-      data: await this.photos.form(
-        id,
-        interview,
-        photo,
-        body,
-        req.headers.authorization,
-      ),
+      data: await this.photos.form(id, photo, body, req.headers.authorization),
       meta: { requestId: req.id },
     };
   }
-  @Post(":photoId/seal") @Header("Cache-Control", "no-store") async seal(
+  @Post("photos/:photoId/seal") @Header("Cache-Control", "no-store") async seal(
     @Param("id", new ParseUUIDPipe()) id: string,
-    @Param("interviewId", new ParseUUIDPipe()) interview: string,
     @Param("photoId", new ParseUUIDPipe()) photo: string,
     @Body() body: CollectionDto,
     @Req() req: FastifyRequest,
   ) {
     return {
-      data: await this.photos.seal(
-        id,
-        interview,
-        photo,
-        body,
-        req.headers.authorization,
-      ),
+      data: await this.photos.seal(id, photo, body, req.headers.authorization),
       meta: { requestId: req.id },
     };
   }
-  @Get(":photoId/content/:kind") async content(
+  @Get("photos/:photoId/content/:kind") async content(
     @Param("id", new ParseUUIDPipe()) id: string,
-    @Param("interviewId", new ParseUUIDPipe()) interview: string,
     @Param("photoId", new ParseUUIDPipe()) photo: string,
     @Param("kind") kind: string,
     @Req() req: FastifyRequest,
@@ -1351,7 +1246,6 @@ export class PhotosController {
     const fence = await this.streams.userFence(id, req.headers.authorization);
     const result = await this.photos.content(
       id,
-      interview,
       photo,
       kind,
       req.headers.authorization,
@@ -1369,7 +1263,6 @@ export class PhotosController {
           () =>
             this.photos.authorizeContent(
               id,
-              interview,
               photo,
               kind,
               req.headers.authorization,

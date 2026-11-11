@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import type {
   PhotoCollection,
+  PhotoMaterials,
   RecordingContext,
 } from "../../../../packages/contracts/src";
 import { photoApi, pendingPhoto, type PendingPhoto } from "../photo-api";
@@ -18,7 +19,9 @@ const route = useRoute(),
 const projectId = computed(() => String(route.params.projectId));
 const interviewId = ref("");
 const linkedStoryId = ref("");
-const collection = ref<PhotoCollection | null>(null),
+type PhotoView = PhotoCollection & { snapshot: PhotoMaterials | null };
+const selectedIds = ref<string[]>([]);
+const collection = ref<PhotoView | null>(null),
   context = ref<RecordingContext | null>(null);
 const pending = ref<PendingPhoto[]>([]),
   captions = ref<Record<string, string>>({});
@@ -30,7 +33,26 @@ const loading = ref(true),
   needsSync = ref(false),
   conflict = ref(false);
 let generation = 0;
-const entries = computed(() => collection.value?.snapshot?.entries ?? []);
+const entries = computed(() =>
+  interviewId.value
+    ? (collection.value?.snapshot?.entries ?? [])
+    : (collection.value?.photos
+        .filter((photo) => photo.state === "sealed")
+        .map((photo) => ({
+          photoId: photo.id,
+          caption: "",
+          assets: photo.assets,
+        })) ?? []),
+);
+const available = computed(() =>
+  interviewId.value
+    ? (collection.value?.photos.filter(
+        (photo) =>
+          photo.state === "sealed" &&
+          !entries.value.some((entry) => entry.photoId === photo.id),
+      ) ?? [])
+    : [],
+);
 const returnTo = computed(() =>
   props.storyId
     ? `/projects/${projectId.value}/stories/${props.storyId}`
@@ -44,6 +66,7 @@ function clear() {
   context.value = null;
   pending.value = [];
   captions.value = {};
+  selectedIds.value = [];
   busy.value = false;
   loading.value = false;
   needsSync.value = false;
@@ -69,7 +92,7 @@ function failure(reason: unknown, current: number) {
       ? "这张照片未能处理，请改用 JPEG 或 PNG 照片后重试。"
       : projectError(reason);
 }
-function accept(value: PhotoCollection) {
+function accept(value: PhotoView) {
   collection.value = value;
   captions.value = Object.fromEntries(
     value.snapshot?.entries.map((entry) => [entry.photoId, entry.caption]) ??
@@ -100,7 +123,10 @@ async function load() {
       if (!props.storyId)
         source =
           (await recordingApi.story(projectId.value, id)).story ?? undefined;
-      const value = await photoApi.list(projectId.value, id);
+      const value = {
+        ...(await photoApi.list(projectId.value)),
+        snapshot: await photoApi.materials(projectId.value, id),
+      };
       if (current !== generation) return;
       linkedStoryId.value = source?.id ?? "";
       accept(value);
@@ -110,8 +136,14 @@ async function load() {
         source.revision.photoSnapshot?.id !== value.snapshot.id
       );
     } else {
-      const value = await recordingApi.context(projectId.value);
-      if (current === generation) context.value = value;
+      const [value, photos] = await Promise.all([
+        recordingApi.context(projectId.value),
+        photoApi.list(projectId.value),
+      ]);
+      if (current === generation) {
+        context.value = value;
+        accept({ ...photos, snapshot: null });
+      }
     }
   } catch (reason) {
     failure(reason, current);
@@ -160,14 +192,29 @@ async function upload(photo: PendingPhoto, current = generation) {
   photo.state = "uploading";
   photo.error = "";
   try {
-    const id = await prepare(current);
-    await photoApi.upload(
+    const remote = await photoApi.upload(
       projectId.value,
-      id,
       photo,
       () => current === generation,
     );
-    const value = await photoApi.list(projectId.value, id);
+    const assets = await photoApi.list(projectId.value);
+    let snapshot = collection.value?.snapshot ?? null;
+    if (interviewId.value)
+      snapshot = await photoApi.revise(
+        projectId.value,
+        interviewId.value,
+        snapshot,
+        [
+          ...(snapshot?.entries.map((entry) => ({
+            photoId: entry.photoId,
+            caption: entry.caption,
+          })) ?? []),
+          { photoId: remote.id, caption: "" },
+        ],
+      );
+    const value = { ...assets, snapshot };
+    if (!interviewId.value && current === generation)
+      selectedIds.value.push(remote.id);
     if (current !== generation) return;
     pending.value = pending.value.filter((item) => item.id !== photo.id);
     accept(value);
@@ -217,12 +264,7 @@ async function cancel(photo: PendingPhoto) {
   const current = generation;
   busy.value = true;
   try {
-    if (photo.serverId)
-      await photoApi.release(
-        projectId.value,
-        interviewId.value,
-        photo.serverId,
-      );
+    if (photo.serverId) await photoApi.release(projectId.value, photo.serverId);
     if (current === generation)
       pending.value = pending.value.filter((item) => item.id !== photo.id);
   } catch (reason) {
@@ -232,8 +274,8 @@ async function cancel(photo: PendingPhoto) {
   }
 }
 async function save(next?: { photoId: string; caption: string }[]) {
-  const snapshot = collection.value?.snapshot;
-  if (!snapshot || busy.value || conflict.value) return;
+  const snapshot = collection.value?.snapshot ?? null;
+  if (!interviewId.value || busy.value || conflict.value) return;
   const current = generation;
   busy.value = true;
   status.value = "";
@@ -281,6 +323,43 @@ function remove(id: string) {
         caption: captions.value[entry.photoId] ?? entry.caption,
       })),
   );
+}
+function togglePhoto(id: string) {
+  selectedIds.value = selectedIds.value.includes(id)
+    ? selectedIds.value.filter((photoId) => photoId !== id)
+    : [...selectedIds.value, id];
+}
+async function addExisting(id: string) {
+  await save([
+    ...entries.value.map((entry) => ({
+      photoId: entry.photoId,
+      caption: captions.value[entry.photoId] ?? entry.caption,
+    })),
+    { photoId: id, caption: "" },
+  ]);
+}
+async function recordPhotos() {
+  if (!selectedIds.value.length || busy.value) return;
+  const current = generation;
+  busy.value = true;
+  try {
+    const ids = [...selectedIds.value];
+    const id = await prepare(current);
+    await photoApi.revise(
+      projectId.value,
+      id,
+      null,
+      ids.map((photoId) => ({ photoId, caption: "" })),
+    );
+    if (current === generation)
+      await router.push(
+        `/projects/${projectId.value}/record?interviewId=${id}&prepare=1`,
+      );
+  } catch (reason) {
+    failure(reason, current);
+  } finally {
+    if (current === generation) busy.value = false;
+  }
 }
 </script>
 <template>
@@ -362,7 +441,6 @@ function remove(id: string) {
           <PrivatePhoto
             v-if="entry.assets.find((asset) => asset.kind === 'preview')"
             :project-id="projectId"
-            :interview-id="interviewId"
             :photo-id="entry.photoId"
             :asset="entry.assets.find((asset) => asset.kind === 'preview')!"
             :alt="entry.caption || `故事照片 ${index + 1}`"
@@ -377,7 +455,7 @@ function remove(id: string) {
           >
             照片清晰度较低，印刷时可能不够清楚。
           </p>
-          <label class="field-label"
+          <label v-if="interviewId" class="field-label"
             >照片说明<textarea
               v-model="captions[entry.photoId]"
               :aria-label="`照片说明 ${index + 1}`"
@@ -388,22 +466,58 @@ function remove(id: string) {
             />
           </label>
           <button
+            v-if="interviewId"
             class="text-button photo-delete"
             :aria-label="`删除照片 ${index + 1}`"
             :disabled="busy || conflict"
             @click="remove(entry.photoId)"
           >
-            删除照片
+            移除本次照片
+          </button>
+          <button
+            v-else
+            class="button secondary"
+            :aria-pressed="selectedIds.includes(entry.photoId)"
+            @click="togglePhoto(entry.photoId)"
+          >
+            {{
+              selectedIds.includes(entry.photoId) ? "已选择" : "选择这张照片"
+            }}
           </button>
         </article>
       </div>
       <section v-else-if="!pending.length" class="panel empty-state">
         <Icon name="book" :size="32" />
-        <h2>给这个故事添一张照片</h2>
+        <h2>{{ interviewId ? "给这个故事添一张照片" : "暂无照片" }}</h2>
+      </section>
+      <section v-if="available.length" class="panel">
+        <h2>选择项目照片</h2>
+        <div class="photo-editor-grid">
+          <article
+            v-for="photo in available"
+            :key="photo.id"
+            class="photo-editor-card"
+          >
+            <PrivatePhoto
+              :project-id="projectId"
+              :photo-id="photo.id"
+              :asset="photo.assets.find((asset) => asset.kind === 'preview')!"
+              alt="项目照片"
+              @denied="accessLost"
+            />
+            <button
+              class="button secondary"
+              :disabled="busy"
+              @click="addExisting(photo.id)"
+            >
+              添加到本次讲述
+            </button>
+          </article>
+        </div>
       </section>
       <div class="hero-actions photo-actions">
         <button
-          v-if="entries.length"
+          v-if="entries.length && interviewId"
           class="button secondary"
           :disabled="busy || conflict"
           @click="save()"
@@ -418,18 +532,14 @@ function remove(id: string) {
         >
           同步到故事
         </button>
-        <RouterLink
-          v-if="
-            interviewId &&
-            entries.length &&
-            !busy &&
-            !pending.length &&
-            !needsSync
-          "
+        <button
+          v-if="!interviewId && selectedIds.length"
           class="button"
-          :to="`/projects/${projectId}/record?interviewId=${interviewId}&prepare=1`"
-          ><Icon name="mic" :size="18" />看着照片讲一讲</RouterLink
+          :disabled="busy || !!pending.length"
+          @click="recordPhotos"
         >
+          <Icon name="mic" :size="18" />看着照片讲一讲
+        </button>
       </div>
     </template>
   </div>
