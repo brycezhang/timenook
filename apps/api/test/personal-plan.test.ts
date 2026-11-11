@@ -210,7 +210,7 @@ async function joinedProject() {
       "POST",
       `/v1/invitations/${invite.token}/accept`,
       narrator.token,
-      { termsVersion: TERMS_VERSION },
+      { relationship: "家人", termsVersion: TERMS_VERSION },
     ),
   );
   return { ...p, narrator };

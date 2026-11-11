@@ -56,7 +56,13 @@ onMounted(() => {
       </div>
       <div class="project-card-info">
         <span class="badge">{{
-          project.origin === "purchased" ? "我购买的" : "受邀参与"
+          project.isSelfGift
+            ? "送给自己"
+            : project.categories.includes("sent")
+              ? "我送出的"
+              : project.categories.includes("received")
+                ? "我收到的"
+                : "我参与的"
         }}</span>
         <h3>{{ project.bookTitle }}</h3>
         <span

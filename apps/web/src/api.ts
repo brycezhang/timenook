@@ -5,12 +5,8 @@ export interface WebSession {
   session: { id: string; expiresAt: string };
   csrfToken: string;
 }
-export interface ProjectSummary {
-  projectId: string;
-  bookTitle: string;
-  state: string;
-  origin: "purchased" | "invited";
-}
+export type { ProjectMembership as ProjectSummary } from "../../../packages/contracts/src/index";
+import type { ProjectMembership as ProjectSummary } from "../../../packages/contracts/src/index";
 export interface SmsChallenge {
   challengeId: string;
   expiresInSeconds: number;

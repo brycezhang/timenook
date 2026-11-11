@@ -387,7 +387,7 @@ test("web and mini-program expose the same purchased and invited projects, with 
     method: "POST",
     url: `/v1/invitations/${invitation.json().data.token}/accept`,
     headers: { authorization: `Bearer ${native.json().data.session.token}` },
-    payload: { termsVersion: USER_TERMS_VERSION },
+    payload: { relationship: "家人", termsVersion: USER_TERMS_VERSION },
   });
   assert.equal(accepted.statusCode, 201, accepted.body);
   const web = await login("13800000012");

@@ -11,11 +11,13 @@ const invitation = ref<Invitation | null>(null),
   loading = ref(true),
   busy = ref(false),
   agreed = ref(false),
+  relationship = ref(""),
   error = ref("");
 let generation = 0,
   controller: AbortController | undefined;
 const clear = auth.onClear(() => {
   agreed.value = false;
+  relationship.value = "";
   busy.value = false;
   generation++;
 });
@@ -54,11 +56,18 @@ onUnmounted(() => {
 });
 async function accept() {
   if (!agreed.value || busy.value) return;
+  if (!relationship.value.trim()) {
+    error.value = "请填写你是主讲人的谁";
+    return;
+  }
   const current = generation;
   busy.value = true;
   error.value = "";
   try {
-    const result = await projectApi.accept(String(route.params.token));
+    const result = await projectApi.accept(
+      String(route.params.token),
+      relationship.value.trim(),
+    );
     if (current === generation)
       await router.push(`/projects/${result.projectId}`);
   } catch (reason) {
@@ -95,6 +104,14 @@ async function accept() {
         ><p class="muted text-small">
           以「{{ auth.account.value.user.nickname || "我的账号" }}」加入
         </p>
+        <label class="field"
+          >你是主讲人的谁（必填）
+          <input
+            v-model="relationship"
+            maxlength="32"
+            placeholder="例如：女儿、孙子或自定义关系"
+          />
+        </label>
         <label class="agreement"
           ><input v-model="agreed" type="checkbox" /><span
             >我已阅读并同意<RouterLink to="/terms" target="_blank"
