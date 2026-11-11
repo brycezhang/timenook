@@ -1,0 +1,1136 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "AssignStory.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "outline",
+      "radius": 26,
+      "title": "08 项目成员｜选择故事所属章节",
+      "w": 390,
+      "x": 1410,
+      "y": 964
+    },
+    "BookAddress.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "print",
+      "radius": 26,
+      "title": "01 项目成员｜收货地址",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "BookCancelled.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "print",
+      "radius": 26,
+      "title": "06 项目成员｜制作已取消",
+      "w": 390,
+      "x": 470,
+      "y": 964
+    },
+    "BookChanged.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "book",
+      "radius": 26,
+      "title": "07 项目成员｜更新书稿",
+      "w": 390,
+      "x": 940,
+      "y": 964
+    },
+    "BookCover.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "book",
+      "radius": 26,
+      "title": "03 项目成员｜编辑封面",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "BookDelivered.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "print",
+      "radius": 26,
+      "title": "05 项目成员｜书籍已送达",
+      "w": 390,
+      "x": 0,
+      "y": 964
+    },
+    "BookDirectory.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "outline",
+      "radius": 26,
+      "title": "01 项目成员｜大纲目录 · 六章",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "BookEmpty.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "book",
+      "radius": 26,
+      "title": "01 项目成员｜书稿概览 · 暂无书稿",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "BookGenerateFailed.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "book",
+      "radius": 26,
+      "title": "08 项目成员｜书稿生成失败",
+      "w": 390,
+      "x": 1410,
+      "y": 964
+    },
+    "BookOverview.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "book",
+      "radius": 26,
+      "title": "02 项目成员｜书稿概览",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "BookPrintConfirm.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "print",
+      "radius": 26,
+      "title": "02 项目成员｜确认制作",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "BookProduction.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "print",
+      "radius": 26,
+      "title": "03 项目成员｜制作进度",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "BookReader.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "book",
+      "radius": 26,
+      "title": "04 项目成员｜PDF 书稿预览",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "BookShipped.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "print",
+      "radius": 26,
+      "title": "04 项目成员｜书籍已寄出",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "ChapterEdit.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "outline",
+      "radius": 26,
+      "title": "05 项目成员｜编辑章节",
+      "w": 390,
+      "x": 0,
+      "y": 964
+    },
+    "ChapterOutline.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "outline",
+      "radius": 26,
+      "title": "02 项目成员｜章节内容 · 问题与故事",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "ChapterStories.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "outline",
+      "radius": 26,
+      "title": "06 项目成员｜本章故事",
+      "w": 390,
+      "x": 470,
+      "y": 964
+    },
+    "Checkout.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "start",
+      "radius": 26,
+      "title": "06 购买者｜确认购买",
+      "w": 390,
+      "x": 470,
+      "y": 964
+    },
+    "FamilyQuestionAnswered.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "family",
+      "radius": 26,
+      "title": "05 项目成员｜家人问题 · 已回答",
+      "w": 390,
+      "x": 0,
+      "y": 964
+    },
+    "FamilyQuestionDetail.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "family",
+      "radius": 26,
+      "title": "04 主讲人及协助家人｜家人问题 · 待回答",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "FamilyQuestionNew.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "family",
+      "radius": 26,
+      "title": "03 项目成员｜提出问题 · 仅文字",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "FamilyQuestions.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "family",
+      "radius": 26,
+      "title": "01 项目成员｜家人提问 · 待回答",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "FamilyQuestionsEmpty.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "family",
+      "radius": 26,
+      "title": "02 项目成员｜家人提问 · 暂无问题",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "GiftAccept.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "receive",
+      "radius": 26,
+      "title": "04 收礼人｜确认领取礼物",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "GiftClaimed.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "receive",
+      "radius": 26,
+      "title": "06 收礼人｜礼物已领取",
+      "w": 390,
+      "x": 470,
+      "y": 964
+    },
+    "GiftInvalid.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "receive",
+      "radius": 26,
+      "title": "05 收礼人｜礼物卡已失效",
+      "w": 390,
+      "x": 0,
+      "y": 964
+    },
+    "GiftMismatch.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "receive",
+      "radius": 26,
+      "title": "03 收礼人｜手机号不匹配",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "GiftOpen.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "receive",
+      "radius": 26,
+      "title": "01 收礼人｜查看礼物",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "GiftReady.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "gift",
+      "radius": 26,
+      "title": "01 送礼人｜购买成功",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "GiftRecipient.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "gift",
+      "radius": 26,
+      "title": "02 送礼人｜指定收礼人",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "GiftShare.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "gift",
+      "radius": 26,
+      "title": "03 送礼人｜发送礼物卡",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "GiftVerify.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "receive",
+      "radius": 26,
+      "title": "02 收礼人｜验证收礼手机号",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "HomeActive.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "project",
+      "radius": 26,
+      "title": "02 项目成员｜故事书首页 · 已有故事",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "HomeEmpty.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "project",
+      "radius": 26,
+      "title": "01 项目成员｜故事书首页 · 暂无故事",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "InviteJoin.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "project",
+      "radius": 26,
+      "title": "06 受邀家人｜加入项目",
+      "w": 390,
+      "x": 470,
+      "y": 964
+    },
+    "InviteShare.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "project",
+      "radius": 26,
+      "title": "05 购买者｜邀请家人",
+      "w": 390,
+      "x": 0,
+      "y": 964
+    },
+    "Login.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "start",
+      "radius": 26,
+      "title": "03 未登录用户｜登录弹窗",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "start",
+      "radius": 26,
+      "title": "01 所有人｜首页",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "MyAccount.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "account",
+      "radius": 26,
+      "title": "02 已登录用户｜我的 · 已登录",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "MyGiftsParticipating.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "project",
+      "radius": 26,
+      "title": "09 已登录用户｜我的礼物 · 参与",
+      "w": 390,
+      "x": 470,
+      "y": 1928
+    },
+    "MyGiftsReceived.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "project",
+      "radius": 26,
+      "title": "08 已登录用户｜我的礼物 · 收到",
+      "w": 390,
+      "x": 0,
+      "y": 1928
+    },
+    "MyGuest.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "account",
+      "radius": 26,
+      "title": "01 未登录用户｜我的 · 未登录",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "MyProjects.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "project",
+      "radius": 26,
+      "title": "03 已登录用户｜我的礼物 · 送出",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "NewGift.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "start",
+      "radius": 26,
+      "title": "04 购买者｜购买礼物 · 选择关系",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "OriginalAudio.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "book",
+      "radius": 26,
+      "title": "06 项目成员｜扫码原声回听",
+      "w": 390,
+      "x": 470,
+      "y": 964
+    },
+    "PaymentPending.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "start",
+      "radius": 26,
+      "title": "07 购买者｜待付款",
+      "w": 390,
+      "x": 940,
+      "y": 964
+    },
+    "PaymentUnknown.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "start",
+      "radius": 26,
+      "title": "08 购买者｜确认付款结果",
+      "w": 390,
+      "x": 1410,
+      "y": 964
+    },
+    "PdfDocument.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "book",
+      "radius": 26,
+      "title": "05 项目成员｜PDF 内容 · 微信查看器",
+      "w": 390,
+      "x": 0,
+      "y": 964
+    },
+    "Photos.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "voice",
+      "radius": 26,
+      "title": "08 项目成员｜项目照片",
+      "w": 390,
+      "x": 0,
+      "y": 1928
+    },
+    "PrintUnknown.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "print",
+      "radius": 26,
+      "title": "07 项目成员｜确认提交结果",
+      "w": 390,
+      "x": 940,
+      "y": 964
+    },
+    "QuestionDetail.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "outline",
+      "radius": 26,
+      "title": "03 主讲人及协助家人｜大纲问题 · 语音回答",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "QuestionEdit.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "outline",
+      "radius": 26,
+      "title": "04 项目成员｜编辑大纲问题",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "ReaderFailed.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "book",
+      "radius": 26,
+      "title": "09 项目成员｜PDF 打开失败",
+      "w": 390,
+      "x": 0,
+      "y": 1928
+    },
+    "RecordBlocked.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "voice",
+      "radius": 26,
+      "title": "07 项目成员｜麦克风权限",
+      "w": 390,
+      "x": 940,
+      "y": 964
+    },
+    "RecordPaused.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "voice",
+      "radius": 26,
+      "title": "04 项目成员｜录音已暂停",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "RecordReady.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "voice",
+      "radius": 26,
+      "title": "01 项目成员｜开始讲述 · 无照片",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "RecordReadyPhoto.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "voice",
+      "radius": 26,
+      "title": "02 项目成员｜开始讲述 · 有照片",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Recording.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "voice",
+      "radius": 26,
+      "title": "03 项目成员｜正在录音",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Sample.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "start",
+      "radius": 26,
+      "title": "02 所有人｜样书预览",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "SelfGift.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "start",
+      "radius": 26,
+      "title": "05 购买者｜购买礼物 · 送给自己",
+      "w": 390,
+      "x": 0,
+      "y": 964
+    },
+    "Stories.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "story",
+      "radius": 26,
+      "title": "01 项目成员｜故事列表",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "Story.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "story",
+      "radius": 26,
+      "title": "02 项目成员｜故事详情",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "StoryEdit.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "story",
+      "radius": 26,
+      "title": "03 项目成员｜编辑故事",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "StoryFailed.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "story",
+      "radius": 26,
+      "title": "05 项目成员｜故事整理失败",
+      "w": 390,
+      "x": 0,
+      "y": 964
+    },
+    "StoryProcessing.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "story",
+      "radius": 26,
+      "title": "04 项目成员｜整理故事",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "StoryUnassigned.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "story",
+      "radius": 26,
+      "title": "06 项目成员｜故事详情 · 未归章",
+      "w": 390,
+      "x": 470,
+      "y": 964
+    },
+    "SwitchProject.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "project",
+      "radius": 26,
+      "title": "04 项目成员｜切换故事书",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "Terms.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "account",
+      "radius": 26,
+      "title": "03 所有人｜使用条款与隐私说明",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "UnassignedStories.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "outline",
+      "radius": 26,
+      "title": "07 项目成员｜未归章故事",
+      "w": 390,
+      "x": 940,
+      "y": 964
+    },
+    "Upload.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "voice",
+      "radius": 26,
+      "title": "05 项目成员｜保存录音",
+      "w": 390,
+      "x": 0,
+      "y": 964
+    },
+    "UploadFailed.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "voice",
+      "radius": 26,
+      "title": "06 项目成员｜录音上传失败",
+      "w": 390,
+      "x": 470,
+      "y": 964
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-10T13:40:48.130Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "start-title",
+    "gift-title",
+    "gift-note",
+    "receive-title",
+    "receive-note",
+    "project-title",
+    "project-note",
+    "voice-title",
+    "voice-note",
+    "story-title",
+    "story-note",
+    "book-title",
+    "book-note",
+    "print-title",
+    "print-note",
+    "account-title",
+    "account-note",
+    "pdf-native-note",
+    "note-9purxj",
+    "note-4zwho7",
+    "note-1adkxl",
+    "note-03qhsv",
+    "note-6owplg",
+    "note-bgt32v",
+    "note-019xpu",
+    "note-cc2lte",
+    "family-title",
+    "family-note",
+    "outline-title",
+    "outline-note",
+    "requirements-applied"
+  ],
+  "notes": {
+    "account-note": {
+      "fill": "orange",
+      "page": "account",
+      "text": "登录与购买分开，已有项目继续使用。条款页为信息布局示例，实施沿用完整现行条款。",
+      "w": 350,
+      "x": 1900,
+      "y": 0
+    },
+    "account-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "account",
+      "text": "账号与使用条款",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "book-note": {
+      "fill": "orange",
+      "page": "book",
+      "text": "生成 PDF 只收录已归章的故事，未归章故事继续保留。目录与问题使用同一章节结构；已生成或提交制作的版本保持固定。",
+      "w": 350,
+      "x": 1900,
+      "y": 0
+    },
+    "book-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "book",
+      "text": "章节管理、PDF 与书中原声",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "family-note": {
+      "fill": "orange",
+      "page": "family",
+      "text": "家人仅文字提问，章节可选。主讲人或协助家人录音回答后关联故事；未归章故事随时可加入任一章节。",
+      "w": 350,
+      "x": 1900,
+      "y": 0
+    },
+    "family-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "family",
+      "text": "家人提问与语音回答",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "gift-note": {
+      "fill": "orange",
+      "page": "gift",
+      "text": "指定收礼手机号后直接生成电子礼物卡。领取前可更正手机号并重发，旧卡失效；书名、故事和照片在项目内管理。",
+      "w": 350,
+      "x": 1900,
+      "y": 0
+    },
+    "gift-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "gift",
+      "text": "礼物设置与分享",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "note-019xpu": {
+      "fill": "red",
+      "page": "project",
+      "text": "小标题「赠送人昵称」xx 送给 爷爷「关系」的时光故事书",
+      "w": 240,
+      "x": 1821,
+      "y": 323
+    },
+    "note-03qhsv": {
+      "fill": "red",
+      "page": "project",
+      "text": "家人提问作为独立入口",
+      "w": 211,
+      "x": -222,
+      "y": 201
+    },
+    "note-1adkxl": {
+      "fill": "red",
+      "text": "强调送礼逻辑，删掉「给自己做一本」，可以自己送自己",
+      "w": 240,
+      "x": -260,
+      "y": 360
+    },
+    "note-4zwho7": {
+      "fill": "red",
+      "page": "project",
+      "text": "从大纲选择问题，内置一套大纲，根据收礼人角色匹配",
+      "w": 206,
+      "x": -222,
+      "y": 290
+    },
+    "note-6owplg": {
+      "fill": "red",
+      "page": "project",
+      "text": "「我的项目」改为「我送出的礼物/收到的礼物」",
+      "w": 240,
+      "x": 1821,
+      "y": 241
+    },
+    "note-9purxj": {
+      "fill": "red",
+      "page": "voice",
+      "text": "不同角色可以向主讲人提问题",
+      "w": 240,
+      "x": 1818,
+      "y": 1188
+    },
+    "note-bgt32v": {
+      "fill": "red",
+      "page": "project",
+      "text": "接受邀请要填写主讲人「关系」",
+      "w": 240,
+      "x": 1344,
+      "y": 1394
+    },
+    "note-cc2lte": {
+      "fill": "red",
+      "text": "被赠送人关系，要求必填，默认选择 爸爸妈妈爷爷奶奶自己，还可以填写自定义关系",
+      "w": 240,
+      "x": 1849,
+      "y": 201
+    },
+    "outline-note": {
+      "fill": "orange",
+      "page": "outline",
+      "text": "通用大纲就是目录：初始六章、每章十题。章节和问题可增删改，章节可拖动排序；每章切换查看问题与故事。未归章故事单独保留，可随时加入任一章。",
+      "w": 350,
+      "x": 1900,
+      "y": 0
+    },
+    "outline-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "outline",
+      "text": "六章大纲与书稿目录",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "pdf-native-note": {
+      "fill": "gray",
+      "page": "book",
+      "text": "PDF 内容画板用于说明封面、目录、正文及二维码，查看器控件由微信提供。移除自定义翻页、点击目录跳页和 PDF 内直达播放器的按钮；原声页独立承接扫码，不依赖返回书稿。",
+      "w": 350,
+      "x": 1900,
+      "y": 964
+    },
+    "print-note": {
+      "fill": "orange",
+      "page": "print",
+      "text": "成书后填写地址。使用首本权益提交制作；制作、寄送、交付分别展示真实业务状态。此处为设计演示。",
+      "w": 350,
+      "x": 1900,
+      "y": 0
+    },
+    "print-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "print",
+      "text": "书籍制作与配送",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "project-note": {
+      "fill": "orange",
+      "page": "project",
+      "text": "我的礼物分送出、收到、参与。给自己的同一本书出现在送出与收到两类；购买者可邀请家人，加入时关系必填。成员可记录、编辑和制作。",
+      "w": 350,
+      "x": 1900,
+      "y": 0
+    },
+    "project-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "project",
+      "text": "项目管理与家庭协作",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "receive-note": {
+      "fill": "orange",
+      "page": "receive",
+      "text": "验证收礼手机号后明确领取，再由「进入项目」打开项目首页。录音统一从首页发起。",
+      "w": 350,
+      "x": 1900,
+      "y": 0
+    },
+    "receive-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "receive",
+      "text": "手机号验证与礼物领取",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "requirements-applied": {
+      "fill": "gray",
+      "page": "start",
+      "text": "已按确认需求更新：统一送礼入口，选“自己”付款后直入。关系必填；通用大纲独立于赠礼关系。红色便签保留原文，后续对话决定以需求文档为准。",
+      "w": 350,
+      "x": 1900,
+      "y": 550
+    },
+    "start-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "start",
+      "text": "首页与购买",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "story-note": {
+      "fill": "orange",
+      "page": "story",
+      "text": "自动整理后可入书，原声支持拖动进度条、暂停续播与重播；支持语音续录和次要的文字校对。示例故事与人物均为虚构。",
+      "w": 350,
+      "x": 1900,
+      "y": 0
+    },
+    "story-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "story",
+      "text": "故事管理与原声回听",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "voice-note": {
+      "fill": "orange",
+      "page": "voice",
+      "text": "开始讲述（无照片 / 有照片）→ 录音 → 保存。支持添加或移除照片；「换个问题」进入可选的「选择问题」页，选定后返回讲述。没有问题朗读功能。原型使用样例照片与模拟录音。",
+      "w": 350,
+      "x": 1900,
+      "y": 0
+    },
+    "voice-title": {
+      "kind": "title1",
+      "maxW": 1800,
+      "page": "voice",
+      "text": "语音记录与照片",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Sample.dc.html",
+    "Login.dc.html",
+    "NewGift.dc.html",
+    "SelfGift.dc.html",
+    "Checkout.dc.html",
+    "PaymentPending.dc.html",
+    "PaymentUnknown.dc.html",
+    "GiftReady.dc.html",
+    "GiftRecipient.dc.html",
+    "GiftShare.dc.html",
+    "GiftOpen.dc.html",
+    "GiftVerify.dc.html",
+    "GiftMismatch.dc.html",
+    "GiftAccept.dc.html",
+    "GiftInvalid.dc.html",
+    "GiftClaimed.dc.html",
+    "HomeEmpty.dc.html",
+    "HomeActive.dc.html",
+    "MyProjects.dc.html",
+    "SwitchProject.dc.html",
+    "InviteShare.dc.html",
+    "InviteJoin.dc.html",
+    "MyGiftsReceived.dc.html",
+    "MyGiftsParticipating.dc.html",
+    "FamilyQuestions.dc.html",
+    "FamilyQuestionsEmpty.dc.html",
+    "FamilyQuestionNew.dc.html",
+    "FamilyQuestionDetail.dc.html",
+    "FamilyQuestionAnswered.dc.html",
+    "RecordReady.dc.html",
+    "RecordReadyPhoto.dc.html",
+    "Recording.dc.html",
+    "RecordPaused.dc.html",
+    "Upload.dc.html",
+    "UploadFailed.dc.html",
+    "RecordBlocked.dc.html",
+    "Photos.dc.html",
+    "Stories.dc.html",
+    "Story.dc.html",
+    "StoryEdit.dc.html",
+    "StoryProcessing.dc.html",
+    "StoryFailed.dc.html",
+    "StoryUnassigned.dc.html",
+    "BookDirectory.dc.html",
+    "ChapterOutline.dc.html",
+    "QuestionDetail.dc.html",
+    "QuestionEdit.dc.html",
+    "ChapterEdit.dc.html",
+    "ChapterStories.dc.html",
+    "UnassignedStories.dc.html",
+    "AssignStory.dc.html",
+    "BookEmpty.dc.html",
+    "BookOverview.dc.html",
+    "BookCover.dc.html",
+    "BookReader.dc.html",
+    "PdfDocument.dc.html",
+    "OriginalAudio.dc.html",
+    "BookChanged.dc.html",
+    "BookGenerateFailed.dc.html",
+    "ReaderFailed.dc.html",
+    "BookAddress.dc.html",
+    "BookPrintConfirm.dc.html",
+    "BookProduction.dc.html",
+    "BookShipped.dc.html",
+    "BookDelivered.dc.html",
+    "BookCancelled.dc.html",
+    "PrintUnknown.dc.html",
+    "MyGuest.dc.html",
+    "MyAccount.dc.html",
+    "Terms.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "start",
+      "name": "01 · 首页与购买"
+    },
+    {
+      "id": "gift",
+      "name": "02 · 礼物设置与分享"
+    },
+    {
+      "id": "receive",
+      "name": "03 · 礼物领取"
+    },
+    {
+      "id": "project",
+      "name": "04 · 故事书与我的礼物"
+    },
+    {
+      "id": "family",
+      "name": "05 · 家人提问"
+    },
+    {
+      "id": "voice",
+      "name": "06 · 语音记录"
+    },
+    {
+      "id": "story",
+      "name": "07 · 故事与原声"
+    },
+    {
+      "id": "outline",
+      "name": "08 · 大纲目录与选题"
+    },
+    {
+      "id": "book",
+      "name": "09 · 书稿编辑与预览"
+    },
+    {
+      "id": "print",
+      "name": "10 · 制作与寄送"
+    },
+    {
+      "id": "account",
+      "name": "11 · 我的与条款"
+    }
+  ],
+  "title": "时光故事 / 现代语音 App"
+}

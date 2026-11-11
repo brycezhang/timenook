@@ -1,0 +1,36 @@
+{
+  "renderedArtboards": 72,
+  "renderFailures": [],
+  "checks": [
+    {
+      "name": "default 6 chapters and 60 questions",
+      "pass": true
+    },
+    {
+      "name": "self gift paid directly and same record in both categories",
+      "pass": true
+    },
+    {
+      "name": "no chapter answer saves as story then can assign chapter six",
+      "pass": true
+    },
+    {
+      "name": "unassigned does not block PDF and remains saved",
+      "pass": true
+    },
+    {
+      "name": "deleting chapter preserves story and family question",
+      "pass": true
+    },
+    {
+      "name": "moving answered question moves story and removing story clears question chapter",
+      "pass": true
+    },
+    {
+      "name": "printed book snapshot remains fixed after changes",
+      "pass": true
+    }
+  ],
+  "redNotes": 8,
+  "redNotesPreserved": true
+}

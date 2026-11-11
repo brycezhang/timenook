@@ -1,0 +1,3897 @@
+{
+  "scope": "Browser design prototype, 390x844 and 320x660 viewports",
+  "boards": 71,
+  "records": [
+    {
+      "file": "Main.dc.html",
+      "title": "01 所有人｜首页",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 581,
+          "content": 590
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "首页",
+        "语音记录制作时光故事书"
+      ],
+      "buttons": [
+        "看看样书",
+        "送出一份礼物",
+        "时光故事",
+        "我的"
+      ],
+      "text": "首页\n时光故事书\n看看样书\n语音记录\n制作时光故事书\n\n用声音记录，和家人一起成书。\n\n书籍效果示例\n只需要说\n不需要写\n\n自动整理成文\n\n照片与原声\n一起珍藏\n\n原声随时回听\n\n把人生故事\n做成实体书\n\n留给最爱的人\n\n时光故事 · 含首本实体书\n¥999\n送出一份礼物\n时光故事\n我的"
+    },
+    {
+      "file": "Main.dc.html",
+      "title": "01 所有人｜首页",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 397,
+          "content": 578
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "首页",
+        "语音记录制作时光故事书"
+      ],
+      "buttons": [
+        "看看样书",
+        "送出一份礼物",
+        "时光故事",
+        "我的"
+      ],
+      "text": "首页\n时光故事书\n看看样书\n语音记录\n制作时光故事书\n\n用声音记录，和家人一起成书。\n\n书籍效果示例\n只需要说\n不需要写\n\n自动整理成文\n\n照片与原声\n一起珍藏\n\n原声随时回听\n\n把人生故事\n做成实体书\n\n留给最爱的人\n\n时光故事 · 含首本实体书\n¥999\n送出一份礼物\n时光故事\n我的"
+    },
+    {
+      "file": "Sample.dc.html",
+      "title": "02 所有人｜样书预览",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 697
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "样书预览",
+        "记得那年夏天"
+      ],
+      "buttons": [
+        "返回",
+        "送出一份礼物"
+      ],
+      "text": "样书预览\n样书节选\n记得那年夏天\n\n小时候，最盼望的就是放暑假。院子里的树影很长，父亲常带着我们去河边，一走就是整个下午。\n\n送出一份礼物"
+    },
+    {
+      "file": "Sample.dc.html",
+      "title": "02 所有人｜样书预览",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 666
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "样书预览",
+        "记得那年夏天"
+      ],
+      "buttons": [
+        "返回",
+        "送出一份礼物"
+      ],
+      "text": "样书预览\n样书节选\n记得那年夏天\n\n小时候，最盼望的就是放暑假。院子里的树影很长，父亲常带着我们去河边，一走就是整个下午。\n\n送出一份礼物"
+    },
+    {
+      "file": "Login.dc.html",
+      "title": "03 未登录用户｜登录弹窗",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 581,
+          "content": 590
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "首页",
+        "语音记录制作人生故事书"
+      ],
+      "buttons": [
+        "看看样书",
+        "送出一份礼物",
+        "时光故事",
+        "我的",
+        "关闭",
+        "《使用条款与隐私说明》",
+        "微信手机号登录"
+      ],
+      "text": "首页\n人生故事书\n看看样书\n语音记录\n制作人生故事书\n\n用声音记录，和家人一起成书。\n\n书籍效果示例\n只需要说\n不需要写\n\n自动整理成文\n\n照片与原声\n一起珍藏\n\n原声随时回听\n\n把人生故事\n做成实体书\n\n留给最爱的人\n\n时光故事 · 含首本实体书\n¥999\n送出一份礼物\n时光故事\n我的\n微信手机号登录\n\n授权微信绑定的手机号，登录后继续。\n\n我已阅读并同意 《使用条款与隐私说明》\n微信手机号登录"
+    },
+    {
+      "file": "Login.dc.html",
+      "title": "03 未登录用户｜登录弹窗",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 397,
+          "content": 578
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "首页",
+        "语音记录制作人生故事书"
+      ],
+      "buttons": [
+        "看看样书",
+        "送出一份礼物",
+        "时光故事",
+        "我的",
+        "关闭",
+        "《使用条款与隐私说明》",
+        "微信手机号登录"
+      ],
+      "text": "首页\n人生故事书\n看看样书\n语音记录\n制作人生故事书\n\n用声音记录，和家人一起成书。\n\n书籍效果示例\n只需要说\n不需要写\n\n自动整理成文\n\n照片与原声\n一起珍藏\n\n原声随时回听\n\n把人生故事\n做成实体书\n\n留给最爱的人\n\n时光故事 · 含首本实体书\n¥999\n送出一份礼物\n时光故事\n我的\n微信手机号登录\n\n授权微信绑定的手机号，登录后继续。\n\n我已阅读并同意 《使用条款与隐私说明》\n微信手机号登录"
+    },
+    {
+      "file": "NewGift.dc.html",
+      "title": "04 购买者｜购买礼物 · 选择关系",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "购买礼物"
+      ],
+      "buttons": [
+        "返回",
+        "爸爸",
+        "妈妈",
+        "爷爷",
+        "奶奶",
+        "自己",
+        "自定义",
+        "下一步"
+      ],
+      "text": "购买礼物\n送给谁 必选\n爸爸\n妈妈\n爷爷\n奶奶\n自己\n自定义\n时光故事\n人生故事书\n含首本实体书\n书名\n\n付款后指定收礼手机号，成书后寄送。\n\n下一步"
+    },
+    {
+      "file": "NewGift.dc.html",
+      "title": "04 购买者｜购买礼物 · 选择关系",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "购买礼物"
+      ],
+      "buttons": [
+        "返回",
+        "爸爸",
+        "妈妈",
+        "爷爷",
+        "奶奶",
+        "自己",
+        "自定义",
+        "下一步"
+      ],
+      "text": "购买礼物\n送给谁 必选\n爸爸\n妈妈\n爷爷\n奶奶\n自己\n自定义\n时光故事\n人生故事书\n含首本实体书\n书名\n\n付款后指定收礼手机号，成书后寄送。\n\n下一步"
+    },
+    {
+      "file": "SelfGift.dc.html",
+      "title": "05 购买者｜购买礼物 · 送给自己",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "购买礼物"
+      ],
+      "buttons": [
+        "返回",
+        "爸爸",
+        "妈妈",
+        "爷爷",
+        "奶奶",
+        "自己",
+        "自定义",
+        "下一步"
+      ],
+      "text": "购买礼物\n送给谁 必选\n爸爸\n妈妈\n爷爷\n奶奶\n自己\n自定义\n时光故事\n我的故事\n含首本实体书\n书名\n\n付款后直接进入自己的故事书。\n\n下一步"
+    },
+    {
+      "file": "SelfGift.dc.html",
+      "title": "05 购买者｜购买礼物 · 送给自己",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "购买礼物"
+      ],
+      "buttons": [
+        "返回",
+        "爸爸",
+        "妈妈",
+        "爷爷",
+        "奶奶",
+        "自己",
+        "自定义",
+        "下一步"
+      ],
+      "text": "购买礼物\n送给谁 必选\n爸爸\n妈妈\n爷爷\n奶奶\n自己\n自定义\n时光故事\n我的故事\n含首本实体书\n书名\n\n付款后直接进入自己的故事书。\n\n下一步"
+    },
+    {
+      "file": "Checkout.dc.html",
+      "title": "06 购买者｜确认购买",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "确认购买"
+      ],
+      "buttons": [
+        "返回",
+        "微信支付 ¥999"
+      ],
+      "text": "确认购买\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n送给爸爸\n时光故事 · 1 本实体书\n语音记录与故事整理\n照片、文字与原声\n完成书稿后寄送\n应付金额\n¥999.00\n微信支付 ¥999"
+    },
+    {
+      "file": "Checkout.dc.html",
+      "title": "06 购买者｜确认购买",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 537
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "确认购买"
+      ],
+      "buttons": [
+        "返回",
+        "微信支付 ¥999"
+      ],
+      "text": "确认购买\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n送给爸爸\n时光故事 · 1 本实体书\n语音记录与故事整理\n照片、文字与原声\n完成书稿后寄送\n应付金额\n¥999.00\n微信支付 ¥999"
+    },
+    {
+      "file": "PaymentPending.dc.html",
+      "title": "07 购买者｜待付款",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 629,
+          "content": 629
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "待付款",
+        "订单待付款"
+      ],
+      "buttons": [
+        "返回",
+        "继续付款",
+        "返回我的礼物"
+      ],
+      "text": "待付款\n订单待付款\n给妈妈的人生书\n待付款\n¥999.00\n继续付款\n返回我的礼物"
+    },
+    {
+      "file": "PaymentPending.dc.html",
+      "title": "07 购买者｜待付款",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 445,
+          "content": 445
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "待付款",
+        "订单待付款"
+      ],
+      "buttons": [
+        "返回",
+        "继续付款",
+        "返回我的礼物"
+      ],
+      "text": "待付款\n订单待付款\n给妈妈的人生书\n待付款\n¥999.00\n继续付款\n返回我的礼物"
+    },
+    {
+      "file": "PaymentUnknown.dc.html",
+      "title": "08 购买者｜确认付款结果",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 637,
+          "content": 637
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "确认付款结果",
+        "正在确认付款结果"
+      ],
+      "buttons": [
+        "返回",
+        "查询付款结果",
+        "返回我的礼物"
+      ],
+      "text": "确认付款结果\n正在确认付款结果\n\n已付款？请先查询结果。\n\n给妈妈的人生书\n付款结果确认中\n查询付款结果\n返回我的礼物"
+    },
+    {
+      "file": "PaymentUnknown.dc.html",
+      "title": "08 购买者｜确认付款结果",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 453,
+          "content": 453
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "确认付款结果",
+        "正在确认付款结果"
+      ],
+      "buttons": [
+        "返回",
+        "查询付款结果",
+        "返回我的礼物"
+      ],
+      "text": "确认付款结果\n正在确认付款结果\n\n已付款？请先查询结果。\n\n给妈妈的人生书\n付款结果确认中\n查询付款结果\n返回我的礼物"
+    },
+    {
+      "file": "GiftReady.dc.html",
+      "title": "01 送礼人｜购买成功",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "购买成功",
+        "购买成功"
+      ],
+      "buttons": [
+        "返回",
+        "填写收礼人"
+      ],
+      "text": "购买成功\n购买成功\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n已付款\n\n含首本实体书\n\n填写收礼人"
+    },
+    {
+      "file": "GiftReady.dc.html",
+      "title": "01 送礼人｜购买成功",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "购买成功",
+        "购买成功"
+      ],
+      "buttons": [
+        "返回",
+        "填写收礼人"
+      ],
+      "text": "购买成功\n购买成功\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n已付款\n\n含首本实体书\n\n填写收礼人"
+    },
+    {
+      "file": "GiftRecipient.dc.html",
+      "title": "02 送礼人｜指定收礼人",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "指定收礼人"
+      ],
+      "buttons": [
+        "返回",
+        "生成礼物卡"
+      ],
+      "text": "指定收礼人\n电子礼物卡\n收礼人称呼\n微信绑定手机号\n\n仅指定手机号可领取；领取前可更正。\n\n生成礼物卡"
+    },
+    {
+      "file": "GiftRecipient.dc.html",
+      "title": "02 送礼人｜指定收礼人",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "指定收礼人"
+      ],
+      "buttons": [
+        "返回",
+        "生成礼物卡"
+      ],
+      "text": "指定收礼人\n电子礼物卡\n收礼人称呼\n微信绑定手机号\n\n仅指定手机号可领取；领取前可更正。\n\n生成礼物卡"
+    },
+    {
+      "file": "GiftShare.dc.html",
+      "title": "03 送礼人｜发送礼物卡",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 637,
+          "content": 637
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "发送礼物卡",
+        "想听听你的故事。"
+      ],
+      "buttons": [
+        "返回",
+        "更正手机号并重新生成",
+        "发送给微信好友",
+        "进入这本书"
+      ],
+      "text": "发送礼物卡\n时光故事 / A GIFT FOR YOU\n想听听\n你的故事。\n送给 爸爸 的人生书\n待领取\n指定手机号 138****0628\n更正手机号并重新生成\n发送给微信好友\n进入这本书"
+    },
+    {
+      "file": "GiftShare.dc.html",
+      "title": "03 送礼人｜发送礼物卡",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 453,
+          "content": 508
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "发送礼物卡",
+        "想听听你的故事。"
+      ],
+      "buttons": [
+        "返回",
+        "更正手机号并重新生成",
+        "发送给微信好友",
+        "进入这本书"
+      ],
+      "text": "发送礼物卡\n时光故事 / A GIFT FOR YOU\n想听听\n你的故事。\n送给 爸爸 的人生书\n待领取\n指定手机号 138****0628\n更正手机号并重新生成\n发送给微信好友\n进入这本书"
+    },
+    {
+      "file": "GiftOpen.dc.html",
+      "title": "01 收礼人｜查看礼物",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "查看礼物"
+      ],
+      "buttons": [
+        "返回",
+        "验证收礼手机号"
+      ],
+      "text": "查看礼物\n爸爸的故事\n那些年，那些我们\n时光故事\n收礼人：爸爸\n收礼手机号\n138****0628\n\n成书后寄送实体书。\n\n验证收礼手机号"
+    },
+    {
+      "file": "GiftOpen.dc.html",
+      "title": "01 收礼人｜查看礼物",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "查看礼物"
+      ],
+      "buttons": [
+        "返回",
+        "验证收礼手机号"
+      ],
+      "text": "查看礼物\n爸爸的故事\n那些年，那些我们\n时光故事\n收礼人：爸爸\n收礼手机号\n138****0628\n\n成书后寄送实体书。\n\n验证收礼手机号"
+    },
+    {
+      "file": "GiftVerify.dc.html",
+      "title": "02 收礼人｜验证收礼手机号",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "验证收礼手机号"
+      ],
+      "buttons": [
+        "返回",
+        "《使用条款与隐私说明》",
+        "授权微信手机号"
+      ],
+      "text": "验证收礼手机号\n\n请使用收礼人微信绑定的手机号。\n\n收礼手机号\n138****0628\n我已阅读并同意《使用条款与隐私说明》\n授权微信手机号"
+    },
+    {
+      "file": "GiftVerify.dc.html",
+      "title": "02 收礼人｜验证收礼手机号",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "验证收礼手机号"
+      ],
+      "buttons": [
+        "返回",
+        "《使用条款与隐私说明》",
+        "授权微信手机号"
+      ],
+      "text": "验证收礼手机号\n\n请使用收礼人微信绑定的手机号。\n\n收礼手机号\n138****0628\n我已阅读并同意《使用条款与隐私说明》\n授权微信手机号"
+    },
+    {
+      "file": "GiftMismatch.dc.html",
+      "title": "03 收礼人｜手机号不匹配",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "手机号不匹配",
+        "手机号不匹配"
+      ],
+      "buttons": [
+        "返回",
+        "更换微信手机号"
+      ],
+      "text": "手机号不匹配\n手机号不匹配\n收礼手机号\n138****0628\n当前手机号\n137****0916\n\n换用收礼手机号，或请送礼人更正。\n\n更换微信手机号"
+    },
+    {
+      "file": "GiftMismatch.dc.html",
+      "title": "03 收礼人｜手机号不匹配",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "手机号不匹配",
+        "手机号不匹配"
+      ],
+      "buttons": [
+        "返回",
+        "更换微信手机号"
+      ],
+      "text": "手机号不匹配\n手机号不匹配\n收礼手机号\n138****0628\n当前手机号\n137****0916\n\n换用收礼手机号，或请送礼人更正。\n\n更换微信手机号"
+    },
+    {
+      "file": "GiftAccept.dc.html",
+      "title": "04 收礼人｜确认领取礼物",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "确认领取礼物"
+      ],
+      "buttons": [
+        "返回",
+        "确认领取"
+      ],
+      "text": "确认领取礼物\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n手机号已验证\n确认领取"
+    },
+    {
+      "file": "GiftAccept.dc.html",
+      "title": "04 收礼人｜确认领取礼物",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "确认领取礼物"
+      ],
+      "buttons": [
+        "返回",
+        "确认领取"
+      ],
+      "text": "确认领取礼物\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n手机号已验证\n确认领取"
+    },
+    {
+      "file": "GiftInvalid.dc.html",
+      "title": "05 收礼人｜礼物卡已失效",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "礼物卡已失效",
+        "礼物卡已失效"
+      ],
+      "buttons": [
+        "返回",
+        "返回首页"
+      ],
+      "text": "礼物卡已失效\n礼物卡已失效\n\n领取信息已更改，请联系送礼人获取新卡片。\n\n返回首页"
+    },
+    {
+      "file": "GiftInvalid.dc.html",
+      "title": "05 收礼人｜礼物卡已失效",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "礼物卡已失效",
+        "礼物卡已失效"
+      ],
+      "buttons": [
+        "返回",
+        "返回首页"
+      ],
+      "text": "礼物卡已失效\n礼物卡已失效\n\n领取信息已更改，请联系送礼人获取新卡片。\n\n返回首页"
+    },
+    {
+      "file": "GiftClaimed.dc.html",
+      "title": "06 收礼人｜礼物已领取",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "礼物已领取",
+        "礼物已领取"
+      ],
+      "buttons": [
+        "返回",
+        "进入项目"
+      ],
+      "text": "礼物已领取\n礼物已领取\n爸爸的故事\n进入项目"
+    },
+    {
+      "file": "GiftClaimed.dc.html",
+      "title": "06 收礼人｜礼物已领取",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "礼物已领取",
+        "礼物已领取"
+      ],
+      "buttons": [
+        "返回",
+        "进入项目"
+      ],
+      "text": "礼物已领取\n礼物已领取\n爸爸的故事\n进入项目"
+    },
+    {
+      "file": "HomeEmpty.dc.html",
+      "title": "01 项目成员｜故事书首页 · 暂无故事",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 706,
+          "content": 738
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "故事书首页",
+        "我希望以后还能去做什么？"
+      ],
+      "buttons": [
+        "切换故事书",
+        "查看书稿",
+        "查看故事",
+        "查看照片",
+        "家人提问0 个问题待回答",
+        "换一个",
+        "开始讲述",
+        "从大纲目录选题",
+        "邀请家人",
+        "时光故事",
+        "我的"
+      ],
+      "text": "故事书首页\n与家人一起记录\n切换故事书\n爸爸的故事\n小陈送给爸爸的时光故事书\n时光故事\n0\n个故事\n0\n张照片\n0\n分钟原声\n家人提问\n0 个问题待回答\n大纲 · 现在的我与想留下的话\n换一个\n我希望以后还能去做什么？\n开始讲述\n从大纲目录选题\n邀请家人\n时光故事\n我的"
+    },
+    {
+      "file": "HomeEmpty.dc.html",
+      "title": "01 项目成员｜故事书首页 · 暂无故事",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 522,
+          "content": 739
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "故事书首页",
+        "我希望以后还能去做什么？"
+      ],
+      "buttons": [
+        "切换故事书",
+        "查看书稿",
+        "查看故事",
+        "查看照片",
+        "家人提问0 个问题待回答",
+        "换一个",
+        "开始讲述",
+        "从大纲目录选题",
+        "邀请家人",
+        "时光故事",
+        "我的"
+      ],
+      "text": "故事书首页\n与家人一起记录\n切换故事书\n爸爸的故事\n小陈送给爸爸的时光故事书\n时光故事\n0\n个故事\n0\n张照片\n0\n分钟原声\n家人提问\n0 个问题待回答\n大纲 · 现在的我与想留下的话\n换一个\n我希望以后还能去做什么？\n开始讲述\n从大纲目录选题\n邀请家人\n时光故事\n我的"
+    },
+    {
+      "file": "HomeActive.dc.html",
+      "title": "02 项目成员｜故事书首页 · 已有故事",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 706,
+          "content": 771
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "故事书首页",
+        "有什么一直想做、还没有去做的事情？"
+      ],
+      "buttons": [
+        "切换故事书",
+        "查看书稿",
+        "查看故事",
+        "查看照片",
+        "家人提问2 个问题待回答",
+        "换一个",
+        "开始讲述",
+        "从大纲目录选题",
+        "邀请家人",
+        "时光故事",
+        "我的"
+      ],
+      "text": "故事书首页\n与家人一起记录\n切换故事书\n爸爸的故事\n小陈送给爸爸的时光故事书\n时光故事\n4\n个故事\n3\n张照片\n7\n分钟原声\n家人提问\n2 个问题待回答\n儿子 · 小陈的提问\n换一个\n有什么一直想做、还没有去做的事情？\n开始讲述\n从大纲目录选题\n邀请家人\n时光故事\n我的"
+    },
+    {
+      "file": "HomeActive.dc.html",
+      "title": "02 项目成员｜故事书首页 · 已有故事",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 522,
+          "content": 739
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "故事书首页",
+        "有什么一直想做、还没有去做的事情？"
+      ],
+      "buttons": [
+        "切换故事书",
+        "查看书稿",
+        "查看故事",
+        "查看照片",
+        "家人提问2 个问题待回答",
+        "换一个",
+        "开始讲述",
+        "从大纲目录选题",
+        "邀请家人",
+        "时光故事",
+        "我的"
+      ],
+      "text": "故事书首页\n与家人一起记录\n切换故事书\n爸爸的故事\n小陈送给爸爸的时光故事书\n时光故事\n4\n个故事\n3\n张照片\n7\n分钟原声\n家人提问\n2 个问题待回答\n儿子 · 小陈的提问\n换一个\n有什么一直想做、还没有去做的事情？\n开始讲述\n从大纲目录选题\n邀请家人\n时光故事\n我的"
+    },
+    {
+      "file": "MyProjects.dc.html",
+      "title": "03 已登录用户｜我的礼物 · 送出",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 619,
+          "content": 619
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "我的礼物"
+      ],
+      "buttons": [
+        "返回",
+        "我送出的",
+        "我收到的",
+        "我参与的",
+        "爸爸的故事小陈送给爸爸的时光故事书已送出 · 4 个故事",
+        "我的故事小陈送给自己的时光故事书送给自己 · 4 个故事",
+        "给妈妈的人生书小陈送给妈妈的时光故事书待付款 · ¥999",
+        "送出一份礼物",
+        "时光故事",
+        "我的"
+      ],
+      "text": "我的礼物\n我送出的\n我收到的\n我参与的\n爸爸的故事\n小陈送给爸爸的时光故事书\n已送出 · 4 个故事\n我的故事\n小陈送给自己的时光故事书\n送给自己 · 4 个故事\n给妈妈的人生书\n小陈送给妈妈的时光故事书\n待付款 · ¥999\n送出一份礼物\n时光故事\n我的"
+    },
+    {
+      "file": "MyProjects.dc.html",
+      "title": "03 已登录用户｜我的礼物 · 送出",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 435,
+          "content": 493
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "我的礼物"
+      ],
+      "buttons": [
+        "返回",
+        "我送出的",
+        "我收到的",
+        "我参与的",
+        "爸爸的故事小陈送给爸爸的时光故事书已送出 · 4 个故事",
+        "我的故事小陈送给自己的时光故事书送给自己 · 4 个故事",
+        "给妈妈的人生书小陈送给妈妈的时光故事书待付款 · ¥999",
+        "送出一份礼物",
+        "时光故事",
+        "我的"
+      ],
+      "text": "我的礼物\n我送出的\n我收到的\n我参与的\n爸爸的故事\n小陈送给爸爸的时光故事书\n已送出 · 4 个故事\n我的故事\n小陈送给自己的时光故事书\n送给自己 · 4 个故事\n给妈妈的人生书\n小陈送给妈妈的时光故事书\n待付款 · ¥999\n送出一份礼物\n时光故事\n我的"
+    },
+    {
+      "file": "SwitchProject.dc.html",
+      "title": "04 项目成员｜切换故事书",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 776,
+          "content": 776
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "切换故事书"
+      ],
+      "buttons": [
+        "返回",
+        "我送出的",
+        "我收到的",
+        "我参与的",
+        "爸爸的故事小陈送给爸爸的时光故事书已送出 · 4 个故事",
+        "我的故事小陈送给自己的时光故事书送给自己 · 4 个故事",
+        "给妈妈的人生书小陈送给妈妈的时光故事书待付款 · ¥999"
+      ],
+      "text": "切换故事书\n我送出的\n我收到的\n我参与的\n爸爸的故事\n小陈送给爸爸的时光故事书\n已送出 · 4 个故事\n我的故事\n小陈送给自己的时光故事书\n送给自己 · 4 个故事\n给妈妈的人生书\n小陈送给妈妈的时光故事书\n待付款 · ¥999"
+    },
+    {
+      "file": "SwitchProject.dc.html",
+      "title": "04 项目成员｜切换故事书",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 592,
+          "content": 592
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "切换故事书"
+      ],
+      "buttons": [
+        "返回",
+        "我送出的",
+        "我收到的",
+        "我参与的",
+        "爸爸的故事小陈送给爸爸的时光故事书已送出 · 4 个故事",
+        "我的故事小陈送给自己的时光故事书送给自己 · 4 个故事",
+        "给妈妈的人生书小陈送给妈妈的时光故事书待付款 · ¥999"
+      ],
+      "text": "切换故事书\n我送出的\n我收到的\n我参与的\n爸爸的故事\n小陈送给爸爸的时光故事书\n已送出 · 4 个故事\n我的故事\n小陈送给自己的时光故事书\n送给自己 · 4 个故事\n给妈妈的人生书\n小陈送给妈妈的时光故事书\n待付款 · ¥999"
+    },
+    {
+      "file": "InviteShare.dc.html",
+      "title": "05 购买者｜邀请家人",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "邀请家人"
+      ],
+      "buttons": [
+        "返回",
+        "邀请微信好友"
+      ],
+      "text": "邀请家人\n\n邀请家人加入「爸爸的故事」。\n\n都能讲述和补充\n也可编辑全部故事\n一起完成这本书\n可预览、制作和寄送\n邀请微信好友"
+    },
+    {
+      "file": "InviteShare.dc.html",
+      "title": "05 购买者｜邀请家人",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "邀请家人"
+      ],
+      "buttons": [
+        "返回",
+        "邀请微信好友"
+      ],
+      "text": "邀请家人\n\n邀请家人加入「爸爸的故事」。\n\n都能讲述和补充\n也可编辑全部故事\n一起完成这本书\n可预览、制作和寄送\n邀请微信好友"
+    },
+    {
+      "file": "InviteJoin.dc.html",
+      "title": "06 受邀家人｜加入项目",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "加入项目"
+      ],
+      "buttons": [
+        "返回",
+        "儿子",
+        "女儿",
+        "孙子",
+        "孙女",
+        "伴侣",
+        "自定义",
+        "阅读使用条款",
+        "登录并接受邀请"
+      ],
+      "text": "加入项目\n\n加入「爸爸的故事」\n\n加入后可记录、编辑和制作，内容仅成员可见。\n\n你是主讲人的谁 必选\n儿子\n女儿\n孙子\n孙女\n伴侣\n自定义\n我已阅读并同意《使用条款与隐私说明》\n阅读使用条款\n登录并接受邀请"
+    },
+    {
+      "file": "InviteJoin.dc.html",
+      "title": "06 受邀家人｜加入项目",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 577
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "加入项目"
+      ],
+      "buttons": [
+        "返回",
+        "儿子",
+        "女儿",
+        "孙子",
+        "孙女",
+        "伴侣",
+        "自定义",
+        "阅读使用条款",
+        "登录并接受邀请"
+      ],
+      "text": "加入项目\n\n加入「爸爸的故事」\n\n加入后可记录、编辑和制作，内容仅成员可见。\n\n你是主讲人的谁 必选\n儿子\n女儿\n孙子\n孙女\n伴侣\n自定义\n我已阅读并同意《使用条款与隐私说明》\n阅读使用条款\n登录并接受邀请"
+    },
+    {
+      "file": "MyGiftsReceived.dc.html",
+      "title": "08 已登录用户｜我的礼物 · 收到",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 619,
+          "content": 619
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "我的礼物"
+      ],
+      "buttons": [
+        "返回",
+        "我送出的",
+        "我收到的",
+        "我参与的",
+        "我的人生故事小雨送给爷爷的时光故事书我是主讲人 · 4 个故事",
+        "我的故事小陈送给自己的时光故事书送给自己 · 4 个故事",
+        "送出一份礼物",
+        "时光故事",
+        "我的"
+      ],
+      "text": "我的礼物\n我送出的\n我收到的\n我参与的\n我的人生故事\n小雨送给爷爷的时光故事书\n我是主讲人 · 4 个故事\n我的故事\n小陈送给自己的时光故事书\n送给自己 · 4 个故事\n送出一份礼物\n时光故事\n我的"
+    },
+    {
+      "file": "MyGiftsReceived.dc.html",
+      "title": "08 已登录用户｜我的礼物 · 收到",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 435,
+          "content": 435
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "我的礼物"
+      ],
+      "buttons": [
+        "返回",
+        "我送出的",
+        "我收到的",
+        "我参与的",
+        "我的人生故事小雨送给爷爷的时光故事书我是主讲人 · 4 个故事",
+        "我的故事小陈送给自己的时光故事书送给自己 · 4 个故事",
+        "送出一份礼物",
+        "时光故事",
+        "我的"
+      ],
+      "text": "我的礼物\n我送出的\n我收到的\n我参与的\n我的人生故事\n小雨送给爷爷的时光故事书\n我是主讲人 · 4 个故事\n我的故事\n小陈送给自己的时光故事书\n送给自己 · 4 个故事\n送出一份礼物\n时光故事\n我的"
+    },
+    {
+      "file": "MyGiftsParticipating.dc.html",
+      "title": "09 已登录用户｜我的礼物 · 参与",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 619,
+          "content": 619
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "我的礼物"
+      ],
+      "buttons": [
+        "返回",
+        "我送出的",
+        "我收到的",
+        "我参与的",
+        "妈妈的故事小林送给妈妈的时光故事书参与记录 · 4 个故事",
+        "送出一份礼物",
+        "时光故事",
+        "我的"
+      ],
+      "text": "我的礼物\n我送出的\n我收到的\n我参与的\n妈妈的故事\n小林送给妈妈的时光故事书\n参与记录 · 4 个故事\n送出一份礼物\n时光故事\n我的"
+    },
+    {
+      "file": "MyGiftsParticipating.dc.html",
+      "title": "09 已登录用户｜我的礼物 · 参与",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 435,
+          "content": 435
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "我的礼物"
+      ],
+      "buttons": [
+        "返回",
+        "我送出的",
+        "我收到的",
+        "我参与的",
+        "妈妈的故事小林送给妈妈的时光故事书参与记录 · 4 个故事",
+        "送出一份礼物",
+        "时光故事",
+        "我的"
+      ],
+      "text": "我的礼物\n我送出的\n我收到的\n我参与的\n妈妈的故事\n小林送给妈妈的时光故事书\n参与记录 · 4 个故事\n送出一份礼物\n时光故事\n我的"
+    },
+    {
+      "file": "FamilyQuestions.dc.html",
+      "title": "01 项目成员｜家人提问 · 待回答",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "家人提问"
+      ],
+      "buttons": [
+        "返回",
+        "待回答",
+        "已回答",
+        "已跳过",
+        "女儿 · 小雨的提问小时候最舍不得丢掉的一件东西是什么？我的童年",
+        "儿子 · 小陈的提问有什么一直想做、还没有去做的事情？未选章节",
+        "提出问题"
+      ],
+      "text": "家人提问\n待回答\n已回答\n已跳过\n女儿 · 小雨的提问\n小时候最舍不得丢掉的一件东西是什么？\n我的童年\n儿子 · 小陈的提问\n有什么一直想做、还没有去做的事情？\n未选章节\n提出问题"
+    },
+    {
+      "file": "FamilyQuestions.dc.html",
+      "title": "01 项目成员｜家人提问 · 待回答",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "家人提问"
+      ],
+      "buttons": [
+        "返回",
+        "待回答",
+        "已回答",
+        "已跳过",
+        "女儿 · 小雨的提问小时候最舍不得丢掉的一件东西是什么？我的童年",
+        "儿子 · 小陈的提问有什么一直想做、还没有去做的事情？未选章节",
+        "提出问题"
+      ],
+      "text": "家人提问\n待回答\n已回答\n已跳过\n女儿 · 小雨的提问\n小时候最舍不得丢掉的一件东西是什么？\n我的童年\n儿子 · 小陈的提问\n有什么一直想做、还没有去做的事情？\n未选章节\n提出问题"
+    },
+    {
+      "file": "FamilyQuestionsEmpty.dc.html",
+      "title": "02 项目成员｜家人提问 · 暂无问题",
+      "width": 390,
+      "height": 843,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 688,
+          "content": 688
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "家人提问"
+      ],
+      "buttons": [
+        "返回",
+        "待回答",
+        "已回答",
+        "已跳过",
+        "提出问题"
+      ],
+      "text": "家人提问\n待回答\n已回答\n已跳过\n暂无待回答的问题\n提出问题"
+    },
+    {
+      "file": "FamilyQuestionsEmpty.dc.html",
+      "title": "02 项目成员｜家人提问 · 暂无问题",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "家人提问"
+      ],
+      "buttons": [
+        "返回",
+        "待回答",
+        "已回答",
+        "已跳过",
+        "提出问题"
+      ],
+      "text": "家人提问\n待回答\n已回答\n已跳过\n暂无待回答的问题\n提出问题"
+    },
+    {
+      "file": "FamilyQuestionNew.dc.html",
+      "title": "03 项目成员｜提出问题 · 仅文字",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "提出问题"
+      ],
+      "buttons": [
+        "返回",
+        "儿子",
+        "女儿",
+        "孙子",
+        "孙女",
+        "伴侣",
+        "自定义",
+        "发布问题"
+      ],
+      "text": "提出问题\n爸爸的故事\n你是主讲人的谁 必选\n儿子\n女儿\n孙子\n孙女\n伴侣\n自定义\n问题\n所属章节 选填\n不选章节\n发布问题"
+    },
+    {
+      "file": "FamilyQuestionNew.dc.html",
+      "title": "03 项目成员｜提出问题 · 仅文字",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 530
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "提出问题"
+      ],
+      "buttons": [
+        "返回",
+        "儿子",
+        "女儿",
+        "孙子",
+        "孙女",
+        "伴侣",
+        "自定义",
+        "发布问题"
+      ],
+      "text": "提出问题\n爸爸的故事\n你是主讲人的谁 必选\n儿子\n女儿\n孙子\n孙女\n伴侣\n自定义\n问题\n所属章节 选填\n不选章节\n发布问题"
+    },
+    {
+      "file": "FamilyQuestionDetail.dc.html",
+      "title": "04 主讲人及协助家人｜家人问题 · 待回答",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "问题详情",
+        "有什么一直想做、还没有去做的事情？"
+      ],
+      "buttons": [
+        "返回",
+        "编辑问题",
+        "稍后回答",
+        "跳过问题",
+        "移除问题",
+        "开始回答"
+      ],
+      "text": "问题详情\n待回答\n编辑问题\n\n儿子 · 小陈的提问\n\n有什么一直想做、还没有去做的事情？\n未选章节\n稍后回答\n跳过问题\n移除问题\n开始回答"
+    },
+    {
+      "file": "FamilyQuestionDetail.dc.html",
+      "title": "04 主讲人及协助家人｜家人问题 · 待回答",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "问题详情",
+        "有什么一直想做、还没有去做的事情？"
+      ],
+      "buttons": [
+        "返回",
+        "编辑问题",
+        "稍后回答",
+        "跳过问题",
+        "移除问题",
+        "开始回答"
+      ],
+      "text": "问题详情\n待回答\n编辑问题\n\n儿子 · 小陈的提问\n\n有什么一直想做、还没有去做的事情？\n未选章节\n稍后回答\n跳过问题\n移除问题\n开始回答"
+    },
+    {
+      "file": "FamilyQuestionAnswered.dc.html",
+      "title": "05 项目成员｜家人问题 · 已回答",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 776,
+          "content": 776
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "问题详情",
+        "第一次看见大海的时候，心情是什么样的？"
+      ],
+      "buttons": [
+        "返回",
+        "编辑问题",
+        "查看回答故事",
+        "移除问题"
+      ],
+      "text": "问题详情\n已回答\n编辑问题\n\n女儿 · 小雨的提问\n\n第一次看见大海的时候，心情是什么样的？\n人生转折与重要经历\n回答故事\n第一次看见大海\n移除问题"
+    },
+    {
+      "file": "FamilyQuestionAnswered.dc.html",
+      "title": "05 项目成员｜家人问题 · 已回答",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 592,
+          "content": 592
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "问题详情",
+        "第一次看见大海的时候，心情是什么样的？"
+      ],
+      "buttons": [
+        "返回",
+        "编辑问题",
+        "查看回答故事",
+        "移除问题"
+      ],
+      "text": "问题详情\n已回答\n编辑问题\n\n女儿 · 小雨的提问\n\n第一次看见大海的时候，心情是什么样的？\n人生转折与重要经历\n回答故事\n第一次看见大海\n移除问题"
+    },
+    {
+      "file": "RecordReady.dc.html",
+      "title": "01 项目成员｜开始讲述 · 无照片",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 665,
+          "content": 665
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "开始讲述",
+        "小时候最舍不得丢掉的一件东西是什么？"
+      ],
+      "buttons": [
+        "返回",
+        "添加照片",
+        "换个问题",
+        "开始录音"
+      ],
+      "text": "开始讲述\n女儿 · 小雨的提问\n小时候最舍不得丢掉的一件东西是什么？\n添加照片\n换个问题\n\n每段 10 分钟自动保存，可继续录。\n\n开始录音"
+    },
+    {
+      "file": "RecordReady.dc.html",
+      "title": "01 项目成员｜开始讲述 · 无照片",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 481,
+          "content": 481
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "开始讲述",
+        "小时候最舍不得丢掉的一件东西是什么？"
+      ],
+      "buttons": [
+        "返回",
+        "添加照片",
+        "换个问题",
+        "开始录音"
+      ],
+      "text": "开始讲述\n女儿 · 小雨的提问\n小时候最舍不得丢掉的一件东西是什么？\n添加照片\n换个问题\n\n每段 10 分钟自动保存，可继续录。\n\n开始录音"
+    },
+    {
+      "file": "RecordReadyPhoto.dc.html",
+      "title": "02 项目成员｜开始讲述 · 有照片",
+      "width": 390,
+      "height": 843,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 664,
+          "content": 664
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "开始讲述",
+        "有什么一直想做、还没有去做的事情？"
+      ],
+      "buttons": [
+        "返回",
+        "添加照片",
+        "移除照片：和家人散步的那一天",
+        "换个问题",
+        "开始录音"
+      ],
+      "text": "开始讲述\n儿子 · 小陈的提问\n有什么一直想做、还没有去做的事情？\n照片 · 1 张\n添加照片\n换个问题\n\n每段 10 分钟自动保存，可继续录。\n\n开始录音"
+    },
+    {
+      "file": "RecordReadyPhoto.dc.html",
+      "title": "02 项目成员｜开始讲述 · 有照片",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 481,
+          "content": 481
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "开始讲述",
+        "有什么一直想做、还没有去做的事情？"
+      ],
+      "buttons": [
+        "返回",
+        "添加照片",
+        "移除照片：和家人散步的那一天",
+        "换个问题",
+        "开始录音"
+      ],
+      "text": "开始讲述\n儿子 · 小陈的提问\n有什么一直想做、还没有去做的事情？\n照片 · 1 张\n添加照片\n换个问题\n\n每段 10 分钟自动保存，可继续录。\n\n开始录音"
+    },
+    {
+      "file": "Recording.dc.html",
+      "title": "03 项目成员｜正在录音",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 660,
+          "content": 660
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "正在录音",
+        "有什么一直想做、还没有去做的事情？"
+      ],
+      "buttons": [
+        "返回",
+        "添加照片",
+        "移除照片：和家人散步的那一天",
+        "暂停",
+        "结束并保存"
+      ],
+      "text": "正在录音\n儿子 · 小陈的提问\n有什么一直想做、还没有去做的事情？\n照片 · 1 张\n添加照片\n01:33\n正在录音\n暂停\n结束并保存\n\n每段 10 分钟自动保存，可继续录。"
+    },
+    {
+      "file": "Recording.dc.html",
+      "title": "03 项目成员｜正在录音",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 476,
+          "content": 476
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "正在录音",
+        "有什么一直想做、还没有去做的事情？"
+      ],
+      "buttons": [
+        "返回",
+        "添加照片",
+        "移除照片：和家人散步的那一天",
+        "暂停",
+        "结束并保存"
+      ],
+      "text": "正在录音\n儿子 · 小陈的提问\n有什么一直想做、还没有去做的事情？\n照片 · 1 张\n添加照片\n01:33\n正在录音\n暂停\n结束并保存\n\n每段 10 分钟自动保存，可继续录。"
+    },
+    {
+      "file": "RecordPaused.dc.html",
+      "title": "04 项目成员｜录音已暂停",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "录音已暂停",
+        "小时候最舍不得丢掉的一件东西是什么？"
+      ],
+      "buttons": [
+        "返回",
+        "添加照片",
+        "移除照片：和家人散步的那一天",
+        "继续讲述",
+        "结束并保存"
+      ],
+      "text": "录音已暂停\n女儿 · 小雨的提问\n小时候最舍不得丢掉的一件东西是什么？\n照片 · 1 张\n添加照片\n01:32\n已暂停\n继续讲述\n结束并保存"
+    },
+    {
+      "file": "RecordPaused.dc.html",
+      "title": "04 项目成员｜录音已暂停",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "录音已暂停",
+        "小时候最舍不得丢掉的一件东西是什么？"
+      ],
+      "buttons": [
+        "返回",
+        "添加照片",
+        "移除照片：和家人散步的那一天",
+        "继续讲述",
+        "结束并保存"
+      ],
+      "text": "录音已暂停\n女儿 · 小雨的提问\n小时候最舍不得丢掉的一件东西是什么？\n照片 · 1 张\n添加照片\n01:32\n已暂停\n继续讲述\n结束并保存"
+    },
+    {
+      "file": "Upload.dc.html",
+      "title": "05 项目成员｜保存录音",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 776,
+          "content": 776
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "保存录音",
+        "正在保存录音"
+      ],
+      "buttons": [
+        "返回"
+      ],
+      "text": "保存录音\n正在保存录音\n\n请保持页面打开。\n\n刚刚的讲述\n01:32\n\n保存中 35%"
+    },
+    {
+      "file": "Upload.dc.html",
+      "title": "05 项目成员｜保存录音",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 592,
+          "content": 592
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "保存录音",
+        "正在保存录音"
+      ],
+      "buttons": [
+        "返回"
+      ],
+      "text": "保存录音\n正在保存录音\n\n请保持页面打开。\n\n刚刚的讲述\n01:32\n\n保存中 35%"
+    },
+    {
+      "file": "UploadFailed.dc.html",
+      "title": "06 项目成员｜录音上传失败",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 637,
+          "content": 637
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "录音上传失败",
+        "录音上传失败"
+      ],
+      "buttons": [
+        "返回",
+        "重新上传",
+        "稍后再试"
+      ],
+      "text": "录音上传失败\n录音上传失败\n\n录音保留在当前设备，可重试上传。\n\n刚刚的讲述 · 01:32\n重新上传\n稍后再试"
+    },
+    {
+      "file": "UploadFailed.dc.html",
+      "title": "06 项目成员｜录音上传失败",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 453,
+          "content": 453
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "录音上传失败",
+        "录音上传失败"
+      ],
+      "buttons": [
+        "返回",
+        "重新上传",
+        "稍后再试"
+      ],
+      "text": "录音上传失败\n录音上传失败\n\n录音保留在当前设备，可重试上传。\n\n刚刚的讲述 · 01:32\n重新上传\n稍后再试"
+    },
+    {
+      "file": "RecordBlocked.dc.html",
+      "title": "07 项目成员｜麦克风权限",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 637,
+          "content": 637
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "麦克风权限",
+        "开启麦克风权限"
+      ],
+      "buttons": [
+        "返回",
+        "前往设置",
+        "返回这本书"
+      ],
+      "text": "麦克风权限\n开启麦克风权限\n\n在微信的小程序设置中开启麦克风。\n\n前往设置\n返回这本书"
+    },
+    {
+      "file": "RecordBlocked.dc.html",
+      "title": "07 项目成员｜麦克风权限",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 453,
+          "content": 453
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "麦克风权限",
+        "开启麦克风权限"
+      ],
+      "buttons": [
+        "返回",
+        "前往设置",
+        "返回这本书"
+      ],
+      "text": "麦克风权限\n开启麦克风权限\n\n在微信的小程序设置中开启麦克风。\n\n前往设置\n返回这本书"
+    },
+    {
+      "file": "Photos.dc.html",
+      "title": "08 项目成员｜项目照片",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 776,
+          "content": 776
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "项目照片"
+      ],
+      "buttons": [
+        "返回",
+        "一杯茶的下午",
+        "和家人散步",
+        "那一次旅行",
+        "添加照片"
+      ],
+      "text": "项目照片\n一杯茶的下午\n和家人散步\n那一次旅行\n添加照片"
+    },
+    {
+      "file": "Photos.dc.html",
+      "title": "08 项目成员｜项目照片",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 592,
+          "content": 592
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "项目照片"
+      ],
+      "buttons": [
+        "返回",
+        "一杯茶的下午",
+        "和家人散步",
+        "那一次旅行",
+        "添加照片"
+      ],
+      "text": "项目照片\n一杯茶的下午\n和家人散步\n那一次旅行\n添加照片"
+    },
+    {
+      "file": "Stories.dc.html",
+      "title": "01 项目成员｜故事列表",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 1568
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "故事列表"
+      ],
+      "buttons": [
+        "返回",
+        "11 月 8 日 · 我的童年父亲的那辆自行车小时候，家里最宝贝的东西，是父亲的那辆自行车。每到周末，他总会把车擦得干干净净，拍拍后座，喊我出门。02:48 · 原声",
+        "11 月 6 日 · 人生转折与重要经历第一次看见大海第一次去海边，是和家人一起。还没走到沙滩，就已经听见了海浪声，远处的蓝色一直延伸到天边。01:36 · 原声",
+        "11 月 7 日 · 求学与成长放学后的那条小路小时候，放学后总要和同学沿着那条小路慢慢走。经过杂货店时，我们会停下来看看橱窗里的新玩具。01:20 · 原声",
+        "11 月 5 日 · 未编入书稿妈妈的拿手菜每次回家，妈妈都会做她最拿手的那道菜。还没走到厨房，就能闻到熟悉的香味。01:12 · 原声",
+        "再讲一个故事"
+      ],
+      "text": "故事列表\n\n4 个故事\n\n11 月 8 日 · 我的童年\n父亲的那辆自行车\n小时候，家里最宝贝的东西，是父亲的那辆自行车。每到周末，他总会把车擦得干干净净，拍拍后座，喊我出门。\n02:48\n· 原声\n11 月 6 日 · 人生转折与重要经历\n第一次看见大海\n第一次去海边，是和家人一起。还没走到沙滩，就已经听见了海浪声，远处的蓝色一直延伸到天边。\n01:36\n· 原声\n11 月 7 日 · 求学与成长\n放学后的那条小路\n小时候，放学后总要和同学沿着那条小路慢慢走。经过杂货店时，我们会停下来看看橱窗里的新玩具。\n01:20\n· 原声\n11 月 5 日 · 未编入书稿\n妈妈的拿手菜\n每次回家，妈妈都会做她最拿手的那道菜。还没走到厨房，就能闻到熟悉的香味。\n01:12\n· 原声\n再讲一个故事"
+    },
+    {
+      "file": "Stories.dc.html",
+      "title": "01 项目成员｜故事列表",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 1580
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "故事列表"
+      ],
+      "buttons": [
+        "返回",
+        "11 月 8 日 · 我的童年父亲的那辆自行车小时候，家里最宝贝的东西，是父亲的那辆自行车。每到周末，他总会把车擦得干干净净，拍拍后座，喊我出门。02:48 · 原声",
+        "11 月 6 日 · 人生转折与重要经历第一次看见大海第一次去海边，是和家人一起。还没走到沙滩，就已经听见了海浪声，远处的蓝色一直延伸到天边。01:36 · 原声",
+        "11 月 7 日 · 求学与成长放学后的那条小路小时候，放学后总要和同学沿着那条小路慢慢走。经过杂货店时，我们会停下来看看橱窗里的新玩具。01:20 · 原声",
+        "11 月 5 日 · 未编入书稿妈妈的拿手菜每次回家，妈妈都会做她最拿手的那道菜。还没走到厨房，就能闻到熟悉的香味。01:12 · 原声",
+        "再讲一个故事"
+      ],
+      "text": "故事列表\n\n4 个故事\n\n11 月 8 日 · 我的童年\n父亲的那辆自行车\n小时候，家里最宝贝的东西，是父亲的那辆自行车。每到周末，他总会把车擦得干干净净，拍拍后座，喊我出门。\n02:48\n· 原声\n11 月 6 日 · 人生转折与重要经历\n第一次看见大海\n第一次去海边，是和家人一起。还没走到沙滩，就已经听见了海浪声，远处的蓝色一直延伸到天边。\n01:36\n· 原声\n11 月 7 日 · 求学与成长\n放学后的那条小路\n小时候，放学后总要和同学沿着那条小路慢慢走。经过杂货店时，我们会停下来看看橱窗里的新玩具。\n01:20\n· 原声\n11 月 5 日 · 未编入书稿\n妈妈的拿手菜\n每次回家，妈妈都会做她最拿手的那道菜。还没走到厨房，就能闻到熟悉的香味。\n01:12\n· 原声\n再讲一个故事"
+    },
+    {
+      "file": "Story.dc.html",
+      "title": "02 项目成员｜故事详情",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 962
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "故事详情",
+        "父亲的那辆自行车"
+      ],
+      "buttons": [
+        "返回",
+        "章节：我的童年",
+        "编辑文字",
+        "播放原声",
+        "添加照片",
+        "继续讲述"
+      ],
+      "text": "故事详情\n章节：我的童年\n编辑文字\n父亲的那辆自行车\n\n11 月 8 日 · 02:48 讲述\n\n00:00\n02:48\n\n小时候，家里最宝贝的东西，是父亲的那辆自行车。每到周末，他总会把车擦得干干净净，拍拍后座，喊我出门。\n\n我坐在车后面，攥着他的衣角。路边的树一棵棵往后退，风吹过来的时候，什么烦恼都没有了。\n\n后来自己也学会了骑车，走了更远的路。可最常想起的，还是那个坐在父亲身后的下午。\n\n一杯茶的下午\n添加照片\n继续讲述"
+    },
+    {
+      "file": "Story.dc.html",
+      "title": "02 项目成员｜故事详情",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 987
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "故事详情",
+        "父亲的那辆自行车"
+      ],
+      "buttons": [
+        "返回",
+        "章节：我的童年",
+        "编辑文字",
+        "播放原声",
+        "添加照片",
+        "继续讲述"
+      ],
+      "text": "故事详情\n章节：我的童年\n编辑文字\n父亲的那辆自行车\n\n11 月 8 日 · 02:48 讲述\n\n00:00\n02:48\n\n小时候，家里最宝贝的东西，是父亲的那辆自行车。每到周末，他总会把车擦得干干净净，拍拍后座，喊我出门。\n\n我坐在车后面，攥着他的衣角。路边的树一棵棵往后退，风吹过来的时候，什么烦恼都没有了。\n\n后来自己也学会了骑车，走了更远的路。可最常想起的，还是那个坐在父亲身后的下午。\n\n一杯茶的下午\n添加照片\n继续讲述"
+    },
+    {
+      "file": "StoryEdit.dc.html",
+      "title": "03 项目成员｜编辑故事",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "编辑故事"
+      ],
+      "buttons": [
+        "返回",
+        "保存修改"
+      ],
+      "text": "编辑故事\n故事标题\n故事正文\n\n不影响原始录音。\n\n保存修改"
+    },
+    {
+      "file": "StoryEdit.dc.html",
+      "title": "03 项目成员｜编辑故事",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 567
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "编辑故事"
+      ],
+      "buttons": [
+        "返回",
+        "保存修改"
+      ],
+      "text": "编辑故事\n故事标题\n故事正文\n\n不影响原始录音。\n\n保存修改"
+    },
+    {
+      "file": "StoryProcessing.dc.html",
+      "title": "04 项目成员｜整理故事",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "整理故事",
+        "正在整理故事"
+      ],
+      "buttons": [
+        "返回",
+        "播放原声",
+        "回到这本书"
+      ],
+      "text": "整理故事\n正在整理故事\n\n录音已保存。\n\n00:00\n01:32\n回到这本书"
+    },
+    {
+      "file": "StoryProcessing.dc.html",
+      "title": "04 项目成员｜整理故事",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 578
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "整理故事",
+        "正在整理故事"
+      ],
+      "buttons": [
+        "返回",
+        "播放原声",
+        "回到这本书"
+      ],
+      "text": "整理故事\n正在整理故事\n\n录音已保存。\n\n00:00\n01:32\n回到这本书"
+    },
+    {
+      "file": "StoryFailed.dc.html",
+      "title": "05 项目成员｜故事整理失败",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 637,
+          "content": 637
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "故事整理失败",
+        "故事整理失败"
+      ],
+      "buttons": [
+        "返回",
+        "播放原声",
+        "重新整理",
+        "回到这本书"
+      ],
+      "text": "故事整理失败\n故事整理失败\n\n录音已保存，可重试整理。\n\n00:00\n01:32\n重新整理\n回到这本书"
+    },
+    {
+      "file": "StoryFailed.dc.html",
+      "title": "05 项目成员｜故事整理失败",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 453,
+          "content": 453
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "故事整理失败",
+        "故事整理失败"
+      ],
+      "buttons": [
+        "返回",
+        "播放原声",
+        "重新整理",
+        "回到这本书"
+      ],
+      "text": "故事整理失败\n故事整理失败\n\n录音已保存，可重试整理。\n\n00:00\n01:32\n重新整理\n回到这本书"
+    },
+    {
+      "file": "StoryUnassigned.dc.html",
+      "title": "06 项目成员｜故事详情 · 未归章",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 845
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "故事详情",
+        "妈妈的拿手菜"
+      ],
+      "buttons": [
+        "返回",
+        "章节：未归章",
+        "编辑文字",
+        "播放原声",
+        "添加照片",
+        "继续讲述"
+      ],
+      "text": "故事详情\n章节：未归章\n编辑文字\n妈妈的拿手菜\n\n11 月 5 日 · 01:12 讲述\n\n00:00\n01:12\n\n每次回家，妈妈都会做她最拿手的那道菜。还没走到厨房，就能闻到熟悉的香味。\n\n饭桌上聊的都是小事，今天买了什么，邻居家的孩子长高了多少。这样的日常，我想好好留下来。\n\n和家人散步的那一天\n添加照片\n继续讲述"
+    },
+    {
+      "file": "StoryUnassigned.dc.html",
+      "title": "06 项目成员｜故事详情 · 未归章",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 836
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "故事详情",
+        "妈妈的拿手菜"
+      ],
+      "buttons": [
+        "返回",
+        "章节：未归章",
+        "编辑文字",
+        "播放原声",
+        "添加照片",
+        "继续讲述"
+      ],
+      "text": "故事详情\n章节：未归章\n编辑文字\n妈妈的拿手菜\n\n11 月 5 日 · 01:12 讲述\n\n00:00\n01:12\n\n每次回家，妈妈都会做她最拿手的那道菜。还没走到厨房，就能闻到熟悉的香味。\n\n饭桌上聊的都是小事，今天买了什么，邻居家的孩子长高了多少。这样的日常，我想好好留下来。\n\n和家人散步的那一天\n添加照片\n继续讲述"
+    },
+    {
+      "file": "BookDirectory.dc.html",
+      "title": "01 项目成员｜大纲目录 · 六章",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 637,
+          "content": 832
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "大纲目录"
+      ],
+      "buttons": [
+        "返回",
+        "新增章节",
+        "1 篇故事未归章",
+        "01我的童年10 个大纲问题 · 1 篇故事",
+        "拖动调整章节顺序；上下方向键可移动",
+        "02求学与成长10 个大纲问题 · 1 篇故事",
+        "拖动调整章节顺序；上下方向键可移动",
+        "03初入社会10 个大纲问题 · 0 篇故事",
+        "拖动调整章节顺序；上下方向键可移动",
+        "04亲密关系与家庭10 个大纲问题 · 0 篇故事",
+        "拖动调整章节顺序；上下方向键可移动",
+        "05人生转折与重要经历10 个大纲问题 · 1 篇故事",
+        "拖动调整章节顺序；上下方向键可移动",
+        "06现在的我与想留下的话10 个大纲问题 · 0 篇故事",
+        "拖动调整章节顺序；上下方向键可移动",
+        "查看书稿",
+        "自由讲述"
+      ],
+      "text": "大纲目录\n\n拖动右侧调整章节顺序\n\n6 章 · 3 篇故事\n新增章节\n1 篇故事未归章\n01\n我的童年\n10 个大纲问题 · 1 篇故事\n拖动\n02\n求学与成长\n10 个大纲问题 · 1 篇故事\n拖动\n03\n初入社会\n10 个大纲问题 · 0 篇故事\n拖动\n04\n亲密关系与家庭\n10 个大纲问题 · 0 篇故事\n拖动\n05\n人生转折与重要经历\n10 个大纲问题 · 1 篇故事\n拖动\n06\n现在的我与想留下的话\n10 个大纲问题 · 0 篇故事\n拖动\n查看书稿\n自由讲述"
+    },
+    {
+      "file": "BookDirectory.dc.html",
+      "title": "01 项目成员｜大纲目录 · 六章",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 453,
+          "content": 823
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "大纲目录"
+      ],
+      "buttons": [
+        "返回",
+        "新增章节",
+        "1 篇故事未归章",
+        "01我的童年10 个大纲问题 · 1 篇故事",
+        "拖动调整章节顺序；上下方向键可移动",
+        "02求学与成长10 个大纲问题 · 1 篇故事",
+        "拖动调整章节顺序；上下方向键可移动",
+        "03初入社会10 个大纲问题 · 0 篇故事",
+        "拖动调整章节顺序；上下方向键可移动",
+        "04亲密关系与家庭10 个大纲问题 · 0 篇故事",
+        "拖动调整章节顺序；上下方向键可移动",
+        "05人生转折与重要经历10 个大纲问题 · 1 篇故事",
+        "拖动调整章节顺序；上下方向键可移动",
+        "06现在的我与想留下的话10 个大纲问题 · 0 篇故事",
+        "拖动调整章节顺序；上下方向键可移动",
+        "查看书稿",
+        "自由讲述"
+      ],
+      "text": "大纲目录\n\n拖动右侧调整章节顺序\n\n6 章 · 3 篇故事\n新增章节\n1 篇故事未归章\n01\n我的童年\n10 个大纲问题 · 1 篇故事\n拖动\n02\n求学与成长\n10 个大纲问题 · 1 篇故事\n拖动\n03\n初入社会\n10 个大纲问题 · 0 篇故事\n拖动\n04\n亲密关系与家庭\n10 个大纲问题 · 0 篇故事\n拖动\n05\n人生转折与重要经历\n10 个大纲问题 · 1 篇故事\n拖动\n06\n现在的我与想留下的话\n10 个大纲问题 · 0 篇故事\n拖动\n查看书稿\n自由讲述"
+    },
+    {
+      "file": "ChapterOutline.dc.html",
+      "title": "02 项目成员｜章节内容 · 问题与故事",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 1514
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "章节内容",
+        "我的童年"
+      ],
+      "buttons": [
+        "返回",
+        "编辑章节",
+        "问题 11",
+        "故事 1",
+        "大纲问题待回答我出生在什么地方，家人怎样讲起我的出生？",
+        "大纲问题待回答我小时候住的家是什么样的？",
+        "大纲问题待回答童年里照顾我最多的人是谁？",
+        "大纲问题待回答我小时候最喜欢和谁一起玩？",
+        "大纲问题待回答我最难忘的一种童年游戏是什么？",
+        "大纲问题待回答哪一道食物最能让我想起小时候？",
+        "大纲问题待回答我小时候是怎样过年或过节的？",
+        "大纲问题待回答童年里让我特别开心的一件事是什么？",
+        "大纲问题待回答我小时候闯过什么至今记得的祸？",
+        "大纲问题待回答回头看，我的童年留给我什么？",
+        "女儿 · 小雨的提问待回答小时候最舍不得丢掉的一件东西是什么？",
+        "向主讲人提问",
+        "新增大纲问题"
+      ],
+      "text": "章节内容\n第\n01\n章\n编辑章节\n我的童年\n问题 11\n故事 1\n大纲问题\n待回答\n我出生在什么地方，家人怎样讲起我的出生？\n大纲问题\n待回答\n我小时候住的家是什么样的？\n大纲问题\n待回答\n童年里照顾我最多的人是谁？\n大纲问题\n待回答\n我小时候最喜欢和谁一起玩？\n大纲问题\n待回答\n我最难忘的一种童年游戏是什么？\n大纲问题\n待回答\n哪一道食物最能让我想起小时候？\n大纲问题\n待回答\n我小时候是怎样过年或过节的？\n大纲问题\n待回答\n童年里让我特别开心的一件事是什么？\n大纲问题\n待回答\n我小时候闯过什么至今记得的祸？\n大纲问题\n待回答\n回头看，我的童年留给我什么？\n女儿 · 小雨的提问\n待回答\n小时候最舍不得丢掉的一件东西是什么？\n向主讲人提问\n新增大纲问题"
+    },
+    {
+      "file": "ChapterOutline.dc.html",
+      "title": "02 项目成员｜章节内容 · 问题与故事",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 1622
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "章节内容",
+        "我的童年"
+      ],
+      "buttons": [
+        "返回",
+        "编辑章节",
+        "问题 11",
+        "故事 1",
+        "大纲问题待回答我出生在什么地方，家人怎样讲起我的出生？",
+        "大纲问题待回答我小时候住的家是什么样的？",
+        "大纲问题待回答童年里照顾我最多的人是谁？",
+        "大纲问题待回答我小时候最喜欢和谁一起玩？",
+        "大纲问题待回答我最难忘的一种童年游戏是什么？",
+        "大纲问题待回答哪一道食物最能让我想起小时候？",
+        "大纲问题待回答我小时候是怎样过年或过节的？",
+        "大纲问题待回答童年里让我特别开心的一件事是什么？",
+        "大纲问题待回答我小时候闯过什么至今记得的祸？",
+        "大纲问题待回答回头看，我的童年留给我什么？",
+        "女儿 · 小雨的提问待回答小时候最舍不得丢掉的一件东西是什么？",
+        "向主讲人提问",
+        "新增大纲问题"
+      ],
+      "text": "章节内容\n第\n01\n章\n编辑章节\n我的童年\n问题 11\n故事 1\n大纲问题\n待回答\n我出生在什么地方，家人怎样讲起我的出生？\n大纲问题\n待回答\n我小时候住的家是什么样的？\n大纲问题\n待回答\n童年里照顾我最多的人是谁？\n大纲问题\n待回答\n我小时候最喜欢和谁一起玩？\n大纲问题\n待回答\n我最难忘的一种童年游戏是什么？\n大纲问题\n待回答\n哪一道食物最能让我想起小时候？\n大纲问题\n待回答\n我小时候是怎样过年或过节的？\n大纲问题\n待回答\n童年里让我特别开心的一件事是什么？\n大纲问题\n待回答\n我小时候闯过什么至今记得的祸？\n大纲问题\n待回答\n回头看，我的童年留给我什么？\n女儿 · 小雨的提问\n待回答\n小时候最舍不得丢掉的一件东西是什么？\n向主讲人提问\n新增大纲问题"
+    },
+    {
+      "file": "QuestionDetail.dc.html",
+      "title": "03 主讲人及协助家人｜大纲问题 · 语音回答",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "问题详情",
+        "我出生在什么地方，家人怎样讲起我的出生？"
+      ],
+      "buttons": [
+        "返回",
+        "编辑问题",
+        "稍后回答",
+        "跳过问题",
+        "移除问题",
+        "开始回答"
+      ],
+      "text": "问题详情\n待回答\n编辑问题\n\n大纲问题\n\n我出生在什么地方，家人怎样讲起我的出生？\n我的童年\n稍后回答\n跳过问题\n移除问题\n开始回答"
+    },
+    {
+      "file": "QuestionDetail.dc.html",
+      "title": "03 主讲人及协助家人｜大纲问题 · 语音回答",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "问题详情",
+        "我出生在什么地方，家人怎样讲起我的出生？"
+      ],
+      "buttons": [
+        "返回",
+        "编辑问题",
+        "稍后回答",
+        "跳过问题",
+        "移除问题",
+        "开始回答"
+      ],
+      "text": "问题详情\n待回答\n编辑问题\n\n大纲问题\n\n我出生在什么地方，家人怎样讲起我的出生？\n我的童年\n稍后回答\n跳过问题\n移除问题\n开始回答"
+    },
+    {
+      "file": "QuestionEdit.dc.html",
+      "title": "04 项目成员｜编辑大纲问题",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "编辑问题"
+      ],
+      "buttons": [
+        "返回",
+        "保存问题"
+      ],
+      "text": "编辑问题\n问题\n所属章节 必选\n请选择章节\n保存问题"
+    },
+    {
+      "file": "QuestionEdit.dc.html",
+      "title": "04 项目成员｜编辑大纲问题",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "编辑问题"
+      ],
+      "buttons": [
+        "返回",
+        "保存问题"
+      ],
+      "text": "编辑问题\n问题\n所属章节 必选\n请选择章节\n保存问题"
+    },
+    {
+      "file": "ChapterEdit.dc.html",
+      "title": "05 项目成员｜编辑章节",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "编辑章节"
+      ],
+      "buttons": [
+        "返回",
+        "本章故事 · 1 篇",
+        "移除章节",
+        "保存章节"
+      ],
+      "text": "编辑章节\n章节名称\n本章故事 · 1 篇\n01\n父亲的那辆自行车\n移除章节\n保存章节"
+    },
+    {
+      "file": "ChapterEdit.dc.html",
+      "title": "05 项目成员｜编辑章节",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "编辑章节"
+      ],
+      "buttons": [
+        "返回",
+        "本章故事 · 1 篇",
+        "移除章节",
+        "保存章节"
+      ],
+      "text": "编辑章节\n章节名称\n本章故事 · 1 篇\n01\n父亲的那辆自行车\n移除章节\n保存章节"
+    },
+    {
+      "file": "ChapterStories.dc.html",
+      "title": "06 项目成员｜本章故事",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "本章故事"
+      ],
+      "buttons": [
+        "返回",
+        "移出",
+        "拖动调整故事顺序；上下方向键可移动",
+        "移到本章",
+        "移到本章",
+        "加入本章",
+        "完成"
+      ],
+      "text": "本章故事\n\n第 01 章 · 我的童年\n\n已放入本章 · 1 篇\n拖动右侧调整故事顺序\n01\n父亲的那辆自行车\n移出\n拖动\n可加入的故事\n第一次看见大海\n已在「人生转折与重要经历」\n移到本章\n放学后的那条小路\n已在「求学与成长」\n移到本章\n妈妈的拿手菜\n尚未编入书稿\n加入本章\n完成"
+    },
+    {
+      "file": "ChapterStories.dc.html",
+      "title": "06 项目成员｜本章故事",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 526
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "本章故事"
+      ],
+      "buttons": [
+        "返回",
+        "移出",
+        "拖动调整故事顺序；上下方向键可移动",
+        "移到本章",
+        "移到本章",
+        "加入本章",
+        "完成"
+      ],
+      "text": "本章故事\n\n第 01 章 · 我的童年\n\n已放入本章 · 1 篇\n拖动右侧调整故事顺序\n01\n父亲的那辆自行车\n移出\n拖动\n可加入的故事\n第一次看见大海\n已在「人生转折与重要经历」\n移到本章\n放学后的那条小路\n已在「求学与成长」\n移到本章\n妈妈的拿手菜\n尚未编入书稿\n加入本章\n完成"
+    },
+    {
+      "file": "UnassignedStories.dc.html",
+      "title": "07 项目成员｜未归章故事",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 776,
+          "content": 776
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "未归章故事"
+      ],
+      "buttons": [
+        "返回",
+        "妈妈的拿手菜",
+        "选择章节",
+        "暂不入书"
+      ],
+      "text": "未归章故事\n\n随时可加入任一章节。\n\n妈妈的拿手菜\n选择章节\n暂不入书"
+    },
+    {
+      "file": "UnassignedStories.dc.html",
+      "title": "07 项目成员｜未归章故事",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 592,
+          "content": 592
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "未归章故事"
+      ],
+      "buttons": [
+        "返回",
+        "妈妈的拿手菜",
+        "选择章节",
+        "暂不入书"
+      ],
+      "text": "未归章故事\n\n随时可加入任一章节。\n\n妈妈的拿手菜\n选择章节\n暂不入书"
+    },
+    {
+      "file": "AssignStory.dc.html",
+      "title": "08 项目成员｜选择故事所属章节",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "选择章节"
+      ],
+      "buttons": [
+        "返回",
+        "01我的童年",
+        "02求学与成长",
+        "03初入社会",
+        "04亲密关系与家庭",
+        "05人生转折与重要经历",
+        "06现在的我与想留下的话",
+        "确定章节"
+      ],
+      "text": "选择章节\n\n妈妈的拿手菜\n\n01\n我的童年\n02\n求学与成长\n03\n初入社会\n04\n亲密关系与家庭\n05\n人生转折与重要经历\n06\n现在的我与想留下的话\n确定章节"
+    },
+    {
+      "file": "AssignStory.dc.html",
+      "title": "08 项目成员｜选择故事所属章节",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "选择章节"
+      ],
+      "buttons": [
+        "返回",
+        "01我的童年",
+        "02求学与成长",
+        "03初入社会",
+        "04亲密关系与家庭",
+        "05人生转折与重要经历",
+        "06现在的我与想留下的话",
+        "确定章节"
+      ],
+      "text": "选择章节\n\n妈妈的拿手菜\n\n01\n我的童年\n02\n求学与成长\n03\n初入社会\n04\n亲密关系与家庭\n05\n人生转折与重要经历\n06\n现在的我与想留下的话\n确定章节"
+    },
+    {
+      "file": "BookEmpty.dc.html",
+      "title": "01 项目成员｜书稿概览 · 暂无书稿",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "书稿概览",
+        "暂无书稿"
+      ],
+      "buttons": [
+        "返回",
+        "查看大纲目录",
+        "开始讲述"
+      ],
+      "text": "书稿概览\n暂无书稿\n\n录下故事后即可成书。\n\n爸爸的故事\n那些年，那些我们\n时光故事\n查看大纲目录\n开始讲述"
+    },
+    {
+      "file": "BookEmpty.dc.html",
+      "title": "01 项目成员｜书稿概览 · 暂无书稿",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "书稿概览",
+        "暂无书稿"
+      ],
+      "buttons": [
+        "返回",
+        "查看大纲目录",
+        "开始讲述"
+      ],
+      "text": "书稿概览\n暂无书稿\n\n录下故事后即可成书。\n\n爸爸的故事\n那些年，那些我们\n时光故事\n查看大纲目录\n开始讲述"
+    },
+    {
+      "file": "BookOverview.dc.html",
+      "title": "02 项目成员｜书稿概览",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 629,
+          "content": 629
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "书稿概览"
+      ],
+      "buttons": [
+        "返回",
+        "1 篇故事未归章",
+        "编辑封面",
+        "章节管理",
+        "查看 PDF 书稿",
+        "去制作"
+      ],
+      "text": "书稿概览\n1 篇故事未归章\nPDF 已生成 · V1\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n那些年，那些我们\n编辑封面\n3\n个故事\n3\n张照片\n8\n页书稿\n章节管理\n查看 PDF 书稿\n去制作"
+    },
+    {
+      "file": "BookOverview.dc.html",
+      "title": "02 项目成员｜书稿概览",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 445,
+          "content": 550
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "书稿概览"
+      ],
+      "buttons": [
+        "返回",
+        "1 篇故事未归章",
+        "编辑封面",
+        "章节管理",
+        "查看 PDF 书稿",
+        "去制作"
+      ],
+      "text": "书稿概览\n1 篇故事未归章\nPDF 已生成 · V1\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n那些年，那些我们\n编辑封面\n3\n个故事\n3\n张照片\n8\n页书稿\n章节管理\n查看 PDF 书稿\n去制作"
+    },
+    {
+      "file": "BookCover.dc.html",
+      "title": "03 项目成员｜编辑封面",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 701
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "编辑封面"
+      ],
+      "buttons": [
+        "返回",
+        "更换照片",
+        "保存封面"
+      ],
+      "text": "编辑封面\n爸爸的故事\n那些年，那些我们\n时光故事\n书名\n副标题\n封面照片\n更换照片\n保存封面"
+    },
+    {
+      "file": "BookCover.dc.html",
+      "title": "03 项目成员｜编辑封面",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 665
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "编辑封面"
+      ],
+      "buttons": [
+        "返回",
+        "更换照片",
+        "保存封面"
+      ],
+      "text": "编辑封面\n爸爸的故事\n那些年，那些我们\n时光故事\n书名\n副标题\n封面照片\n更换照片\n保存封面"
+    },
+    {
+      "file": "BookReader.dc.html",
+      "title": "04 项目成员｜PDF 书稿预览",
+      "width": 390,
+      "height": 843,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 688,
+          "content": 688
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "书稿预览"
+      ],
+      "buttons": [
+        "返回",
+        "打开完整 PDF",
+        "去制作"
+      ],
+      "text": "书稿预览\n\n第 1 版 · 共 8 页\n\n爸爸的故事.pdf\n时光故事\n爸爸的故事\n那些年，那些我们\n打开完整 PDF\n\n使用微信文档查看器打开\n\n去制作"
+    },
+    {
+      "file": "BookReader.dc.html",
+      "title": "04 项目成员｜PDF 书稿预览",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 508
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "书稿预览"
+      ],
+      "buttons": [
+        "返回",
+        "打开完整 PDF",
+        "去制作"
+      ],
+      "text": "书稿预览\n\n第 1 版 · 共 8 页\n\n爸爸的故事.pdf\n时光故事\n爸爸的故事\n那些年，那些我们\n打开完整 PDF\n\n使用微信文档查看器打开\n\n去制作"
+    },
+    {
+      "file": "PdfDocument.dc.html",
+      "title": "05 项目成员｜PDF 内容 · 微信查看器",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 784,
+          "content": 3998
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "爸爸的故事",
+        "目录",
+        "父亲的那辆自行车",
+        "父亲的那辆自行车",
+        "放学后的那条小路",
+        "放学后的那条小路",
+        "第一次看见大海",
+        "第一次看见大海"
+      ],
+      "buttons": [
+        "关闭 PDF"
+      ],
+      "text": "爸爸的故事.pdf\nPDF\n时光故事\n爸爸的故事\n\n那些年，那些我们\n\n1\n目录\n我的童年 · 父亲的那辆自行车\n3\n求学与成长 · 放学后的那条小路\n5\n人生转折与重要经历 · 第一次看见大海\n7\n2\n我的童年\n父亲的那辆自行车\n扫码回听原声\n访问需登录并获授权\n\n小时候，家里最宝贝的东西，是父亲的那辆自行车。每到周末，他总会把车擦得干干净净，拍拍后座，喊我出门。\n\n我坐在车后面，攥着他的衣角。路边的树一棵棵往后退，风吹过来的时候，什么烦恼都没有了。\n\n后来自己也学会了骑车，走了更远的路。可最常想起的，还是那个坐在父亲身后的下午。\n\n3\n父亲的那辆自行车\n\n一杯茶的下午\n\n4\n求学与成长\n放学后的那条小路\n扫码回听原声\n访问需登录并获授权\n\n小时候，放学后总要和同学沿着那条小路慢慢走。经过杂货店时，我们会停下来看看橱窗里的新玩具。\n\n后来那条路修宽了，店也换了。可一想起那段路，还是能记起书包晃动的声音。\n\n5\n放学后的那条小路\n\n原声入口见本篇故事页。\n\n6\n人生转折与重要经历\n第一次看见大海\n扫码回听原声\n访问需登录并获授权\n\n第一次去海边，是和家人一起。还没走到沙滩，就已经听见了海浪声，远处的蓝色一直延伸到天边。\n\n那天我们没有赶着去哪里。沿着海边慢慢走，聊了很多以前的小事。我想，最值得记住的不是风景，是身旁的人。\n\n7\n第一次看见大海\n\n第一次看见大海\n\n8"
+    },
+    {
+      "file": "PdfDocument.dc.html",
+      "title": "05 项目成员｜PDF 内容 · 微信查看器",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 600,
+          "content": 4006
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "爸爸的故事",
+        "目录",
+        "父亲的那辆自行车",
+        "父亲的那辆自行车",
+        "放学后的那条小路",
+        "放学后的那条小路",
+        "第一次看见大海",
+        "第一次看见大海"
+      ],
+      "buttons": [
+        "关闭 PDF"
+      ],
+      "text": "爸爸的故事.pdf\nPDF\n时光故事\n爸爸的故事\n\n那些年，那些我们\n\n1\n目录\n我的童年 · 父亲的那辆自行车\n3\n求学与成长 · 放学后的那条小路\n5\n人生转折与重要经历 · 第一次看见大海\n7\n2\n我的童年\n父亲的那辆自行车\n扫码回听原声\n访问需登录并获授权\n\n小时候，家里最宝贝的东西，是父亲的那辆自行车。每到周末，他总会把车擦得干干净净，拍拍后座，喊我出门。\n\n我坐在车后面，攥着他的衣角。路边的树一棵棵往后退，风吹过来的时候，什么烦恼都没有了。\n\n后来自己也学会了骑车，走了更远的路。可最常想起的，还是那个坐在父亲身后的下午。\n\n3\n父亲的那辆自行车\n\n一杯茶的下午\n\n4\n求学与成长\n放学后的那条小路\n扫码回听原声\n访问需登录并获授权\n\n小时候，放学后总要和同学沿着那条小路慢慢走。经过杂货店时，我们会停下来看看橱窗里的新玩具。\n\n后来那条路修宽了，店也换了。可一想起那段路，还是能记起书包晃动的声音。\n\n5\n放学后的那条小路\n\n原声入口见本篇故事页。\n\n6\n人生转折与重要经历\n第一次看见大海\n扫码回听原声\n访问需登录并获授权\n\n第一次去海边，是和家人一起。还没走到沙滩，就已经听见了海浪声，远处的蓝色一直延伸到天边。\n\n那天我们没有赶着去哪里。沿着海边慢慢走，聊了很多以前的小事。我想，最值得记住的不是风景，是身旁的人。\n\n7\n第一次看见大海\n\n第一次看见大海\n\n8"
+    },
+    {
+      "file": "OriginalAudio.dc.html",
+      "title": "06 项目成员｜扫码原声回听",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 776,
+          "content": 776
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "原声回听",
+        "父亲的那辆自行车"
+      ],
+      "buttons": [
+        "返回",
+        "播放原声"
+      ],
+      "text": "原声回听\n父亲的那辆自行车\n纸书原声 · 故事第 1 版\n00:00\n02:48\n\n对应所印版本原声，仅项目成员可回听。"
+    },
+    {
+      "file": "OriginalAudio.dc.html",
+      "title": "06 项目成员｜扫码原声回听",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 592,
+          "content": 592
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "原声回听",
+        "父亲的那辆自行车"
+      ],
+      "buttons": [
+        "返回",
+        "播放原声"
+      ],
+      "text": "原声回听\n父亲的那辆自行车\n纸书原声 · 故事第 1 版\n00:00\n02:48\n\n对应所印版本原声，仅项目成员可回听。"
+    },
+    {
+      "file": "BookChanged.dc.html",
+      "title": "07 项目成员｜更新书稿",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 637,
+          "content": 637
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "更新书稿",
+        "书稿待更新"
+      ],
+      "buttons": [
+        "返回",
+        "重新生成 PDF",
+        "返回书稿"
+      ],
+      "text": "更新书稿\n书稿待更新\n\n重新生成 PDF 后即可预览和制作。\n\n上次生成 V1\n\n不影响已提交版本。\n\n重新生成 PDF\n返回书稿"
+    },
+    {
+      "file": "BookChanged.dc.html",
+      "title": "07 项目成员｜更新书稿",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 453,
+          "content": 453
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "更新书稿",
+        "书稿待更新"
+      ],
+      "buttons": [
+        "返回",
+        "重新生成 PDF",
+        "返回书稿"
+      ],
+      "text": "更新书稿\n书稿待更新\n\n重新生成 PDF 后即可预览和制作。\n\n上次生成 V1\n\n不影响已提交版本。\n\n重新生成 PDF\n返回书稿"
+    },
+    {
+      "file": "BookGenerateFailed.dc.html",
+      "title": "08 项目成员｜书稿生成失败",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 637,
+          "content": 637
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "书稿生成失败",
+        "书稿生成失败"
+      ],
+      "buttons": [
+        "返回",
+        "重新生成书稿",
+        "回到这本书"
+      ],
+      "text": "书稿生成失败\n书稿生成失败\n\n内容已保留，可重试。\n\n重新生成书稿\n回到这本书"
+    },
+    {
+      "file": "BookGenerateFailed.dc.html",
+      "title": "08 项目成员｜书稿生成失败",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 453,
+          "content": 453
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "书稿生成失败",
+        "书稿生成失败"
+      ],
+      "buttons": [
+        "返回",
+        "重新生成书稿",
+        "回到这本书"
+      ],
+      "text": "书稿生成失败\n书稿生成失败\n\n内容已保留，可重试。\n\n重新生成书稿\n回到这本书"
+    },
+    {
+      "file": "ReaderFailed.dc.html",
+      "title": "09 项目成员｜PDF 打开失败",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "PDF 打开失败",
+        "PDF 打开失败"
+      ],
+      "buttons": [
+        "返回",
+        "重新打开 PDF"
+      ],
+      "text": "PDF 打开失败\nPDF 打开失败\n重新打开 PDF"
+    },
+    {
+      "file": "ReaderFailed.dc.html",
+      "title": "09 项目成员｜PDF 打开失败",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "PDF 打开失败",
+        "PDF 打开失败"
+      ],
+      "buttons": [
+        "返回",
+        "重新打开 PDF"
+      ],
+      "text": "PDF 打开失败\nPDF 打开失败\n重新打开 PDF"
+    },
+    {
+      "file": "BookAddress.dc.html",
+      "title": "01 项目成员｜收货地址",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "收货地址"
+      ],
+      "buttons": [
+        "返回",
+        "下一步"
+      ],
+      "text": "收货地址\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n\n当前书稿 V1\n首本实体书 × 1\n\n收件人\n收货手机号\n省 / 市 / 区\n详细地址\n下一步"
+    },
+    {
+      "file": "BookAddress.dc.html",
+      "title": "01 项目成员｜收货地址",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 589
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "收货地址"
+      ],
+      "buttons": [
+        "返回",
+        "下一步"
+      ],
+      "text": "收货地址\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n\n当前书稿 V1\n首本实体书 × 1\n\n收件人\n收货手机号\n省 / 市 / 区\n详细地址\n下一步"
+    },
+    {
+      "file": "BookPrintConfirm.dc.html",
+      "title": "02 项目成员｜确认制作",
+      "width": 390,
+      "height": 843,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 688,
+          "content": 688
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "确认制作"
+      ],
+      "buttons": [
+        "返回",
+        "修改",
+        "提交制作"
+      ],
+      "text": "确认制作\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\nV1\n·\n8\n页\n\n首本实体书 × 1\n\n收货信息\n修改\n陈先生 · 138****0628\n上海市 徐汇区 示例路 10 号\n本次使用首本制作权益\n¥0\n\n按此版本制作，后续修改不影响已提交版本。\n\n提交制作"
+    },
+    {
+      "file": "BookPrintConfirm.dc.html",
+      "title": "02 项目成员｜确认制作",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "确认制作"
+      ],
+      "buttons": [
+        "返回",
+        "修改",
+        "提交制作"
+      ],
+      "text": "确认制作\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\nV1\n·\n8\n页\n\n首本实体书 × 1\n\n收货信息\n修改\n陈先生 · 138****0628\n上海市 徐汇区 示例路 10 号\n本次使用首本制作权益\n¥0\n\n按此版本制作，后续修改不影响已提交版本。\n\n提交制作"
+    },
+    {
+      "file": "BookProduction.dc.html",
+      "title": "03 项目成员｜制作进度",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 637,
+          "content": 764
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "制作进度",
+        "书籍制作中"
+      ],
+      "buttons": [
+        "返回",
+        "查看制作书稿",
+        "回到这本书"
+      ],
+      "text": "制作进度\n书籍制作中\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n\n制作版本 V1\n\n已提交制作\n已完成\n正在制作\n当前进度\n已寄出\n等待后续进度\n已送达\n等待后续进度\n查看制作书稿\n回到这本书"
+    },
+    {
+      "file": "BookProduction.dc.html",
+      "title": "03 项目成员｜制作进度",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 453,
+          "content": 728
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "制作进度",
+        "书籍制作中"
+      ],
+      "buttons": [
+        "返回",
+        "查看制作书稿",
+        "回到这本书"
+      ],
+      "text": "制作进度\n书籍制作中\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n\n制作版本 V1\n\n已提交制作\n已完成\n正在制作\n当前进度\n已寄出\n等待后续进度\n已送达\n等待后续进度\n查看制作书稿\n回到这本书"
+    },
+    {
+      "file": "BookShipped.dc.html",
+      "title": "04 项目成员｜书籍已寄出",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 743
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "书籍已寄出",
+        "书籍已寄出"
+      ],
+      "buttons": [
+        "返回",
+        "返回这本书"
+      ],
+      "text": "书籍已寄出\n书籍已寄出\n陈先生 · 138****0628\n\n上海市 徐汇区 示例路 10 号\n\n配送信息\n已寄出\n已提交制作\n已完成\n正在制作\n已完成\n已寄出\n当前进度\n已送达\n等待后续进度\n返回这本书"
+    },
+    {
+      "file": "BookShipped.dc.html",
+      "title": "04 项目成员｜书籍已寄出",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 707
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "书籍已寄出",
+        "书籍已寄出"
+      ],
+      "buttons": [
+        "返回",
+        "返回这本书"
+      ],
+      "text": "书籍已寄出\n书籍已寄出\n陈先生 · 138****0628\n\n上海市 徐汇区 示例路 10 号\n\n配送信息\n已寄出\n已提交制作\n已完成\n正在制作\n已完成\n已寄出\n当前进度\n已送达\n等待后续进度\n返回这本书"
+    },
+    {
+      "file": "BookDelivered.dc.html",
+      "title": "05 项目成员｜书籍已送达",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 637,
+          "content": 637
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "书籍已送达",
+        "书籍已送达"
+      ],
+      "buttons": [
+        "返回",
+        "查看制作书稿",
+        "继续记录新故事"
+      ],
+      "text": "书籍已送达\n书籍已送达\n爸爸的故事\n\n已交付 · V1 · 首本实体书\n\n查看制作书稿\n继续记录新故事"
+    },
+    {
+      "file": "BookDelivered.dc.html",
+      "title": "05 项目成员｜书籍已送达",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 453,
+          "content": 545
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "书籍已送达",
+        "书籍已送达"
+      ],
+      "buttons": [
+        "返回",
+        "查看制作书稿",
+        "继续记录新故事"
+      ],
+      "text": "书籍已送达\n书籍已送达\n爸爸的故事\n\n已交付 · V1 · 首本实体书\n\n查看制作书稿\n继续记录新故事"
+    },
+    {
+      "file": "BookCancelled.dc.html",
+      "title": "06 项目成员｜制作已取消",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 689,
+          "content": 689
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "制作已取消",
+        "制作已取消"
+      ],
+      "buttons": [
+        "返回",
+        "查看当前书稿"
+      ],
+      "text": "制作已取消\n制作已取消\n\n内容已保留，可重新提交。\n\n查看当前书稿"
+    },
+    {
+      "file": "BookCancelled.dc.html",
+      "title": "06 项目成员｜制作已取消",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 505,
+          "content": 505
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "制作已取消",
+        "制作已取消"
+      ],
+      "buttons": [
+        "返回",
+        "查看当前书稿"
+      ],
+      "text": "制作已取消\n制作已取消\n\n内容已保留，可重新提交。\n\n查看当前书稿"
+    },
+    {
+      "file": "PrintUnknown.dc.html",
+      "title": "07 项目成员｜确认提交结果",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 637,
+          "content": 637
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "确认提交结果",
+        "正在确认提交结果"
+      ],
+      "buttons": [
+        "返回",
+        "查询制作进度",
+        "回到这本书"
+      ],
+      "text": "确认提交结果\n正在确认提交结果\n\n请先查询结果，避免重复提交。\n\n爸爸的故事\n\n提交版本 V1 · 首本实体书\n\n查询制作进度\n回到这本书"
+    },
+    {
+      "file": "PrintUnknown.dc.html",
+      "title": "07 项目成员｜确认提交结果",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 453,
+          "content": 453
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "确认提交结果",
+        "正在确认提交结果"
+      ],
+      "buttons": [
+        "返回",
+        "查询制作进度",
+        "回到这本书"
+      ],
+      "text": "确认提交结果\n正在确认提交结果\n\n请先查询结果，避免重复提交。\n\n爸爸的故事\n\n提交版本 V1 · 首本实体书\n\n查询制作进度\n回到这本书"
+    },
+    {
+      "file": "MyGuest.dc.html",
+      "title": "01 未登录用户｜我的 · 未登录",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 706,
+          "content": 706
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "我的"
+      ],
+      "buttons": [
+        "微信手机号登录",
+        "送出一份礼物",
+        "使用条款与隐私说明",
+        "时光故事",
+        "我的"
+      ],
+      "text": "我的\n还未登录\n微信手机号登录\n送出一份礼物\n使用条款与隐私说明\n时光故事\n我的"
+    },
+    {
+      "file": "MyGuest.dc.html",
+      "title": "01 未登录用户｜我的 · 未登录",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 522,
+          "content": 522
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "我的"
+      ],
+      "buttons": [
+        "微信手机号登录",
+        "送出一份礼物",
+        "使用条款与隐私说明",
+        "时光故事",
+        "我的"
+      ],
+      "text": "我的\n还未登录\n微信手机号登录\n送出一份礼物\n使用条款与隐私说明\n时光故事\n我的"
+    },
+    {
+      "file": "MyAccount.dc.html",
+      "title": "02 已登录用户｜我的 · 已登录",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 706,
+          "content": 706
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "我的"
+      ],
+      "buttons": [
+        "修改昵称",
+        "我的礼物",
+        "送出一份礼物",
+        "使用条款与隐私说明",
+        "退出登录",
+        "时光故事",
+        "我的"
+      ],
+      "text": "我的\n小陈\n微信手机号 138****0628\n我的礼物\n送出一份礼物\n使用条款与隐私说明\n退出登录\n时光故事\n我的"
+    },
+    {
+      "file": "MyAccount.dc.html",
+      "title": "02 已登录用户｜我的 · 已登录",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 522,
+          "content": 522
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "我的"
+      ],
+      "buttons": [
+        "修改昵称",
+        "我的礼物",
+        "送出一份礼物",
+        "使用条款与隐私说明",
+        "退出登录",
+        "时光故事",
+        "我的"
+      ],
+      "text": "我的\n小陈\n微信手机号 138****0628\n我的礼物\n送出一份礼物\n使用条款与隐私说明\n退出登录\n时光故事\n我的"
+    },
+    {
+      "file": "Terms.dc.html",
+      "title": "03 所有人｜使用条款与隐私说明",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 776,
+          "content": 776
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "使用条款与隐私说明",
+        "声音与照片的使用",
+        "项目成员权限",
+        "书稿与制作",
+        "售后与资料管理"
+      ],
+      "buttons": [
+        "返回"
+      ],
+      "text": "使用条款与隐私说明\n声音与照片的使用\n\n录音用于转成文字、整理故事和保留原声。照片、故事与书稿仅在获授权的项目成员之间使用。\n\n项目成员权限\n\n接受项目邀请或领取礼物后成为成员，可以记录、编辑和安排制作。分享邀请前请确认愿意与对方共同使用这些内容。\n\n书稿与制作\n\n购买包含首本实体书权益，完成书稿后再填写地址并提交制作。已经提交的版本不因后续编辑而改变。\n\n售后与资料管理\n\n退款、质量售后、资料导出与删除按服务约定由客服核实处理。正式上线采用完整现行条款。"
+    },
+    {
+      "file": "Terms.dc.html",
+      "title": "03 所有人｜使用条款与隐私说明",
+      "width": 320,
+      "height": 660,
+      "scrollWidth": 320,
+      "overflow": [],
+      "tiny": [],
+      "scrollers": [
+        {
+          "height": 592,
+          "content": 614
+        }
+      ],
+      "brokenImages": 0,
+      "headings": [
+        "使用条款与隐私说明",
+        "声音与照片的使用",
+        "项目成员权限",
+        "书稿与制作",
+        "售后与资料管理"
+      ],
+      "buttons": [
+        "返回"
+      ],
+      "text": "使用条款与隐私说明\n声音与照片的使用\n\n录音用于转成文字、整理故事和保留原声。照片、故事与书稿仅在获授权的项目成员之间使用。\n\n项目成员权限\n\n接受项目邀请或领取礼物后成为成员，可以记录、编辑和安排制作。分享邀请前请确认愿意与对方共同使用这些内容。\n\n书稿与制作\n\n购买包含首本实体书权益，完成书稿后再填写地址并提交制作。已经提交的版本不因后续编辑而改变。\n\n售后与资料管理\n\n退款、质量售后、资料导出与删除按服务约定由客服核实处理。正式上线采用完整现行条款。"
+    }
+  ],
+  "errors": []
+}

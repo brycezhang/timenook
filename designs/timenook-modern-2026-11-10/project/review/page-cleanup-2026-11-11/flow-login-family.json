@@ -1,0 +1,23 @@
+{
+  "results": [
+    {
+      "case": "login-self-gift",
+      "duplicateDismiss": 0,
+      "termsReturns": 1,
+      "paid": "故事书首页\n与家人一起记录\n切换故事书\n我的时光走查\n小陈送给自己的时光故事书\n时光故事\n0\n个故事\n0\n张照片\n0\n分钟原声\n家人提问\n0 个问题待回答\n大纲 · 求学与成长\n换一个\n年轻时，我最向往怎样的未来？\n开始讲述\n从大纲目录选题\n邀请家人\n时光故事\n我的",
+      "sent": true,
+      "received": true
+    },
+    {
+      "case": "answered-card",
+      "answerEntries": 1,
+      "opensStory": true
+    },
+    {
+      "case": "family-optional-chapter",
+      "detail": "问题详情\n待回答\n编辑问题\n\n女儿 · 小陈的提问\n\n走查问题：第一次独自旅行是什么样的？\n未选章节\n稍后回答\n跳过问题\n移除问题\n开始回答\n问题已发布",
+      "laterCard": "女儿 · 小陈的提问\n稍后回答\n走查问题：第一次独自旅行是什么样的？\n未选章节"
+    }
+  ],
+  "errors": []
+}

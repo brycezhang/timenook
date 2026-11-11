@@ -1,0 +1,33 @@
+{
+  "scope": "Design prototype only",
+  "checks": [
+    {
+      "name": "family first, 2:1 order, no repeats",
+      "pass": true
+    },
+    {
+      "name": "later deferred this visit and eligible on reentry",
+      "pass": true
+    },
+    {
+      "name": "answered and skipped excluded",
+      "pass": true
+    },
+    {
+      "name": "first question requires own relation, keeps author when another member edits",
+      "pass": true
+    },
+    {
+      "name": "no chapter voice answer stays unassigned and records question source",
+      "pass": true
+    },
+    {
+      "name": "publishing a new question retains seen items in this round",
+      "pass": true
+    }
+  ],
+  "seedRender": {
+    "boards": 71,
+    "issues": []
+  }
+}

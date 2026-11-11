@@ -1,0 +1,49 @@
+{
+  "log": [
+    {
+      "options": [
+        {
+          "value": "",
+          "label": "不选章节"
+        },
+        {
+          "value": "chapter-1",
+          "label": "我的童年"
+        },
+        {
+          "value": "chapter-2",
+          "label": "求学与成长"
+        },
+        {
+          "value": "chapter-3",
+          "label": "初入社会"
+        },
+        {
+          "value": "chapter-4",
+          "label": "亲密关系与家庭"
+        },
+        {
+          "value": "chapter-5",
+          "label": "人生转折与重要经历"
+        },
+        {
+          "value": "chapter-6",
+          "label": "现在的我与想留下的话"
+        }
+      ]
+    },
+    {
+      "savedBackToList": 1
+    },
+    {
+      "autoAssigned": true
+    },
+    {
+      "homeQuestionMatches": 1
+    },
+    {
+      "removed": 0
+    }
+  ],
+  "errors": []
+}

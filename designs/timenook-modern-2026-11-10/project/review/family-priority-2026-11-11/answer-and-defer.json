@@ -1,0 +1,25 @@
+[
+  {
+    "pausedSource": true
+  },
+  {
+    "unassignedAnswer": true
+  },
+  {
+    "nextAfterAnswer": "小时候最舍不得丢掉的一件东西是什么？"
+  },
+  {
+    "relationRemembered": true,
+    "relationButtons": 0
+  },
+  {
+    "afterLater": "我最珍惜当下生活里的什么？"
+  },
+  {
+    "reentry": [
+      "小时候最舍不得丢掉的一件东西是什么？",
+      "有什么一直想做、还没有去做的事情？"
+    ],
+    "laterReturns": true
+  }
+]

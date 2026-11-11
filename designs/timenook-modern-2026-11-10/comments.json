@@ -1,0 +1,278 @@
+{
+  "version": 1,
+  "threads": [
+    {
+      "id": "c_0aaf4463a7",
+      "anchor": "#dc-root > div:nth-of-type(1) > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > h1:nth-of-type(1) > dcfx06if5oo:nth-of-type(1) > dct:nth-of-type(284) > dce522f40a9e62497682198:nth-of-type(1)",
+      "label": "02 指定收礼人 › text \"把礼物送给对的人\"",
+      "detail": "GiftRecipient.dc.html: #283:1/1/9/0/1/0 text \"把礼物送给对的人\"",
+      "location": {
+        "file": "project/GiftRecipient.dc.html",
+        "board": "GiftRecipient.dc.html"
+      },
+      "status": "open",
+      "createdAt": "2026-11-11T01:52:24.304Z",
+      "updatedAt": "2026-11-11T01:56:34.316Z",
+      "messages": [
+        {
+          "id": "m_498f765230",
+          "author": {
+            "kind": "user",
+            "name": "bryce"
+          },
+          "text": "文案改为「指定收礼人」",
+          "at": "2026-11-11T01:52:24.304Z"
+        },
+        {
+          "id": "m_6523df229a",
+          "author": {
+            "kind": "agent",
+            "name": "agent"
+          },
+          "text": "已将标题改为「指定收礼人」，并同步到完整原型中的对应页面。",
+          "at": "2026-11-11T01:56:34.316Z"
+        }
+      ]
+    },
+    {
+      "id": "c_fe678bf7bb",
+      "anchor": "#dc-root > div:nth-of-type(1) > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > h1:nth-of-type(1) > dct:nth-of-type(347) > dce568fc64399a696462367:nth-of-type(1)",
+      "label": "02 验证收礼手机号 › text \"确认是你，才能打开\"",
+      "detail": "GiftVerify.dc.html: #346:1/1/12/0/1/1/0 text \"确认是你，才能打开\"",
+      "location": {
+        "file": "project/GiftVerify.dc.html",
+        "board": "GiftVerify.dc.html"
+      },
+      "status": "open",
+      "createdAt": "2026-11-11T02:08:45.115Z",
+      "updatedAt": "2026-11-11T02:13:57.294Z",
+      "messages": [
+        {
+          "id": "m_762263c8cc",
+          "author": {
+            "kind": "user",
+            "name": "bryce"
+          },
+          "text": "修改为功能说明的标题，不要用这类文案",
+          "at": "2026-11-11T02:08:45.115Z"
+        },
+        {
+          "id": "m_bdbff55045",
+          "author": {
+            "kind": "agent",
+            "name": "agent"
+          },
+          "text": "已改为「验证收礼手机号」，并统一调整 03 组各页的功能标题和按钮文案。",
+          "at": "2026-11-11T02:13:57.294Z"
+        }
+      ]
+    },
+    {
+      "id": "c_2a7c041554",
+      "anchor": "#dc-root > div:nth-of-type(1) > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > h1:nth-of-type(1) > dct:nth-of-type(370) > dce2831fc3e92d096022367:nth-of-type(1)",
+      "label": "03 手机号不匹配 › text \"这份礼物另有所属\"",
+      "detail": "GiftMismatch.dc.html: #369:1/1/13/0/1/1/0 text \"这份礼物另有所属\"",
+      "location": {
+        "file": "project/GiftMismatch.dc.html",
+        "board": "GiftMismatch.dc.html"
+      },
+      "status": "open",
+      "createdAt": "2026-11-11T02:08:49.855Z",
+      "updatedAt": "2026-11-11T02:13:57.376Z",
+      "messages": [
+        {
+          "id": "m_bbfab53838",
+          "author": {
+            "kind": "user",
+            "name": "bryce"
+          },
+          "text": "修改为功能说明的标题，不要用这类文案",
+          "at": "2026-11-11T02:08:49.855Z"
+        },
+        {
+          "id": "m_c0cc65d18c",
+          "author": {
+            "kind": "agent",
+            "name": "agent"
+          },
+          "text": "已改为「手机号不匹配」，保留换用收礼手机号或请送礼人更正的处理提示。",
+          "at": "2026-11-11T02:13:57.376Z"
+        }
+      ]
+    },
+    {
+      "id": "c_d2c57f7b84",
+      "anchor": "#dc-root > div:nth-of-type(1) > div:nth-of-type(1) > main:nth-of-type(1) > dcfx0efgopx:nth-of-type(1) > dct:nth-of-type(18) > dce6a3df60b63ad77760103:nth-of-type(1)",
+      "label": "01 开始讲述 › shape \"一份礼物，一生的故事看看样书把熟悉的声音留成一本书用声音记录，…\"",
+      "detail": "RecordReady.dc.html: #17:1/1 shape \"一份礼物，一生的故事看看样书把熟悉的声音留成一本书用声音记录，和家人一起成书。…\"",
+      "location": {
+        "file": "project/RecordReady.dc.html",
+        "board": "RecordReady.dc.html"
+      },
+      "status": "open",
+      "createdAt": "2026-11-11T03:03:22.612Z",
+      "updatedAt": "2026-11-11T03:12:18.886Z",
+      "messages": [
+        {
+          "id": "m_d48c1a70c0",
+          "author": {
+            "kind": "user",
+            "name": "bryce"
+          },
+          "text": "可以添加和删除照片，需要 2 中状态的讲述页面",
+          "at": "2026-11-11T03:03:22.612Z"
+        },
+        {
+          "id": "m_2cbd3ff10c",
+          "author": {
+            "kind": "user",
+            "name": "bryce"
+          },
+          "text": "删除「把问题都给我听」的按钮，没有这个功能",
+          "at": "2026-11-11T03:03:52.359Z"
+        },
+        {
+          "id": "m_ace0f80ffe",
+          "author": {
+            "kind": "agent",
+            "name": "agent"
+          },
+          "text": "已补齐「开始讲述 · 无照片」和「开始讲述 · 有照片」两张状态稿，支持添加多张照片、横向浏览及逐张移除，录音中添加照片先暂停并保留时长。同时删除「把问题读给我听」按钮及对应动作。",
+          "at": "2026-11-11T03:12:18.886Z"
+        }
+      ]
+    },
+    {
+      "id": "c_a9ef524a08",
+      "anchor": "#dc-root > div:nth-of-type(1) > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > h1:nth-of-type(1) > dct:nth-of-type(709) > dceaa157e850c6b96462367:nth-of-type(1)",
+      "label": "04 保存录音 › text \"这段声音，正在保存\"",
+      "detail": "Upload.dc.html: #708:1/1/24/0/1/1/0 text \"这段声音，正在保存\"",
+      "location": {
+        "file": "project/Upload.dc.html",
+        "board": "Upload.dc.html"
+      },
+      "status": "open",
+      "createdAt": "2026-11-11T03:04:20.234Z",
+      "updatedAt": "2026-11-11T03:12:18.974Z",
+      "messages": [
+        {
+          "id": "m_b3b0e8bc28",
+          "author": {
+            "kind": "user",
+            "name": "bryce"
+          },
+          "text": "改为功能性描述",
+          "at": "2026-11-11T03:04:20.234Z"
+        },
+        {
+          "id": "m_7d9dd1efe8",
+          "author": {
+            "kind": "agent",
+            "name": "agent"
+          },
+          "text": "标题已改为功能性描述「正在保存录音」。",
+          "at": "2026-11-11T03:12:18.974Z"
+        }
+      ]
+    },
+    {
+      "id": "c_8b8b1f00e6",
+      "anchor": "#dc-root > div:nth-of-type(1) > div:nth-of-type(1) > main:nth-of-type(1) > dcfx0w2rxq2:nth-of-type(1) > dct:nth-of-type(18) > dcee699bb77087577750103:nth-of-type(1)",
+      "label": "07 选择一个起点 › shape \"一份礼物，一生的故事看看样书把熟悉的声音留成一…\"",
+      "detail": "Topics.dc.html: #17:1/1 shape \"一份礼物，一生的故事看看样书把熟悉的声音留成一本书用声音记录，和家人一起成书。…\"",
+      "location": {
+        "file": "project/Topics.dc.html",
+        "board": "Topics.dc.html"
+      },
+      "status": "open",
+      "createdAt": "2026-11-11T03:04:49.980Z",
+      "updatedAt": "2026-11-11T03:12:19.057Z",
+      "messages": [
+        {
+          "id": "m_82f120ed04",
+          "author": {
+            "kind": "user",
+            "name": "bryce"
+          },
+          "text": "这个页面流程从哪里来？",
+          "at": "2026-11-11T03:04:49.980Z"
+        },
+        {
+          "id": "m_422722fed8",
+          "author": {
+            "kind": "agent",
+            "name": "agent"
+          },
+          "text": "此页是本次重设计将现有小程序录音页的换题与自由讲述功能单独展开成的辅助页面，现有入口位于 miniprogram/pages/interview/index.wxml；它不是录音主线的必经步骤。已改名为「选择问题」，并在画布标明「开始讲述 → 换个问题 → 选择问题 → 返回讲述」的分支。",
+          "at": "2026-11-11T03:12:19.057Z"
+        }
+      ]
+    },
+    {
+      "id": "c_2d9ae94e54",
+      "anchor": "#dc-root > div:nth-of-type(1) > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > h1:nth-of-type(1) > dcfx0g546f4:nth-of-type(1) > dct:nth-of-type(908) > dcebbeecda5d51e97682198:nth-of-type(1)",
+      "label": "01 故事 › text \"故事慢慢长出来\"",
+      "detail": "Stories.dc.html: #907:1/1/29/0/0/0 text \"故事慢慢长出来\"",
+      "location": {
+        "file": "project/Stories.dc.html",
+        "board": "Stories.dc.html"
+      },
+      "status": "open",
+      "createdAt": "2026-11-11T03:13:56.289Z",
+      "updatedAt": "2026-11-11T03:19:41.071Z",
+      "messages": [
+        {
+          "id": "m_aea2db2eb0",
+          "author": {
+            "kind": "user",
+            "name": "bryce"
+          },
+          "text": "修改为功能性标题",
+          "at": "2026-11-11T03:13:56.289Z"
+        },
+        {
+          "id": "m_d29fed4346",
+          "author": {
+            "kind": "agent",
+            "name": "agent"
+          },
+          "text": "已改为「故事列表」，空状态统一为「暂无故事」，导航栏和画板名称同步更新。",
+          "at": "2026-11-11T03:19:41.071Z"
+        }
+      ]
+    },
+    {
+      "id": "c_2a45784030",
+      "anchor": "#dc-root > div:nth-of-type(1) > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > h1:nth-of-type(1) > dct:nth-of-type(1031) > dce346c8bc812ed96022367:nth-of-type(1)",
+      "label": "05 整理未完成 › text \"故事暂时没整理好\"",
+      "detail": "StoryFailed.dc.html: #1030:1/1/33/0/1/1/0 text \"故事暂时没整理好\"",
+      "location": {
+        "file": "project/StoryFailed.dc.html",
+        "board": "StoryFailed.dc.html"
+      },
+      "status": "open",
+      "createdAt": "2026-11-11T03:14:30.357Z",
+      "updatedAt": "2026-11-11T03:19:41.157Z",
+      "messages": [
+        {
+          "id": "m_d188889278",
+          "author": {
+            "kind": "user",
+            "name": "bryce"
+          },
+          "text": "修改为功能项标题",
+          "at": "2026-11-11T03:14:30.357Z"
+        },
+        {
+          "id": "m_69c644c977",
+          "author": {
+            "kind": "agent",
+            "name": "agent"
+          },
+          "text": "已改为「故事整理失败」，保留「录音已保存，可重试整理」的必要提示；同时完成全部页面功能性标题梳理。",
+          "at": "2026-11-11T03:19:41.157Z"
+        }
+      ]
+    }
+  ]
+}

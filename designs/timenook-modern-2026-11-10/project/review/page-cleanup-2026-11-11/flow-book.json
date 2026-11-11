@@ -1,0 +1,20 @@
+{
+  "results": [
+    {
+      "case": "cover-pdf-print",
+      "pdfHasTitle": true,
+      "pdfHasDirectory": true,
+      "confirm": "确认制作\n爸爸的故事（走查）\n那些年，那些我们\n时光故事\n爸爸的故事（走查）\nV2\n·\n8\n页\n\n首本实体书 × 1\n\n收货信息\n修改\n陈先生 · 138****0628\n上海市 徐汇区 上海市徐汇区示例路 12 号\n本次使用首本制作权益\n¥0\n\n按此版本制作，后续修改不影响已提交版本。\n\n提交制作",
+      "production": "制作进度\n书籍制作中\n爸爸的故事（走查）\n那些年，那些我们\n时光故事\n爸爸的故事（走查）\n\n制作版本 V2\n\n已提交制作\n已完成\n正在制作\n当前进度\n已寄出\n等待后续进度\n已送达\n等待后续进度\n查看制作书稿\n回到这本书",
+      "frozen": "书稿预览\n\n第 2 版 · 共 8 页\n\n爸爸的故事（走查）.pdf\n时光故事\n爸爸的故事（走查）\n那些年，那些我们\n打开完整 PDF\n\n使用微信文档查看器打开\n\n查看制作进度",
+      "shortHeight": {
+        "viewport": 460,
+        "body": 480,
+        "buttonBottom": 460,
+        "buttonTop": 408,
+        "insideViewport": true
+      }
+    }
+  ],
+  "errors": []
+}

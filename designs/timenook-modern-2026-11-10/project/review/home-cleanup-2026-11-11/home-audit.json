@@ -1,0 +1,103 @@
+{
+  "out": [
+    {
+      "screen": "HomeEmpty",
+      "width": 390,
+      "layout": {
+        "pageWidth": 390,
+        "scrollWidth": 390,
+        "overflow": [],
+        "startInsideQuestion": true,
+        "startInsideScroll": true,
+        "startPosition": "static",
+        "duplicateQuickActions": 0,
+        "brokenImages": 0
+      },
+      "scroll": {
+        "delta": 16,
+        "questionMoved": 16,
+        "buttonMoved": 16
+      }
+    },
+    {
+      "screen": "HomeEmpty",
+      "width": 320,
+      "layout": {
+        "pageWidth": 320,
+        "scrollWidth": 320,
+        "overflow": [],
+        "startInsideQuestion": true,
+        "startInsideScroll": true,
+        "startPosition": "static",
+        "duplicateQuickActions": 0,
+        "brokenImages": 0
+      },
+      "scroll": {
+        "delta": 49,
+        "questionMoved": 49,
+        "buttonMoved": 49
+      }
+    },
+    {
+      "flow": {
+        "screen": "HomeEmpty",
+        "stories": "故事列表\n故事列表\n\n0 个故事\n\n暂无故事\n再讲一个故事",
+        "photos": "项目照片\n项目照片\n\n选张照片，开始讲述。\n\n一杯茶的下午\n和家人散步\n那一次旅行\n添加照片\n回到这本书",
+        "book": "书稿概览\n暂无书稿\n\n录下故事后即可成书。\n\n爸爸的故事\n那些年，那些我们\n时光故事\n讲一段记忆\n让照片一起入书\n查看大纲目录\n讲第一个故事",
+        "question": "我希望以后还能去做什么？",
+        "recordReady": "开始讲述\n大纲问题\n我希望以后还能去做什么？\n添加照片\n换个问题\n\n每段 10 分钟自动保存，可继续录。\n\n开始录音",
+        "sameQuestion": true
+      }
+    },
+    {
+      "screen": "HomeActive",
+      "width": 390,
+      "layout": {
+        "pageWidth": 390,
+        "scrollWidth": 390,
+        "overflow": [],
+        "startInsideQuestion": true,
+        "startInsideScroll": true,
+        "startPosition": "static",
+        "duplicateQuickActions": 0,
+        "brokenImages": 0
+      },
+      "scroll": {
+        "delta": 49,
+        "questionMoved": 49,
+        "buttonMoved": 49
+      }
+    },
+    {
+      "screen": "HomeActive",
+      "width": 320,
+      "layout": {
+        "pageWidth": 320,
+        "scrollWidth": 320,
+        "overflow": [],
+        "startInsideQuestion": true,
+        "startInsideScroll": true,
+        "startPosition": "static",
+        "duplicateQuickActions": 0,
+        "brokenImages": 0
+      },
+      "scroll": {
+        "delta": 49,
+        "questionMoved": 49,
+        "buttonMoved": 49
+      }
+    },
+    {
+      "flow": {
+        "screen": "HomeActive",
+        "stories": "故事列表\n故事列表\n\n4 个故事\n\n11 月 8 日 · 我的童年\n父亲的那辆自行车\n小时候，家里最宝贝的东西，是父亲的那辆自行车。每到周末，他总会把车擦得干干净净，拍拍后座，喊我出门。\n02:48\n· 原声\n11 月 6 日 · 人生转折与重要经历\n第一次看见大海\n第一次去海边，是和家人一起。还没走到沙滩，就已经听见了海浪声，远处的蓝色一直延伸到天边。\n01:36\n· 原声\n11 月 7 日 · 求学与成长\n放学后的那条小路\n小时候，放学后总要和同学沿着那条小路慢慢走。经过杂货店时，我们会停下来看看橱窗里的新玩具",
+        "photos": "项目照片\n项目照片\n\n选张照片，开始讲述。\n\n一杯茶的下午\n和家人散步\n那一次旅行\n添加照片\n回到这本书",
+        "book": "书稿概览\n1 篇故事未归章\nPDF 已生成 · V1\n编辑封面\n爸爸的故事\n那些年，那些我们\n时光故事\n爸爸的故事\n\n那些年，那些我们\n\n3\n个故事\n3\n张照片\n8\n页书稿\n章节管理\n查看 PDF 书稿\n去制作",
+        "question": "小时候最舍不得丢掉的一件东西是什么？",
+        "recordReady": "开始讲述\n女儿 · 小雨的提问\n小时候最舍不得丢掉的一件东西是什么？\n添加照片\n换个问题\n\n每段 10 分钟自动保存，可继续录。\n\n开始录音",
+        "sameQuestion": true
+      }
+    }
+  ],
+  "errors": []
+}

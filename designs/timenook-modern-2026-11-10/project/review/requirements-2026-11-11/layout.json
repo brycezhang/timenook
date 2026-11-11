@@ -1,0 +1,1450 @@
+{
+  "date": "2026-11-11",
+  "boards": 72,
+  "widths": [
+    390,
+    320
+  ],
+  "results": [
+    {
+      "group": "01",
+      "title": "01 所有人｜首页",
+      "file": "Main.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 144,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "01 所有人｜首页",
+      "file": "Main.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 144,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "02 所有人｜样书预览",
+      "file": "Sample.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 92,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "02 所有人｜样书预览",
+      "file": "Sample.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 92,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "03 未登录用户｜登录弹窗",
+      "file": "Login.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 207,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "03 未登录用户｜登录弹窗",
+      "file": "Login.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 207,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "04 购买者｜购买礼物 · 选择关系",
+      "file": "NewGift.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 80,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "04 购买者｜购买礼物 · 选择关系",
+      "file": "NewGift.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 80,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "05 购买者｜购买礼物 · 送给自己",
+      "file": "SelfGift.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 76,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "05 购买者｜购买礼物 · 送给自己",
+      "file": "SelfGift.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 76,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "06 购买者｜确认购买",
+      "file": "Checkout.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 130,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "06 购买者｜确认购买",
+      "file": "Checkout.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 130,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "07 购买者｜待付款",
+      "file": "PaymentPending.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 58,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "07 购买者｜待付款",
+      "file": "PaymentPending.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 58,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "08 购买者｜确认付款结果",
+      "file": "PaymentUnknown.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 59,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "01",
+      "title": "08 购买者｜确认付款结果",
+      "file": "PaymentUnknown.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 59,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "02",
+      "title": "01 送礼人｜购买成功",
+      "file": "GiftReady.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 83,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "02",
+      "title": "01 送礼人｜购买成功",
+      "file": "GiftReady.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 83,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "02",
+      "title": "02 送礼人｜指定收礼人",
+      "file": "GiftRecipient.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 72,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "02",
+      "title": "02 送礼人｜指定收礼人",
+      "file": "GiftRecipient.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 72,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "02",
+      "title": "03 送礼人｜发送礼物卡",
+      "file": "GiftShare.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 101,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "02",
+      "title": "03 送礼人｜发送礼物卡",
+      "file": "GiftShare.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 101,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "03",
+      "title": "01 收礼人｜查看礼物",
+      "file": "GiftOpen.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 98,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "03",
+      "title": "01 收礼人｜查看礼物",
+      "file": "GiftOpen.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 98,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "03",
+      "title": "02 收礼人｜验证收礼手机号",
+      "file": "GiftVerify.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 78,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "03",
+      "title": "02 收礼人｜验证收礼手机号",
+      "file": "GiftVerify.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 78,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "03",
+      "title": "03 收礼人｜手机号不匹配",
+      "file": "GiftMismatch.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 76,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "03",
+      "title": "03 收礼人｜手机号不匹配",
+      "file": "GiftMismatch.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 76,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "03",
+      "title": "04 收礼人｜确认领取礼物",
+      "file": "GiftAccept.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 69,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "03",
+      "title": "04 收礼人｜确认领取礼物",
+      "file": "GiftAccept.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 69,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "03",
+      "title": "05 收礼人｜礼物卡已失效",
+      "file": "GiftInvalid.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 41,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "03",
+      "title": "05 收礼人｜礼物卡已失效",
+      "file": "GiftInvalid.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 41,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "03",
+      "title": "06 收礼人｜礼物已领取",
+      "file": "GiftClaimed.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 22,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "03",
+      "title": "06 收礼人｜礼物已领取",
+      "file": "GiftClaimed.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 22,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "01 项目成员｜故事书首页 · 暂无故事",
+      "file": "HomeEmpty.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 143,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "01 项目成员｜故事书首页 · 暂无故事",
+      "file": "HomeEmpty.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 143,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "02 项目成员｜故事书首页 · 已有故事",
+      "file": "HomeActive.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 143,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "02 项目成员｜故事书首页 · 已有故事",
+      "file": "HomeActive.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 143,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "03 已登录用户｜我的礼物 · 送出",
+      "file": "MyProjects.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 133,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "03 已登录用户｜我的礼物 · 送出",
+      "file": "MyProjects.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 133,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "04 项目成员｜切换故事书",
+      "file": "SwitchProject.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 120,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "04 项目成员｜切换故事书",
+      "file": "SwitchProject.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 120,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "05 购买者｜邀请家人",
+      "file": "InviteShare.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 68,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "05 购买者｜邀请家人",
+      "file": "InviteShare.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 68,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "06 受邀家人｜加入项目",
+      "file": "InviteJoin.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 108,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "06 受邀家人｜加入项目",
+      "file": "InviteJoin.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 108,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "07 受邀家人｜邀请已失效",
+      "file": "InviteExpired.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 29,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "07 受邀家人｜邀请已失效",
+      "file": "InviteExpired.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 29,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "08 已登录用户｜我的礼物 · 收到",
+      "file": "MyGiftsReceived.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 104,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "08 已登录用户｜我的礼物 · 收到",
+      "file": "MyGiftsReceived.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 104,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "09 已登录用户｜我的礼物 · 参与",
+      "file": "MyGiftsParticipating.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 71,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "04",
+      "title": "09 已登录用户｜我的礼物 · 参与",
+      "file": "MyGiftsParticipating.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 71,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "05",
+      "title": "01 项目成员｜家人提问 · 待回答",
+      "file": "FamilyQuestions.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 93,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "05",
+      "title": "01 项目成员｜家人提问 · 待回答",
+      "file": "FamilyQuestions.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 93,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "05",
+      "title": "02 项目成员｜家人提问 · 暂无问题",
+      "file": "FamilyQuestionsEmpty.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 35,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "05",
+      "title": "02 项目成员｜家人提问 · 暂无问题",
+      "file": "FamilyQuestionsEmpty.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 35,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "05",
+      "title": "03 项目成员｜提出问题 · 仅文字",
+      "file": "FamilyQuestionNew.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 36,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "05",
+      "title": "03 项目成员｜提出问题 · 仅文字",
+      "file": "FamilyQuestionNew.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 36,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "05",
+      "title": "04 主讲人及协助家人｜家人问题 · 待回答",
+      "file": "FamilyQuestionDetail.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 69,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "05",
+      "title": "04 主讲人及协助家人｜家人问题 · 待回答",
+      "file": "FamilyQuestionDetail.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 69,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "05",
+      "title": "05 项目成员｜家人问题 · 已回答",
+      "file": "FamilyQuestionAnswered.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 81,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "05",
+      "title": "05 项目成员｜家人问题 · 已回答",
+      "file": "FamilyQuestionAnswered.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 81,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "01 项目成员｜开始讲述 · 无照片",
+      "file": "RecordReady.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 66,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "01 项目成员｜开始讲述 · 无照片",
+      "file": "RecordReady.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 66,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "02 项目成员｜开始讲述 · 有照片",
+      "file": "RecordReadyPhoto.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 75,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "02 项目成员｜开始讲述 · 有照片",
+      "file": "RecordReadyPhoto.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 75,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "03 项目成员｜正在录音",
+      "file": "Recording.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 92,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "03 项目成员｜正在录音",
+      "file": "Recording.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 92,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "04 项目成员｜录音已暂停",
+      "file": "RecordPaused.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 74,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "04 项目成员｜录音已暂停",
+      "file": "RecordPaused.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 74,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "05 项目成员｜保存录音",
+      "file": "Upload.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 43,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "05 项目成员｜保存录音",
+      "file": "Upload.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 43,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "06 项目成员｜录音上传失败",
+      "file": "UploadFailed.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 56,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "06 项目成员｜录音上传失败",
+      "file": "UploadFailed.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 56,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "07 项目成员｜麦克风权限",
+      "file": "RecordBlocked.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 43,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "07 项目成员｜麦克风权限",
+      "file": "RecordBlocked.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 43,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "08 项目成员｜项目照片",
+      "file": "Photos.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 52,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "06",
+      "title": "08 项目成员｜项目照片",
+      "file": "Photos.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 52,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "07",
+      "title": "01 项目成员｜故事列表",
+      "file": "Stories.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 351,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "07",
+      "title": "01 项目成员｜故事列表",
+      "file": "Stories.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 351,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "07",
+      "title": "02 项目成员｜故事详情",
+      "file": "Story.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 222,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "07",
+      "title": "02 项目成员｜故事详情",
+      "file": "Story.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 222,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "07",
+      "title": "03 项目成员｜编辑故事",
+      "file": "StoryEdit.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 43,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "07",
+      "title": "03 项目成员｜编辑故事",
+      "file": "StoryEdit.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 43,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "07",
+      "title": "04 项目成员｜整理故事",
+      "file": "StoryProcessing.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 48,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "07",
+      "title": "04 项目成员｜整理故事",
+      "file": "StoryProcessing.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 48,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "07",
+      "title": "05 项目成员｜故事整理失败",
+      "file": "StoryFailed.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 51,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "07",
+      "title": "05 项目成员｜故事整理失败",
+      "file": "StoryFailed.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 51,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "07",
+      "title": "06 项目成员｜故事详情 · 未归章",
+      "file": "StoryUnassigned.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 168,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "07",
+      "title": "06 项目成员｜故事详情 · 未归章",
+      "file": "StoryUnassigned.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 168,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "01 项目成员｜大纲目录 · 六章",
+      "file": "BookDirectory.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 241,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "01 项目成员｜大纲目录 · 六章",
+      "file": "BookDirectory.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 241,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "02 项目成员｜章节内容 · 问题与故事",
+      "file": "ChapterOutline.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 377,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "02 项目成员｜章节内容 · 问题与故事",
+      "file": "ChapterOutline.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 377,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "03 主讲人及协助家人｜大纲问题 · 语音回答",
+      "file": "QuestionDetail.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 71,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "03 主讲人及协助家人｜大纲问题 · 语音回答",
+      "file": "QuestionDetail.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 71,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "04 项目成员｜编辑大纲问题",
+      "file": "QuestionEdit.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 31,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "04 项目成员｜编辑大纲问题",
+      "file": "QuestionEdit.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 31,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "05 项目成员｜编辑章节",
+      "file": "ChapterEdit.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 58,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "05 项目成员｜编辑章节",
+      "file": "ChapterEdit.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 58,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "06 项目成员｜本章故事",
+      "file": "ChapterStories.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 151,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "06 项目成员｜本章故事",
+      "file": "ChapterStories.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 151,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "07 项目成员｜未归章故事",
+      "file": "UnassignedStories.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 52,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "07 项目成员｜未归章故事",
+      "file": "UnassignedStories.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 52,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "08 项目成员｜选择故事所属章节",
+      "file": "AssignStory.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 86,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "08",
+      "title": "08 项目成员｜选择故事所属章节",
+      "file": "AssignStory.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 86,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "01 项目成员｜书稿概览 · 暂无书稿",
+      "file": "BookEmpty.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 77,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "01 项目成员｜书稿概览 · 暂无书稿",
+      "file": "BookEmpty.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 77,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "02 项目成员｜书稿概览",
+      "file": "BookOverview.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 112,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "02 项目成员｜书稿概览",
+      "file": "BookOverview.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 112,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "03 项目成员｜编辑封面",
+      "file": "BookCover.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 58,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "03 项目成员｜编辑封面",
+      "file": "BookCover.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 58,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "04 项目成员｜PDF 书稿预览",
+      "file": "BookReader.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 112,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "04 项目成员｜PDF 书稿预览",
+      "file": "BookReader.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 112,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "05 项目成员｜PDF 内容 · 微信查看器",
+      "file": "PdfDocument.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 592,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "05 项目成员｜PDF 内容 · 微信查看器",
+      "file": "PdfDocument.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 592,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "06 项目成员｜扫码原声回听",
+      "file": "OriginalAudio.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 67,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "06 项目成员｜扫码原声回听",
+      "file": "OriginalAudio.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 67,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "07 项目成员｜更新书稿",
+      "file": "BookChanged.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 65,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "07 项目成员｜更新书稿",
+      "file": "BookChanged.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 65,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "08 项目成员｜书稿生成失败",
+      "file": "BookGenerateFailed.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 39,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "08 项目成员｜书稿生成失败",
+      "file": "BookGenerateFailed.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 39,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "09 项目成员｜PDF 打开失败",
+      "file": "ReaderFailed.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 26,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "09",
+      "title": "09 项目成员｜PDF 打开失败",
+      "file": "ReaderFailed.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 26,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "01 项目成员｜收货地址",
+      "file": "BookAddress.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 98,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "01 项目成员｜收货地址",
+      "file": "BookAddress.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 98,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "02 项目成员｜确认制作",
+      "file": "BookPrintConfirm.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 148,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "02 项目成员｜确认制作",
+      "file": "BookPrintConfirm.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 148,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "03 项目成员｜制作进度",
+      "file": "BookProduction.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 108,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "03 项目成员｜制作进度",
+      "file": "BookProduction.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 108,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "04 项目成员｜书籍已寄出",
+      "file": "BookShipped.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 111,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "04 项目成员｜书籍已寄出",
+      "file": "BookShipped.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 111,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "05 项目成员｜书籍已送达",
+      "file": "BookDelivered.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 54,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "05 项目成员｜书籍已送达",
+      "file": "BookDelivered.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 54,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "06 项目成员｜制作已取消",
+      "file": "BookCancelled.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 33,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "06 项目成员｜制作已取消",
+      "file": "BookCancelled.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 33,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "07 项目成员｜确认提交结果",
+      "file": "PrintUnknown.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 69,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "10",
+      "title": "07 项目成员｜确认提交结果",
+      "file": "PrintUnknown.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 69,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "11",
+      "title": "01 未登录用户｜我的 · 未登录",
+      "file": "MyGuest.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 45,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "11",
+      "title": "01 未登录用户｜我的 · 未登录",
+      "file": "MyGuest.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 45,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "11",
+      "title": "02 已登录用户｜我的 · 已登录",
+      "file": "MyAccount.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 61,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "11",
+      "title": "02 已登录用户｜我的 · 已登录",
+      "file": "MyAccount.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 61,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "11",
+      "title": "03 所有人｜使用条款与隐私说明",
+      "file": "Terms.dc.html",
+      "width": 390,
+      "scroll": 390,
+      "text": 244,
+      "broken": 0,
+      "overflow": []
+    },
+    {
+      "group": "11",
+      "title": "03 所有人｜使用条款与隐私说明",
+      "file": "Terms.dc.html",
+      "width": 320,
+      "scroll": 320,
+      "text": 244,
+      "broken": 0,
+      "overflow": []
+    }
+  ]
+}

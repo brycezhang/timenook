@@ -1,8 +1,8 @@
-# TimeNook · 时光里「岁月成书」
+# TimeNook · 时光故事
 
-微信小程序帮助一位讲述者把真实讲述、照片和经本人确认的故事制作成个人故事书。目标支持父母、亲友等可配置赠礼关系，以及可修改的大纲与问题。999元套餐包含一个人生项目及一本实体书。
+以语音记录为主，将故事、照片与原声整理为个人故事书，可送给家人或自己。999 元套餐包含一个项目及一本实体书。已确认的新流程包括共用六章大纲、家人提问和礼物三分类，详见[产品流程](designs/timenook-modern-2026-11-10/project/BUSINESS-FLOW.md)。
 
-已实现首版原生微信小程序前端（15个页面，当前仍仅妈妈/爸爸、静态题库），附共用页面源码的浏览器预览。当前仍使用本机演示数据，已增加 NestJS/Fastify 工程 API、数据库迁移和健康检查；业务后端、微信登录/支付、云存储、文件转写、AI整理和印刷服务仍未接入。
+工程包含原生微信小程序、Vue 网页、NestJS/Fastify API、Worker 与后台。当前实现与新版设计的差异见[小程序重构调整清单](docs/delivery/2026-11-11/miniprogram-design-gap.md)；设计确认、工程实现与真实验收分别记录，最新状态见 [CONTEXT.md](CONTEXT.md)。
 
 ```bash
 pnpm install --frozen-lockfile # Node 22.23.4 / pnpm 10.34.7
@@ -15,7 +15,7 @@ pnpm check:native    # Mac 微信开发者工具 WXML / WXSS 编译器
 
 首次开发请按[本地开发与验证](docs/development.md)启动独立 PostgreSQL/Redis、生成 Prisma Client 并执行迁移。
 
-微信开发者工具导入本目录，读取 `project.config.json`，构建目录为 `dist/miniprogram/`。当前使用游客 AppID，真机预览需配置自己的小程序 AppID。
+微信开发者工具导入本目录，读取已配置项目 AppID 的 `project.config.json`，构建目录为 `dist/miniprogram/`。正式构建、手机号登录及环境配置见[本地开发与验证](docs/development.md)。
 
 实现范围、页面清单及验证边界见[前端说明](docs/frontend/README.md)，参考效果图与实现对照见[视觉验收](docs/frontend/visual-review.md)。
 
@@ -29,7 +29,8 @@ pnpm check:native    # Mac 微信开发者工具 WXML / WXSS 编译器
 | 个人大纲与追问         | [大纲与追问设计](docs/architecture/大纲与追问设计.md) |
 | 尚未冻结的参数         | [决策与待定项](docs/architecture/决策与待定项.md)     |
 | 业务语言               | [GLOSSARY.md](GLOSSARY.md)                            |
-| 交互原型说明           | [原型说明](design/figma-prototype/README.md)          |
+| 交互原型说明           | [新版画布与设计说明](designs/timenook-modern-2026-11-10/project/README.md) |
+| 小程序重构范围         | [18 项功能调整清单](docs/delivery/2026-11-11/miniprogram-design-gap.md) |
 
 技术架构采用**TypeScript / NestJS + Fastify**与**Vben Admin**，工程尽量对齐wutong-admin。基础设施使用**阿里云RDS PostgreSQL、Tair、私有OSS和ECS**；文件ASR首选**豆包**，追问与故事整理首选**DeepSeek**。录音可靠保存后异步转写，产品支持动态赠礼关系与个人大纲，详见[技术架构](docs/architecture/技术架构.md)与[工程基线](docs/architecture/wutong技术栈对齐.md)。
 

@@ -2,7 +2,7 @@
 
 用户确认范围为 `apps/web` 的项目、故事、录音、书稿与我的；现代简洁风格参考 shadcn，移动设备优先，设计 token 沿用小程序。营销官网不在本轮范围。
 
-已落地的设计见 [原型与说明](../../../designs/timenook-web-2026-11-07/README.md)，使用 Vue 3 SFC，配套 Baoyu Design System 文件及可编辑 token。新增设计原型未替换 `apps/web`，也未修改营销官网、小程序、后端、CI 或生产部署。
+已落地的设计见 [原型与说明](https://github.com/brycezhang/timenook/blob/e36a64f1df23396584b7cea80510f17bc0d1a9c5/designs/timenook-web-2026-11-07/README.md)，使用 Vue 3 SFC，配套 Baoyu Design System 文件及可编辑 token。新增设计原型未替换 `apps/web`，也未修改营销官网、小程序、后端、CI 或生产部署。
 
 ## 工程与浏览器结果
 

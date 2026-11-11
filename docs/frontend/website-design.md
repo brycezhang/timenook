@@ -1,6 +1,6 @@
 # 官网视觉与交互依据
 
-本次沿用已确认的小程序视觉与现有素材。布局参考保存在 [完整页面布局](../../design/website/layout-concept.png)，以[营销需求](marketing-requirements.md)中的功能、素材和版权为准。
+本次沿用已确认的小程序视觉与现有素材。布局参考保存在[历史完整页面布局](https://github.com/brycezhang/timenook/blob/a6b6633bf6efdaaf6454e20f93ee9171370e43e4/design/website/layout-concept.png)，以[营销需求](marketing-requirements.md)中的功能、素材和版权为准。
 
 ## 设计系统
 

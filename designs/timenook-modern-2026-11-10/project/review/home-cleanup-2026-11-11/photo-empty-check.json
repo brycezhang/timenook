@@ -1,0 +1,15 @@
+{
+  "empty": {
+    "text": "项目照片\n项目照片\n暂无照片\n添加照片\n回到这本书",
+    "images": 0,
+    "overflow": false
+  },
+  "added": {
+    "images": 1,
+    "text": "项目照片\n项目照片\n\n选张照片，开始讲述。\n\n一杯茶的下午\n添加照片\n一杯茶的下午\n\n已选择\n\n讲讲这张照片\n回到这本书\n已添加示例照片"
+  },
+  "homeCount": "1\n张照片",
+  "existingImages": 3,
+  "errors": [],
+  "prototypeStateCheck": "empty, add, switch project and return passed"
+}
