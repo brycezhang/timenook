@@ -2,7 +2,7 @@ import type {
   FamilyQuestion,
   PersonalPlan,
 } from "../../packages/contracts/src";
-import { familyQuestionSource } from "./family-questions";
+import { familyQuestionSource } from "./family-question-source";
 import { sessionClient } from "./session";
 export interface RecommendedQuestion {
   id: string;
@@ -88,7 +88,6 @@ export class QuestionRecommendations {
     if (this.currentId === id) this.currentId = "";
   }
   restore(id: string) {
-    this.deferred.delete(id);
     this.seen.delete(id);
   }
 }
