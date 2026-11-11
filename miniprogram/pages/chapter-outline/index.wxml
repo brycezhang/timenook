@@ -1,6 +1,7 @@
+<tn-navigation title="章节内容" />
 <app-loading wx:if="{{pageLoading}}" variant="list" />
 <view wx:else class="tn-page with-dock">
-  <view class="outline-between"><text class="outline-badge">第 {{number}} 章</text><button class="tn-link" bindtap="edit">编辑章节</button></view>
+  <view class="outline-between"><text class="outline-badge">第 {{number}} 章</text><button class="tn-link" bindtap="edit"><image class="outline-small-icon" src="/assets/icons/pencil.svg" />编辑章节</button></view>
   <view class="outline-title">{{title}}</view>
   <view class="outline-tabs"><button class="{{tab==='questions'?'selected':''}}" data-tab="questions" bindtap="tab">问题 · {{questions.length}}</button><button class="{{tab==='stories'?'selected':''}}" data-tab="stories" bindtap="tab">故事 · {{stories.length}}</button></view>
   <block wx:if="{{tab==='questions'}}"><view class="outline-list" wx:if="{{!sorting}}"><button wx:for="{{questions}}" wx:key="id" class="outline-card" data-id="{{item.id}}" bindtap="question"><view class="outline-source"><text>大纲问题</text><text>{{item.state}}</text></view><view class="outline-card-title">{{item.text}}</view></button></view>

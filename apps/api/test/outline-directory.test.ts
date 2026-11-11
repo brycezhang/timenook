@@ -5,6 +5,7 @@ import {
   stopBookFixture,
   joinedProject,
   readyStory,
+  storyPhoto,
   request,
   data,
 } from "./book-fixture";
@@ -130,4 +131,64 @@ test("free narration remains unassigned, exclusion is separate, and an empty dir
   );
   assert.equal(restored.included, true);
   assert.equal(restored.chapter, null);
+});
+
+test("excluding a story retains the independently selected project cover photo", async () => {
+  const p = await readyStory(),
+    base = `/v1/projects/${p.projectId}`;
+  const photos = await storyPhoto(p, "合成照片：庭院");
+  const story = data(
+    await request(
+      "POST",
+      base + `/stories/${p.story.id}/revisions`,
+      p.narrator.token,
+      {
+        baseRevisionId: p.story.revision.id,
+        expectedVersion: p.story.version,
+        title: p.story.revision.title,
+        theme: p.story.revision.theme,
+        paragraphs: p.story.revision.paragraphs,
+        photoSnapshotId: photos.id,
+        reviewResolutions: p.story.revision.reviewItems.map((item: string) => ({
+          item,
+          reason: "本人核对后保留约略年代",
+        })),
+        notes: [],
+      },
+    ),
+  );
+  const context = data(
+    await request("GET", base + "/book", p.narrator.token),
+    200,
+  );
+  const chosen = data(
+    await request("POST", base + "/book/cover", p.narrator.token, {
+      expectedVersion: context.cover.version,
+      salutation: "家人的故事",
+      photoAssetId: context.coverPhotoOptions[0].assetId,
+    }),
+  );
+  const excluded = data(
+    await request(
+      "POST",
+      base + `/stories/${story.id}/inclusion`,
+      p.narrator.token,
+      {
+        expectedVersion: story.version,
+        included: false,
+      },
+    ),
+  );
+  assert.equal(excluded.included, false);
+  assert.equal(excluded.chapter, null);
+  const after = data(
+    await request("GET", base + "/book", p.narrator.token),
+    200,
+  );
+  assert.deepEqual(after.cover, chosen.cover);
+  assert.ok(
+    after.coverPhotoOptions.some(
+      (photo: any) => photo.assetId === chosen.cover.photoAssetId,
+    ),
+  );
 });

@@ -613,40 +613,8 @@ export class Stories {
           where: { id },
           data: { included: body.included },
         });
-        if (story.included !== body.included) {
-          if (!body.included)
-            await placeStoryIn(tx, projectId, id, null, actor.userId);
-          if (!body.included) {
-            const cover = await tx.bookCoverVersion.findFirst({
-              where: { projectId },
-              orderBy: { version: "desc" },
-            });
-            // A cover sourced from a removed story must not leave an invalid book input.
-            const revision = story.currentRevisionId
-              ? await tx.storyRevision.findUnique({
-                  where: { id: story.currentRevisionId },
-                })
-              : null;
-            const photos = revision?.photoSnapshot as unknown as {
-              entries?: { assets: { id: string }[] }[];
-            } | null;
-            if (
-              cover?.photoAssetId &&
-              photos?.entries?.some((p) =>
-                p.assets.some((a) => a.id === cover.photoAssetId),
-              )
-            )
-              await tx.bookCoverVersion.create({
-                data: {
-                  projectId,
-                  version: cover.version + 1,
-                  salutation: cover.salutation,
-                  photoAssetId: null,
-                  createdBy: actor.userId,
-                },
-              });
-          }
-        }
+        if (story.included !== body.included && !body.included)
+          await placeStoryIn(tx, projectId, id, null, actor.userId);
         return this.view(tx, projectId, id);
       },
     );

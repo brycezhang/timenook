@@ -5,10 +5,11 @@ import type {
 import { personalPlanClient } from "../../services/personal-plan";
 import { bookClient } from "../../services/books";
 import { sessionClient } from "../../services/session";
-type Row = { id: string; title: string; elsewhere?: boolean };
+type Row = { id: string; title: string; elsewhere?: boolean; source?: string };
 Page({
   data: {
     title: "",
+    number: "",
     selected: [] as Row[],
     available: [] as Row[],
     busy: false,
@@ -60,6 +61,10 @@ Page({
     if (!chapter) throw new Error("章节不存在");
     this.setData({
       title: chapter.title,
+      number: String(c.directory.chapters.indexOf(chapter) + 1).padStart(
+        2,
+        "0",
+      ),
       selected: chapter.storyRefs.map((id) => ({
         id,
         title: c.eligibleStories.find((s) => s.id === id)?.title || "故事",
@@ -69,6 +74,9 @@ Page({
         .map((s) => ({
           id: s.id,
           title: s.title,
+          source: c.directory.chapters.some((x) => x.storyRefs.includes(s.id))
+            ? `已在「${c.directory.chapters.find((x) => x.storyRefs.includes(s.id))!.title}」`
+            : "尚未编入书稿",
           elsewhere: c.directory.chapters.some((x) =>
             x.storyRefs.includes(s.id),
           ),
