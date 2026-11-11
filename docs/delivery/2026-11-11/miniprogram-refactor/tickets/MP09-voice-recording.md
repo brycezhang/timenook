@@ -1,6 +1,6 @@
 # MP09 · 语音讲述、照片操作与可靠保存
 
-状态：ready-for-agent；GitHub [#175](https://github.com/brycezhang/timenook/issues/175)，父规格 [#166](https://github.com/brycezhang/timenook/issues/166)。父规格：[小程序全量重构](../spec.md)。
+状态：本地功能已实现，原生与外部待验；GitHub [#175](https://github.com/brycezhang/timenook/issues/175)，父规格 [#166](https://github.com/brycezhang/timenook/issues/166)。父规格：[小程序全量重构](../spec.md)。
 
 ## 交付结果
 
@@ -34,4 +34,4 @@
 - [MP07 项目照片与从照片开始讲述](MP07-project-photos.md)
 - [MP08 故事编辑、回听与随时归章](MP08-stories-assignment.md)
 
-工程契约已具备即可推进；尚缺代码或数据契约时保持依赖，不能靠前端样例绕过。本票已确认，尚无已完成验收。
+工程契约已具备即可推进；尚缺代码或数据契约时保持依赖，不能靠前端样例绕过。本票本地功能与定向验证见 [MP09 交付](../MP09-delivery.md)；原生逐画板与实际设备/供应商验收仍待执行。

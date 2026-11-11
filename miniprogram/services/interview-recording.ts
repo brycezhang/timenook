@@ -136,6 +136,10 @@ export class InterviewRecorder extends LocalAudioRecorder {
   }
   private sessionContext = sessionClient.context();
   private uploading = false;
+  private progress: number | null = null;
+  uploadProgress() {
+    return this.progress;
+  }
   constructor(
     readonly projectId: string,
     readonly interview: RecordingInterview,
@@ -202,6 +206,7 @@ export class InterviewRecorder extends LocalAudioRecorder {
       throw new Error(message);
     }
     this.uploading = true;
+    this.progress = null;
     let sealing = false;
     const base = `/projects/${this.projectId}/interviews/${this.interview.id}/clips`,
       body = this.assistedSessionId
@@ -249,7 +254,15 @@ export class InterviewRecorder extends LocalAudioRecorder {
           { key: paymentKey(), data: body },
         );
         this.currentContext();
-        await sessionClient.uploadRecording(form, local.path);
+        await sessionClient.uploadRecording(
+          form,
+          local.path,
+          "recordings",
+          (progress) => {
+            this.progress = progress;
+            this.update("uploading", "正在保存录音");
+          },
+        );
         this.currentContext();
         sealing = true;
         this.update("sealing", "录音已上传，正在确认保存，请先别退出");

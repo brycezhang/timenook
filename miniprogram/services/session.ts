@@ -291,6 +291,7 @@ export class SessionClient {
     form: import("../../packages/contracts/src/audio-probe").ProbeUploadForm,
     filePath: string,
     kind: "recordings" | "photos" = "recordings",
+    onProgress?: (progress: number) => void,
   ): Promise<void> {
     if (this.cookie) return this.cookie.upload(form, filePath, kind);
     const generation = this.generation,
@@ -299,8 +300,8 @@ export class SessionClient {
       throw new ApiFailure("UNAUTHENTICATED", 401);
     this.checkBaseUrl();
     const { local, url } = recordingUploadTarget(form, this.apiBaseUrl, kind);
-    const result = await new Promise<number>((resolve, reject) =>
-      wx.uploadFile({
+    const result = await new Promise<number>((resolve, reject) => {
+      const task = wx.uploadFile({
         url,
         name: "file",
         filePath,
@@ -311,8 +312,15 @@ export class SessionClient {
           : {}),
         success: (r) => resolve(r.statusCode),
         fail: () => reject(new ApiFailure("NETWORK_ERROR")),
-      }),
-    );
+      });
+      task?.onProgressUpdate?.((event) => {
+        if (
+          generation === this.generation &&
+          this.persisted()?.session.token === stored.session.token
+        )
+          onProgress?.(Math.min(100, Math.max(0, event.progress)));
+      });
+    });
     this.assertCurrent(generation);
     if (
       result === 401 &&
