@@ -34,6 +34,9 @@ Page({
       if (n !== this.generation || owner !== sessionClient.context()) return;
       this.apply(plan);
       this.setData({
+        storyCount: overview.stories.filter(
+          (s) => s.revision && s.included !== false,
+        ).length,
         unassigned: overview.stories.filter(
           (s) => s.revision && s.included !== false && !s.chapter,
         ).length,
@@ -54,7 +57,6 @@ Page({
         title: c.title,
         subtitle: `${c.questions.length} 个大纲问题 · ${c.storyRefs.length} 篇故事`,
       })),
-      storyCount: plan.chapters.reduce((n, c) => n + c.storyRefs.length, 0),
     });
   },
   onHide() {

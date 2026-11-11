@@ -1,0 +1,87 @@
+{
+  "status": "partial-native-verification",
+  "sourceBase": "dbc58f4",
+  "uiFixCommit": "d889912",
+  "devtools": "2.02.2609250",
+  "library": "3.17.5",
+  "device": {
+    "model": "iPhone 12/13 (Pro)",
+    "logicalWidth": 390,
+    "screenHeight": 844,
+    "capturePixels": "602x1300 simulator frame; native output preserved"
+  },
+  "transport": "real HTTP on 127.0.0.1:3422/v1; isolated PostgreSQL/Redis; synthetic identity/audio/AI fixtures",
+  "projectId": "dc001005-887c-461f-ba16-6d7ef3c00514",
+  "images": [
+    {
+      "file": "native/BookDirectory-390.png",
+      "width": 602,
+      "height": 1300,
+      "logicalDeviceWidth": 390
+    },
+    {
+      "file": "native/ChapterEdit-390.png",
+      "width": 602,
+      "height": 1300,
+      "logicalDeviceWidth": 390
+    },
+    {
+      "file": "native/ChapterOutline-390.png",
+      "width": 602,
+      "height": 1300,
+      "logicalDeviceWidth": 390
+    },
+    {
+      "file": "native/ChapterStories-390.png",
+      "width": 602,
+      "height": 1300,
+      "logicalDeviceWidth": 390
+    },
+    {
+      "file": "native/CrossChapterQuestion-390.png",
+      "width": 602,
+      "height": 1300,
+      "logicalDeviceWidth": 390
+    },
+    {
+      "file": "native/CrossChapterStory-390.png",
+      "width": 602,
+      "height": 1300,
+      "logicalDeviceWidth": 390
+    },
+    {
+      "file": "native/QuestionDetail-390.png",
+      "width": 602,
+      "height": 1300,
+      "logicalDeviceWidth": 390
+    },
+    {
+      "file": "native/QuestionEdit-390.png",
+      "width": 602,
+      "height": 1300,
+      "logicalDeviceWidth": 390
+    },
+    {
+      "file": "native/QuestionToRecording-390.png",
+      "width": 602,
+      "height": 1300,
+      "logicalDeviceWidth": 390
+    }
+  ],
+  "passedInteractions": [
+    "native chapter title/body edits persisted in API",
+    "native question edit persisted and recording entry captures its identity/text/chapter",
+    "native story cross-chapter add moves saved story and question together, in both directions"
+  ],
+  "pending": [
+    "320x568 native six-board visual comparison",
+    "CUA physical chapter drag and story drag persistence",
+    "CUA custom-component removal click followed by add",
+    "complete final all-board acceptance after manual Mac unlock"
+  ],
+  "toolingCorrections": [
+    "use wechatide CLI consistently; mixed SDK and CLI resets the VM",
+    "native selector subset does not support pseudo/attribute selectors or entry into sort-list; explicit page IDs/classes and CUA used",
+    "interview status is an instructional message, not an error"
+  ]
+}

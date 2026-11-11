@@ -100,3 +100,5 @@
 .modern, .modern .sort-content, .modern .sort-handle, .modern .sort-action { box-sizing:border-box; }
 .modern .sort-content, .modern .sort-action { margin:0; border:0; border-radius:0; line-height:1.6; }
 .modern .sort-content::after, .modern .sort-action::after { border:0; }
+
+.modern.compact:last-child { margin-bottom:0; }
