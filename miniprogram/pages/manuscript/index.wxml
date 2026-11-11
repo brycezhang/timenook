@@ -1,4 +1,20 @@
+<tn-navigation title="{{openFailed ? '打开书稿' : 'PDF 书稿'}}" />
 <app-loading wx:if="{{pageLoading}}" variant="book" />
-<block wx:else>
-<view class="s-page"><view class="s-title">{{version.snapshot.cover.title || '完整书稿'}}</view><view class="s-muted" wx:if="{{version}}">第 {{version.version}} 版 · {{version.pageCount || 0}} 页</view><view class="s-book"><view class="s-subtitle">{{version.snapshot.cover.title}}</view><view class="s-muted">{{version.snapshot.cover.salutation}}</view></view><button class="s-button" bindtap="openPdf" loading="{{busy}}" disabled="{{busy || version.state!=='ready'}}">打开完整 PDF</button><button class="s-link s-space" bindtap="edit">返回修改内容</button><view class="s-error">{{status}}</view><view wx:if="{{version && version.state!=='ready'}}" class="s-muted">书稿正在更新，请返回我的书生成新版。</view><view class="s-dock"><button class="s-button" disabled="{{busy || version.state!=='ready'}}" bindtap="print">去印刷这本书</button></view></view>
-</block>
+<view wx:else class="tn-page with-dock book-page">
+  <block wx:if="{{openFailed}}">
+    <view class="book-state-space" /><view class="book-state-intro"><view class="book-state-icon"><image src="/assets/icons/modern-book.svg" /></view><view class="book-heading">PDF 打开失败</view></view><view class="book-state-tail" />
+    <view class="tn-dock"><button class="tn-button" bindtap="openPdf" disabled="{{busy}}" loading="{{busy}}"><image wx:if="{{!busy}}" class="tn-icon" src="/assets/icons/rotate-ccw-light.svg" />重新打开 PDF</button></view>
+  </block>
+  <block wx:elif="{{version.state === 'ready'}}">
+    <view class="tn-muted">第 {{version.version}} 版 · 共 {{version.pageCount}} 页</view>
+    <view class="pdf-card">
+      <view class="pdf-file"><view class="pdf-file-icon"><image src="/assets/icons/file-text.svg" /></view><text>{{version.snapshot.cover.title}}.pdf</text></view>
+      <view class="pdf-cover"><view class="pdf-cover-copy {{coverImage ? '' : 'full'}}"><text class="pdf-brand">时光故事</text><text class="pdf-cover-title">{{version.snapshot.cover.title}}</text><text class="pdf-message">{{version.snapshot.cover.salutation}}</text></view><image wx:if="{{coverImage}}" class="pdf-cover-image" src="{{coverImage}}" mode="aspectFill" /></view>
+      <button id="open-pdf" class="tn-button" bindtap="openPdf" loading="{{busy}}" disabled="{{busy}}"><image wx:if="{{!busy}}" class="tn-icon" src="/assets/icons/file-text-light.svg" />打开完整 PDF</button>
+      <view class="pdf-viewer-note">使用微信文档查看器打开</view>
+    </view>
+    <view class="tn-dock"><button class="tn-button" bindtap="print" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/book-white.svg" />去制作</button></view>
+  </block>
+  <block wx:elif="{{version}}"><view class="book-state-space" /><view class="book-state-intro"><view class="book-state-icon"><image src="/assets/icons/modern-book.svg" /></view><view class="book-intro"><view class="book-heading">书稿待更新</view><view class="tn-muted">重新生成 PDF 后即可预览和制作。</view></view></view><view class="tn-dock"><button class="tn-button" bindtap="edit">返回书稿</button></view></block>
+  <view wx:if="{{status}}" class="tn-error">{{status}}</view><button wx:if="{{!version}}" class="tn-button" bindtap="refresh" disabled="{{busy}}" loading="{{busy}}">重新读取书稿</button>
+</view>

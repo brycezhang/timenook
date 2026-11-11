@@ -1,5 +1,11 @@
+<tn-navigation title="编辑封面" />
 <app-loading wx:if="{{pageLoading}}" variant="book" />
-<block wx:else>
-<view class="s-page"><view class="s-book"><view class="s-subtitle">{{title}}</view><view class="s-muted">{{salutation}}</view><image wx:if="{{image}}" src="{{image}}" mode="aspectFill" /><view wx:elif="{{hasPhoto}}"><app-loading wx:if="{{busy}}" variant="photo" /><view wx:else class="s-muted">封面照片暂未加载</view></view></view><label class="s-field">书名<input class="s-input" value="{{title}}" data-field="title" bindinput="input" maxlength="80" /></label><label class="s-field">封面寄语（选填）<input class="s-input" value="{{salutation}}" data-field="salutation" bindinput="input" maxlength="80" /></label><button class="s-row" bindtap="choose" disabled="{{busy}}"><text>封面图片</text><text>{{hasPhoto?'更换照片':'选择照片'}}　›</text></button><view class="s-error" wx:if="{{status}}">{{status}}</view><view class="s-dock"><button class="s-button" bindtap="save" disabled="{{busy}}" loading="{{busy}}">保存书封</button></view></view>
-
-</block>
+<view wx:else class="tn-page with-dock book-page">
+  <view class="book-display"><view class="book-model"><text class="book-model-title">{{title}}</text><text wx:if="{{salutation}}" class="book-model-message">{{salutation}}</text><image wx:if="{{image}}" class="book-model-image" src="{{image}}" mode="aspectFill" /><view wx:elif="{{hasPhoto}}" class="book-model-image"><app-loading wx:if="{{photoLoading}}" variant="photo" /></view><text class="book-model-brand">时光故事</text></view></view>
+  <label class="tn-field">书名<input id="cover-title" class="tn-input" value="{{title}}" data-field="title" bindinput="input" maxlength="120" disabled="{{busy}}" adjust-position="{{true}}" /></label>
+  <label class="tn-field">封面寄语<input id="cover-salutation" class="tn-input" value="{{salutation}}" data-field="salutation" bindinput="input" maxlength="120" disabled="{{busy}}" adjust-position="{{true}}" /></label>
+  <view class="cover-photo-label"><text>封面照片</text><button class="tn-link" bindtap="choose" disabled="{{busy}}">{{hasPhoto ? '更换照片' : '选择照片'}}<image class="tn-icon" src="/assets/icons/image.svg" /></button></view>
+  <view class="cover-thumbnails"><button wx:for="{{photos}}" wx:key="id" class="cover-thumbnail {{photoAssetId === item.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="selectPhoto" aria-label="选择封面照片"><image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" /><app-loading wx:else variant="photo" /></button></view>
+  <view wx:if="{{status}}" class="tn-error">{{status}}</view>
+  <view class="tn-dock"><button id="save-cover" class="tn-button" bindtap="save" loading="{{busy}}" disabled="{{busy}}"><image wx:if="{{!busy}}" class="tn-icon" src="/assets/icons/check-light.svg" />保存封面</button></view>
+</view>

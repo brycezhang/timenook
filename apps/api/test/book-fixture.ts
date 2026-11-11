@@ -387,6 +387,16 @@ export function data(
   assert.equal(r.json().error, undefined);
   return r.json().data;
 }
+export async function coverMetadata(projectId: string, token: string) {
+  const overview = data(
+    await request("GET", `/v1/projects/${projectId}/overview`, token),
+    200,
+  );
+  return {
+    title: overview.bookTitle,
+    expectedMetadataVersion: overview.metadataVersion,
+  };
+}
 export async function project(versionId = packageId) {
   const buyer = await login();
   const order = data(

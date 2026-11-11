@@ -195,20 +195,17 @@ test("member submits pinned PDF and address without confirmation; unknown result
   assert.match(h.routes[0], /production/);
   h.page.onUnload();
 });
-test("cover selection saves an explicit no-photo cover with observed version", async () => {
+test("cover selection returns a local choice without saving the cover", async () => {
   const h = harness("cover-photos");
-  h.page.onLoad({ projectId });
+  h.page.onLoad({ projectId, selected: storyId });
   const show = h.page.onShow();
-  const c = context();
-  c.cover.photoAssetId = storyId;
-  h.respond(0, c);
+  h.respond(0, context());
   await show;
   h.page.choose({ currentTarget: { dataset: { id: "" } } });
-  const save = h.page.save();
-  assert.equal(h.requests[1].data.photoAssetId, null);
-  assert.equal(h.requests[1].data.expectedVersion, c.cover.version);
-  h.respond(1, { ...c, cover: { ...c.cover, version: 1, photoAssetId: null } });
-  await save;
+  await h.page.save();
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.events[0].name, "coverPhotoSelected");
+  assert.equal(h.events[0].value.photoAssetId, null);
   assert.deepEqual(h.routes, ["back"]);
   h.page.onUnload();
 });

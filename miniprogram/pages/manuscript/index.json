@@ -1,1 +1,4 @@
-{ "navigationBarTitleText": "完整书稿" }
+{
+  "navigationBarTitleText": "PDF 书稿",
+  "navigationStyle": "custom"
+}

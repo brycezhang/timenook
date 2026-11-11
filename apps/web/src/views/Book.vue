@@ -269,22 +269,15 @@ async function saveCover() {
   const token = ++sequence;
   clearTimeout(timer);
   try {
-    if (title.value.trim() !== overview.value.bookTitle) {
-      const project = await projectApi.rename(
-        projectId.value,
-        titleBaseVersion,
-        title.value.trim(),
-      );
-      if (token !== sequence) return;
-      overview.value = project;
-      titleBaseVersion = project.metadataVersion;
-    }
-    const value = await bookApi.cover(
-      projectId.value,
-      coverBaseVersion,
-      salutation.value,
-      photoAssetId.value,
-    );
+    const value = await bookApi.cover(projectId.value, {
+      expectedVersion: coverBaseVersion,
+      expectedMetadataVersion: titleBaseVersion,
+      title: title.value.trim(),
+      salutation: salutation.value,
+      photoAssetId: photoAssetId.value,
+    });
+    if (token !== sequence) return;
+    overview.value = await projectApi.overview(projectId.value);
     if (token !== sequence) return;
     accept(value, true);
     notice.value = "封面已保存";
@@ -592,10 +585,10 @@ onBeforeUnmount(() => {
                   :aria-pressed="photoAssetId === photo.assetId"
                   @click="choosePhoto(photo)"
                 >
-                  {{ photo.caption || "故事照片" }}
+                  {{ photo.caption || "项目照片" }}
                 </button>
                 <p v-if="!context.coverPhotoOptions.length">
-                  可从已入书的故事照片中选择。先为故事添加照片，或使用无照片封面。
+                  可从项目照片中选择，或使用无照片封面。
                 </p>
               </div>
               <p v-if="error" class="notice error" role="alert">

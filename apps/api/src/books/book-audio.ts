@@ -19,7 +19,7 @@ import {
 import { ApiBearerAuth, ApiTags, ApiProduces, ApiQuery } from "@nestjs/swagger";
 import { PrismaClient } from "@prisma/client";
 import type { FastifyRequest, FastifyReply } from "fastify";
-import type { BookAudioEntryView } from "@timenook/contracts";
+import type { BookAudioEntryView, PhotoMaterials } from "@timenook/contracts";
 import { createHash } from "node:crypto";
 import { API_CONFIG, ApiConfig } from "../config";
 import { IdentityAccess } from "../identity/identity-access";
@@ -162,6 +162,14 @@ export class BookAudio implements OnModuleDestroy {
             durationMs: asset.durationMs,
           });
         }
+        const photos =
+          revision.photoSnapshot as unknown as PhotoMaterials | null;
+        const photo =
+          terms.retention?.derivedPhotos &&
+          terms.retention.derivedPhotos.state !== "deleted"
+            ? photos?.entries[0]
+            : undefined;
+        const image = photo?.assets.find((asset) => asset.kind === "print");
         return {
           id: entry.id,
           projectId: entry.projectId,
@@ -171,6 +179,18 @@ export class BookAudio implements OnModuleDestroy {
             version: revision.version,
             title: revision.title ?? "原声",
           },
+          photo:
+            photo && image
+              ? {
+                  id: photo.photoId,
+                  assetId: image.id,
+                  sha256: image.sha256,
+                  bytes: image.bytes,
+                  width: image.width,
+                  height: image.height,
+                  caption: photo.caption,
+                }
+              : null,
           clips,
           accessEpoch: actor.accessEpoch,
           accessExpiresAt: actor.accessExpiresAt,

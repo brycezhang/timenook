@@ -1,31 +1,9 @@
-.photo-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24rpx;
-  margin-top: 32rpx;
-}
-.photo-option,
-.photo-none {
-  border: 3rpx solid #d4cbbc;
-  border-radius: 22rpx;
-  padding: 20rpx;
-  font-size: 34rpx;
-}
-.photo-option image,
-.photo-loading {
-  width: 100%;
-  height: 280rpx;
-  margin-bottom: 20rpx;
-}
-.chosen {
-  border-color: #46563c;
-  background: #e8ecdf;
-}
-.photo-none {
-  width: 100%;
-  text-align: left;
-  min-height: 120rpx;
-}
-.address-detail {
-  min-height: 180rpx;
-}
+.photo-picker { min-height: calc(100vh - 88px); }
+.photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.photo-option { position: relative; border: 2px solid transparent; border-radius: 18px; overflow: hidden; }
+.photo-image, .photo-loading { width: 100%; height: 180px; }
+.photo-none { width: 100%; min-height: 54px; padding: 14px 16px; border: 1px solid #ded4c6; border-radius: 16px; text-align: left; display: flex; justify-content: space-between; align-items: center; }
+.chosen { border-color: #46563c; background: #edf0e7; }
+.photo-check { position: absolute; right: 8px; bottom: 8px; width: 28px; height: 28px; border-radius: 50%; background: #46563c; display: flex; align-items: center; justify-content: center; }
+.photo-check image { width: 20px; height: 20px; }
+@media (max-width: 350px) { .photo-image, .photo-loading { height: 145px; } }

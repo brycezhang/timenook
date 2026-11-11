@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
 import {
+  coverMetadata,
   startBookFixture,
   stopBookFixture,
   joinedProject,
@@ -403,7 +404,12 @@ test("a manuscript change after the timed grant blocks both production downloads
       "POST",
       `/v1/projects/${p.projectId}/book/cover`,
       p.buyer.token,
-      { expectedVersion: 0, salutation: "后来修改的封面", photoAssetId: null },
+      {
+        ...(await coverMetadata(p.projectId, p.buyer.token)),
+        expectedVersion: 0,
+        salutation: "后来修改的封面",
+        photoAssetId: null,
+      },
     ),
   );
   assert.equal(
