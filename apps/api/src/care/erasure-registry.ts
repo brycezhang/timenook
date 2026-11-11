@@ -1,6 +1,19 @@
 /** Explicit private payload inventory. Unknown category/layer overlaps stay pending. */
 export const ERASURE_REGISTRY = [
   {
+    table: "project_gifts",
+    category: "activeData",
+    columns: [
+      "recipient_name",
+      "recipient_phone",
+      "token",
+      "token_hash",
+      "claimed_by_user_id",
+    ],
+    keys: ["project_id"],
+    owner: "r.project_id",
+  },
+  {
     table: "projects",
     category: "activeData",
     columns: ["book_title"],
