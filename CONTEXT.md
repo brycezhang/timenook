@@ -1,5 +1,7 @@
 # TimeNook 项目上下文
 
+2026-11-11 MP09 语音讲述已本地重构：当前题直接准备、整块开始、所有起点关联照片、录中加图先暂停、结束/十分钟到时自动保存并进入同故事整理；补录锁定原采访，失败按原片段恢复。复用单段十分钟/项目六小时底层，删除旧多步骤操作。相关页面与真实 PostgreSQL/Redis 录音回归、类型检查及正式包构建通过；390/320 DevTools 与真机、实际供应商仍待验，见[MP09 交付](docs/delivery/2026-11-11/miniprogram-refactor/MP09-delivery.md)。未部署或上传。
+
 2026-11-11 MP04 礼物分类、切书与家人邀请已实现：真实购买／指定领取／普通邀请三分类，自购同一本在送出和收到均可进入，送出恢复原待付款；只有购买者邀请，家人接受必填主讲人视角关系，购买者首次提问可单独补填，关系缺失不影响权限。已同步 Web 邀请和 Admin 关联项目，以及关系资料删除登记。API 与原生控制器、Chromium／WebKit 邀请、类型检查和正式原生编译通过；DevTools 六画板 390／320 对照因锁屏待继续，真机微信分享另验，未部署或上传。见 [MP04 交付](docs/delivery/2026-11-11/miniprogram-refactor/MP04-delivery.md)与[共享关系契约](docs/delivery/2026-11-11/miniprogram-refactor/MP04-contract.md)。
 
 2026-11-11 MP01 入口与账号已实现：公开首页／样书、共享底部登录、我的昵称与脱敏手机号、完整八节条款和左侧自定义页头／横排两Tab。原canvas同步未勾选可点、继续即同意和窄屏标题。六张主责画板完成真实DevTools 390×844、320×568对照；身份API用真实本地PostgreSQL/Redis，微信供应商边界仍为fixture。真实手机号成功授权与真机另记，未部署或上传。后续模块使用[共享契约](docs/delivery/2026-11-11/miniprogram-refactor/MP01-ui-contract.md)，[运行证据与外部待验](docs/delivery/2026-11-11/miniprogram-refactor/MP01-evidence.md)。

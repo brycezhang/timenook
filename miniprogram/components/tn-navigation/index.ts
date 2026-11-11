@@ -3,6 +3,7 @@ Component({
     title: { type: String, value: "" },
     brand: { type: Boolean, value: false },
     back: { type: Boolean, value: true },
+    interceptBack: { type: Boolean, value: false },
   },
   data: { statusHeight: 20, rightInset: 100, compact: false },
   lifetimes: {
@@ -18,6 +19,10 @@ Component({
   },
   methods: {
     goBack() {
+      if (this.properties.interceptBack) {
+        this.triggerEvent("back");
+        return;
+      }
       if (getCurrentPages().length > 1) wx.navigateBack();
       else wx.switchTab({ url: "/pages/home/index" });
     },
