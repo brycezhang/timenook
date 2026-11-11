@@ -49,7 +49,13 @@ export interface ProjectOverview {
   stories: StoryView[];
   tasks: import("./tasks").ProductionTaskView[];
   interviews: import("./recording").RecordingContext["interviews"];
-  summary: { pending: number; confirmed: number; included: number };
+  summary: {
+    pending: number;
+    confirmed: number;
+    included: number;
+    photos: number;
+    audioMinutes: number;
+  };
   nextStep: string;
   accessExpiresAt: string | null;
 }

@@ -1597,3 +1597,19 @@ model AdminUserNote {
  @@index([userId,createdAt])
  @@map("admin_user_notes")
 }
+
+model FamilyQuestion {
+  removed Boolean @default(false)
+  id String @id @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  version Int @default(1)
+  text String?
+  chapterKey String? @map("chapter_key")
+  authorId String? @map("author_id") @db.Uuid
+  authorNickname String? @map("author_nickname")
+  authorRelationship String? @map("author_relationship") @db.VarChar(32)
+  state String @default("ready")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  @@index([projectId])
+  @@map("family_questions")
+}

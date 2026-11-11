@@ -130,7 +130,17 @@ export interface ActualPlanQuestion {
     | PlanContent["starters"][number]
     | { text: string; intent: string };
   source?: {
-    kind: "plan" | "photo" | "free-narration" | "self-written" | "follow-up";
+    kind:
+      | "plan"
+      | "photo"
+      | "free-narration"
+      | "self-written"
+      | "follow-up"
+      | "family";
+    familyQuestionId?: string;
+    authorId?: string;
+    authorNickname?: string;
+    authorRelationship?: string;
     chapterKey?: string;
     rewritesQuestionKey?: string;
     generationTaskId?: string;
@@ -162,3 +172,4 @@ export * from "./quality-care";
 
 export * from "./account-link";
 export * from "./gifts";
+export * from "./family-questions";

@@ -10,6 +10,7 @@ import type {
   ProjectPlanRevision,
   TemplateReference,
 } from "@timenook/contracts";
+import { familyAnswersIn } from "./family-question-answers";
 import { BUILTIN_TEMPLATE, BuiltinTemplate } from "./builtin-template";
 
 export class ProjectPlanError extends Error {
@@ -165,6 +166,7 @@ export class ProjectPlans {
       expectedPlanRevision: number;
       capturedBy: string;
       questionKey?: string;
+      familyQuestionId?: string;
       starterKind?: "photo" | "free-narration";
       followupSource?: {
         generationTaskId: string;
@@ -192,6 +194,8 @@ export class ProjectPlans {
         prior.planRevision !== command.expectedPlanRevision ||
         prior.capturedBy !== command.capturedBy ||
         prior.questionKey !== (command.questionKey ?? null) ||
+        (prior.source as Prisma.JsonObject | null)?.familyQuestionId !==
+          command.familyQuestionId ||
         prior.starterKind !== (command.starterKind ?? null) ||
         (prior.source as Prisma.JsonObject | null)?.generationTaskId !==
           command.followupSource?.generationTaskId ||
@@ -210,10 +214,24 @@ export class ProjectPlans {
     if (plan.revision !== command.expectedPlanRevision)
       throw new ProjectPlanError("VERSION_CONFLICT");
     if (
-      [command.questionKey, command.starterKind, command.selfWritten].filter(
-        Boolean,
-      ).length !== 1
+      [
+        command.questionKey,
+        command.familyQuestionId,
+        command.starterKind,
+        command.selfWritten,
+      ].filter(Boolean).length !== 1
     )
+      throw new ProjectPlanError("INVALID_COMMAND");
+    const family = command.familyQuestionId
+      ? await tx.familyQuestion.findFirst({
+          where: {
+            id: command.familyQuestionId,
+            projectId: command.projectId,
+            removed: false,
+          },
+        })
+      : null;
+    if (command.familyQuestionId && !family)
       throw new ProjectPlanError("INVALID_COMMAND");
     const custom = command.selfWritten;
     if (custom) {
@@ -241,13 +259,15 @@ export class ProjectPlans {
       : undefined;
     if (custom?.rewritesQuestionKey && !original)
       throw new ProjectPlanError("INVALID_COMMAND");
-    const snapshot = custom
-      ? { text: custom.text, intent: custom.intent }
-      : command.questionKey
-        ? plan.chapters
-            .flatMap((c) => c.questions)
-            .find((q) => q.key === command.questionKey)
-        : plan.starters.find((s) => s.kind === command.starterKind);
+    const snapshot = family
+      ? { text: family.text!, intent: "回答家人的提问" }
+      : custom
+        ? { text: custom.text, intent: custom.intent }
+        : command.questionKey
+          ? plan.chapters
+              .flatMap((c) => c.questions)
+              .find((q) => q.key === command.questionKey)
+          : plan.starters.find((s) => s.kind === command.starterKind);
     if (!snapshot) throw new ProjectPlanError("INVALID_COMMAND");
     if (
       command.questionKey &&
@@ -267,16 +287,27 @@ export class ProjectPlans {
           questionKey: command.questionKey,
           starterKind: command.starterKind,
           snapshot: JSON.parse(JSON.stringify(snapshot)),
-          source: {
-            kind: command.questionKey ? "plan" : command.starterKind!,
-            ...(command.questionKey
-              ? {
-                  chapterKey: plan.chapters.find((ch) =>
-                    ch.questions.some((q) => q.key === command.questionKey),
-                  )!.key,
-                }
-              : {}),
-          },
+          source: family
+            ? {
+                kind: "family",
+                familyQuestionId: family.id,
+                authorId: family.authorId!,
+                authorNickname: family.authorNickname!,
+                authorRelationship: family.authorRelationship!,
+                ...(plan.chapters.some((ch) => ch.key === family.chapterKey)
+                  ? { chapterKey: family.chapterKey! }
+                  : {}),
+              }
+            : {
+                kind: command.questionKey ? "plan" : command.starterKind!,
+                ...(command.questionKey
+                  ? {
+                      chapterKey: plan.chapters.find((ch) =>
+                        ch.questions.some((q) => q.key === command.questionKey),
+                      )!.key,
+                    }
+                  : {}),
+              },
           ...(custom
             ? {
                 source: JSON.parse(
@@ -820,6 +851,22 @@ export async function reviseProjectPlanIn(
       );
       destination.questions.push(question);
     }
+  }
+  const familyAnswers = await familyAnswersIn(tx, command.projectId);
+  for (const question of await tx.familyQuestion.findMany({
+    where: { projectId: command.projectId, removed: false },
+  })) {
+    const answer = familyAnswers.find((a) => a.questionId === question.id);
+    const chapterKey = answer
+      ? (content.chapters.find((ch) => ch.storyRefs.includes(answer.storyId))
+          ?.key ?? null)
+      : (content.chapters.find((ch) => ch.key === question.chapterKey)?.key ??
+        null);
+    if (question.chapterKey !== chapterKey)
+      await tx.familyQuestion.update({
+        where: { id: question.id },
+        data: { chapterKey, version: { increment: 1 } },
+      });
   }
   validateContent(content);
   const refs = content.chapters.flatMap((ch) => ch.storyRefs);
