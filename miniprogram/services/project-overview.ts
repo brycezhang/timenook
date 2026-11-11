@@ -1,4 +1,7 @@
-import type { ProjectOverview } from "../../packages/contracts/src";
+import type {
+  ProjectOverview,
+  ProjectMembership,
+} from "../../packages/contracts/src";
 import { sessionClient } from "./session";
 
 function selectionKey() {
@@ -35,12 +38,7 @@ function validate(value: ProjectOverview, projectId: string) {
 export const projectOverviewClient = {
   async memberships() {
     return sessionClient.request<{
-      projects: {
-        projectId: string;
-        state: string;
-        bookTitle: string;
-        origin: "purchased" | "invited";
-      }[];
+      projects: ProjectMembership[];
     }>("/participations");
   },
   selected() {

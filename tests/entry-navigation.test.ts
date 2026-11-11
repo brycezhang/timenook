@@ -137,6 +137,10 @@ test("invitation login stays in place until the user explicitly accepts", async 
   const h = await harness("welcome", [], false);
   h.page.onLoad({ token: "c".repeat(43) });
   await h.page.onShow();
+  h.page.chooseRelationship({
+    currentTarget: { dataset: { relationship: "女儿" } },
+  });
+  h.page.agreementChange({ detail: { value: ["agree"] } });
   await h.page.accept();
   assert.equal(h.page.data.loginVisible, true);
   h.storage.set(`timenook.session.v1:${base}`, session);

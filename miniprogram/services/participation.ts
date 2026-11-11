@@ -2,6 +2,7 @@ import {
   CONSENT_PURPOSES,
   type ConsentPurpose,
   type InvitationView,
+  type ProjectMemberProfile,
   type ParticipationState,
   type BindingApplication,
   type ProjectCareRequestView,
@@ -87,15 +88,25 @@ export const participationClient = {
       throw new Error("邀请无效");
     return result;
   },
-  async apply(value: string, noticeVersion: string) {
+  async apply(value: string, noticeVersion: string, relationship: string) {
     return sessionClient.request<{
-      id: string;
       projectId: string;
       state: string;
     }>(`/invitations/${value}/accept`, {
-      data: { termsVersion: noticeVersion },
+      data: { termsVersion: noticeVersion, relationship },
       key: paymentKey(),
     });
+  },
+  async memberProfile(id: string) {
+    return sessionClient.request<ProjectMemberProfile>(
+      `/projects/${id}/member-profile`,
+    );
+  },
+  async saveMemberProfile(id: string, relationship: string) {
+    return sessionClient.request<ProjectMemberProfile>(
+      `/projects/${id}/member-profile`,
+      { data: { relationship }, key: paymentKey() },
+    );
   },
   async state(id: string) {
     if (!uuid(id)) throw new Error("项目编号无效");

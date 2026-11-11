@@ -1,5 +1,7 @@
 # TimeNook 项目上下文
 
+2026-11-11 MP04 礼物分类、切书与家人邀请已实现：真实购买／指定领取／普通邀请三分类，自购同一本在送出和收到均可进入，送出恢复原待付款；只有购买者邀请，家人接受必填主讲人视角关系，购买者首次提问可单独补填，关系缺失不影响权限。已同步 Web 邀请和 Admin 关联项目，以及关系资料删除登记。API 与原生控制器、Chromium／WebKit 邀请、类型检查和正式原生编译通过；DevTools 六画板 390／320 对照因锁屏待继续，真机微信分享另验，未部署或上传。见 [MP04 交付](docs/delivery/2026-11-11/miniprogram-refactor/MP04-delivery.md)与[共享关系契约](docs/delivery/2026-11-11/miniprogram-refactor/MP04-contract.md)。
+
 2026-11-11 MP01 入口与账号已实现：公开首页／样书、共享底部登录、我的昵称与脱敏手机号、完整八节条款和左侧自定义页头／横排两Tab。原canvas同步未勾选可点、继续即同意和窄屏标题。六张主责画板完成真实DevTools 390×844、320×568对照；身份API用真实本地PostgreSQL/Redis，微信供应商边界仍为fixture。真实手机号成功授权与真机另记，未部署或上传。后续模块使用[共享契约](docs/delivery/2026-11-11/miniprogram-refactor/MP01-ui-contract.md)，[运行证据与外部待验](docs/delivery/2026-11-11/miniprogram-refactor/MP01-evidence.md)。
 
 2026-11-11 用户已授权按最新业务流程与设计完整重构小程序，要求 UI 和交互逐画板对齐；开发阶段前后端与数据库可以破坏性更新，不做旧版本兼容。已在 `codex/miniprogram-modern-refactor` 整理[12 张模块票及实施规格](docs/delivery/2026-11-11/miniprogram-refactor/README.md)，[71 张画板对应表](docs/delivery/2026-11-11/miniprogram-refactor/DESIGN-MAP.md)已覆盖无遗漏。用户已确认拆分与验收方式，[父规格 #166](https://github.com/brycezhang/timenook/issues/166) 与 12 张子票及原生阻塞关系已发布，MP01（#167）开始实施；所有原生验收仍为待验证。当前基线 CI 的支付测试 `Array.at` 类型错误纳入首票修复，最新登录同意提示需同步原画布与小程序。

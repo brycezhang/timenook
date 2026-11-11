@@ -1,5 +1,13 @@
+<tn-navigation title="邀请家人"/>
 <app-loading wx:if="{{pageLoading}}" variant="book" />
-<block wx:else>
-<view class="s-page"><view class="s-title">一起，把故事留下。</view><view class="s-book"><view class="s-subtitle serif">{{bookTitle}}</view><view class="s-muted s-space">时光故事</view></view><view class="s-muted">把邀请分享给家人。对方接受后，就能一起记录、编辑和印刷。</view><view wx:if="{{status}}" class="s-error">{{status}}</view><button wx:if="{{status}}" class="s-link" bindtap="prepare">重新准备邀请</button></view><view class="s-dock"><button class="s-button" open-type="share" loading="{{busy}}" disabled="{{busy || !token}}">微信分享给家人</button><view class="s-term">请仅邀请愿意共同完成这本书的人。</view></view>
-
-</block>
+<view wx:else class="tn-page with-dock family-page">
+ <view wx:if="{{bookTitle}}" class="tn-muted">邀请家人加入「{{bookTitle}}」。</view>
+ <view class="family-photo"><image src="/assets/invite-family.jpg" mode="aspectFill" aria-label="父女合影示例照片"/></view>
+ <view class="tn-card">
+  <view class="tn-row"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/modern-mic.svg"/></view><view class="tn-grow family-benefit-copy"><view>都能讲述和补充</view><view class="family-caption">也可编辑全部故事</view></view></view>
+  <view class="tn-row"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/modern-book.svg"/></view><view class="tn-grow family-benefit-copy"><view>一起完成这本书</view><view class="family-caption">可预览、制作和寄送</view></view></view>
+ </view>
+ <view wx:if="{{status}}" class="tn-error">{{status}}</view>
+ <button wx:if="{{status}}" class="tn-link" bindtap="prepare">重新准备邀请</button>
+</view>
+<view class="tn-dock"><button class="tn-button" open-type="share" loading="{{busy}}" disabled="{{busy || !token || !canInvite}}"><image class="tn-icon" src="/assets/icons/share-light.svg"/>邀请微信好友</button></view>

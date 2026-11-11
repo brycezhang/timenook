@@ -1,12 +1,30 @@
+import type {
+  GiftCategory,
+  ProjectMembership,
+  PaymentOrderView,
+} from "../../../packages/contracts/src";
 import { paymentClient } from "../../services/payments";
 import { sessionClient } from "../../services/session";
 import { projectOverviewClient } from "../../services/project-overview";
 import { switchProjectTab } from "../../services/navigation";
 import { go } from "../../services/store";
-type Row = { projectId: string; bookTitle: string; origin: string };
+const categories = [
+  { value: "sent", label: "我送出的" },
+  { value: "received", label: "我收到的" },
+  { value: "participating", label: "我参与的" },
+];
+type Row = ProjectMembership & { description: string; detail: string };
+type PendingRow = {
+  id: string;
+  bookTitle: string;
+  description: string;
+  detail: string;
+};
 Page({
   data: {
-    pending: [] as { id: string; bookTitle: string }[],
+    categories,
+    category: "sent" as GiftCategory,
+    pending: [] as PendingRow[],
     rows: [] as Row[],
     selected: "",
     busy: false,
@@ -14,58 +32,138 @@ Page({
     status: "",
     switching: false,
     loggedIn: false,
+    loginVisible: false,
   },
   generation: 0,
+  owner: "",
+  projects: [] as ProjectMembership[],
+  orders: [] as PaymentOrderView[],
   onLoad(q) {
-    this.setData({ switching: q.switch === "1" });
-    wx.setNavigationBarTitle({ title: q.switch === "1" ? "切换项目" : "项目" });
+    this.setData({
+      switching: q.switch === "1",
+      ...(categories.some((item) => item.value === q.category)
+        ? { category: q.category as GiftCategory }
+        : {}),
+    });
   },
   async onShow() {
     const n = ++this.generation;
-    this.setData({ busy: true, pageLoading: true, status: "", rows: [] });
+    const previous = sessionClient.context();
+    if (previous !== this.owner) this.clearProjects();
+    this.setData({
+      busy: true,
+      pageLoading: !this.projects.length && !this.orders.length,
+      status: "",
+    });
     try {
       const user = await sessionClient.restore();
       if (n !== this.generation) return;
       this.setData({ loggedIn: !!user });
-      if (!user) return;
+      if (!user) {
+        this.clearProjects();
+        return;
+      }
       const owner = sessionClient.context();
+      if (owner !== this.owner) this.clearProjects();
       const [{ projects }, orders] = await Promise.all([
         projectOverviewClient.memberships(),
         paymentClient.list(),
       ]);
-      if (n === this.generation && owner === sessionClient.context())
-        this.setData({
-          pending: orders.filter((o) => o.state === "pending"),
-          rows: projects,
-          selected: projectOverviewClient.selected(),
-        });
+      if (n !== this.generation || owner !== sessionClient.context()) return;
+      this.owner = owner;
+      this.projects = projects;
+      this.orders = orders.filter((order) => order.state === "pending");
+      this.showCategory();
     } catch (e) {
-      if (n === this.generation)
+      if (n === this.generation) {
+        if (this.owner !== sessionClient.context()) this.clearProjects();
         this.setData({
-          status: e instanceof Error ? e.message : "项目未能读取",
+          status: e instanceof Error ? e.message : "礼物未能读取",
         });
+      }
     } finally {
       if (n === this.generation)
         this.setData({ busy: false, pageLoading: false });
     }
   },
+  clearProjects() {
+    this.projects = [];
+    this.orders = [];
+    this.owner = "";
+    this.setData({ rows: [], pending: [], selected: "" });
+  },
+  showCategory() {
+    const category = this.data.category;
+    this.setData({
+      rows: this.projects
+        .filter((p) => p.categories.includes(category))
+        .map((p) => ({
+          ...p,
+          description: p.giftRelationship
+            ? `${p.giverNickname}送给${p.giftRelationship}的时光故事书`
+            : `${p.giverNickname}发起的时光故事书`,
+          detail: `${p.isSelfGift ? "送给自己" : category === "received" ? "我是主讲人" : category === "participating" ? "参与记录" : p.giftState === "unissued" ? "待送出" : p.giftState === "unclaimed" ? "待领取" : "已送出"} · ${p.storyCount} 个故事`,
+        })),
+      pending:
+        category === "sent"
+          ? this.orders.map((o) => ({
+              id: o.id,
+              bookTitle: o.bookTitle,
+              description: `${sessionClient.nickname() || "我"}送给${o.recipient.relationshipLabel}的时光故事书`,
+              detail: `${o.paymentStatus === "unknown" ? "付款结果待确认" : "待付款"} · ¥${(o.amount / 100).toFixed(o.amount % 100 ? 2 : 0)}`,
+            }))
+          : [],
+      selected: projectOverviewClient.selected(),
+    });
+  },
+  changeCategory(e: WechatMiniprogram.TouchEvent) {
+    const category = e.currentTarget.dataset.category as GiftCategory;
+    if (!categories.some((item) => item.value === category)) return;
+    this.setData({ category });
+    if (this.owner && this.owner === sessionClient.context())
+      this.showCategory();
+  },
   onHide() {
     ++this.generation;
-    this.setData({ rows: [], pending: [], busy: false, pageLoading: false });
+    this.setData({ busy: false });
+  },
+  onUnload() {
+    ++this.generation;
   },
   choose(e: WechatMiniprogram.TouchEvent) {
     const id = e.currentTarget.dataset.id as string;
-    if (this.data.rows.some((p) => p.projectId === id))
+    if (
+      this.owner === sessionClient.context() &&
+      this.data.rows.some((p) => p.projectId === id)
+    )
       switchProjectTab("home", id);
   },
   payment(e: WechatMiniprogram.TouchEvent) {
-    go("order", `id=${e.currentTarget.dataset.id}`);
+    const id = e.currentTarget.dataset.id as string;
+    if (
+      this.owner === sessionClient.context() &&
+      this.data.pending.some((order) => order.id === id)
+    )
+      go("order", `id=${id}`);
   },
   login() {
-    switchProjectTab("account");
+    this.setData({ loginVisible: true });
+  },
+  closeLogin() {
+    this.setData({ loginVisible: false });
+  },
+  loginSucceeded() {
+    this.setData({ loginVisible: false });
+    void this.onShow();
   },
   purchase() {
     go("new-book");
+  },
+  home() {
+    switchProjectTab("home");
+  },
+  account() {
+    switchProjectTab("account");
   },
   refresh() {
     void this.onShow();

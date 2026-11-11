@@ -61,6 +61,7 @@ test("project lists show the purchase title for owners and members, then prefer 
         state: "active",
         categories: [category],
         isSelfGift: false,
+        giftState: "unissued",
         giverNickname: data(
           await request("GET", "/v1/users/me", p.buyer.token),
           200,
