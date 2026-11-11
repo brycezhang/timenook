@@ -203,7 +203,10 @@ Page({
             },
           );
           markEditing(false);
-          wx.navigateBack();
+          const previous = getCurrentPages().slice(-2)[0];
+          wx.navigateBack({
+            delta: previous?.route === "pages/chapter-outline/index" ? 2 : 1,
+          });
         } catch (e) {
           this.setData({ status: e instanceof Error ? e.message : "未能移除" });
         } finally {

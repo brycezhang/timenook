@@ -1,6 +1,6 @@
-<tn-navigation title="大纲问题" />
+<tn-navigation title="问题详情" />
 <app-loading wx:if="{{pageLoading}}" variant="story" />
-<view wx:else class="tn-page with-dock"><view class="outline-between"><text class="outline-badge">大纲问题</text><button class="tn-link" bindtap="edit">编辑</button></view><view class="outline-title question-text">{{text}}</view><view class="tn-muted">{{chapter}} · {{state}}</view>
-<button wx:if="{{storyId}}" class="outline-card" bindtap="story"><view class="outline-card-title">查看回答故事 ›</view></button>
-<view wx:else class="question-actions"><button class="tn-link" data-state="later" bindtap="state" disabled="{{busy}}">稍后回答</button><button class="tn-link" data-state="{{state==='已跳过'?'ready':'skipped'}}" bindtap="state" disabled="{{busy}}">{{state==='已跳过'?'恢复问题':'跳过问题'}}</button></view>
-<view class="tn-error" wx:if="{{status}}">{{status}}</view><view wx:if="{{!storyId}}" class="tn-dock"><button class="tn-button" bindtap="answer" disabled="{{busy}}" loading="{{busy}}">开始回答</button></view></view>
+<view wx:else class="tn-page with-dock question-page"><view class="outline-between"><text class="outline-badge">{{state}}</text><button class="tn-link" bindtap="edit"><image class="outline-small-icon" src="/assets/icons/pencil.svg" />编辑问题</button></view><view class="tn-muted">大纲问题</view><view class="outline-title question-text">{{text}}</view><text class="outline-badge">{{chapter}}</text>
+<button wx:if="{{storyId}}" class="outline-card" bindtap="story"><view class="tn-muted">回答故事</view><view class="outline-card-title">{{storyTitle}} ›</view></button>
+<view wx:elif="{{state!=='已跳过'}}" class="question-actions"><button class="tn-link" data-state="later" bindtap="state" disabled="{{busy}}">稍后回答</button><button class="tn-link" data-state="skipped" bindtap="state" disabled="{{busy}}">跳过问题</button></view><button wx:else class="tn-link" data-state="ready" bindtap="state" disabled="{{busy}}">恢复到待回答</button>
+<button class="tn-link question-remove" bindtap="remove" disabled="{{busy}}">移除问题</button><view class="tn-error" wx:if="{{status}}">{{status}}</view><view wx:if="{{!storyId}}" class="tn-dock"><button class="tn-button" bindtap="answer" disabled="{{busy}}" loading="{{busy}}"><image class="tn-icon" src="/assets/icons/mic-light.svg" />开始回答</button></view></view>

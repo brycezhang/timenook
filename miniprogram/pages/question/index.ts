@@ -2,6 +2,7 @@ import type {
   PersonalPlan,
   PlanQuestionState,
 } from "../../../packages/contracts/src";
+import { storyClient } from "../../services/stories";
 import { personalPlanClient } from "../../services/personal-plan";
 import { startOutlineAnswer } from "../../services/outline";
 import { sessionClient } from "../../services/session";
@@ -12,6 +13,7 @@ Page({
     chapter: "",
     state: "",
     storyId: "",
+    storyTitle: "",
     busy: false,
     pageLoading: true,
     status: "",
@@ -41,7 +43,12 @@ Page({
       const state =
         plan.questionStates.find((s) => s.questionKey === this.key)?.state ||
         "ready";
+      const story = answer
+        ? await storyClient.read(this.projectId, answer.storyId)
+        : null;
+      if (n !== this.generation || owner !== sessionClient.context()) return;
       this.setData({
+        storyTitle: story?.revision?.title || "",
         text: q.text,
         chapter: answer
           ? plan.chapters.find((c) => c.key === answer.chapterKey)?.title ||
@@ -110,5 +117,31 @@ Page({
     } finally {
       this.setData({ busy: false });
     }
+  },
+  remove() {
+    if (!this.plan || this.data.busy) return;
+    wx.showModal({
+      title: "移除这个问题？",
+      content: "已保存的故事和原声仍会保留。",
+      confirmText: "移除问题",
+      success: async (r) => {
+        if (!r.confirm || !this.plan) return;
+        this.setData({ busy: true });
+        try {
+          await personalPlanClient.revise(this.projectId, this.plan.revision, {
+            chapters: this.plan.chapters.map((c) => ({
+              ...c,
+              questions: c.questions.filter((q) => q.key !== this.key),
+            })),
+            starters: this.plan.starters,
+          });
+          wx.navigateBack();
+        } catch (e) {
+          this.setData({ status: e instanceof Error ? e.message : "未能移除" });
+        } finally {
+          this.setData({ busy: false });
+        }
+      },
+    });
   },
 });

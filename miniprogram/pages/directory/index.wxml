@@ -7,5 +7,5 @@
   <sort-list id="chapters" items="{{rows}}" numbered modern disabled="{{busy}}" bindopen="open" bindreorder="reorder" />
   <view wx:if="{{!rows.length}}" class="outline-empty">暂无章节，可添加自己的章节</view>
   <view wx:if="{{status}}" class="tn-error">{{status}}</view>
-  <view class="tn-dock"><button class="tn-button" bindtap="book">查看书稿</button><button class="tn-link" bindtap="free" disabled="{{busy}}">自由讲述</button></view>
+  <view class="tn-dock"><button class="tn-button" bindtap="book"><image class="tn-icon" src="/assets/icons/book-open-light.svg" />查看书稿</button><button class="tn-link" bindtap="free" disabled="{{busy}}"><image class="outline-small-icon" src="/assets/icons/mic.svg" />自由讲述</button></view>
 </view>

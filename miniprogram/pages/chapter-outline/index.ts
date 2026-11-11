@@ -6,7 +6,7 @@ import { go } from "../../services/store";
 Page({
   data: {
     title: "",
-    number: 0,
+    number: "",
     tab: "questions",
     sorting: false,
     questions: [] as {
@@ -60,7 +60,7 @@ Page({
     this.plan = plan;
     this.setData({
       title: c.title,
-      number: plan.chapters.indexOf(c) + 1,
+      number: String(plan.chapters.indexOf(c) + 1).padStart(2, "0"),
       questions: c.questions.map((q) => ({
         id: q.key,
         title: q.text,

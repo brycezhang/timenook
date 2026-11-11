@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "大纲问题",
+  "navigationBarTitleText": "问题详情",
   "usingComponents": {
     "sort-list": "/components/sort-list/index",
     "tn-navigation": "/components/tn-navigation/index"

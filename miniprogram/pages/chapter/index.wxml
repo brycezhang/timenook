@@ -3,6 +3,6 @@
 <view wx:else class="tn-page with-dock"><label class="tn-field">章节名称<input class="tn-input" value="{{title}}" bindinput="title" maxlength="120" placeholder="输入章节名称" /></label>
 <button class="chapter-story-link" bindtap="choose" disabled="{{busy}}"><text>本章故事 · {{rows.length}} 篇</text><text class="tn-arrow">›</text></button>
 <view wx:if="{{!rows.length}}" class="outline-empty">本章暂无故事</view>
-<label wx:for="{{rows}}" wx:key="id" class="tn-field"><text>{{index + 1}}　{{item.title}}</text><textarea class="chapter-body" value="{{item.body}}" data-id="{{item.id}}" bindinput="body" maxlength="-1" auto-height adjust-position cursor-spacing="130" /></label>
-<button wx:if="{{existing}}" class="tn-link outline-danger" bindtap="remove" disabled="{{busy}}">移除章节</button>
+<label wx:for="{{rows}}" wx:key="id" class="tn-field"><text>{{index < 9 ? '0' + (index + 1) : index + 1}}　{{item.title}}</text><textarea class="chapter-body" value="{{item.body}}" data-id="{{item.id}}" bindinput="body" maxlength="-1" adjust-position cursor-spacing="130" /></label>
+<button wx:if="{{existing}}" class="tn-link outline-danger chapter-remove" bindtap="remove" disabled="{{busy}}">移除章节</button>
 <view class="tn-error" wx:if="{{status}}">{{status}}</view><view class="tn-dock"><button class="tn-button" loading="{{busy}}" disabled="{{busy}}" bindtap="save">保存章节</button></view></view>

@@ -117,31 +117,4 @@ Page({
       this.setData({ busy: false });
     }
   },
-  remove() {
-    if (!this.plan || this.data.busy) return;
-    wx.showModal({
-      title: "移除这个问题？",
-      content: "已保存的故事和原声仍会保留。",
-      confirmText: "移除问题",
-      success: async (r) => {
-        if (!r.confirm || !this.plan) return;
-        this.setData({ busy: true });
-        try {
-          await personalPlanClient.revise(this.projectId, this.plan.revision, {
-            chapters: this.plan.chapters.map((c) => ({
-              ...c,
-              questions: c.questions.filter((q) => q.key !== this.key),
-            })),
-            starters: this.plan.starters,
-          });
-          markEditing(false);
-          wx.navigateBack({ delta: 2 });
-        } catch (e) {
-          this.setData({ status: e instanceof Error ? e.message : "未能移除" });
-        } finally {
-          this.setData({ busy: false });
-        }
-      },
-    });
-  },
 });
