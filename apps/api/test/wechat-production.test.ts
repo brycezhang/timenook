@@ -454,7 +454,11 @@ test("ordinary merchant signed notifications and active queries share durable pa
     };
     const buyer = await login("isolated-buyer"),
       stranger = await login("isolated-stranger");
-    assert.deepEqual(buyer.user, { ...webActor.user, nickname: "用户1234" });
+    assert.deepEqual(buyer.user, {
+      ...webActor.user,
+      nickname: "用户1234",
+      maskedPhone: "131****1234",
+    });
     const auth = { authorization: `Bearer ${buyer.session.token}` };
     const snapshot = JSON.parse(
       readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),

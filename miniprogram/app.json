@@ -11,6 +11,7 @@
     "pages/photos/index",
     "pages/story/index",
     "pages/edit-story/index",
+    "pages/assign-story/index",
     "pages/book/index",
     "pages/manuscript/index",
     "pages/print/index",

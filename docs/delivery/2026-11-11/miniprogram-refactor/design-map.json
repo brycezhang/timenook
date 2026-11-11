@@ -14,12 +14,13 @@
       "state": "未登录公开首页",
       "entry": "启动小程序／退出登录",
       "interaction": "样书、送礼、我的入口",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP01/native/Main-320.png",
+      "native390": "evidence/MP01/native/Main-390.png",
+      "interactionEvidence": "MP01-evidence.md",
+      "result": "passed",
       "design390": "design-reference/390/Main.png",
-      "design320": "design-reference/320/Main.png"
+      "design320": "design-reference/320/Main.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external phone identity"
     },
     {
       "board": "Sample.dc.html",
@@ -30,12 +31,13 @@
       "state": "公共样书",
       "entry": "首页→看看样书",
       "interaction": "节选阅读、返回与购买入口",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP01/native/Sample-320.png",
+      "native390": "evidence/MP01/native/Sample-390.png",
+      "interactionEvidence": "MP01-evidence.md",
+      "result": "passed",
       "design390": "design-reference/390/Sample.png",
-      "design320": "design-reference/320/Sample.png"
+      "design320": "design-reference/320/Sample.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external phone identity"
     },
     {
       "board": "Login.dc.html",
@@ -46,12 +48,14 @@
       "state": "登录与未勾选确认弹窗",
       "entry": "首页／我的／受保护操作→登录",
       "interaction": "关闭、协议返回、继续授权与成功恢复",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP01/native/Login-320.png",
+      "native390": "evidence/MP01/native/Login-390.png",
+      "interactionEvidence": "MP01-evidence.md",
+      "result": "passed",
       "design390": "design-reference/390/Login.png",
-      "design320": "design-reference/320/Login.png"
+      "design320": "design-reference/320/Login.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external phone identity",
+      "externalPending": "真实手机号成功授权与真机账号路径"
     },
     {
       "board": "MyGuest.dc.html",
@@ -62,12 +66,13 @@
       "state": "未登录",
       "entry": "底部我的",
       "interaction": "原地登录、送礼、条款",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP01/native/MyGuest-320.png",
+      "native390": "evidence/MP01/native/MyGuest-390.png",
+      "interactionEvidence": "MP01-evidence.md",
+      "result": "passed",
       "design390": "design-reference/390/MyGuest.png",
-      "design320": "design-reference/320/MyGuest.png"
+      "design320": "design-reference/320/MyGuest.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external phone identity"
     },
     {
       "board": "MyAccount.dc.html",
@@ -78,12 +83,14 @@
       "state": "已登录",
       "entry": "底部我的",
       "interaction": "昵称弹窗、礼物、送礼、退出",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP01/native/MyAccount-320.png",
+      "native390": "evidence/MP01/native/MyAccount-390.png",
+      "interactionEvidence": "MP01-evidence.md",
+      "result": "passed",
       "design390": "design-reference/390/MyAccount.png",
-      "design320": "design-reference/320/MyAccount.png"
+      "design320": "design-reference/320/MyAccount.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external phone identity",
+      "externalPending": "真实手机号成功授权与真机账号路径"
     },
     {
       "board": "Terms.dc.html",
@@ -94,12 +101,13 @@
       "state": "现行条款",
       "entry": "登录弹窗／我的→使用条款",
       "interaction": "滚动、返回原弹窗",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP01/native/Terms-320.png",
+      "native390": "evidence/MP01/native/Terms-390.png",
+      "interactionEvidence": "MP01-evidence.md",
+      "result": "passed",
       "design390": "design-reference/390/Terms.png",
-      "design320": "design-reference/320/Terms.png"
+      "design320": "design-reference/320/Terms.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external phone identity"
     },
     {
       "board": "NewGift.dc.html",

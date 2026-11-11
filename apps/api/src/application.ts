@@ -146,6 +146,7 @@ import {
 import { ErrorResponseDto, HealthResponseDto } from "./health-contract";
 import { IdentityAccess, WECHAT_FETCH } from "./identity/identity-access";
 import { IdentityController } from "./identity/identity-controller";
+import { Gifts, GiftsController } from "./identity/gifts";
 import { WebController } from "./web/web-controller";
 import { WebAccess } from "./web/web-access";
 import { SmsCodes } from "./sms/sms-codes";
@@ -514,6 +515,7 @@ export async function createApplication(
       ...(productEnabled
         ? [
             ParticipationController,
+            GiftsController,
             AdminCareController,
             DeletionController,
             AdminDeletionController,
@@ -686,6 +688,7 @@ export async function createApplication(
       IdentityAccess,
       ProjectStreams,
       Participation,
+      Gifts,
       PersonalPlans,
       Interviews,
       AdminAccess,

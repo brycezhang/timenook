@@ -161,3 +161,4 @@ export * from "./deletion";
 export * from "./quality-care";
 
 export * from "./account-link";
+export * from "./gifts";

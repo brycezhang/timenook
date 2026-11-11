@@ -46,6 +46,7 @@ Page({
       const s = await storyClient.read(this.projectId, this.storyId);
       if (n !== this.generation || this.owner !== sessionClient.context())
         return;
+      if (!s.revision) throw new Error("故事整理完成后可以编辑文字");
       this.story = s;
       this.setData({ title: s.revision?.title || "", body: storyBody(s) });
     } catch (e) {
@@ -58,12 +59,18 @@ Page({
   },
   onHide() {
     ++this.generation;
+    this.setData({ busy: false });
   },
   onUnload() {
+    this.onHide();
     this.stopSession?.();
+    this.story = null;
+    this.setData({ title: "", body: "", dirty: false });
     markEditing(false);
   },
   input(e: WechatMiniprogram.Input) {
+    if (!["title", "body"].includes(e.currentTarget.dataset.field as string))
+      return;
     this.setData({
       [e.currentTarget.dataset.field as string]: e.detail.value,
       dirty: true,
@@ -87,11 +94,13 @@ Page({
       markEditing(false);
       wx.navigateBack();
     } catch (e) {
-      this.setData({
-        status: e instanceof Error ? e.message : "未能保存，修改仍保留",
-      });
+      if (n === this.generation && owner === sessionClient.context())
+        this.setData({
+          status: e instanceof Error ? e.message : "未能保存，修改仍保留",
+        });
     } finally {
-      this.setData({ busy: false });
+      if (n === this.generation && owner === sessionClient.context())
+        this.setData({ busy: false });
     }
   },
 });

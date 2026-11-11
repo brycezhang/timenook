@@ -14,6 +14,14 @@ import {
 import { recordingPartition } from "../../services/interview-recording";
 import { paymentKey } from "../../services/payments";
 import { projectOverviewClient } from "../../services/project-overview";
+import { switchProjectTab } from "../../services/navigation";
+import {
+  audioTime,
+  storyDuration,
+  storyPlacement,
+  storySources,
+  storyState,
+} from "../../services/story-presentation";
 import type {
   StoryView,
   StoryContext,
@@ -44,13 +52,6 @@ function stage(story: StoryView | null) {
                   : task.state === "obsolete"
                     ? "这次整理已失效，请保存补录后重新整理"
                     : "处理中，可离开";
-}
-function audioTime(seconds: number) {
-  const total = Math.max(0, Math.floor(seconds)),
-    hours = Math.floor(total / 3600);
-  const minutes = Math.floor(total / 60) % 60,
-    rest = total % 60;
-  return `${hours ? hours + ":" : ""}${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 import type { Story } from "../../domain/model";
 import { confirmStory, touch } from "../../domain/model";
@@ -89,6 +90,11 @@ Page({
   decisionCommand: null as { input: string; key: string } | null,
   careCommand: null as { input: string; key: string } | null,
   data: {
+    displayState: "saved",
+    placement: "",
+    storyMeta: "",
+    failureTitle: "故事整理失败",
+    failureHint: "录音已保存，可重试整理。",
     needsReview: false,
     showAudio: false,
     showCare: false,
@@ -173,6 +179,9 @@ Page({
           });
         });
       this.setData({
+        displayState: "saved",
+        placement: "",
+        storyMeta: "",
         story: null,
         liveParagraphs: [],
         liveTranscripts: [],
@@ -261,6 +270,9 @@ Page({
         canDecide: false,
         allowInBook: false,
         decisionStatus: "",
+        displayState: "saved",
+        placement: "",
+        storyMeta: "",
         story: null,
         liveParagraphs: [],
         liveTranscripts: [],
@@ -394,6 +406,34 @@ Page({
           if (!this.currentLive(generation, context)) return;
           Object.assign(view, {
             story: full,
+            displayState: storyState(full),
+            placement: storyPlacement(full),
+            storyMeta: [
+              full.task?.allSavedAt?.slice(0, 10),
+              storyDuration(full) ? `${storyDuration(full)} 讲述` : "",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            failureTitle:
+              full.task?.errorCode === "DEPENDENCY_FAILED"
+                ? "录音识别未完成"
+                : full.task?.state === "no_speech"
+                  ? "未识别到语音"
+                  : full.task?.state === "no_content"
+                    ? "还没有形成故事"
+                    : full.task?.state === "manual_review"
+                      ? "整理需要协助"
+                      : "故事整理失败",
+            failureHint:
+              full.task?.errorCode === "DEPENDENCY_FAILED"
+                ? "原声已保存，可以返回讲述重试。"
+                : full.task?.state === "no_speech"
+                  ? "原声已保存，可以回听后再录一段。"
+                  : full.task?.state === "no_content"
+                    ? "文字已识别，可以继续补充讲述。"
+                    : full.task?.state === "manual_review"
+                      ? "原声仍保留，可以继续补充讲述。"
+                      : "录音已保存，可重试整理。",
             decisionReady: !!full.confirmation,
             canDecide:
               !!full.confirmation &&
@@ -403,7 +443,7 @@ Page({
               full.confirmation?.noticeVersion || "synthetic-d08-v1",
             evidencePrefix: full.confirmation?.evidencePrefix || "synthetic:",
             noticeText: full.confirmation?.noticeText || "",
-            liveAudioSources: (full.task?.sources ?? []).map((source) => ({
+            liveAudioSources: storySources(full).map((source) => ({
               clipId: source.clipId,
               durationSeconds: (source.durationMs ?? 0) / 1000,
               durationLabel: source.durationMs
@@ -507,10 +547,8 @@ Page({
       // show the photos already collected for this same interview.
       const snapshot = story.revision
         ? story.revision.photoSnapshot
-        : (
-            await sessionClient.request<PhotoMaterials | null>(
-              `/projects/${this.projectId}/interviews/${story.interviewId}/photo-materials`,
-            )
+        : await sessionClient.request<PhotoMaterials | null>(
+            `/projects/${this.projectId}/interviews/${story.interviewId}/photo-materials`,
           );
       if (!current()) return;
       await clearPhotoPreviews();
@@ -911,7 +949,9 @@ Page({
   },
   async playLive(e: E) {
     const id = e.currentTarget.dataset.id,
-      source = this.data.story?.task?.sources.find((s) => s.clipId === id),
+      source = this.data.story
+        ? storySources(this.data.story).find((s) => s.clipId === id)
+        : undefined,
       generation = this.generation,
       context = this.ownerContext;
     if (
@@ -1082,7 +1122,18 @@ Page({
       audioPositionLabel: audioTime(position),
     });
   },
+  assignStory() {
+    if (this.data.story?.revision && !this.data.busy)
+      go(
+        "assign-story",
+        `projectId=${this.projectId}&storyId=${this.data.story.id}`,
+      );
+  },
+  returnToProject() {
+    switchProjectTab("home", this.projectId);
+  },
   recoverInterview() {
+    if (!this.projectId || !this.interviewId) return;
     const partition = recordingPartition(this.projectId),
       stored: unknown = wx.getStorageSync(`${partition}:index`),
       ids = Array.isArray(stored)
