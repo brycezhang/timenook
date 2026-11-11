@@ -439,11 +439,12 @@
       "entry": "首页／书稿→大纲目录",
       "interaction": "章节拖动、新增、进入章",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP05/native/BookDirectory-390.png",
+      "interactionEvidence": "MP05-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookDirectory.png",
-      "design320": "design-reference/320/BookDirectory.png"
+      "design320": "design-reference/320/BookDirectory.png",
+      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
     },
     {
       "board": "ChapterOutline.dc.html",
@@ -455,11 +456,12 @@
       "entry": "大纲目录→某章",
       "interaction": "页签、题目状态、故事排序入口",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP05/native/ChapterOutline-390.png",
+      "interactionEvidence": "MP05-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/ChapterOutline.png",
-      "design320": "design-reference/320/ChapterOutline.png"
+      "design320": "design-reference/320/ChapterOutline.png",
+      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
     },
     {
       "board": "QuestionDetail.dc.html",
@@ -471,11 +473,12 @@
       "entry": "章节问题列表→题目",
       "interaction": "回答、稍后、跳过、编辑",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP05/native/QuestionDetail-390.png",
+      "interactionEvidence": "MP05-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/QuestionDetail.png",
-      "design320": "design-reference/320/QuestionDetail.png"
+      "design320": "design-reference/320/QuestionDetail.png",
+      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
     },
     {
       "board": "QuestionEdit.dc.html",
@@ -487,11 +490,12 @@
       "entry": "章内新增／题目编辑",
       "interaction": "文字和章节保存、取消",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP05/native/QuestionEdit-390.png",
+      "interactionEvidence": "MP05-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/QuestionEdit.png",
-      "design320": "design-reference/320/QuestionEdit.png"
+      "design320": "design-reference/320/QuestionEdit.png",
+      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
     },
     {
       "board": "ChapterEdit.dc.html",
@@ -503,11 +507,12 @@
       "entry": "目录／章内→编辑章节",
       "interaction": "保存、取消、删除保留故事",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP05/native/ChapterEdit-390.png",
+      "interactionEvidence": "MP05-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/ChapterEdit.png",
-      "design320": "design-reference/320/ChapterEdit.png"
+      "design320": "design-reference/320/ChapterEdit.png",
+      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
     },
     {
       "board": "ChapterStories.dc.html",
@@ -519,11 +524,12 @@
       "entry": "章节→本章故事",
       "interaction": "选取、章内拖动、移出、跨章",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP05/native/ChapterStories-390.png",
+      "interactionEvidence": "MP05-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/ChapterStories.png",
-      "design320": "design-reference/320/ChapterStories.png"
+      "design320": "design-reference/320/ChapterStories.png",
+      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
     },
     {
       "board": "HomeEmpty.dc.html",
@@ -647,11 +653,12 @@
       "entry": "首页照片数／讲述选图",
       "interaction": "上传、预览、选择、照片起讲",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP07/native/Photos-390.png",
+      "interactionEvidence": "MP07-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/Photos.png",
-      "design320": "design-reference/320/Photos.png"
+      "design320": "design-reference/320/Photos.png",
+      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
     },
     {
       "board": "Stories.dc.html",
