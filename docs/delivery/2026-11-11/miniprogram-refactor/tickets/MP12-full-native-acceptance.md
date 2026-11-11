@@ -1,6 +1,6 @@
 # MP12 · 全量原生对照验收与旧实现清理
 
-状态：已确认，待发布 GitHub Issue。父规格：[小程序全量重构](../spec.md)。
+状态：ready-for-agent；GitHub [#178](https://github.com/brycezhang/timenook/issues/178)，父规格 [#166](https://github.com/brycezhang/timenook/issues/166)。父规格：[小程序全量重构](../spec.md)。
 
 ## 交付结果
 
@@ -44,4 +44,3 @@
 - [MP11 制作、收货地址与寄送状态](MP11-print-delivery.md)
 
 工程契约已具备即可推进；尚缺代码或数据契约时保持依赖，不能靠前端样例绕过。本票已确认，尚无已完成验收。
-

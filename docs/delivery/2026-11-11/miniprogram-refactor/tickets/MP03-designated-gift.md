@@ -1,6 +1,6 @@
 # MP03 · 指定手机号发卡与领取礼物
 
-状态：已确认，待发布 GitHub Issue。父规格：[小程序全量重构](../spec.md)。
+状态：ready-for-agent；GitHub [#169](https://github.com/brycezhang/timenook/issues/169)，父规格 [#166](https://github.com/brycezhang/timenook/issues/166)。父规格：[小程序全量重构](../spec.md)。
 
 ## 交付结果
 
@@ -34,4 +34,3 @@
 - [MP02 统一购买、付款与送给自己](MP02-purchase-self-gift.md)
 
 工程契约已具备即可推进；尚缺代码或数据契约时保持依赖，不能靠前端样例绕过。本票已确认，尚无已完成验收。
-
