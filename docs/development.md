@@ -100,7 +100,9 @@ FFmpeg 保持 8.1.1 和原最小编译参数。`scripts/setup-audio-tools.sh` �
 
 ## T06 微信身份与小程序模式
 
-API 内部路径为 `POST /v1/sessions/wechat`（只接受 `{ code }`）、`GET /v1/users/me` 和 `DELETE /v1/sessions/:sessionId`。登录返回 `user.id` 和 `session.id/token/expiresAt`；后两者需 `Authorization: Bearer <token>`，撤销仅允许本人会话，跨账号和未知会话均返回 404。成功撤销为 204；其余成功/错误沿用统一 envelope 和 requestId。账号恢复是重新 `wx.login` 回到同一 `(AppID, openid)` 账号，不含手机号、项目或支付权限。
+API 内部路径为 `POST /v1/sessions/wechat`、`GET /v1/users/me` 和 `DELETE /v1/sessions/:sessionId`。登录提交 `wx.login` 的 `code`、独立的 `phoneCode` 及用户明确同意的 `termsVersion`。服务端核验微信身份和手机号授权，再按已验证手机号解析统一产品账号。登录返回 `user.id/nickname` 和 `session.id/token/expiresAt`；后两者需 `Authorization: Bearer <token>`，撤销仅允许本人会话，跨账号和未知会话均返回 404。成功撤销为 204；其余成功/错误沿用统一 envelope 和 requestId。
+
+修改 `USER_TERMS_VERSION` 时，将 API、网页和小程序体验版放在同一轮发布。小程序的条款正文与正式包发送的版本须和线上 API 一致；API 切换后，把配套开发版本设为体验版，并用手机从未登录状态走一遍手机号授权。旧包提交的旧条款版本会被拒绝；上传成功与设为体验版分别确认。见[登录故障记录](delivery/2026-11-09/wechat-login-release.md)。
 
 正式微信配置只用 `TIMENOOK_WECHAT_APP_ID` 与 `TIMENOOK_WECHAT_APP_SECRET`，必须属于 TimeNook 独立小程序，不复用 legal-agent 或 wutong 身份。AppID `wxa54f81265fba2439` 已绑定根目录 `project.config.json`；2026-11-01 已通过 Git 忽略且权限 600 的 `.env.wechat-local` 交接 AppSecret，成对同步到服务器 `/data/server/timenook/shared/.env`（root:timenook、640），并重启 `timenook-api.service`。本机交接文件不会自动被服务加载或同步，后续修改须单独更新服务端受限配置。实际验证见[微信登录记录](delivery/2026-11-01/wechat-login.md)。开发未配置时登录为 503；任意环境只配置一项均拒绝启动，生产缺失或含占位内容也拒绝启动。代码没有可启用模拟身份的环境开关；外部网络替身仅能在 `environment=test` 的测试构造入口传入，生产和开发均拒绝该入口。本地测试不是双账号微信验收。
 
