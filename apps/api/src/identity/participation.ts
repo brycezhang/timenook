@@ -459,6 +459,14 @@ export class Participation
           state: "active",
           categories,
           isSelfGift,
+          giftState:
+            !order || isSelfGift
+              ? null
+              : p.gift?.claimedByUserId
+                ? "claimed"
+                : p.gift
+                  ? "unclaimed"
+                  : "unissued",
           giverNickname: names.get(p.createdBy) ?? "家人",
           giftRelationship:
             (order?.recipient as { relationshipLabel?: string } | null)

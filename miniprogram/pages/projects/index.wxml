@@ -1,27 +1,21 @@
+<tn-navigation title="{{switching ? '切换故事书' : '我的礼物'}}"/>
 <app-loading wx:if="{{pageLoading}}" variant="list" />
-<block wx:else>
-  <view class="s-page projects-page">
-    <view class="s-title">{{switching ? '切换项目' : '我的项目'}}</view>
-    <view class="s-muted">购买与参与的故事书，都在这里。</view>
-    <view class="projects-list">
-      <button wx:for="{{rows}}" wx:key="projectId" class="project-card" data-id="{{item.projectId}}" bindtap="choose">
-        <view class="s-grow">
-          <view class="project-card__title">{{item.bookTitle}}</view>
-          <view class="project-card__meta">{{item.projectId === selected ? '当前项目' : item.origin === 'invited' ? '参与的项目' : '购买的项目'}}</view>
-        </view>
-        <text class="s-arrow">›</text>
-      </button>
-      <button wx:for="{{pending}}" wx:key="id" class="project-card" data-id="{{item.id}}" bindtap="payment">
-        <view class="s-grow">
-          <view class="project-card__title">{{item.bookTitle}}</view>
-          <view class="project-card__meta">购买待完成</view>
-        </view>
-        <text class="s-arrow">›</text>
-      </button>
-    </view>
-    <view wx:if="{{status}}" class="s-error">{{status}}<button class="s-link" bindtap="refresh">重新读取</button></view>
-    <view wx:elif="{{!rows.length && !pending.length}}" class="s-empty">还没有项目，可以新购一本书，或接受家人的邀请。</view>
-    <button wx:if="{{!loggedIn && !busy}}" class="s-button" bindtap="login">微信登录</button>
-  </view>
-  <view class="s-dock"><button class="s-button secondary" bindtap="purchase">新购一本书</button></view>
+<view wx:else class="tn-page gifts-page {{switching ? '' : 'with-gifts-dock'}}">
+ <view class="gift-categories"><button wx:for="{{categories}}" wx:key="value" class="gift-category {{category === item.value ? 'selected' : ''}}" data-category="{{item.value}}" bindtap="changeCategory" aria-pressed="{{category === item.value}}">{{item.label}}</button></view>
+ <button wx:for="{{rows}}" wx:key="projectId" class="gift-project" data-id="{{item.projectId}}" bindtap="choose" aria-label="{{item.bookTitle}}">
+  <view class="gift-book"><image src="/assets/icons/modern-book.svg"/></view>
+  <view class="tn-grow gift-copy"><view class="gift-title">{{item.bookTitle}}</view><view class="gift-description">{{item.description}}</view><view class="gift-detail">{{item.detail}}</view></view><image class="gift-arrow" src="/assets/icons/modern-chevron-right.svg"/>
+ </button>
+ <button wx:for="{{pending}}" wx:key="id" class="gift-project" data-id="{{item.id}}" bindtap="payment">
+  <view class="gift-book"><image src="/assets/icons/modern-book.svg"/></view>
+  <view class="tn-grow gift-copy"><view class="gift-title">{{item.bookTitle}}</view><view class="gift-description">{{item.description}}</view><view class="gift-detail">{{item.detail}}</view></view><image class="gift-arrow" src="/assets/icons/modern-chevron-right.svg"/>
+ </button>
+ <view wx:if="{{status}}" class="tn-error">{{status}}<button class="tn-link" bindtap="refresh">重新读取</button></view>
+ <view wx:elif="{{!rows.length && !pending.length}}" class="tn-muted gift-empty">{{!loggedIn ? '登录后查看你的礼物' : category === 'sent' ? '还没有送出的礼物' : category === 'received' ? '还没有收到的礼物' : '还没有参与的故事书'}}</view>
+ <button wx:if="{{!loggedIn && !busy}}" class="tn-button" bindtap="login">微信手机号登录</button>
+</view>
+<block wx:if="{{!switching}}">
+ <view class="tn-dock gifts-dock"><button class="tn-button" bindtap="purchase"><image class="tn-icon" src="/assets/icons/gift-white.svg"/>送出一份礼物</button></view>
+ <view class="gift-tabs"><button bindtap="home"><image src="/assets/icons/modern-book-muted.svg"/>时光故事</button><button class="active" bindtap="account"><image src="/assets/icons/modern-user.svg"/>我的</button></view>
 </block>
+<quick-login id="quick-login" visible="{{loginVisible}}" bindsuccess="loginSucceeded" bindclose="closeLogin"/>
