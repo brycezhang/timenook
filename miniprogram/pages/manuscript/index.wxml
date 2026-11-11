@@ -1,4 +1,4 @@
-<tn-navigation title="{{openFailed ? '打开书稿' : 'PDF 书稿'}}" />
+<tn-navigation title="{{openFailed ? 'PDF 打开失败' : version && version.state !== 'ready' ? '更新书稿' : '书稿预览'}}" />
 <app-loading wx:if="{{pageLoading}}" variant="book" />
 <view wx:else class="tn-page with-dock book-page">
   <block wx:if="{{openFailed}}">

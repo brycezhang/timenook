@@ -1,5 +1,7 @@
 # TimeNook 项目上下文
 
+2026-11-11 MP10 封面草稿、真实 PDF 与固定版本原声已实现：书名／寄语／项目照片同次保存，选图返回和取消不写入，购买订单书名保持冻结；书稿按统一目录生成，系统查看器打开真实 PDF，旧书原声及照片来自不可变版本且可拖动回听。Web 消费者同步契约并修复目录初始化。真实本地 PostgreSQL／Redis、控制器与 PDF 渲染检查通过，原生九画板 390／320、微信查看器与手机扫码另验；未部署或上传。见 [MP10 交付与逐画板待验](docs/delivery/2026-11-11/miniprogram-refactor/MP10-delivery.md)。
+
 2026-11-11 MP06 家人文字问题、作者关系快照、完成故事关联、家人优先混合推荐与真实统计首页已实现；支持可选章、无章故事、稍后／跳过／恢复，章内合并家人题计数。API、页面控制器和正式编译已验证；微信原生模块循环已单独修复，七张主责画板及章内增量的 390／320 原生验收仍待串行执行。见 [MP06 契约](docs/delivery/2026-11-11/miniprogram-refactor/MP06-contract.md)与[交付记录](docs/delivery/2026-11-11/miniprogram-refactor/MP06-delivery.md)。
 
 2026-11-11 MP04 礼物分类、切书与家人邀请已实现：真实购买／指定领取／普通邀请三分类，自购同一本在送出和收到均可进入，送出恢复原待付款；只有购买者邀请，家人接受必填主讲人视角关系，购买者首次提问可单独补填，关系缺失不影响权限。已同步 Web 邀请和 Admin 关联项目，以及关系资料删除登记。API 与原生控制器、Chromium／WebKit 邀请、类型检查和正式原生编译通过；DevTools 六画板 390／320 对照因锁屏待继续，真机微信分享另验，未部署或上传。见 [MP04 交付](docs/delivery/2026-11-11/miniprogram-refactor/MP04-delivery.md)与[共享关系契约](docs/delivery/2026-11-11/miniprogram-refactor/MP04-contract.md)。
