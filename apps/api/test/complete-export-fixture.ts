@@ -178,11 +178,15 @@ export async function largeExportSources(
   token: string,
   assistedSessionId?: string,
 ) {
+  const plan = data(
+    await request("GET", `/v1/projects/${projectId}/plan`, token),
+    200,
+  );
   const session = assistedSessionId ? { assistedSessionId } : {},
     interview = data(
       await request("POST", `/v1/projects/${projectId}/interviews`, token, {
         clientInterviewId: randomUUID(),
-        expectedPlanRevision: 1,
+        expectedPlanRevision: plan.revision,
         starterKind: "free-narration",
         ...session,
       }),

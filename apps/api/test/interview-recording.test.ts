@@ -216,7 +216,7 @@ async function joinedProject(versionId = packageId) {
       "POST",
       `/v1/invitations/${invite.token}/accept`,
       narrator.token,
-      { termsVersion: TERMS_VERSION },
+      { relationship: "家人", termsVersion: TERMS_VERSION },
     ),
   );
   return { ...p, narrator };
@@ -244,7 +244,7 @@ test("a currently authorized narrator captures a stable actual plan question in 
   const created = data(await request("POST", url, p.narrator.token, command));
   assert.equal(
     created.actualQuestion.snapshot.text,
-    "有没有一个地方，你现在还想说说它的样子？",
+    plan.chapters[0].questions[0].text,
   );
   assert.equal(created.actualQuestion.planRevision, 1);
   assert.equal(created.actualQuestion.answerRef, created.id);
@@ -333,7 +333,7 @@ test("self-written and rewritten questions preserve their actual source without 
   );
   assert.equal(
     rewritten.actualQuestion.source.original.text,
-    "有没有一个地方，你现在还想说说它的样子？",
+    plan.chapters[0].questions[0].text,
   );
   const current = data(
     await request("GET", `${url}/${written.id}`, p.narrator.token),

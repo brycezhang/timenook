@@ -221,6 +221,7 @@ test.beforeAll(async () => {
         template: {},
         subjectName: "合成讲述者",
         bookTitle: "合成书名",
+        purchaseKind: "gift",
         state: i === 0 ? "paid" : "pending",
         createdAt: new Date(1700000000000 + i * 1000),
       })),

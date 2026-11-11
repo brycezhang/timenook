@@ -115,10 +115,10 @@ export const projectApi = {
     request<Invitation>(`/invitations/${encodeURIComponent(token)}`, {
       signal,
     }),
-  accept: (token: string) =>
+  accept: (token: string, relationship: string) =>
     memberRequest<{ projectId: string }>(
       `/invitations/${encodeURIComponent(token)}/accept`,
-      { termsVersion: USER_TERMS_VERSION },
+      { termsVersion: USER_TERMS_VERSION, relationship },
     ),
   nickname: (nickname: string) =>
     memberRequest<{ id: string; nickname: string }>("/users/me/profile", {

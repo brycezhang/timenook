@@ -19,6 +19,7 @@
 - 零故事封面候选/保存与已有封面冻结 PDF 测试通过。首次 PDF 测试因新工作树缺少固定字体失败；复用已校验的本机字体缓存后通过，未改渲染实现。
 - 132 项照片/采访/故事/会话定向页面回归通过；原生与网页类型检查、29 页正式原生编译通过。
 - Chromium 与 WebKit 对真实 API/数据库的照片上传中断重试、故事补图/说明、移除关联、项目选图起讲及录音照片显示均通过。测试图片、登录/存储与麦克风输入为隔离夹具，不能据此声明真实微信/OSS/设备采集通过。
+- 集成 `dbc58f4` 上补验真实 PostgreSQL/Redis 的历史载荷与文件删除回归通过：`deletion.test.ts` 的 `all historical payloads and owned files disappear while minimum version and financial shells reject restoration`。覆盖当前项目素材与冻结快照清理，未使用线上资料。
 
 ## 原生设计与外部验收
 
