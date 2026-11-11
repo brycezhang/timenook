@@ -1,4 +1,15 @@
-.book-state {
-  text-align: center;
-  color: #46563c;
-}
+@import "../../styles/book.wxss";
+.book-preview { width: 100%; border: 1px solid #ded4c6; border-radius: 24px; padding: 22px 16px; display: flex; align-items: center; gap: 16px; text-align: left; }
+.book-preview-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.book-preview-title { font-size: 21px; line-height: 1.5; letter-spacing: -.6px; font-weight: 700; overflow-wrap: anywhere; }
+.book-preview-message { font-size: 13px; line-height: 1.8; color: #756859; overflow-wrap: anywhere; }
+.book-edit-label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #46563c; }
+.book-edit-label image { width: 17px; height: 17px; }
+.book-badge { display: inline-block; border-radius: 7px; padding: 4px 8px; font-size: 11px; line-height: 1.5; font-weight: 600; color: #46563c; background: #edf0e7; }
+.book-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; text-align: center; padding: 13px 0; border-top: 1px solid #ded4c6; border-bottom: 1px solid #ded4c6; }
+.book-stats > view > view { font-size: 12px; color: #756859; margin-top: 7px; }
+.book-stat-value { font-size: 25px; font-weight: 700; }
+.unassigned-entry { width: 100%; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 58px; text-align: left; font-size: 15px; font-weight: 600; border: 1px solid #ded4c6; border-radius: 16px; background: #edf0e7; color: #46563c; }
+.book-outline { color: #382c24; background: #fff; border: 1px solid #ded4c6; }
+.previous-version > text:first-child { font-weight: 600; }
+.previous-version .tn-muted { font-size: 12px; }

@@ -2,6 +2,7 @@ import type {
   BookContext,
   BookVersionView,
   BookConfirmationContext,
+  BookCoverInput,
 } from "../../packages/contracts/src";
 import { sessionClient } from "./session";
 import { paymentKey } from "./payments";
@@ -100,7 +101,7 @@ export const bookClient = {
   async reviseCover(
     projectId: string,
     expectedVersion: number,
-    input: { salutation: string; photoAssetId: string | null },
+    input: Omit<BookCoverInput, "expectedVersion">,
     key: string,
   ) {
     validProject(projectId);

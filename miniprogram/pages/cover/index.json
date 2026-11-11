@@ -1,1 +1,4 @@
-{ "navigationBarTitleText": "调整书封" }
+{
+  "navigationBarTitleText": "编辑封面",
+  "navigationStyle": "custom"
+}

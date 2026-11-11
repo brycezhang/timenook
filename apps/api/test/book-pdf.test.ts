@@ -20,6 +20,7 @@ import { startProductionWorker } from "../src/tasks/worker";
 import { createOpenApiDocument, createApplication } from "../src/application";
 import { ProductionTasks } from "../src/tasks/tasks";
 import {
+  coverMetadata,
   startBookFixture,
   stopBookFixture,
   app,
@@ -560,6 +561,7 @@ test("the actual directory omits empty chapters and the full long manuscript ret
     ),
     context = data(
       await request("POST", base + "/cover", p.narrator.token, {
+        ...(await coverMetadata(p.projectId, p.buyer.token)),
         expectedVersion: contextBeforeCover.cover.version,
         salutation: "献给这些年一路相伴的家人",
         photoAssetId: contextBeforeCover.coverPhotoOptions[0].assetId,
@@ -913,7 +915,7 @@ test("body mentions of page numbers and the page header remain complete in the r
       undefined,
       false,
       false,
-      "我在第1页写下门前的那条路。书稿预览 · 制作规格待核验，是我当时记下的话。",
+      "我在第1页写下门前的那条路。时光故事，是我当时记下的话。",
     ),
     base = `/v1/projects/${p.projectId}/book`,
     ctx = data(await request("GET", base, p.narrator.token), 200),
@@ -1003,7 +1005,7 @@ async function inspectDownloadedBook(bytes: Uint8Array) {
       let text = content.items
         .map((item) => ("str" in item ? item.str : ""))
         .join("")
-        .replace(/^书稿预览 · 制作规格待核验/, "")
+        .replace(/^时光故事/, "")
         .replace(new RegExp(`第${number}[页⻚]$`), "");
       pages.push({
         text: normalize(text),
@@ -1127,6 +1129,7 @@ test("a zero-story project can choose its uploaded project photo for the cover",
   assert.equal(context.coverPhotoOptions[0].id, photo.id);
   const chosen = data(
     await request("POST", `${base}/cover`, p.buyer.token, {
+      ...(await coverMetadata(p.projectId, p.buyer.token)),
       expectedVersion: 0,
       salutation: "家人的故事",
       photoAssetId: context.coverPhotoOptions[0].assetId,
@@ -1162,6 +1165,7 @@ test("cover settings freeze an allowed salutation and photo and invalidate an ea
       202,
     ),
     body = {
+      ...(await coverMetadata(p.projectId, p.buyer.token)),
       expectedVersion: 0,
       salutation: "献给我亲爱的家人",
       photoAssetId: photo.assetId,
@@ -1215,12 +1219,15 @@ test("cover settings freeze an allowed salutation and photo and invalidate an ea
     inspected.pages[0].text.includes(inspected.normalize(body.salutation)),
   );
   assert.equal(inspected.pages[0].images, 1);
+  assert.ok(inspected.pages[1].text.startsWith("目录"));
+  assert.ok(!inspected.pages[0].text.includes("技术试验文件"));
   assert.equal(
     inspected.pages.reduce((n, p) => n + p.images, 0),
     3,
   );
   const cleared = data(
     await request("POST", base + "/cover", p.buyer.token, {
+      ...(await coverMetadata(p.projectId, p.buyer.token)),
       expectedVersion: 1,
       salutation: "另一份称呼",
       photoAssetId: null,

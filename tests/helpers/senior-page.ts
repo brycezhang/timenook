@@ -58,6 +58,7 @@ const bundles = new Map(
 );
 function harness(name = "book") {
   const clock = { now: Date.now() };
+  const faults = { openDocument: false };
   const storage = new Map<string, any>([
     ["timenook.mode.v1", "live"],
     [`timenook.session.v1:${base}`, structuredClone(login)],
@@ -67,6 +68,8 @@ function harness(name = "book") {
     opened: any[] = [],
     removed: string[] = [],
     routes: string[] = [],
+    navigations: any[] = [],
+    events: any[] = [],
     timers: { callback: () => void; delay: number }[] = [];
   let page: any;
   runInNewContext(bundles.get(name)!, {
@@ -83,6 +86,9 @@ function harness(name = "book") {
     Page(value: any) {
       page = value;
       page.setData = (patch: object) => Object.assign(page.data, patch);
+      page.getOpenerEventChannel = () => ({
+        emit: (name: string, value: any) => events.push({ name, value }),
+      });
     },
     wx: {
       env: { USER_DATA_PATH: "/user-data" },
@@ -101,7 +107,8 @@ function harness(name = "book") {
       downloadFile: (d: any) => downloads.push(d),
       openDocument: (o: any) => {
         opened.push(o);
-        o.success?.({});
+        if (faults.openDocument) o.fail?.({ errMsg: "open failed" });
+        else o.success?.({});
       },
       getFileSystemManager: () => ({
         unlink: (o: any) => {
@@ -111,7 +118,10 @@ function harness(name = "book") {
         getFileInfo: (o: any) =>
           o.success({ size: 4567, digest: "f".repeat(64) }),
       }),
-      navigateTo: ({ url }: any) => routes.push(url),
+      navigateTo: (options: any) => {
+        routes.push(options.url);
+        navigations.push(options);
+      },
       reLaunch: ({ url }: any) => routes.push(url),
       redirectTo: ({ url }: any) => routes.push(url),
       pageScrollTo() {},
@@ -125,12 +135,15 @@ function harness(name = "book") {
   return {
     page,
     clock,
+    faults,
     storage,
     requests,
     downloads,
     opened,
     removed,
     routes,
+    navigations,
+    events,
     timers,
     respond(index: number, data: any, statusCode = 200) {
       assert.ok(requests[index], "expected HTTP");

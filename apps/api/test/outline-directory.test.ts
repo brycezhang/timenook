@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
 import {
+  coverMetadata,
   startBookFixture,
   stopBookFixture,
   joinedProject,
@@ -163,6 +164,7 @@ test("excluding a story retains the independently selected project cover photo",
   );
   const chosen = data(
     await request("POST", base + "/book/cover", p.narrator.token, {
+      ...(await coverMetadata(p.projectId, p.buyer.token)),
       expectedVersion: context.cover.version,
       salutation: "家人的故事",
       photoAssetId: context.coverPhotoOptions[0].assetId,

@@ -2,6 +2,7 @@ import type {
   BookContext,
   BookVersionView,
   BookAudioEntryView,
+  BookCoverInput,
 } from "../../../packages/contracts/src";
 import { memberRequest } from "./project-api";
 const base = (id: string) => `/projects/${encodeURIComponent(id)}/book`;
@@ -11,17 +12,8 @@ export const bookApi = {
     memberRequest<BookVersionView>(
       `${base(id)}/versions/${encodeURIComponent(version)}`,
     ),
-  cover: (
-    id: string,
-    expectedVersion: number,
-    salutation: string,
-    photoAssetId: string | null,
-  ) =>
-    memberRequest<BookContext>(
-      `${base(id)}/cover`,
-      { expectedVersion, salutation, photoAssetId },
-      crypto.randomUUID(),
-    ),
+  cover: (id: string, input: BookCoverInput) =>
+    memberRequest<BookContext>(`${base(id)}/cover`, input, crypto.randomUUID()),
   generate: (id: string, expectedInputHash: string, key: string) =>
     memberRequest<BookVersionView>(
       `${base(id)}/versions`,

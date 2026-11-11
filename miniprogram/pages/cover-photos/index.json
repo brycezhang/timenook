@@ -1,1 +1,4 @@
-{ "navigationBarTitleText": "选择封面图片" }
+{
+  "navigationBarTitleText": "选择封面照片",
+  "navigationStyle": "custom"
+}

@@ -146,7 +146,7 @@ export async function renderBook(
     const text = inspection.pages
       .map((page: any) => {
         let body = normalized(page.text);
-        const header = normalized("书稿预览 · 制作规格待核验"),
+        const header = normalized("时光故事"),
           footer = `第${page.number}页`;
         if (body.startsWith(header)) body = body.slice(header.length);
         if (body.endsWith(footer)) body = body.slice(0, -footer.length);

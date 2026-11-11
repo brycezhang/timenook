@@ -1,1 +1,4 @@
-{ "navigationBarTitleText": "书中原声" }
+{
+  "navigationBarTitleText": "书中原声",
+  "navigationStyle": "custom"
+}

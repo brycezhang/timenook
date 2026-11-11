@@ -15,6 +15,14 @@ export interface BookCoverSettings {
   salutation: string;
   photoAssetId: string | null;
 }
+/** One explicit save of the complete cover draft, including the project title. */
+export interface BookCoverInput {
+  expectedVersion: number;
+  expectedMetadataVersion: number;
+  title: string;
+  salutation: string;
+  photoAssetId: string | null;
+}
 export interface BookStory {
   id: string;
   revisionId: string;
@@ -113,6 +121,8 @@ export interface BookAudioEntryView {
   id: string;
   projectId: string;
   story: { id: string; revisionId: string; version: number; title: string };
+  /** Photograph from the same frozen story revision, if currently readable. */
+  photo: BookPhoto | null;
   clips: {
     clipId: string;
     /** Zero-based position in the frozen book item, independent of recording counters. */
