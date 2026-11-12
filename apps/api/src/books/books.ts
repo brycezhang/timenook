@@ -514,7 +514,21 @@ export class Books implements OnModuleDestroy {
         throw new ConflictException("Frozen story content is unavailable");
     }
   }
-  // Quality review uses the immutable file actually printed, even after a newer
+  async frozenViewIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    bookId: string,
+    snapshotHash: string,
+    accessExpiresAt: string | null,
+  ) {
+    const book = await tx.bookVersion.findFirst({
+      where: { id: bookId, projectId, snapshotHash },
+    });
+    if (!book || digest(book.snapshot) !== snapshotHash)
+      throw new ForbiddenException();
+    return this.viewIn(tx, book, null, accessExpiresAt);
+  }
+  // Production and quality review use the immutable file selected, even after a newer
   // draft exists. Retention, current consent and stream fences still apply.
   async frozenOutputIn(
     tx: Prisma.TransactionClient,

@@ -74,6 +74,15 @@ function context(value: BookContext, projectId: string): BookContext {
   return value;
 }
 export const bookClient = {
+  async readProduction(projectId: string) {
+    validProject(projectId);
+    return version(
+      await sessionClient.request<BookVersionView>(
+        `/projects/${projectId}/fulfillment/book`,
+      ),
+      projectId,
+    );
+  },
   async confirmations(projectId: string) {
     validProject(projectId);
     return sessionClient.request<BookConfirmationContext>(

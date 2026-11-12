@@ -27,13 +27,13 @@ test("fulfillment progress is private and does not expose manuscript or address"
   assert.equal(view.book, undefined);
   assert.equal(view.address, undefined);
 });
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   readyFirstCopyBook,
   readyReservedFirstCopy,
 } from "./first-copy-fixture";
 import { paymentAdmin } from "./payment-admin-fixture";
-import { app, config } from "./book-fixture";
+import { app, config, state } from "./book-fixture";
 async function operator() {
   return paymentAdmin(config, app, ["fulfillment:write", "audit:read"]);
 }
@@ -51,6 +51,87 @@ async function admin(
     ...(body ? { payload: body } : {}),
   });
 }
+test("members can read the reserved PDF after changing the draft while ordinary preview stays unavailable", async () => {
+  const p = await readyReservedFirstCopy();
+  const base = `/v1/projects/${p.projectId}`;
+  data(
+    await request("POST", base + "/book/cover", p.buyer.token, {
+      ...(await coverMetadata(p.projectId, p.buyer.token)),
+      expectedVersion: 0,
+      salutation: "下一版的寄语",
+      photoAssetId: null,
+    }),
+  );
+  const ordinary = data(
+    await request("GET", base + `/book/versions/${p.book.id}`, p.buyer.token),
+    200,
+  );
+  assert.equal(ordinary.state, "obsolete");
+  assert.equal(
+    (
+      await request(
+        "GET",
+        base + `/book/versions/${p.book.id}/pdf`,
+        p.buyer.token,
+      )
+    ).statusCode,
+    409,
+  );
+  const fixed = data(
+    await request("GET", base + "/fulfillment/book", p.narrator.token),
+    200,
+  );
+  assert.equal(fixed.id, p.binding.bookVersionId);
+  assert.equal(fixed.snapshotHash, p.binding.snapshotHash);
+  assert.equal(fixed.pdf.sha256, p.binding.pdfHash);
+  const pdf = await request(
+    "GET",
+    base + "/fulfillment/book/pdf",
+    p.narrator.token,
+  );
+  assert.equal(pdf.statusCode, 200, pdf.body);
+  assert.equal(
+    createHash("sha256").update(pdf.rawPayload).digest("hex"),
+    p.binding.pdfHash,
+  );
+  const outsider = await login();
+  for (const suffix of ["/fulfillment/book", "/fulfillment/book/pdf"])
+    assert.equal(
+      (await request("GET", base + suffix, outsider.token)).statusCode,
+      403,
+    );
+  const current = await state(p, p.narrator.token);
+  const careOperator = await paymentAdmin(config, app, ["care:write"]);
+  const care = data(
+    await admin(
+      "POST",
+      `/v1/admin/projects/${p.projectId}/care-requests`,
+      careOperator,
+      {
+      kind: "delete",
+        expectedBindingVersion: current.bindingVersion,
+      },
+    ),
+  );
+  data(
+    await admin(
+      "POST",
+      `/v1/admin/care-requests/${care.id}/verify`,
+      careOperator,
+      {
+        expectedBindingVersion: current.bindingVersion,
+        expectedAccessEpoch: current.accessEpoch,
+        noticeVersion: "synthetic-d08-v1",
+      evidenceRef: "synthetic:本人申请删除固定稿资料",
+      },
+    ),
+  );
+  for (const suffix of ["/fulfillment/book", "/fulfillment/book/pdf"])
+    assert.equal(
+      (await request("GET", base + suffix, p.narrator.token)).statusCode,
+      403,
+    );
+});
 test("concurrent creation fixes one production attempt, handoff id and case owner without exposing private materials", async () => {
   const p = await readyReservedFirstCopy(),
     h = await operator(),
@@ -405,7 +486,7 @@ test("unknown printer result survives process restart and remains fenced to the 
     409,
   );
 });
-test("a manuscript change after the timed grant blocks both production downloads and handoff without hiding historical progress", async () => {
+test("a later manuscript change preserves the reserved production materials, PDF and handoff", async () => {
   const p = await attemptFixture();
   data(
     await request(
@@ -422,15 +503,15 @@ test("a manuscript change after the timed grant blocks both production downloads
   );
   assert.equal(
     (await admin("GET", p.attemptBase + "/materials", p.headers)).statusCode,
-    409,
+    200,
   );
   assert.equal(
     (await admin("GET", p.attemptBase + "/pdf", p.headers)).statusCode,
-    409,
+    200,
   );
   assert.equal(
     (await admin("POST", p.attemptBase + "/handoff", p.headers, {})).statusCode,
-    409,
+    201,
   );
   const progress = data(
     await request(
@@ -441,7 +522,7 @@ test("a manuscript change after the timed grant blocks both production downloads
     200,
   );
   assert.equal(progress.current.id, p.attempt.id);
-  assert.equal(progress.current.state, "approved");
+  assert.equal(progress.current.state, "handoff_pending");
   assert.equal(progress.reservation.pdfHash, p.binding.pdfHash);
 });
 test("handoff approval cannot choose a printing provider outside the purchased D08 admission", async () => {

@@ -1,11 +1,11 @@
-<tn-navigation title="{{openFailed ? 'PDF 打开失败' : version && version.state !== 'ready' ? '更新书稿' : '书稿预览'}}" />
+<tn-navigation title="{{openFailed ? 'PDF 打开失败' : fixedProduction ? '制作书稿' : version && version.state !== 'ready' ? '更新书稿' : '书稿预览'}}" />
 <app-loading wx:if="{{pageLoading}}" variant="book" />
 <view wx:else class="tn-page with-dock book-page">
   <block wx:if="{{openFailed}}">
     <view class="book-state-space" /><view class="book-state-intro"><view class="book-state-icon"><image src="/assets/icons/modern-book.svg" /></view><view class="book-heading">PDF 打开失败</view></view><view class="book-state-tail" />
     <view class="tn-dock"><button class="tn-button" bindtap="openPdf" disabled="{{busy}}" loading="{{busy}}"><image wx:if="{{!busy}}" class="tn-icon" src="/assets/icons/rotate-ccw-light.svg" />重新打开 PDF</button></view>
   </block>
-  <block wx:elif="{{version.state === 'ready'}}">
+  <block wx:elif="{{version.pdf && (fixedProduction || version.state === 'ready')}}">
     <view class="tn-muted">第 {{version.version}} 版 · 共 {{version.pageCount}} 页</view>
     <view class="pdf-card">
       <view class="pdf-file"><view class="pdf-file-icon"><image src="/assets/icons/file-text.svg" /></view><text>{{version.snapshot.cover.title}}.pdf</text></view>
@@ -13,7 +13,7 @@
       <button id="open-pdf" class="tn-button" bindtap="openPdf" loading="{{busy}}" disabled="{{busy}}"><image wx:if="{{!busy}}" class="tn-icon" src="/assets/icons/file-text-light.svg" />打开完整 PDF</button>
       <view class="pdf-viewer-note">使用微信文档查看器打开</view>
     </view>
-    <view class="tn-dock"><button class="tn-button" bindtap="print" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/book-white.svg" />去制作</button></view>
+    <view class="tn-dock"><button wx:if="{{fixedProduction}}" class="tn-button" bindtap="production">返回制作进度</button><button wx:else class="tn-button" bindtap="print" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/book-white.svg" />去制作</button></view>
   </block>
   <block wx:elif="{{version}}"><view class="book-state-space" /><view class="book-state-intro"><view class="book-state-icon"><image src="/assets/icons/modern-book.svg" /></view><view class="book-intro"><view class="book-heading">书稿待更新</view><view class="tn-muted">重新生成 PDF 后即可预览和制作。</view></view></view><view class="tn-dock"><button class="tn-button" bindtap="edit">返回书稿</button></view></block>
   <view wx:if="{{status}}" class="tn-error">{{status}}</view><button wx:if="{{!version}}" class="tn-button" bindtap="refresh" disabled="{{busy}}" loading="{{busy}}">重新读取书稿</button>

@@ -156,6 +156,31 @@ test("a non-ready version never issues a PDF download", async () => {
   await h.page.openPdf();
   assert.equal(h.downloads.length, 0);
 });
+test("production preview opens its reserved PDF after draft changes without enabling a new print submission", async (t) => {
+  const h = harness("manuscript");
+  t.after(() => h.page.onUnload());
+  h.page.onLoad({ projectId, versionId, production: "1" });
+  const loading = h.page.onShow();
+  assert.equal(
+    h.requests[0].url,
+    `${base}/projects/${projectId}/fulfillment/book`,
+  );
+  h.respond(0, { ...version(), state: "obsolete" });
+  await loading;
+  const opening = h.page.openPdf();
+  assert.equal(
+    h.downloads[0].url,
+    `${base}/projects/${projectId}/fulfillment/book/pdf`,
+  );
+  h.downloads[0].success({
+    statusCode: 200,
+    tempFilePath: "/tmp/fixed-production.pdf",
+  });
+  await opening;
+  assert.equal(h.opened[0].filePath, "/tmp/fixed-production.pdf");
+  h.page.print();
+  assert.equal(h.routes.length, 0);
+});
 test("failed PDF HTTP response is removed without opening a viewer", async () => {
   const h = await manuscript();
   const opening = h.page.openPdf();

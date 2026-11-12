@@ -142,6 +142,7 @@ export class FirstCopies implements OnModuleDestroy {
     tx: Prisma.TransactionClient,
     projectId: string,
     actor: Actor,
+    reservation?: FirstCopyOrder,
   ): Promise<FirstCopyContext> {
     const project = await tx.project.findUniqueOrThrow({
         where: { id: projectId },
@@ -190,13 +191,26 @@ export class FirstCopies implements OnModuleDestroy {
     const subject = await tx.projectSubject.findUniqueOrThrow({
         where: { projectId },
       }),
-      context = await this.books.contextIn(
-        tx,
-        projectId,
-        actor.accessExpiresAt,
-      ),
+      context = reservation
+        ? {
+            current: await this.books.frozenViewIn(
+              tx,
+              projectId,
+              reservation.bookId,
+              reservation.snapshotHash,
+              actor.accessExpiresAt,
+            ),
+            accessExpiresAt: actor.accessExpiresAt,
+          }
+        : await this.books.contextIn(tx, projectId, actor.accessExpiresAt),
       terms = await this.terms.read(projectId, tx),
-      address = await tx.firstCopyAddress.findUnique({ where: { projectId } }),
+      address = reservation
+        ? {
+            version: 0,
+            hash: reservation.addressHash,
+            value: reservation.address,
+          }
+        : await tx.firstCopyAddress.findUnique({ where: { projectId } }),
       entitlement = await tx.firstCopyEntitlement.findUnique({
         where: { projectId },
       }),
@@ -240,6 +254,7 @@ export class FirstCopies implements OnModuleDestroy {
         !!qualityRevisionRequestId);
     const role = order.buyerId === actor.userId ? "initiator" : "narrator";
     const book = context.current;
+    const bookReady = !!book?.pdf && (!!reservation || book.state === "ready");
     const confirmations = { narrator: false, initiator: false };
     const snapshot = order.packageSnapshot as unknown as SalesSnapshot;
     const regionCodes = (
@@ -257,7 +272,7 @@ export class FirstCopies implements OnModuleDestroy {
       !book?.snapshot.specification.productionReady
     )
       blockers.push("PRODUCTION_PDF_UNAPPROVED");
-    if (book?.state !== "ready" || !book.pdf) blockers.push("BOOK_NOT_READY");
+    if (!bookReady) blockers.push("BOOK_NOT_READY");
     const activeData = !(await this.participation.activeDataDeletedIn(
       tx,
       projectId,
@@ -289,7 +304,7 @@ export class FirstCopies implements OnModuleDestroy {
       blockers.push("POLICY_PENDING");
     else if (["terminated", "suspended"].includes(terms.creation.state))
       blockers.push("PROJECT_FROZEN");
-    if (book?.state === "ready") {
+    if (book && bookReady) {
       const spec = snapshot.d01;
       if (
         !spec ||
@@ -738,7 +753,7 @@ export class FirstCopies implements OnModuleDestroy {
       decisionSessionId: null,
       accessExpiresAt: null,
     };
-    const current = await this.contextIn(tx, projectId, actor);
+    const current = await this.contextIn(tx, projectId, actor, order);
     await this.command(tx, projectId, operatorId, "approve", key, body);
     const view = this.orderView(order);
     if (
@@ -748,13 +763,16 @@ export class FirstCopies implements OnModuleDestroy {
       view.addressHash !== body.addressHash
     )
       throw new ConflictException();
-    this.assertBook(current, body);
-    if (
-      current.blockers.some((code) => code !== "ALREADY_SUBMITTED") ||
-      current.address.hash !== order.addressHash
-    )
+    await this.books.frozenOutputIn(tx, projectId, order.bookId, order.pdfHash);
+    await this.books.assertFrozenPrintPermissionIn(tx, {
+      projectId,
+      bookId: order.bookId,
+      subjectId: subject.id,
+      bindingVersion: subject.bindingVersion,
+    });
+    if (current.blockers.some((code) => code !== "ALREADY_SUBMITTED"))
       throw new ConflictException(
-        "Reservation requires the current file, address and entitlement",
+        "Reservation requires its fixed file, address and current entitlement",
       );
     if (order.state !== "approved") {
       await tx.firstCopyOrder.update({
@@ -773,7 +791,7 @@ export class FirstCopies implements OnModuleDestroy {
         order.reservationRevision,
       );
     }
-    return this.approvalView(await this.contextIn(tx, projectId, actor));
+    return this.approvalView(await this.contextIn(tx, projectId, actor, order));
   }
   async qualityReplacementIn(
     tx: Prisma.TransactionClient,

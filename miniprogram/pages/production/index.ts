@@ -141,7 +141,7 @@ Page({
       if (fixedId && this.data.book?.id !== fixedId) {
         void clearPhotoPreviews([this.data.coverImage].filter(Boolean));
         this.setData({ book: null, coverImage: "" });
-        const book = await bookClient.readVersion(this.projectId, fixedId);
+        const book = await bookClient.readProduction(this.projectId);
         if (n !== this.generation || owner !== sessionClient.context()) return;
         this.setData({ book });
       }
@@ -187,7 +187,11 @@ Page({
     const id =
       this.data.view?.current?.bookVersionId ||
       this.data.view?.reservation?.bookVersionId;
-    if (id) go("manuscript", `projectId=${this.projectId}&versionId=${id}`);
+    if (id)
+      go(
+        "manuscript",
+        `projectId=${this.projectId}&versionId=${id}&production=1`,
+      );
   },
   record() {
     go("interview", `projectId=${this.projectId}`);
