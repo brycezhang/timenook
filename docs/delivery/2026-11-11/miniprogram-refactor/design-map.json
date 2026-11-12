@@ -464,11 +464,10 @@
       "native320": "evidence/MP05/native/BookDirectory-320.png",
       "native390": "evidence/MP05/native/BookDirectory-390.png",
       "interactionEvidence": "MP05-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/BookDirectory.png",
       "design320": "design-reference/320/BookDirectory.png",
-      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input",
-      "pendingReason": "Both-width screenshots and page controls verified; native custom-component drag/reorder remains pending while Mac locked."
+      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
     },
     {
       "board": "ChapterOutline.dc.html",
@@ -1048,10 +1047,17 @@
       "interaction": "封面、章节、页码与原声二维码内容",
       "native320": null,
       "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "interactionEvidence": "MP10-delivery.md",
+      "result": "passed",
       "design390": "design-reference/390/PdfDocument.png",
-      "design320": "design-reference/320/PdfDocument.png"
+      "design320": "design-reference/320/PdfDocument.png",
+      "platformEvidence": {
+        "invocation": "evidence/MP12/native-book-print-320.json",
+        "generatedContent": "evidence/MP10/pdf/manifest.json",
+        "observedDesktop": "Matching local filename, four-page cover and contents/story thumbnails in WPS; not uploaded",
+        "phoneViewer": "pending actual iOS/Android WeChat viewer"
+      },
+      "validationScope": "system-call-and-pdf-content"
     },
     {
       "board": "BookChanged.dc.html",
@@ -1080,10 +1086,10 @@
       "state": "PDF 生成失败",
       "entry": "生成任务失败",
       "interaction": "错误与重试",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP10/native/BookGenerateFailed-320.png",
+      "native390": "evidence/MP10/native/BookGenerateFailed-390.png",
+      "interactionEvidence": "MP10-delivery.md",
+      "result": "passed",
       "design390": "design-reference/390/BookGenerateFailed.png",
       "design320": "design-reference/320/BookGenerateFailed.png"
     },
@@ -1240,9 +1246,9 @@
       "state": "提交结果未知",
       "entry": "提交响应未知",
       "interaction": "查原操作、防止重复制作",
-      "native320": null,
+      "native320": "evidence/MP11/native/PrintUnknown-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP11-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/PrintUnknown.png",
       "design320": "design-reference/320/PrintUnknown.png"
