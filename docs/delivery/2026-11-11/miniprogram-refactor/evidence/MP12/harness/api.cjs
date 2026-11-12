@@ -2,6 +2,7 @@
 // through real API commands and ProductionTasks; only external providers are fixtures.
 const assert = require("node:assert/strict");
 const { randomUUID } = require("node:crypto");
+const { execFileSync } = require("node:child_process");
 const { mkdirSync, writeFileSync, unlinkSync, chmodSync } = require("node:fs");
 const net = require("node:net");
 const path = require("node:path");
@@ -150,7 +151,7 @@ async function pendingStory(p) {
   await pause();
   return read(p, `/stories/${context.story.id}`);
 }
-async function verifyPdf(p, book) {
+async function verifyPdf(p, book, minimumClipDurationMs = 0) {
   assert.equal(book.state, "ready");
   const response = await f.request(
     "GET",
@@ -165,6 +166,9 @@ async function verifyPdf(p, book) {
     200,
   );
   assert.ok(audio.clips.length > 0);
+  assert.ok(
+    audio.clips.every((clip) => clip.durationMs >= minimumClipDurationMs),
+  );
   return {
     bookVersionId: book.id,
     pdfSha256: book.pdf.sha256,
@@ -191,10 +195,36 @@ async function main() {
   // A 71-board manual capture lasts longer than the unit fixture's ten-minute
   // provider window. Set the local configuration before any story task exists.
   f.config.generation.deadlineMs = 24 * 60 * 60 * 1000;
+  // Enough real media time to exercise native pause and seek controls. These
+  // bytes pass the same upload, server duration detection and seal as any clip.
+  const playbackAudio = execFileSync(
+    "ffmpeg",
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=frequency=440:duration=30",
+      "-ar",
+      "16000",
+      "-ac",
+      "1",
+      "-c:a",
+      "libmp3lame",
+      "-b:a",
+      "32k",
+      "-f",
+      "mp3",
+      "pipe:1",
+    ],
+    { maxBuffer: 1024 * 1024 },
+  );
   const empty = register(await f.joinedProject());
   const active = register(await f.joinedProject());
   await cover(active, { title: "爸爸的时光故事：走过的山河与日常" });
-  const ready = await f.readyStory(active);
+  const ready = await f.readyStory(active, undefined, playbackAudio);
   const photos = await f.storyPhoto(ready, "合成家庭照片", {
     width: 1800,
     height: 1200,
@@ -240,7 +270,9 @@ async function main() {
   });
   console.log("MP12 story scenes seeded through API commands.");
 
-  const readyBook = register(await fc.readyFirstCopyBook());
+  const readyBook = register(
+    await fc.readyFirstCopyBook({}, undefined, playbackAudio),
+  );
   const bookPhotos = await f.storyPhoto(readyBook, "留在纸书里的合成照片", {
     width: 1800,
     height: 1200,
@@ -251,7 +283,7 @@ async function main() {
   const currentBook = await generate(readyBook);
   const readyBookScene = scene(
     readyBook,
-    await verifyPdf(readyBook, currentBook),
+    await verifyPdf(readyBook, currentBook, 29_000),
   );
   const stale = register(await fc.readyFirstCopyBook());
   const staleBook = await read(stale, `/book/versions/${stale.book.id}`);

@@ -560,7 +560,7 @@ Page({
       context = this.ownerContext,
       keyName = `${recordingPartition(this.projectId)}:story-retry:${task.id}`,
       stored = wx.getStorageSync(keyName),
-      key = typeof stored === "string" ? stored : paymentKey();
+      key = typeof stored === "string" && stored ? stored : paymentKey();
     wx.setStorageSync(keyName, key);
     this.setData({ busy: true, error: "" });
     try {

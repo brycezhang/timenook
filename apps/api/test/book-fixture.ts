@@ -533,8 +533,8 @@ export async function interview(
 export async function sealedClip(
   p: Awaited<ReturnType<typeof joinedProject>>,
   interviewId: string,
+  audio: Buffer = syntheticAudio(),
 ) {
-  const audio = syntheticAudio();
   const base = `/v1/projects/${p.projectId}/interviews/${interviewId}/clips`;
   const clip = data(
     await request("POST", base, p.narrator.token, {
@@ -564,11 +564,12 @@ export async function readyStory(
     | { familyQuestionId: string } = {
     questionKey: "childhood-01",
   },
+  audio?: Buffer,
 ) {
   const p = existing ?? (await joinedProject()),
     i = await interview(p, true, source);
-  await sealedClip(p, i.id);
-  await sealedClip(p, i.id);
+  await sealedClip(p, i.id, audio);
+  await sealedClip(p, i.id, audio);
   const tasks = data(
     await request("GET", `/v1/projects/${p.projectId}/tasks`, p.narrator.token),
     200,
