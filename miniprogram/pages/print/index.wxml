@@ -1,4 +1,22 @@
+<import src="../../templates/print-book.wxml" />
+<tn-navigation title="{{unknown ? '确认提交结果' : '确认制作'}}" />
 <app-loading wx:if="{{pageLoading}}" variant="book" />
-<block wx:else>
-<view class="s-page"><view class="s-title">{{context.book.snapshot.cover.title || '印刷与寄送'}}</view><view class="s-card"><view class="s-subtitle">1 本实体书</view><view class="s-muted">首本书费已包含，无需再次支付</view><button class="s-link" bindtap="preview" wx:if="{{context.book.state==='ready'}}">查看完整书稿 · {{context.book.pageCount}} 页</button></view><button class="s-row" bindtap="address"><view class="s-grow"><view class="s-subtitle">收货地址</view><block wx:if="{{context.address.value}}"><view>{{context.address.value.recipientName}}　{{context.address.value.phone}}</view><view class="s-muted">{{context.shipping.regionLabels[context.address.value.regionCode]}} {{context.address.value.detail}}</view></block><view wx:else class="s-muted">请填写收货信息</view></view><text class="s-arrow">›</text></button><view wx:for="{{context.shipping.terms}}" wx:key="label" class="s-muted s-space">{{item.label}} {{item.text}}</view><view class="s-error" wx:for="{{blockers}}" wx:key="*this">{{item}}</view><view class="s-error">{{status}}</view><button wx:if="{{!context.book || context.book.state!=='ready'}}" class="s-link" bindtap="book">返回生成书稿</button><button class="s-link" bindtap="terms">使用条款与客服</button><view class="s-dock"><button wx:if="{{unknown}}" class="s-button" bindtap="refresh" disabled="{{busy}}">查询提交结果</button><button wx:elif="{{context.production && !context.canReviseProduction}}" class="s-button" bindtap="production">查看制作进度</button><button wx:else class="s-button" disabled="{{busy || !context.canSubmit}}" loading="{{busy}}" bindtap="submit">确认印刷并寄送</button></view></view>
-</block>
+<view wx:else class="tn-page with-dock print-page {{unknown ? 'double-dock' : ''}}">
+  <block wx:if="{{unknown}}">
+    <view class="book-state-space" />
+    <view class="book-state-intro"><view class="book-state-icon"><image src="/assets/icons/rotate-ccw.svg" /></view><view class="print-state-copy"><view class="print-state-title">正在确认提交结果</view><view class="tn-muted">请先查询结果，避免重复提交。</view></view></view>
+    <view class="book-state-tail" />
+    <view class="tn-card"><text class="print-book-title">{{pendingIntent.title}}</text><text class="print-small">提交版本 V{{pendingIntent.version}} · 首本实体书</text></view>
+    <view class="tn-dock"><button wx:if="{{queryComplete}}" class="tn-button" bindtap="submit" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/rotate-ccw-light.svg" />重试原提交</button><button wx:else class="tn-button" bindtap="refresh" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/rotate-ccw-light.svg" />查询制作进度</button><button class="tn-link" bindtap="projectHome">回到这本书</button></view>
+  </block>
+  <block wx:elif="{{context}}">
+    <template wx:if="{{context.book}}" is="print-book" data="{{book: context.book, coverImage, badge: true, caption: '首本实体书 × 1'}}" />
+    <view class="tn-card"><view class="print-card-heading"><text class="print-card-title">收货信息</text><button wx:if="{{!pendingIntent}}" class="tn-link" bindtap="address">修改<image class="print-edit-icon" src="/assets/icons/modern-pencil.svg" /></button></view><view wx:if="{{context.address.value}}" class="print-address">{{context.address.value.recipientName}} · {{maskedPhone}}<view>{{context.shipping.regionLabels[context.address.value.regionCode]}} {{context.address.value.detail}}</view></view><button wx:else class="tn-link" bindtap="address">填写收货地址</button></view>
+    <view class="print-price"><text>本次使用首本制作权益</text><text>¥{{context.payment.amountDueFen / 100}}</text></view>
+    <view class="print-small">按此版本制作，后续修改不影响已提交版本。</view>
+    <view class="tn-error" wx:for="{{blockers}}" wx:key="*this">{{item}}</view>
+    <button wx:if="{{!context.book || context.book.state !== 'ready'}}" class="tn-link" bindtap="book">返回更新书稿</button>
+    <view class="tn-dock"><button wx:if="{{needsRefresh}}" class="tn-button" bindtap="refresh" loading="{{busy}}" disabled="{{busy}}">重新读取制作状态</button><button wx:else class="tn-button" disabled="{{busy || (!context.canSubmit && !pendingIntent)}}" loading="{{busy}}" bindtap="submit"><image class="tn-icon" src="/assets/icons/package-light.svg" />{{pendingIntent ? '重试原提交' : '提交制作'}}</button></view>
+  </block>
+  <view wx:if="{{status}}" class="tn-error">{{status}}</view><button wx:if="{{!context && !unknown}}" class="tn-button" bindtap="refresh" loading="{{busy}}" disabled="{{busy}}">重新读取</button>
+</view>

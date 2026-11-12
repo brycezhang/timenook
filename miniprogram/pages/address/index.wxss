@@ -1,31 +1,23 @@
-.photo-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24rpx;
-  margin-top: 32rpx;
+@import "../../styles/print.wxss";
+.address-page .tn-field {
+  font-size: 13px;
 }
-.photo-option,
-.photo-none {
-  border: 3rpx solid #d4cbbc;
-  border-radius: 22rpx;
-  padding: 20rpx;
-  font-size: 34rpx;
+.address-page .tn-input {
+  height: 56px;
+  min-height: 56px;
+  padding: 15px;
 }
-.photo-option image,
-.photo-loading {
-  width: 100%;
-  height: 280rpx;
-  margin-bottom: 20rpx;
+.address-region {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
 }
-.chosen {
-  border-color: #46563c;
-  background: #e8ecdf;
+.address-region.placeholder {
+  color: #756859;
 }
-.photo-none {
-  width: 100%;
-  text-align: left;
-  min-height: 120rpx;
-}
-.address-detail {
-  min-height: 180rpx;
+.address-region image {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
