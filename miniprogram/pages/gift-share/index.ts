@@ -1,7 +1,7 @@
 import type { OwnedGift } from "../../../packages/contracts/src";
 import { giftClient } from "../../services/gifts";
 import { sessionClient } from "../../services/session";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 import { switchProjectTab } from "../../services/navigation";
 
 Page({

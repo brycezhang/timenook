@@ -344,7 +344,7 @@ export class Participation
     });
     return {
       projectId: p.id,
-      bookTitle: p.bookTitle ?? "人生故事书",
+      bookTitle: p.bookTitle ?? "时光故事书",
       inviter: giver?.nickname ?? "家人",
       process: ["记录故事", "一起编辑", "成书与印刷"],
       purposes: [],
@@ -827,7 +827,7 @@ export class Participation
     const canRead = member && !deleted;
     return {
       projectId: p.id,
-      bookTitle: canRead ? (p.bookTitle ?? "人生故事书") : undefined,
+      bookTitle: canRead ? (p.bookTitle ?? "时光故事书") : undefined,
       subjectId: subject.id,
       bindingVersion: subject.bindingVersion,
       accessEpoch: p.accessEpoch,
@@ -1494,7 +1494,7 @@ export class Participation
       return {
         ...state,
         bookTitle: active
-          ? (p.bookTitle ?? p.snapshot.bookTitle ?? "人生故事书")
+          ? (p.bookTitle ?? p.snapshot.bookTitle ?? "时光故事书")
           : null,
         subjectName: active ? subject.name : null,
       };

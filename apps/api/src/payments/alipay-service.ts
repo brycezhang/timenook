@@ -72,7 +72,7 @@ export class AlipayService {
           client_type: channel === "alipay_page" ? "page" : "h5",
           client_ip: clientIp,
           extra: {
-            subject: "岁月成书 · 人生故事书",
+            subject: "时光故事书",
             return_url: returnUrl,
             quit_url: returnUrl,
           },

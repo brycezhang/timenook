@@ -1,7 +1,7 @@
 import { NATIVE_TABS } from "../../config";
 import { sessionClient } from "../../services/session";
 import { showProjectTab, switchProjectTab } from "../../services/navigation";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 Page({
   data: {
     nativeTabs: NATIVE_TABS,

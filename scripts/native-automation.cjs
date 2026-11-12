@@ -74,12 +74,14 @@ async function waitForPage(
             rendered: snapshot?.rendered === true,
             busy: snapshot?.data?.busy === true,
             loading: snapshot?.data?.loading === true,
+            pageLoading: snapshot?.data?.pageLoading === true,
           };
           if (
             snapshot?.route === `pages/${name}/index` &&
             snapshot.rendered &&
             snapshot.data.busy !== true &&
             snapshot.data.loading !== true &&
+            snapshot.data.pageLoading !== true &&
             ready(snapshot.data)
           ) {
             const visible = await mp.evaluate(function () {

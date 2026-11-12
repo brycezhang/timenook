@@ -2,7 +2,7 @@ import type { BookVersionView } from "../../../packages/contracts/src";
 import { bookClient } from "../../services/books";
 import { sessionClient, ApiFailure } from "../../services/session";
 import { watchProjectAccess } from "../../services/project-access";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 import { previewBookPhoto } from "../../services/book-editor";
 import { clearPhotoPreviews } from "../../services/story-photos";
 Page({

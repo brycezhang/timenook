@@ -2,7 +2,7 @@ import type { PersonalPlan, StoryView } from "../../../packages/contracts/src";
 import { personalPlanClient } from "../../services/personal-plan";
 import { storyClient } from "../../services/stories";
 import { sessionClient } from "../../services/session";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 
 Page({
   projectId: "",

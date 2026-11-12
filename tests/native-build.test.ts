@@ -193,7 +193,9 @@ test("built new-book preserves an encoded user title and relationship", async ()
     currentTarget: { dataset: { field: "bookTitle" } },
     detail: { value: "妈妈的一生 & 回忆" },
   });
-  p.chooseRelationship({ currentTarget: { dataset: { relationship: "妈妈" } } });
+  p.chooseRelationship({
+    currentTarget: { dataset: { relationship: "妈妈" } },
+  });
   p.next();
   const [route, query] = app.route().slice(1).split("?");
   const purchase = await app.open(route, false);
@@ -240,7 +242,19 @@ test("release package excludes website and probe routes and ignores stored demo 
   );
   assert.ok(config.pages.includes("pages/interview/index"));
   assert.ok(config.pages.includes("pages/manuscript/index"));
-  for (const name of ["account-link", "audio-probe"]) {
+  for (const name of [
+    "account-link",
+    "audio-probe",
+    "login",
+    "project",
+    "assisted",
+    "settings",
+    "service",
+    "refunds",
+    "quality",
+    "export",
+    "deletion-status",
+  ]) {
     assert.ok(!config.pages.includes(`pages/${name}/index`));
     await assert.rejects(readFile(path.join(root, `pages/${name}/index.js`)), {
       code: "ENOENT",
@@ -249,6 +263,16 @@ test("release package excludes website and probe routes and ignores stored demo 
       code: "ENOENT",
     });
   }
+  for (const file of [
+    "services/store.js",
+    "domain/model.js",
+    "domain/questions.js",
+  ])
+    await assert.rejects(readFile(path.join(root, file)), { code: "ENOENT" });
+  assert.doesNotMatch(
+    await readFile(path.join(root, "services/mode.js"), "utf8"),
+    /"demo"/,
+  );
   for (const name of config.pages) {
     const markup = await readFile(path.join(root, name + ".wxml"), "utf8");
     assert.doesNotMatch(
@@ -265,6 +289,7 @@ test("release package excludes website and probe routes and ignores stored demo 
     /同一已验证手机号在网页和小程序对应同一产品账号/,
   );
   const app = await harness("demo");
+  for (const name of config.pages) await app.open(name, false);
   const homeMarkup = await readFile(
     path.join(root, "pages/home/index.wxml"),
     "utf8",

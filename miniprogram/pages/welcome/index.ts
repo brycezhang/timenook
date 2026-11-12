@@ -2,7 +2,7 @@ import { participationClient } from "../../services/participation";
 import { ApiFailure, sessionClient } from "../../services/session";
 import { setDataMode } from "../../services/mode";
 import { switchProjectTab } from "../../services/navigation";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 import type { InvitationView } from "../../../packages/contracts/src";
 const relationships = ["儿子", "女儿", "孙子", "孙女", "伴侣", "自定义"];
 Page({

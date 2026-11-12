@@ -1,5 +1,5 @@
 import type { WithdrawalStatus } from "../../../packages/contracts/src";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 import { dataMode, setDataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
 import {

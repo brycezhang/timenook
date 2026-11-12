@@ -7,7 +7,7 @@ import { storyClient } from "../../services/stories";
 import { personalPlanClient } from "../../services/personal-plan";
 import { startOutlineAnswer } from "../../services/outline";
 import { sessionClient } from "../../services/session";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 Page({
   data: {
     text: "",

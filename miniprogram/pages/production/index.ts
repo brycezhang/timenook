@@ -8,8 +8,8 @@ import { sessionClient } from "../../services/session";
 import { previewBookPhoto } from "../../services/book-editor";
 import { clearPhotoPreviews } from "../../services/story-photos";
 import { watchProjectAccess } from "../../services/project-access";
-import { go } from "../../services/store";
-import { switchProjectTab } from "../../services/navigation";
+import { go, switchProjectTab } from "../../services/navigation";
+
 const labels = {
   approved: "已提交，等待制作",
   handoff_pending: "正在核实制作安排",

@@ -1,6 +1,6 @@
 import { participationClient } from "../../services/participation";
 import { sessionClient } from "../../services/session";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 Page({
   data: {
     bookTitle: "",
@@ -77,7 +77,7 @@ Page({
           title: `一起完成《${this.data.bookTitle}》`,
           path: `/pages/welcome/index?token=${this.data.token}`,
         }
-      : { title: "时光故事 · 岁月成书", path: "/pages/home/index" };
+      : { title: "时光故事", path: "/pages/home/index" };
   },
   terms() {
     go("terms");

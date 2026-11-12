@@ -106,7 +106,7 @@ export class ProjectOverview {
       );
     return {
       projectId,
-      bookTitle: p.bookTitle ?? admission.snapshot.bookTitle ?? "人生故事书",
+      bookTitle: p.bookTitle ?? admission.snapshot.bookTitle ?? "时光故事书",
       source: admission.source,
       ...participationNotice(
         admission.snapshot,

@@ -1,11 +1,20 @@
 import { NATIVE_RELEASE } from "../config";
 export type DataMode = "demo" | "live";
 export function dataMode(): DataMode {
-  if (NATIVE_RELEASE) return "live";
-  return wx.getStorageSync("timenook.mode.v1") === "live" ? "live" : "demo";
+  // @development-only:start
+  if (!NATIVE_RELEASE)
+    return wx.getStorageSync("timenook.mode.v1") === "live" ? "live" : "demo";
+  // @development-only:end
+  return "live";
 }
 export function setDataMode(mode: DataMode): void {
-  wx.setStorageSync("timenook.mode.v1", NATIVE_RELEASE ? "live" : mode);
+  // @development-only:start
+  if (!NATIVE_RELEASE) {
+    wx.setStorageSync("timenook.mode.v1", mode);
+    return;
+  }
+  // @development-only:end
+  wx.setStorageSync("timenook.mode.v1", "live");
 }
 
 export function livePageAllowed(page: string): boolean {

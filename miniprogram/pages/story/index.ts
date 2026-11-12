@@ -1,5 +1,4 @@
 import { watchProjectAccess } from "../../services/project-access";
-import { dataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
 import { storyClient } from "../../services/stories";
 import {
@@ -13,8 +12,7 @@ import {
 } from "../../services/story-audio";
 import { recordingPartition } from "../../services/interview-recording";
 import { paymentKey } from "../../services/payments";
-import { projectOverviewClient } from "../../services/project-overview";
-import { switchProjectTab } from "../../services/navigation";
+import { go, switchProjectTab } from "../../services/navigation";
 import {
   audioTime,
   storyDuration,
@@ -53,28 +51,15 @@ function stage(story: StoryView | null) {
                     ? "这次整理已失效，请保存补录后重新整理"
                     : "处理中，可离开";
 }
-import type { Story } from "../../domain/model";
-import { confirmStory, touch } from "../../domain/model";
-import {
-  go,
-  home,
-  notify,
-  read,
-  required,
-  save,
-  toast,
-} from "../../services/store";
 type E = {
   currentTarget: { dataset: Record<string, string> };
   detail: { value: string };
 };
-let audio: WechatMiniprogram.InnerAudioContext | null = null;
 Page({
   projectId: "",
   interviewId: "",
   storyId: "",
   assistedSessionId: "",
-  confirmationSessionId: "",
   generation: 0,
   visible: false,
   autoOrganize: false,
@@ -87,27 +72,12 @@ Page({
   stopProjectWatch: undefined as (() => void) | undefined,
   stopSessionWatch: undefined as (() => void) | undefined,
   poll: undefined as ReturnType<typeof setTimeout> | undefined,
-  decisionCommand: null as { input: string; key: string } | null,
-  careCommand: null as { input: string; key: string } | null,
   data: {
     displayState: "saved",
     placement: "",
     storyMeta: "",
     failureTitle: "故事整理失败",
     failureHint: "录音已保存，可重试整理。",
-    needsReview: false,
-    showAudio: false,
-    showCare: false,
-    careExpiry: "",
-    careEvidence: "",
-    careStatus: "",
-    noticeVersion: "synthetic-d08-v1",
-    evidencePrefix: "synthetic:",
-    noticeText: "当前为本地合成政策验证；此说明仅提交到本次选择。",
-    decisionReady: false,
-    canDecide: false,
-    allowInBook: false,
-    decisionStatus: "",
     audioBusy: false,
     audioError: "",
     playingClipId: "",
@@ -128,179 +98,134 @@ Page({
     photoError: "",
     saveWarning: "",
     canOrganize: false,
-    live: false,
     story: null as StoryView | null,
     context: null as StoryContext | null,
     stage: "",
     error: "",
     privateError: "",
     busy: false,
-    pageLoading: dataMode() === "live",
+    pageLoading: true,
     pendingLocal: false,
     retryable: false,
-    id: "",
-    s: null as Story | null,
-    paragraphs: [] as string[],
-    playing: false,
   },
   onLoad(q) {
-    if (dataMode() === "live") {
-      this.autoOrganize = q.organize === "1";
-      this.projectId = q.projectId || "";
-      this.interviewId = q.interviewId || "";
-      this.storyId = q.storyId || "";
-      this.assistedSessionId = this.storyId ? "" : q.assistedSessionId || "";
-      this.confirmationSessionId = this.storyId
-        ? q.assistedSessionId || ""
-        : "";
-      this.setData({ live: true });
-      return;
-    }
-    this.setData({ id: q.id || "" });
+    this.autoOrganize = q.organize === "1";
+    this.projectId = q.projectId || "";
+    this.interviewId = q.interviewId || "";
+    this.storyId = q.storyId || "";
+    this.assistedSessionId = this.storyId ? "" : q.assistedSessionId || "";
   },
   async onShow() {
-    if (dataMode() === "live") {
-      this.visible = true;
-      this.photoKey = "";
-      ++this.photoSequence;
-      const generation = ++this.generation,
-        context = sessionClient.context();
-      this.ownerContext = context;
-      this.stopSessionWatch?.();
-      this.stopSessionWatch = undefined;
-      if (context)
-        this.stopSessionWatch = sessionClient.onInvalidated((lost) => {
-          if (lost !== context || this.ownerContext !== context) return;
+    this.visible = true;
+    this.photoKey = "";
+    ++this.photoSequence;
+    const generation = ++this.generation,
+      context = sessionClient.context();
+    this.ownerContext = context;
+    this.stopSessionWatch?.();
+    this.stopSessionWatch = undefined;
+    if (context)
+      this.stopSessionWatch = sessionClient.onInvalidated((lost) => {
+        if (lost !== context || this.ownerContext !== context) return;
+        this.onHide();
+        this.setData({
+          stage: sessionClient.sessionCleanupPending()
+            ? "登录已失效；设备会话缓存清理失败，请重试登录"
+            : "登录已失效，请重新登录；本机原文件仍保留",
+        });
+      });
+    this.setData({
+      displayState: "saved",
+      placement: "",
+      storyMeta: "",
+      story: null,
+      liveParagraphs: [],
+      liveTranscripts: [],
+      livePhotos: [],
+      photoError: "",
+      liveAudioSources: [],
+      canOrganize: false,
+      context: null,
+      error: "",
+      privateError: "",
+      stage: "",
+      busy: false,
+      pageLoading: true,
+    });
+    await this.stopLiveAudio().catch(() => {});
+    if (!this.currentLive(generation, context)) return;
+    if (!context || !this.projectId || (!this.interviewId && !this.storyId)) {
+      this.setData({
+        pageLoading: false,
+        stage: "请登录并从本次采访进入故事",
+      });
+      return;
+    }
+    await this.refreshLive(generation, context);
+    if (
+      this.currentLive(generation, context) &&
+      this.autoOrganize &&
+      this.data.canOrganize &&
+      (!this.data.story?.task ||
+        this.data.story.task.state === "obsolete" ||
+        this.data.context?.clipCount !== this.data.story.task.sources.length)
+    ) {
+      this.autoOrganize = false;
+      await this.submitLive();
+    }
+    if (this.currentLive(generation, context) && this.data.story) {
+      this.stopProjectWatch?.();
+      this.stopProjectWatch = watchProjectAccess(
+        this.projectId,
+        () => this.currentLive(generation, context),
+        () => {
           this.onHide();
           this.setData({
-            stage: sessionClient.sessionCleanupPending()
-              ? "登录已失效；设备会话缓存清理失败，请重试登录"
-              : "登录已失效，请重新登录；本机原文件仍保留",
+            stage:
+              "资料用途或账号授权已变化，私人内容与临时回听已清理，请重新查询",
           });
-        });
-      this.setData({
-        displayState: "saved",
-        placement: "",
-        storyMeta: "",
-        story: null,
-        liveParagraphs: [],
-        liveTranscripts: [],
-        livePhotos: [],
-        photoError: "",
-        liveAudioSources: [],
-        canOrganize: false,
-        context: null,
-        error: "",
-        privateError: "",
-        stage: "",
-        busy: false,
-        pageLoading: true,
-        decisionReady: false,
-        canDecide: false,
-        allowInBook: false,
-        decisionStatus: "",
-        careExpiry: "",
-        careEvidence: "",
-        careStatus: "",
-      });
-      await this.stopLiveAudio().catch(() => {});
-      if (!this.currentLive(generation, context)) return;
-      if (!context || !this.projectId || (!this.interviewId && !this.storyId)) {
-        this.setData({
-          pageLoading: false,
-          stage: "请登录并从本次采访进入故事",
-        });
-        return;
-      }
-      await this.refreshLive(generation, context);
-      if (
-        this.currentLive(generation, context) &&
-        this.autoOrganize &&
-        this.data.canOrganize &&
-        (!this.data.story?.task ||
-          this.data.story.task.state === "obsolete" ||
-          this.data.context?.clipCount !== this.data.story.task.sources.length)
-      ) {
-        this.autoOrganize = false;
-        await this.submitLive();
-      }
-      if (this.currentLive(generation, context) && this.data.story) {
-        this.stopProjectWatch?.();
-        this.stopProjectWatch = watchProjectAccess(
-          this.projectId,
-          () => this.currentLive(generation, context),
-          () => {
-            this.onHide();
-            this.setData({
-              stage:
-                "资料用途或账号授权已变化，私人内容与临时回听已清理，请重新查询",
-            });
-          },
-        );
-      }
-      return;
+        },
+      );
     }
-    const s = required().stories.find((s) => s.id === this.data.id);
-    if (!s) {
-      home();
-      return;
-    }
-    this.setData({ s, paragraphs: s.body.split("\n\n") });
   },
   onHide() {
     this.stopProjectWatch?.();
     this.stopProjectWatch = undefined;
-    if (this.data.live) {
-      this.stopSessionWatch?.();
-      this.stopSessionWatch = undefined;
-      void this.stopLiveAudio().catch(() => {});
-      ++this.photoSequence;
-      this.photoKey = "";
-      void clearPhotoPreviews().catch(() => {});
-      this.visible = false;
-      this.decisionCommand = null;
-      this.careCommand = null;
-      ++this.generation;
-      if (this.poll) clearTimeout(this.poll);
-      this.setData({
-        careExpiry: "",
-        careEvidence: "",
-        careStatus: "",
-        decisionReady: false,
-        canDecide: false,
-        allowInBook: false,
-        decisionStatus: "",
-        displayState: "saved",
-        placement: "",
-        storyMeta: "",
-        story: null,
-        liveParagraphs: [],
-        liveTranscripts: [],
-        livePhotos: [],
-        photoError: "",
-        liveAudioSources: [],
-        canOrganize: false,
-        context: null,
-        busy: false,
-        pageLoading: false,
-        error: "",
-        privateError: "",
-      });
-    }
-    audio?.pause();
-    this.setData({ playing: false });
+    this.stopSessionWatch?.();
+    this.stopSessionWatch = undefined;
+    void this.stopLiveAudio().catch(() => {});
+    ++this.photoSequence;
+    this.photoKey = "";
+    void clearPhotoPreviews().catch(() => {});
+    this.visible = false;
+    ++this.generation;
+    if (this.poll) clearTimeout(this.poll);
+    this.setData({
+      displayState: "saved",
+      placement: "",
+      storyMeta: "",
+      story: null,
+      liveParagraphs: [],
+      liveTranscripts: [],
+      livePhotos: [],
+      photoError: "",
+      liveAudioSources: [],
+      canOrganize: false,
+      context: null,
+      busy: false,
+      pageLoading: false,
+      error: "",
+      privateError: "",
+    });
   },
   onUnload() {
     this.onHide();
-    audio?.destroy();
-    audio = null;
   },
   currentLive(generation: number, context: string, invalidated = false) {
     const current = sessionClient.context();
     return (
       this.visible &&
       generation === this.generation &&
-      dataMode() === "live" &&
       (current === context || (invalidated && !current))
     );
   },
@@ -340,13 +265,6 @@ Page({
         busy: true,
         pageLoading: !this.data.story && !this.data.context,
         error: "",
-        decisionReady: false,
-        canDecide: false,
-        allowInBook: false,
-        careEvidence: "",
-        careExpiry: "",
-        decisionStatus: "",
-        careStatus: "",
       });
     try {
       let loaded: StoryView | undefined;
@@ -378,7 +296,6 @@ Page({
           text: string;
         }[],
         privateError: "",
-        needsReview: false,
         liveAudioSources: [] as {
           clipId: string;
           durationSeconds: number;
@@ -434,15 +351,6 @@ Page({
                     : full.task?.state === "manual_review"
                       ? "原声仍保留，可以继续补充讲述。"
                       : "录音已保存，可重试整理。",
-            decisionReady: !!full.confirmation,
-            canDecide:
-              !!full.confirmation &&
-              (full.confirmation.canDecide || !!this.confirmationSessionId),
-            allowInBook: full.confirmation?.allowInBook === true,
-            noticeVersion:
-              full.confirmation?.noticeVersion || "synthetic-d08-v1",
-            evidencePrefix: full.confirmation?.evidencePrefix || "synthetic:",
-            noticeText: full.confirmation?.noticeText || "",
             liveAudioSources: storySources(full).map((source) => ({
               clipId: source.clipId,
               durationSeconds: (source.durationMs ?? 0) / 1000,
@@ -450,12 +358,6 @@ Page({
                 ? audioTime(source.durationMs / 1000)
                 : "--:--",
             })),
-            needsReview: !!full.revision?.reviewItems.some(
-              (item) =>
-                !full.revision?.reviewResolutions?.some(
-                  (resolved) => resolved.item === item,
-                ),
-            ),
             stage: stage(full),
             privateError: "",
             liveTranscripts:
@@ -601,30 +503,6 @@ Page({
       this.ownerContext,
     );
   },
-  moreActions() {
-    wx.showActionSheet({
-      itemList: [
-        "修改故事文字",
-        "补充照片",
-        "回听已保存的原声",
-        "重新整理故事",
-        "申请人工校对",
-        "继续补充讲述",
-      ],
-      success: ({ tapIndex }) => {
-        if (tapIndex === 0) this.edit();
-        else if (tapIndex === 1) this.editLivePhotos();
-        else if (tapIndex === 2) {
-          this.setData({ showAudio: true });
-          wx.pageScrollTo?.({ selector: ".live-audio-list", duration: 200 });
-        } else if (tapIndex === 3) void this.submitLive();
-        else if (tapIndex === 4) {
-          this.setData({ showCare: true });
-          void this.prepareDecision();
-        } else this.recoverInterview();
-      },
-    });
-  },
   async submitLive() {
     if (
       this.data.busy ||
@@ -702,230 +580,6 @@ Page({
   },
   refresh() {
     if (!this.data.busy) void this.refreshLive();
-  },
-  async prepareDecision() {
-    if (this.data.busy || !this.data.story?.revision) return;
-    const generation = this.generation,
-      context = this.ownerContext;
-    this.setData({ busy: true, decisionStatus: "" });
-    try {
-      const overview = await projectOverviewClient.read(this.projectId);
-      if (!this.currentLive(generation, context)) return;
-      this.setData({
-        decisionReady: true,
-        noticeVersion: overview.noticeVersion || "synthetic-d08-v1",
-        evidencePrefix: overview.evidencePrefix || "synthetic:",
-        noticeText:
-          overview.noticeText ||
-          "当前为本地合成政策验证；此说明仅提交到本次选择。",
-        canDecide: overview.canDecide || !!this.confirmationSessionId,
-        allowInBook:
-          this.data.story?.confirmation?.allowInBook ??
-          this.data.story?.decision?.allowInBook ??
-          true,
-        decisionStatus:
-          overview.canDecide || this.confirmationSessionId
-            ? "请本人阅读全文后确认这版内容"
-            : "当前账号只能协助校对；本人确认请使用讲述者账号或当次故事确认协助",
-      });
-    } catch (error) {
-      this.liveFailure(
-        generation,
-        context,
-        error,
-        "查询本人确认权限失败，请重试",
-      );
-    } finally {
-      if (this.currentLive(generation, context, true))
-        this.setData({ busy: false });
-    }
-  },
-  decideLive() {
-    return this.saveDecision(true, this.data.allowInBook);
-  },
-  adjustDecision() {
-    if (!this.data.canDecide || this.data.busy) return;
-    wx.showActionSheet({
-      itemList: ["撤回这版内容确认", "这版暂不入书", "重新确认并允许这版入书"],
-      success: ({ tapIndex }) => {
-        if (tapIndex >= 0 && tapIndex <= 2)
-          void this.saveDecision(tapIndex !== 0, tapIndex === 2);
-      },
-    });
-  },
-  async saveDecision(confirmed: boolean, allowInBook: boolean) {
-    const current = this.data.story,
-      revision = current?.revision;
-    if (
-      this.data.busy ||
-      !current ||
-      !revision ||
-      !this.data.canDecide ||
-      (confirmed && this.data.needsReview)
-    )
-      return;
-    const input = {
-      revisionId: revision.id,
-      contentHash: revision.contentHash,
-      expectedVersion: current.version,
-      confirmed,
-      allowInBook,
-      noticeVersion: this.data.noticeVersion,
-      ...(this.confirmationSessionId
-        ? { assistedSessionId: this.confirmationSessionId }
-        : {}),
-    };
-    const serialized = JSON.stringify(input);
-    if (this.decisionCommand?.input !== serialized)
-      this.decisionCommand = { input: serialized, key: paymentKey() };
-    const generation = this.generation,
-      context = this.ownerContext;
-    this.setData({ busy: true, decisionStatus: "" });
-    try {
-      const result = await storyClient.decide(
-        this.projectId,
-        current.id,
-        {
-          ...input,
-          evidenceRef: `${this.data.evidencePrefix}click:story-confirm:${this.decisionCommand!.key}`,
-        },
-        this.decisionCommand!.key,
-      );
-      if (!this.currentLive(generation, context)) return;
-      this.decisionCommand = null;
-      this.setData({
-        story: result,
-        stage: stage(result),
-        allowInBook: result.decision?.allowInBook ?? this.data.allowInBook,
-        decisionReady: false,
-        decisionStatus: result.decision?.confirmed
-          ? result.decision.allowInBook
-            ? "本人已确认，允许这版入书"
-            : "本人已确认，这版暂不入书"
-          : "本人已撤回这版确认与入书许可",
-      });
-    } catch (error) {
-      if (this.currentLive(generation, context))
-        this.setData({
-          decisionStatus:
-            error instanceof ApiFailure && error.status === 409
-              ? "版本或核对状态已变化，请刷新并重新核对；本次决定未确认"
-              : "本次决定未确认，请重新查询或重试",
-        });
-      this.liveFailure(generation, context, error, "决定保存失败");
-    } finally {
-      if (this.currentLive(generation, context, true))
-        this.setData({ busy: false });
-    }
-  },
-  participation() {
-    go(
-      "assisted",
-      `projectId=${this.projectId}&storyId=${this.data.story?.id || this.storyId}&interviewId=${this.interviewId}&purpose=story_confirmation`,
-    );
-  },
-  correctionInput(e: E) {
-    if (["careExpiry", "careEvidence"].includes(e.currentTarget.dataset.field))
-      this.setData({ [e.currentTarget.dataset.field]: e.detail.value });
-  },
-  async requestCorrection() {
-    const current = this.data.story,
-      revision = current?.revision;
-    if (this.data.busy || !current || !revision || !this.data.canDecide) return;
-    const expiry = this.data.careExpiry.trim(),
-      evidence = this.data.careEvidence.trim();
-    if (
-      !/^[^\r\n]{3,160}$/.test(evidence) ||
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(
-        expiry,
-      ) ||
-      !Number.isFinite(Date.parse(expiry)) ||
-      Date.parse(expiry) <= Date.now()
-    ) {
-      this.setData({
-        careStatus:
-          "请本人明确填写未来的 ISO 有效期和 3 至 160 字的单行独立说明；尚未申请",
-      });
-      return;
-    }
-    const input = {
-      revisionId: revision.id,
-      contentHash: revision.contentHash,
-      expectedVersion: current.version,
-      noticeVersion: this.data.noticeVersion,
-      evidenceRef: `${this.data.evidencePrefix}${evidence}`,
-      expiresAt: expiry,
-      ...(this.confirmationSessionId
-        ? { assistedSessionId: this.confirmationSessionId }
-        : {}),
-    };
-    const serialized = JSON.stringify(input);
-    if (this.careCommand?.input !== serialized)
-      this.careCommand = { input: serialized, key: paymentKey() };
-    const generation = this.generation,
-      context = this.ownerContext;
-    this.setData({ busy: true, careStatus: "" });
-    try {
-      const result = await storyClient.requestCorrection(
-        this.projectId,
-        current.id,
-        input,
-        this.careCommand!.key,
-      );
-      if (!this.currentLive(generation, context)) return;
-      if (
-        result.storyId !== current.id ||
-        !/^[0-9a-f-]{36}$/.test(result.caseId) ||
-        Date.parse(result.expiresAt) !== Date.parse(expiry)
-      )
-        throw new Error("工单结果无效，请重新查询");
-      this.careCommand = null;
-      this.setData({
-        careEvidence: "",
-        careStatus: `校对申请已记录，工单 ${result.caseId}，有效期至 ${result.expiresAt}。等待运营处理；故事仍须本人确认。`,
-      });
-    } catch (error) {
-      if (this.currentLive(generation, context))
-        this.setData({ careStatus: "校对申请结果未确定，请重新查询或重试" });
-      this.liveFailure(generation, context, error, "申请未保存");
-    } finally {
-      if (this.currentLive(generation, context, true))
-        this.setData({ busy: false });
-    }
-  },
-  audioSelection() {
-    if (this.data.story)
-      go(
-        "story-audio",
-        `projectId=${this.projectId}&storyId=${this.data.story.id}`,
-      );
-  },
-  async toggleInclusion() {
-    const story = this.data.story;
-    if (!story?.revision || this.data.busy) return;
-    const generation = this.generation,
-      owner = sessionClient.context();
-    this.setData({ busy: true, error: "" });
-    try {
-      const value = await storyClient.inclusion(
-        this.projectId,
-        story.id,
-        story.version,
-        story.included === false,
-      );
-      if (this.currentLive(generation, owner)) this.setData({ story: value });
-    } catch (e) {
-      if (this.currentLive(generation, owner))
-        this.setData({ error: e instanceof Error ? e.message : "未能保存" });
-    } finally {
-      if (this.currentLive(generation, owner)) this.setData({ busy: false });
-    }
-  },
-  editLivePhotos() {
-    go(
-      "photos",
-      `projectId=${this.projectId}&interviewId=${this.interviewId}&storyId=${this.data.story?.id || ""}`,
-    );
   },
   async stopLiveAudio(path?: string) {
     ++this.audioSequence;
@@ -1147,89 +801,11 @@ Page({
       `projectId=${this.projectId}&interviewId=${this.interviewId}&prepare=1${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
     );
   },
-  confirm() {
-    const p = required();
-    confirmStory(p, this.data.id);
-    save(p);
-    this.onShow();
-    toast("已确认，允许这版故事入书");
-  },
   edit() {
-    if (this.data.live && this.data.story?.revision) {
+    if (this.data.story?.revision)
       go(
         "edit-story",
         `projectId=${this.projectId}&storyId=${this.data.story.id}${this.assistedSessionId ? `&assistedSessionId=${this.assistedSessionId}` : ""}`,
       );
-      return;
-    }
-    go("edit-story", "id=" + this.data.id);
-  },
-  supplement() {
-    go("interview");
-  },
-  exclude() {
-    const p = required();
-    const s = p.stories.find((s) => s.id === this.data.id)!;
-    s.included = !s.included;
-    touch(p);
-    save(p);
-    this.onShow();
-  },
-  photos() {
-    const projectId = required().id;
-    const storyId = this.data.id;
-    wx.chooseMedia({
-      count: 3,
-      mediaType: ["image"],
-      success: async (r) => {
-        try {
-          const paths = await Promise.all(
-            r.tempFiles.map(
-              (f) =>
-                new Promise<string>((resolve, reject) =>
-                  wx.getFileSystemManager().saveFile({
-                    tempFilePath: f.tempFilePath,
-                    success: (v) => resolve(v.savedFilePath),
-                    fail: reject,
-                  }),
-                ),
-            ),
-          );
-          const p = read(projectId);
-          const s = p?.stories.find((s) => s.id === storyId);
-          if (!p || !s) throw new Error("Story removed");
-          s.photos.push(...paths);
-          s.version += 1;
-          s.confirmedVersion = null;
-          touch(p);
-          save(p);
-          if (read()?.id === projectId) this.onShow();
-        } catch {
-          toast("照片没有保存成功，请重试");
-        }
-      },
-    });
-  },
-  play() {
-    const s = this.data.s;
-    if (!s?.recordings.length) {
-      notify(
-        "这是一篇示例故事",
-        "示例没有对应的真实原声。您录下的声音可在“我的 → 本机原声”中回听。",
-      );
-      return;
-    }
-    if (!audio) {
-      audio = wx.createInnerAudioContext();
-      audio.onEnded(() => this.setData({ playing: false }));
-      audio.onError(() => {
-        toast("原声暂时无法播放");
-        this.setData({ playing: false });
-      });
-    }
-    audio.src = s.recordings[0].path;
-    if (this.data.playing) audio.pause();
-    else audio.play();
-    this.setData({ playing: !this.data.playing });
   },
 });

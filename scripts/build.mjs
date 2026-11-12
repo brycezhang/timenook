@@ -28,7 +28,9 @@ const files = (await walk("miniprogram")).filter(
   (file) =>
     !release ||
     // Website originals and development-only book covers are not used by release pages.
-    (!/\/assets\/(?:family|book|father-book|home-family|sample-book)\.jpg$/.test(file) &&
+    (!/\/assets\/(?:family|book|father-book|home-family|sample-book)\.jpg$/.test(
+      file,
+    ) &&
       !/\/(?:pages\/(?:audio-probe|account-link|login|assisted|settings|service|refunds|quality|export|deletion-status|project)\/|services\/(?:audio-probe|account-link|login|assisted|settings|service|refunds|quality|export|deletion-status|project)\.ts)/.test(
         file,
       )),
@@ -105,6 +107,58 @@ await build({
     __TIMENOOK_API_BASE_URL__: JSON.stringify(apiBase),
   },
 });
+if (release) {
+  // Only registered pages, their components and their runtime dependencies ship.
+  // Shared modules stay separate to preserve native session/recorder singletons.
+  const reachable = new Set();
+  async function include(file) {
+    file = path.normalize(file);
+    if (reachable.has(file)) return;
+    if (file.startsWith("..") || path.isAbsolute(file))
+      throw new Error(`Native dependency escapes miniprogramRoot: ${file}`);
+    reachable.add(file);
+    const source = await fs.readFile(path.join(out, file), "utf8");
+    if (file.endsWith(".js")) {
+      for (const [, dependency] of source.matchAll(
+        /\brequire\(["']([^"']+)["']\)/g,
+      )) {
+        if (!dependency.startsWith("."))
+          throw new Error(`Native dependency must be relative: ${dependency}`);
+        const target = path.join(path.dirname(file), dependency);
+        await include(target.endsWith(".js") ? target : target + ".js");
+      }
+    } else if (file.endsWith(".json")) {
+      for (const component of Object.values(
+        JSON.parse(source).usingComponents ?? {},
+      )) {
+        const target = component.startsWith("/")
+          ? component.slice(1)
+          : path.join(path.dirname(file), component);
+        await includePage(target);
+      }
+    } else if (file.endsWith(".wxss")) {
+      for (const [, dependency] of source.matchAll(
+        /@import\s+["']([^"']+)["']/g,
+      ))
+        await include(path.join(path.dirname(file), dependency));
+    }
+  }
+  async function includePage(page) {
+    for (const ext of [".js", ".json", ".wxml", ".wxss"])
+      await include(page + ext);
+  }
+  for (const file of ["app.js", "app.json", "app.wxss", "sitemap.json"])
+    await include(file);
+  for (const page of config.pages) await includePage(page);
+  if (config.tabBar?.custom) await includePage("custom-tab-bar/index");
+  for (const file of await walk(out)) {
+    if (
+      /\.(?:js|json|wxml|wxss)$/.test(file) &&
+      !reachable.has(path.relative(out, file))
+    )
+      await fs.rm(file);
+  }
+}
 // Native encoding is an independent module; publish notices and an exact source link.
 const notices = path.resolve(
   import.meta.dirname,

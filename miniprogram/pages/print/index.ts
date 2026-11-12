@@ -9,8 +9,8 @@ import { printIntent, type PrintIntent } from "../../services/print-intent";
 import { previewBookPhoto } from "../../services/book-editor";
 import { clearPhotoPreviews } from "../../services/story-photos";
 import { watchProjectAccess } from "../../services/project-access";
-import { go } from "../../services/store";
-import { switchProjectTab } from "../../services/navigation";
+import { go, switchProjectTab } from "../../services/navigation";
+
 const labels: Record<FirstCopyBlocker, string> = {
   PHYSICAL_PRODUCTION_UNAVAILABLE: "当前项目没有实体书制作权益",
   PRODUCTION_PDF_UNAPPROVED: "书稿等待印前检查",
