@@ -188,6 +188,9 @@ async function main() {
   process.chdir(path.join(root, "apps/api"));
   started = true;
   await f.startBookFixture();
+  // A 71-board manual capture lasts longer than the unit fixture's ten-minute
+  // provider window. Set the local configuration before any story task exists.
+  f.config.generation.deadlineMs = 24 * 60 * 60 * 1000;
   const empty = register(await f.joinedProject());
   const active = register(await f.joinedProject());
   await cover(active, { title: "爸爸的时光故事：走过的山河与日常" });
@@ -220,6 +223,10 @@ async function main() {
   }
   const failedView = await read(active, `/stories/${failed.id}`);
   assert.equal(failedView.task.state, "failed");
+  const failedTask = (await read(active, "/tasks")).find(
+    (task) => task.id === failedView.task.id,
+  );
+  assert.equal(failedTask.retryable, true);
   const processingView = await pendingStory(active);
   heldTasks.add(processingView.task.id);
   assert.ok(["queued", "waiting_inputs"].includes(processingView.task.state));
