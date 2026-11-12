@@ -303,6 +303,20 @@ export class Fulfillment implements OnModuleDestroy {
       (payment?.packageSnapshot ?? {}) as Prisma.JsonObject,
       this.config.books?.mode === "internal-acceptance",
     );
+    const currentIndex = rows.findIndex(
+      (row) => row.reservationRevision === order?.reservationRevision,
+    );
+    const current = attempts[currentIndex] ?? null;
+    const fixedAddress =
+      actor && !erased && order
+        ? ((rows[currentIndex]?.address ??
+            order.address) as unknown as FirstCopyAddress)
+        : null;
+    const regionLabels = (
+      payment?.packageSnapshot as {
+        shippingRegionLabels?: Record<string, string>;
+      } | null
+    )?.shippingRegionLabels;
     return {
       noticeVersion: notice.noticeVersion,
       evidencePrefix: notice.evidencePrefix,
@@ -314,12 +328,20 @@ export class Fulfillment implements OnModuleDestroy {
         (await tx.firstCopyEntitlement.findUnique({ where: { projectId } }))
           ?.state ?? null,
       reservation: order ? this.binding(order) : null,
+      deliveryAddress: fixedAddress
+        ? {
+            ...fixedAddress,
+            regionLabel:
+              regionLabels?.[fixedAddress.regionCode] ??
+              fixedAddress.regionCode,
+          }
+        : null,
       accessExpiresAt: actor?.accessExpiresAt ?? null,
       grantMaxMinutes: 30,
       canGrantNarrator:
         !erased && !!actor && subject.boundUserId === actor.userId,
       attempts,
-      current: attempts[0] ?? null,
+      current,
       creation: {
         state: terms.creation?.state ?? "pending",
         expiresAt: terms.creation?.expiresAt ?? null,
@@ -328,8 +350,9 @@ export class Fulfillment implements OnModuleDestroy {
       canGrant:
         !erased &&
         !!actor &&
-        attempts[0]?.state === "approved" &&
-        (!!rows[0]?.qualityRequestId || terms.creation?.state === "active"),
+        current?.state === "approved" &&
+        (!!rows[currentIndex]?.qualityRequestId ||
+          terms.creation?.state === "active"),
     };
   }
   progress(projectId: string, authorization?: string) {

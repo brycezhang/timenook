@@ -1,0 +1,132 @@
+@import "./book.wxss";
+.print-page {
+  min-height: calc(100vh - 88px);
+}
+.print-page.double-dock {
+  padding-bottom: calc(164px + env(safe-area-inset-bottom));
+}
+.print-book-card {
+  flex-direction: row;
+  gap: 18px;
+  align-items: center;
+}
+.print-book-model {
+  width: 78px;
+  min-height: 109px;
+  padding: 10px 7px;
+  gap: 8px;
+  border-left-width: 5px;
+}
+.print-book-model .book-model-title {
+  font-size: 9px;
+}
+.print-book-model .book-model-message,
+.print-book-model .book-model-brand {
+  font-size: 5px;
+}
+.print-book-model .book-model-image {
+  height: 48px;
+}
+.print-book-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+.print-book-title {
+  font-weight: 600;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.print-book-caption {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #756859;
+  white-space: pre-line;
+}
+.print-badge {
+  display: inline-block;
+  border-radius: 7px;
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: #756859;
+  background: #f1e9de;
+}
+.print-badge.active {
+  color: #46563c;
+  background: #edf0e7;
+}
+.print-card-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.print-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.print-small {
+  font-size: 12px;
+  line-height: 1.75;
+  color: #756859;
+}
+.print-state-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.print-state-title {
+  font-size: 26px;
+  line-height: 1.3;
+  letter-spacing: -0.8px;
+  font-weight: 700;
+}
+.print-address {
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.print-step {
+  display: flex;
+  gap: 15px;
+  align-items: flex-start;
+  padding-bottom: 22px;
+}
+.print-step-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid #ded4c6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.print-step-mark.done {
+  border-color: #46563c;
+  background: #46563c;
+}
+.print-step-mark image {
+  width: 13px;
+  height: 13px;
+}
+.print-step-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.print-step-title {
+  color: #756859;
+  font-size: 15px;
+  font-weight: 600;
+}
+.print-step-title.done {
+  color: #382c24;
+}
+.print-step-caption {
+  color: #756859;
+  font-size: 12px;
+}
