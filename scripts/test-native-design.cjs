@@ -83,7 +83,7 @@ function family() {
   h.tap(".tn-dock .tn-button");
   const draft = ready("family-question-edit");
   capture(
-    "FamilyQuestionNew",
+    draft.needsRelationship ? "FamilyQuestionNew" : "FamilyQuestionNewExistingRelation",
     "Family questions → ask a question",
     "Optional chapter remains unset; author relationship is required when missing",
   );

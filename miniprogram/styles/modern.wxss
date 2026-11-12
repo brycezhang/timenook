@@ -10,7 +10,7 @@
 .tn-card { padding: 18px; border: 1px solid #ded4c6; background: #fff; border-radius: 20px; display: flex; flex-direction: column; gap: 14px; }
 .tn-button { width: 100%; min-height: 52px; border: 0; border-radius: 16px; padding: 13px 18px; display: flex; justify-content: center; align-items: center; gap: 9px; font-size: 16px; font-weight: 600; line-height: 1.5; background: #46563c; color: #fff; white-space: normal; }
 .tn-button.tn-secondary { color: #46563c; background: #edf0e7; }
-.tn-button[disabled] { background: #edf0e7; color: #756859; opacity: .6; }
+.tn-button[disabled], button.tn-button[disabled]:not([type]) { background: #edf0e7; color: #756859; opacity: 1; }
 .tn-link { color: #46563c; min-height: 44px; padding: 10px 2px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; font-weight: 600; }
 .tn-icon-button { width: 44px; height: 44px; border: 0; border-radius: 14px; background: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .tn-icon { width: 22px; height: 22px; flex-shrink: 0; }

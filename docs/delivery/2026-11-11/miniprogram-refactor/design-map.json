@@ -546,13 +546,14 @@
       "state": "有书暂无故事",
       "entry": "自购成功／领取后进入／切换空书",
       "interaction": "卡片入口、零数量、推荐与开讲",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP06/native/HomeEmpty-320.png",
+      "native390": "evidence/MP06/native/HomeEmpty-390.png",
+      "interactionEvidence": "MP06-delivery.md",
+      "result": "passed",
       "design390": "design-reference/390/HomeEmpty.png",
       "design320": "design-reference/320/HomeEmpty.png",
-      "implementationEvidence": "MP06-delivery.md"
+      "implementationEvidence": "MP06-delivery.md",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers"
     },
     {
       "board": "HomeActive.dc.html",
@@ -563,13 +564,14 @@
       "state": "已有故事",
       "entry": "登录已有项目／切换书",
       "interaction": "真实统计、推荐、滚动、整卡入口",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP06/native/HomeActive-320.png",
+      "native390": "evidence/MP06/native/HomeActive-390.png",
+      "interactionEvidence": "MP06-delivery.md",
+      "result": "passed",
       "design390": "design-reference/390/HomeActive.png",
       "design320": "design-reference/320/HomeActive.png",
-      "implementationEvidence": "MP06-delivery.md"
+      "implementationEvidence": "MP06-delivery.md",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers"
     },
     {
       "board": "FamilyQuestions.dc.html",
@@ -580,13 +582,14 @@
       "state": "家人题列表",
       "entry": "首页→家人提问",
       "interaction": "状态筛选、文字提问、问题详情",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP06/native/FamilyQuestions-320.png",
+      "native390": "evidence/MP06/native/FamilyQuestions-390.png",
+      "interactionEvidence": "MP06-delivery.md",
+      "result": "passed",
       "design390": "design-reference/390/FamilyQuestions.png",
       "design320": "design-reference/320/FamilyQuestions.png",
-      "implementationEvidence": "MP06-delivery.md"
+      "implementationEvidence": "MP06-delivery.md",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers"
     },
     {
       "board": "FamilyQuestionsEmpty.dc.html",
@@ -597,13 +600,14 @@
       "state": "暂无家人题",
       "entry": "空书→家人提问",
       "interaction": "空态与提问入口",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP06/native/FamilyQuestionsEmpty-320.png",
+      "native390": "evidence/MP06/native/FamilyQuestionsEmpty-390.png",
+      "interactionEvidence": "MP06-delivery.md",
+      "result": "passed",
       "design390": "design-reference/390/FamilyQuestionsEmpty.png",
       "design320": "design-reference/320/FamilyQuestionsEmpty.png",
-      "implementationEvidence": "MP06-delivery.md"
+      "implementationEvidence": "MP06-delivery.md",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers"
     },
     {
       "board": "FamilyQuestionNew.dc.html",
@@ -614,13 +618,15 @@
       "state": "文字提问",
       "entry": "家人列表／某章→提问",
       "interaction": "关系补填、可选章、发布和取消",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native320": "evidence/MP06/native/FamilyQuestionNew-320.png",
+      "native390": "evidence/MP06/native/FamilyQuestionNew-390.png",
+      "interactionEvidence": "MP06-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/FamilyQuestionNew.png",
       "design320": "design-reference/320/FamilyQuestionNew.png",
-      "implementationEvidence": "MP06-delivery.md"
+      "implementationEvidence": "MP06-delivery.md",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers",
+      "pendingReason": "Disabled-button native specificity fixed and observed at 390; 320 screenshot predates fix and must be recaptured."
     },
     {
       "board": "FamilyQuestionDetail.dc.html",
@@ -631,13 +637,14 @@
       "state": "待回答／稍后／跳过",
       "entry": "首页／列表→家人题",
       "interaction": "作者来源、回答、稍后、跳过及恢复",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP06/native/FamilyQuestionDetail-320.png",
+      "native390": "evidence/MP06/native/FamilyQuestionDetail-390.png",
+      "interactionEvidence": "MP06-delivery.md",
+      "result": "passed",
       "design390": "design-reference/390/FamilyQuestionDetail.png",
       "design320": "design-reference/320/FamilyQuestionDetail.png",
-      "implementationEvidence": "MP06-delivery.md"
+      "implementationEvidence": "MP06-delivery.md",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers"
     },
     {
       "board": "FamilyQuestionAnswered.dc.html",
@@ -648,13 +655,14 @@
       "state": "已回答",
       "entry": "已回答列表→问题",
       "interaction": "原作者、关联故事整卡入口",
-      "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
-      "result": "pending",
+      "native320": "evidence/MP06/native/FamilyQuestionAnswered-320.png",
+      "native390": "evidence/MP06/native/FamilyQuestionAnswered-390.png",
+      "interactionEvidence": "MP06-delivery.md",
+      "result": "passed",
       "design390": "design-reference/390/FamilyQuestionAnswered.png",
       "design320": "design-reference/320/FamilyQuestionAnswered.png",
-      "implementationEvidence": "MP06-delivery.md"
+      "implementationEvidence": "MP06-delivery.md",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers"
     },
     {
       "board": "Photos.dc.html",
