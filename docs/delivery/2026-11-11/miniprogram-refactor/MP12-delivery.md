@@ -1,6 +1,6 @@
 # MP12 集成清理与原生验收
 
-范围：[#178](https://github.com/brycezhang/timenook/issues/178)。本票正在进行；当前已完成正式包清理与走查脚本更新，71 张画板仍按 [design-map.json](design-map.json) 的实际记录判断，不能将本页工程检查当作原生通过。
+范围：[#178](https://github.com/brycezhang/timenook/issues/178)。本票的代码清理与开发者工具原生验收已完成：70 个应用状态均有实际 390／320 截图与对应交互，另 1 个 PdfDocument 状态验证系统调用及实际 PDF 内容。逐项范围见 [design-map.json](design-map.json)，真机、资金、供应商及实物结果另验。
 
 ## 本轮清理
 
@@ -35,4 +35,6 @@ node scripts/test-native-design.cjs family
 
 当前已完成录音 320 真实上传／丢响应重试、书稿 320 实际 PDF 打开、长原声拖动／退出清理、地址保存／提交／生产状态读取，以及真实取消订单重提的未知响应查询恢复；详见各票记录及[本轮书稿制作检查点](evidence/MP12/native-book-print-320.json)。原生发现的 sort-list 异步查询／touchend 竞态已修复，实际 320 CUA 拖动章节后，界面与 API 均保存为「求学与成长、我的童年」顺序。封面照片返回的多余离开提示也已修复并通过真实选图／草稿保存复验。
 
-剩余：缺失的 390 原生画板、故事行拖动／移出、地址 picker 初始选择确认、暂停录音照片页头返回检查。PDF 系统外壳不伪装为应用 390/320 截图，按系统调用与实际内容单独记录。真机手机号授权、实际录音和供应商、支付资金、微信分享、扫码、印厂与实物验收各自独立。集成分支与 [PR #179](https://github.com/brycezhang/timenook/pull/179) 已由集成负责人推送；未部署或上传。
+最终补齐 390 应用状态，并完成故事拖动／移出与 API 顺序回读、故事长音频原生 slider 跳转、地址 picker 首项确认、暂停录音照片页头返回、失败故事重试和首次制作未知响应查询。正式包 `f257c62` 删除了设计中没有的原始转写展示，StoryFailed／StoryProcessing 用真实 API 状态再次双宽采集；其余不受影响的通过证据保留。[最终脱敏记录](evidence/MP12/native-final-acceptance.json)记录环境、交互结果与边界。最后正式构建及官方 wcc/wcsc 均通过 37 页，制作页引用模板实际存在于包内。
+
+PDF 系统外壳不伪装为应用 390/320 截图，按系统调用与实际内容单独记录。真机手机号授权、实际录音和供应商、支付资金、微信分享、扫码、印厂与实物验收各自独立待验。集成分支与 [PR #179](https://github.com/brycezhang/timenook/pull/179) 已由集成负责人推送；本轮未部署或上传。

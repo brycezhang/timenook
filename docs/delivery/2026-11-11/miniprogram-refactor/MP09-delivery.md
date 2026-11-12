@@ -40,7 +40,7 @@ node --env-file=../../.env --test --test-concurrency=1 --test-timeout=120000 dis
 
 ## 原生与外部待验
 
-Mac 锁屏且开发者工具由 root 单写，本工作树没有操作 DevTools/CUA/CLI。下表全部为待验，浏览器、控制器或构建不替代原生截图与点击证据。设计参考沿用 `design-reference/390` 与 `design-reference/320` 的对应画板。
+初始实现阶段因 Mac 锁屏未操作 DevTools/CUA/CLI，下表当时为待验；后续 MP12 已完成七态双宽，见文末。浏览器、控制器或构建不替代原生截图与点击证据。设计参考沿用 `design-reference/390` 与 `design-reference/320` 的对应画板。
 
 | 画板 | 真实入口/状态 | 待验内容 |
 | --- | --- | --- |
@@ -61,3 +61,7 @@ iPhone/Android 真机麦克风、授权弹层、十分钟实录、系统手势/�
 - 真实上传 204 响应丢失后进入失败，实际重试再次收到 204 并进入故事；受保护 API 读回 1 个 sealed 片段。[脱敏记录](evidence/MP09/native/recording-boundary-320.json)保留实际事件。
 - 短屏照片为 120×90，暂停/结束/继续与重试图标对齐参考。原型 320px 计时被底栏裁切，本次明确改善短屏计时区域：缩小波形与计时字号，去掉重复状态文字。实测计时 bottom 449.2px、底栏 top 452px，完整计时可见；390px 样式不受此调整影响。
 - 390px 原生截图及上述真机、供应商验收仍待完成。
+
+## MP12 最终原生收尾（2026-11-12）
+
+七张画板已补齐 390，与 320 一起完成原生验收。390 从权限拒绝、设置恢复、选照片、录音到暂停；照片页实际 CUA 页头返回直接回到暂停并保留照片，无多余离开提示。继续录音后真实上传响应丢失，点击重试后 API 确认 1 个 sealed clip。RecorderManager、权限及上传回调丢失为声明的硬件边界；上传、下载、封存均为真实 API。 详见[最终脱敏记录](evidence/MP12/native-final-acceptance.json)及 [design-map](design-map.json)；前文时间点的待验项以本段和映射为准。

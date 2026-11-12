@@ -1,6 +1,6 @@
 # MP05 六章大纲、问题与故事目录交付
 
-对应 [#171](https://github.com/brycezhang/timenook/issues/171)、[规格](spec.md)和 [MP05 票据](tickets/MP05-outline-directory.md)。功能代码已完成；本票尚未完成原生 UI 验收，不标记为完成。以下分别记录已通过检查、原生待验与外部验收。
+对应 [#171](https://github.com/brycezhang/timenook/issues/171)、[规格](spec.md)和 [MP05 票据](tickets/MP05-outline-directory.md)。功能及 390／320 开发者工具原生验收已完成；真实设备与外部供应商结果另验。下文保留分阶段证据，最新结论见文末。
 
 ## 当前功能和契约
 
@@ -48,7 +48,7 @@
 
 [运行清单](evidence/MP05/manifest.json)、[官方 CLI 操作记录](evidence/MP05/cli-actions.jsonl)和[步骤记录](evidence/MP05/cli-results.json)保留当前证据。早期脚本失败是混用持久 SDK 与 CLI、选择器能力和访谈提示文案判断问题，均已识别；不将这些脚本错误计作产品通过或失败。
 
-**尚未完成**：GUI 真实拖章/拖故事、组件内「移出」后加入，以及最终全部画板验收。CUA 明确返回 Mac 已锁屏且自动解锁失败，已请用户手动解锁；没有反复重试或绕过。390 截图与已通过操作不代表本票全部原生验收完成。
+**当时尚未完成（已在文末关闭）**：GUI 真实拖章/拖故事、组件内「移出」后加入，以及最终全部画板验收。CUA 明确返回 Mac 已锁屏且自动解锁失败，已请用户手动解锁；没有反复重试或绕过。390 截图与已通过操作不代表本票全部原生验收完成。
 
 ## 恢复验证与交接
 
@@ -67,3 +67,7 @@
 六张原生图已补齐并对照，使用真实 MP06 API/PG/Redis 与 release 包。首页进入书稿、目录后，章内入口用真实路由打开；Mac 锁定时没有将 CLI 直接路由当作自定义组件点击或拖动证据。章内显示 11 题（10 个大纲题、1 个家人题），编辑问题、章节名称和故事正文均通过真实输入/保存返回确认。点击“移到本章”完成真实跨章移动，章内故事与章节正文随之显示。目录及故事拖排仍明确待验。
 
 2026-11-12 原生修复复验：真实 CUA 快速拖动重现最后一次 touchmove 的异步查询被 touchend 提前清空，导致顺序未保存。修复后 release `4e38b3f` 在实际 320px 再拖「我的童年」到「求学与成长」后方，界面与真实 API 顺序均变为 learning、childhood；[拖后截图](evidence/MP05/native/BookDirectoryReordered-320.png)保留结果。QuestionEdit 的「所属章节／必选」层级及 ChapterStories「可加入的故事」文案已补采 320；故事页已通过实际加入按钮准备两条故事，行拖动／移出与最新 390 文案待继续。Mac 此时明确锁定，未将受阻的后续动作记为通过。
+
+## MP12 最终原生收尾（2026-11-12）
+
+六张画板已完成 390／320。最终 QuestionEdit 必选标签、ChapterStories 文案均已双宽更新；实际 320 CUA 拖动两条故事交换顺序，再点击组件「移出」，两次界面结果与真实 plan.storyRefs 回读一致。此前章节拖动也已保存，拖排与移出缺口已关闭。 详见[最终脱敏记录](evidence/MP12/native-final-acceptance.json)及 [design-map](design-map.json)；前文时间点的待验项以本段和映射为准。

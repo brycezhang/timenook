@@ -24,3 +24,7 @@ GitHub：[#168](https://github.com/brycezhang/timenook/issues/168)。功能与�
 - 微信真机手机号授权、微信收银台实付、设备与供应商实际结果另验。
 
 输入框垂直对齐修复后的 320px 已确认；390px 的 NewGift / SelfGift / GiftRecipient 复采因 Mac 再次锁定而待设备切换。旧图与已完成的两宽业务链路分别保留，design-map 未把待复采项标为通过。
+
+## MP12 最终原生收尾（2026-11-12）
+
+输入垂直对齐修复后的 NewGift／SelfGift 已补采 390，双宽购买链路沿用此前实际验收；GiftRecipient 的 390 同步更新。 详见[最终脱敏记录](evidence/MP12/native-final-acceptance.json)及 [design-map](design-map.json)；前文时间点的待验项以本段和映射为准。
