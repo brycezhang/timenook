@@ -52,6 +52,7 @@ Page({
     });
   },
   async onShow() {
+    markEditing(this.data.dirty);
     const n = ++this.generation;
     this.owner = sessionClient.context();
     const owner = this.owner;
@@ -192,8 +193,13 @@ Page({
   choose() {
     if (!this.context || this.data.busy) return;
     const owner = this.owner;
+    markEditing(false);
     wx.navigateTo({
       url: `/pages/cover-photos/index?projectId=${this.projectId}&selected=${this.data.photoAssetId || ""}`,
+      fail: () => {
+        if (!this.disposed && owner === sessionClient.context())
+          markEditing(this.data.dirty);
+      },
       events: {
         coverPhotoSelected: ({
           photoAssetId,
@@ -202,7 +208,6 @@ Page({
         }) => {
           if (this.disposed || owner !== sessionClient.context()) return;
           this.setData({ photoAssetId, hasPhoto: !!photoAssetId, dirty: true });
-          markEditing(true);
         },
       },
     });
