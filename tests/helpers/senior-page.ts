@@ -59,6 +59,7 @@ const bundles = new Map(
 function harness(name = "book") {
   const clock = { now: Date.now() };
   const faults = { openDocument: false };
+  const unloadAlert = { enabled: false };
   const storage = new Map<string, any>([
     ["timenook.mode.v1", "live"],
     [`timenook.session.v1:${base}`, structuredClone(login)],
@@ -127,8 +128,12 @@ function harness(name = "book") {
       pageScrollTo() {},
       showModal: (o: any) => o.success({ confirm: true }),
       showToast() {},
-      enableAlertBeforeUnload() {},
-      disableAlertBeforeUnload() {},
+      enableAlertBeforeUnload() {
+        unloadAlert.enabled = true;
+      },
+      disableAlertBeforeUnload() {
+        unloadAlert.enabled = false;
+      },
       navigateBack: () => routes.push("back"),
     },
   });
@@ -136,6 +141,7 @@ function harness(name = "book") {
     page,
     clock,
     faults,
+    unloadAlert,
     storage,
     requests,
     downloads,
