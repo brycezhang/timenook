@@ -1,42 +1,37 @@
-# 双方确认与首本制作本地验证
+# 首本制作
 
-T22 接入 T10 已核验付款及唯一首本权益、T12 当次协助证据和 T20/T21 确定书稿。当前仍由 `books.mode=synthetic-local` 与 `environment=test` 隔离，只在既有 Book 合成应用中注册路由；默认配置和生产不能启用。本票不冻结 D01/D05/D06，不付款、不联系印厂，也不执行 T23 的交接。
+2026-11-12 按[当前业务流程](../designs/timenook-modern-2026-11-10/project/BUSINESS-FLOW.md)和 [MP11](delivery/2026-11-11/miniprogram-refactor/MP11-delivery.md)执行。项目成员在当前 PDF 就绪后填写地址并提交制作，不再要求双方确认或协助确认。购买时不收地址。
 
 ## 用户接口
 
-以下路由以 `/v1/projects/:id/first-copy` 为前缀，均要求当前 TimeNook Bearer 会话和项目私人内容权限；写入要求 `Idempotency-Key`。成功返回统一 envelope，私人响应 `Cache-Control: no-store`。
+前缀 `/v1/projects/:id/first-copy`；要求产品会话及项目权限，写入要求 `Idempotency-Key`，私人响应禁止缓存。
 
-| 路径             | 方法 | 输入与结果                                                                                                                           |
-| ---------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `/`              | GET  | 当前书稿、双方有效确认、地址版本/hash、已付金额、制作一本/本次零付款、原订单配送/生产/物流约定、长期制作状态和拒绝原因               |
-| `/address`       | POST | 发起人提交 `expectedVersion, recipientName, phone, regionCode, detail`；地区必须在原销售快照包含范围内且不在排除范围                 |
-| `/confirmations` | POST | `role, bookVersionId, snapshotHash, pdfHash, noticeVersion, evidenceRef`；发起人另传 `addressHash`，当次协助另传 `assistedSessionId` |
-| `/submit`        | POST | 发起人提交 `bookVersionId, snapshotHash, pdfHash, addressHash`；唯一预留首本，返回原生产单或冲突                                     |
+| 路径 | 方法 | 输入与结果 |
+| --- | --- | --- |
+| `/` | GET | 当前书稿、地址版本/hash、首本权益、已提交生产单及阻断原因 |
+| `/address` | POST | `expectedVersion, recipientName, phone, regionCode, detail`；按原销售快照核验配送范围 |
+| `/submit` | POST | `bookVersionId, snapshotHash, pdfHash, addressHash`；预留唯一首本，返回生产单或冲突 |
 
-`noticeVersion=synthetic-d08-v1`，证据引用必须明确以 `synthetic:` 开头。讲述者只看到地址版本及 hash，不返回私人收货字段。讲述者确认内容；发起人确认同一完整 PDF 与当前地址。发起人代操作讲述者确认时，必须有独立、当前有效的 `book_confirmation` 会话，另写本次确定版本证据；录音或故事确认会话不能替代。
+提交时核验当前完整 PDF、真实付款与唯一权益、项目与资料权限、印刷规格和地址。事务锁定项目并保存书稿、PDF 与地址快照/hash；同键同载荷及合法并发保持同一生产单，同键异载荷拒绝。小程序在请求前保存原键、绑定与展示摘要，响应未知先查询，不能以超时另造一次提交。
 
-书稿内容、实际目录、素材或入书许可变化后，受影响旧书稿及双方确认失效。地址实际变化只使发起人确认失效；即使地址由 A 改为 B 再改回 A，也必须重新确认，因为确认同时绑定地址版本及 hash。重复保存相同规范化地址不制造新版本。
+提交后新故事、改稿或改地址不覆盖本次制作内容。成员通过 `GET /v1/projects/:id/fulfillment/book` 读取已提交版本，通过 `/fulfillment/book/pdf` 读取固定 PDF；普通旧稿预览仍拒绝过期版本。访问始终检查当前成员权限、制作绑定及文件 hash，不绕过核验删除等权限拒绝。
 
-事务锁定当前会话/项目/讲述者后，重新读取真实付款事务、唯一权益、当前完整 PDF、故事许可、授权与 epoch、现有撤回/删除工单、购买时规格和双方确认。权益必须可用；`suspended` / `revoked` 阻止提交及审核。后两者是消费后续 Commerce 退款/核验动作的既定状态契约，本票没有实际退款接口或资金操作。书稿必须匹配销售快照的尺寸、出血及页数范围，不能用前端按钮放行超规格内容。
+## 审核与取消后重提
 
-成功预留在同一事务内写唯一首本单、权益 `reserved`、审计事件和持久 Outbox。一个项目、付款订单和权益分别唯一；同键同载荷及不同键并发返回同一生产单，同键异载荷或已预留单不同内容返回 409。Outbox 仅保存交接事实，T22 没有新增队列或自动向印厂提交。
+`POST /v1/admin/first-copy/:id/approve` 的 `:id` 是生产单 ID；要求独立管理员会话、CSRF、`fulfillment:write` 与幂等键。核验预留的版本/hash、原地址快照、付款、权益、权限及规格；不要求该书稿仍是最新编辑稿，不重建双方确认门槛。
 
-## 审核与长期资格
+印厂明确确认取消后，成员可用当前就绪书稿及地址重提。沿用原生产单和首本权益，递增预留版本，旧尝试及原 PDF/地址保持不变；取消待核实期间不释放权益。详见[生产与物流](development-fulfillment.md)。按 [ADR 0017](adr/0017-lifetime-service-and-retention.md)，长期制作资格不增加首本数量，也不取消付款、权限或唯一权益校验。
 
-`POST /v1/admin/first-copy/:id/approve` 的 `:id` 是生产单 ID，输入为同一组四项版本/hash 绑定。要求独立管理员飞书会话、CSRF、`fulfillment:write` 和幂等键，由 AdminAccess 同事务审计。审核再次执行付款、权益、当前版本、许可、授权、冻结、规格与双方确认。返回仅含 `projectId, production`，不返回私人正文或地址，也不授予运营私人内容读取权限。
+## 验证
 
-按 [ADR0017](adr/0017-lifetime-service-and-retention.md)，制作资格长期有效；`creation.expiresAt=null`，不计算起算、暂停或到期。`/expiry-review`、期限管理接口和对应权限已移除。退款导致的 suspended/terminated、唯一首本权益、当前授权及主动删除继续阻止不合法提交；长期服务不增加首本数量，也不免除版本确认。
+先按[本地开发](development.md)准备 PostgreSQL/Redis、固定字体及 Chromium。在仓库根目录编译，再从 API 目录执行：
 
-## 复现
-
-先按[本地开发](development.md)准备回环 PostgreSQL/Redis、Node 22.23.4、pnpm 10.34.7、固定字体及 Chromium。API 测试只使用可丢弃独立 schema；微信、支付、ASR/文本边界均为明确合成替身。
-
-```bash
+```sh
 pnpm db:generate
 pnpm --filter @timenook/contracts build
 pnpm --filter @timenook/api exec tsc -p tsconfig.test.json
 cd apps/api
-node --env-file=../../.env --test dist-test/test/first-copy.test.js
+node --env-file-if-exists=../../.env --test dist-test/test/first-copy.test.js
 ```
 
-真实 PDF 样本使用独立合成套餐，`minPages=1, bleedMm=0` 与 T20 当前固定候选渲染器匹配。默认销售夹具仍是 `minPages=48, bleedMm=3`，不会为演示放宽。真实印厂规格、实际商业规则、双端微信双方确认/协助和实物交接仍按责任票验收。工程证据见 [T22 后端](delivery/2026-10-22/evidence/T22-backend.md) 和 [T22 汇总](delivery/2026-10-22/evidence/T22.md)。
+当前工程结果见 [MP11 交付](delivery/2026-11-11/miniprogram-refactor/MP11-delivery.md)及[固定稿修复](delivery/2026-11-11/miniprogram-refactor/review-fixes.md)。测试使用真实本地 PostgreSQL/Redis 与真实 PDF；支付及印厂结果为明确夹具，不代表真实资金或实物交付。早期双方确认方案的历史证据保留在 [T22](delivery/2026-10-22/evidence/T22.md)，不作为当前接口要求。
