@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import { cp, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import {
+  appendFile,
+  cp,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -206,7 +215,15 @@ test("built new-book preserves an encoded user title and relationship", async ()
   assert.equal(purchase.data.relationship, "妈妈");
 });
 
-test("release package excludes website and probe routes and ignores stored demo mode", async () => {
+test("release package excludes website and probe routes and ignores stored demo mode", async (t) => {
+  await appendFile(
+    path.join(fixture, "miniprogram/templates/print-book.wxml"),
+    '\n<include src="/templates/print-summary.wxml" />\n',
+  );
+  await writeFile(
+    path.join(fixture, "miniprogram/templates/print-summary.wxml"),
+    "<view>当前制作书稿</view>\n",
+  );
   const release = spawnSync(
     process.execPath,
     [path.resolve("scripts/build.mjs")],
@@ -223,6 +240,19 @@ test("release package excludes website and probe routes and ignores stored demo 
     },
   );
   assert.equal(release.status, 0, release.stderr);
+  await t.test(
+    "release keeps imported print templates and their included content",
+    async () => {
+      for (const file of ["print-book.wxml", "print-summary.wxml"])
+        assert.equal(
+          await readFile(path.join(root, "templates", file), "utf8"),
+          await readFile(
+            path.join(fixture, "miniprogram/templates", file),
+            "utf8",
+          ),
+        );
+    },
+  );
   const media = (await readdir(root, { recursive: true })).filter((file) =>
     /\.(?:jpe?g|png|svg|webp|gif|flac|m4a|ogg|ape|amr|wma|wav|mp3|mp4|aac|aiff|caf)$/i.test(
       file,
