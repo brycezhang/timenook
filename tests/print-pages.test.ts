@@ -179,7 +179,7 @@ test("production reads the submitted version and actual shipment without marking
   const pending = h.page.refresh();
   h.respond(0, fulfillment());
   await tick();
-  assert.match(h.requests[1].url, new RegExp(`/book/versions/${versionId}$`));
+  assert.match(h.requests[1].url, /\/fulfillment\/book$/);
   h.respond(1, version());
   await pending;
   assert.equal(h.page.data.label, "已提交，等待制作");
@@ -187,7 +187,7 @@ test("production reads the submitted version and actual shipment without marking
   h.page.preview();
   assert.equal(
     h.routes[0],
-    `/pages/manuscript/index?projectId=${projectId}&versionId=${versionId}`,
+    `/pages/manuscript/index?projectId=${projectId}&versionId=${versionId}&production=1`,
   );
   const shipped = h.page.refresh();
   h.respond(2, fulfillment("shipped"));

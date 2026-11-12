@@ -25,6 +25,9 @@ const projectId = computed(() =>
 const fixedId = computed(() =>
   typeof route.query.version === "string" ? route.query.version : "",
 );
+const fixedProduction = computed(
+  () => !!fixedId.value && route.query.production === "1",
+);
 const plan = ref<PersonalPlan | null>(null);
 const context = ref<BookContext | null>(null),
   overview = ref<ProjectOverview | null>(null),
@@ -76,6 +79,7 @@ const generating = computed(
 );
 const outdated = computed(
   () =>
+    !fixedProduction.value &&
     !!displayed.value &&
     (displayed.value.state === "obsolete" ||
       (!!context.value?.inputHash &&
@@ -83,8 +87,8 @@ const outdated = computed(
 );
 const ready = computed(
   () =>
-    displayed.value?.state === "ready" &&
-    !!displayed.value.pdf &&
+    (fixedProduction.value || displayed.value?.state === "ready") &&
+    !!displayed.value?.pdf &&
     !outdated.value,
 );
 const includedCount = computed(() =>
@@ -211,7 +215,9 @@ async function load(initial = false) {
     plan.value = outline;
     accept(value, resetCover, resetDirectory);
     if (fixedId.value) {
-      const version = await bookApi.version(projectId.value, fixedId.value);
+      const version = fixedProduction.value
+        ? await bookApi.production(projectId.value)
+        : await bookApi.version(projectId.value, fixedId.value);
       if (token !== sequence) return;
       displayed.value = version;
       deadline();
@@ -385,7 +391,9 @@ async function pdf(download = false) {
     version = displayed.value;
   try {
     const blob = await fetchVerifiedBlob(
-      `/projects/${projectId.value}/book/versions/${version.id}/pdf`,
+      fixedProduction.value
+        ? `/projects/${projectId.value}/fulfillment/book/pdf`
+        : `/projects/${projectId.value}/book/versions/${version.id}/pdf`,
       version.pdf!,
       mediaController.signal,
     );

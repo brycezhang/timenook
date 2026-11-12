@@ -13,6 +13,7 @@ Page({
     status: "",
     coverImage: "",
     openFailed: false,
+    fixedProduction: false,
   },
   projectId: "",
   versionId: "",
@@ -24,6 +25,7 @@ Page({
   onLoad(q) {
     this.projectId = q.projectId || "";
     this.versionId = q.versionId || "";
+    this.setData({ fixedProduction: q.production === "1" });
     this.stopSession = sessionClient.onInvalidated(() => this.clearAccess());
   },
   clearAccess() {
@@ -41,7 +43,9 @@ Page({
       () => this.clearAccess(),
     );
     await this.perform(async (n, owner) => {
-      const v = await bookClient.readVersion(this.projectId, this.versionId);
+      const v = this.data.fixedProduction
+        ? await bookClient.readProduction(this.projectId)
+        : await bookClient.readVersion(this.projectId, this.versionId);
       if (!this.current(n, owner)) return;
       this.setData({ version: v, openFailed: false });
       const photo = v.coverPhotoAccess.allowed ? v.snapshot.cover.photo : null;
@@ -109,18 +113,24 @@ Page({
   },
   async openPdf() {
     const version = this.data.version;
-    if (!version || version.state !== "ready" || !version.pdf) return;
+    if (
+      !version ||
+      (!this.data.fixedProduction && version.state !== "ready") ||
+      !version.pdf
+    )
+      return;
     const pdf = version.pdf;
     return this.perform(async (generation: number, owner: string) => {
       this.removeFile(this.file);
       this.file = "";
-      const result = await sessionClient
-        .downloadBook(this.projectId, version.id)
-        .catch((error) => {
-          if (this.current(generation, owner))
-            this.setData({ openFailed: true });
-          throw error;
-        });
+      const result = await (
+        this.data.fixedProduction
+          ? sessionClient.downloadProductionBook(this.projectId)
+          : sessionClient.downloadBook(this.projectId, version.id)
+      ).catch((error) => {
+        if (this.current(generation, owner)) this.setData({ openFailed: true });
+        throw error;
+      });
       const path = result.tempFilePath;
       let opened = false;
       try {
@@ -167,8 +177,12 @@ Page({
   },
 
   print() {
-    if (this.data.version?.state !== "ready") return;
+    if (this.data.fixedProduction || this.data.version?.state !== "ready")
+      return;
     go("print", `projectId=${this.projectId}`);
+  },
+  production() {
+    go("production", `projectId=${this.projectId}`);
   },
   edit() {
     go("book", `projectId=${this.projectId}`);
