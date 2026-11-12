@@ -136,6 +136,15 @@ if (release) {
           : path.join(path.dirname(file), component);
         await includePage(target);
       }
+    } else if (file.endsWith(".wxml")) {
+      for (const [, dependency] of source.matchAll(
+        /<(?:import|include)\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/g,
+      ))
+        await include(
+          dependency.startsWith("/")
+            ? dependency.slice(1)
+            : path.join(path.dirname(file), dependency),
+        );
     } else if (file.endsWith(".wxss")) {
       for (const [, dependency] of source.matchAll(
         /@import\s+["']([^"']+)["']/g,
