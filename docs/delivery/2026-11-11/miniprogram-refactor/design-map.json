@@ -119,11 +119,13 @@
       "entry": "统一送礼入口",
       "interaction": "关系必选、自定义、书名及继续",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP02/native/NewGift-390.png",
+      "interactionEvidence": "MP02-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/NewGift.png",
-      "design320": "design-reference/320/NewGift.png"
+      "design320": "design-reference/320/NewGift.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "SelfGift.dc.html",
@@ -135,11 +137,13 @@
       "entry": "关系→自己",
       "interaction": "身份含义、确认书名与继续",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP02/native/SelfGift-390.png",
+      "interactionEvidence": "MP02-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/SelfGift.png",
-      "design320": "design-reference/320/SelfGift.png"
+      "design320": "design-reference/320/SelfGift.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "Checkout.dc.html",
@@ -151,11 +155,13 @@
       "entry": "填写关系和书名→继续",
       "interaction": "套餐事实、付款、重复操作",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP02/native/Checkout-390.png",
+      "interactionEvidence": "MP02-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/Checkout.png",
-      "design320": "design-reference/320/Checkout.png"
+      "design320": "design-reference/320/Checkout.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "PaymentPending.dc.html",
@@ -167,11 +173,13 @@
       "entry": "支付取消／送出类待付款",
       "interaction": "恢复原单、返回",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP02/native/PaymentPending-390.png",
+      "interactionEvidence": "MP02-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/PaymentPending.png",
-      "design320": "design-reference/320/PaymentPending.png"
+      "design320": "design-reference/320/PaymentPending.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "PaymentUnknown.dc.html",
@@ -183,11 +191,13 @@
       "entry": "支付后状态待确认",
       "interaction": "查询原单与正确结果去向",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP02/native/PaymentUnknown-390.png",
+      "interactionEvidence": "MP02-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/PaymentUnknown.png",
-      "design320": "design-reference/320/PaymentUnknown.png"
+      "design320": "design-reference/320/PaymentUnknown.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "GiftReady.dc.html",
@@ -199,11 +209,13 @@
       "entry": "服务端确认他人订单已付",
       "interaction": "指定收礼人、进入原书",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP02/native/GiftReady-390.png",
+      "interactionEvidence": "MP02-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/GiftReady.png",
-      "design320": "design-reference/320/GiftReady.png"
+      "design320": "design-reference/320/GiftReady.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "GiftRecipient.dc.html",
@@ -215,11 +227,13 @@
       "entry": "购买成功／礼物卡→设置",
       "interaction": "号码输入校验、保存与重发",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP03/native/GiftRecipient-390.png",
+      "interactionEvidence": "MP03-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/GiftRecipient.png",
-      "design320": "design-reference/320/GiftRecipient.png"
+      "design320": "design-reference/320/GiftRecipient.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "GiftShare.dc.html",
@@ -231,11 +245,13 @@
       "entry": "号码保存成功",
       "interaction": "分享、更正号码、进入书",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP03/native/GiftShare-390.png",
+      "interactionEvidence": "MP03-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/GiftShare.png",
-      "design320": "design-reference/320/GiftShare.png"
+      "design320": "design-reference/320/GiftShare.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "GiftOpen.dc.html",
@@ -247,11 +263,13 @@
       "entry": "微信分享卡片",
       "interaction": "礼物事实、验证入口",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP03/native/GiftOpen-390.png",
+      "interactionEvidence": "MP03-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/GiftOpen.png",
-      "design320": "design-reference/320/GiftOpen.png"
+      "design320": "design-reference/320/GiftOpen.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "GiftVerify.dc.html",
@@ -263,11 +281,13 @@
       "entry": "礼物卡→验证",
       "interaction": "原地授权、返回和匹配结果",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP03/native/GiftVerify-390.png",
+      "interactionEvidence": "MP03-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/GiftVerify.png",
-      "design320": "design-reference/320/GiftVerify.png"
+      "design320": "design-reference/320/GiftVerify.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "GiftMismatch.dc.html",
@@ -279,11 +299,13 @@
       "entry": "错误账号验证",
       "interaction": "禁止领取、切换账号",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP03/native/GiftMismatch-390.png",
+      "interactionEvidence": "MP03-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/GiftMismatch.png",
-      "design320": "design-reference/320/GiftMismatch.png"
+      "design320": "design-reference/320/GiftMismatch.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "GiftAccept.dc.html",
@@ -295,11 +317,13 @@
       "entry": "正确账号完成验证",
       "interaction": "明确领取、返回不领取",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP03/native/GiftAccept-390.png",
+      "interactionEvidence": "MP03-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/GiftAccept.png",
-      "design320": "design-reference/320/GiftAccept.png"
+      "design320": "design-reference/320/GiftAccept.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "GiftInvalid.dc.html",
@@ -311,11 +335,13 @@
       "entry": "打开重发前卡片",
       "interaction": "禁止领取、返回",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP03/native/GiftInvalid-390.png",
+      "interactionEvidence": "MP03-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/GiftInvalid.png",
-      "design320": "design-reference/320/GiftInvalid.png"
+      "design320": "design-reference/320/GiftInvalid.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "GiftClaimed.dc.html",
@@ -327,11 +353,13 @@
       "entry": "明确领取／原账号重开",
       "interaction": "进入原书、不能重领",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP03/native/GiftClaimed-390.png",
+      "interactionEvidence": "MP03-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/GiftClaimed.png",
-      "design320": "design-reference/320/GiftClaimed.png"
+      "design320": "design-reference/320/GiftClaimed.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis; synthetic WeChat identity and signed payment provider",
+      "pendingReason": "390 native journey and visual comparison complete; actual 320 capture pending."
     },
     {
       "board": "MyProjects.dc.html",
