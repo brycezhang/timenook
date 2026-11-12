@@ -209,7 +209,7 @@ test("cover selection returns a local choice without saving the cover", async ()
   assert.deepEqual(h.routes, ["back"]);
   h.page.onUnload();
 });
-test("drag handle reorders once and cancel restores; tapping content never starts a drag", async () => {
+async function sortList(deferred = false) {
   const source = (
     await build({
       entryPoints: ["miniprogram/components/sort-list/index.ts"],
@@ -221,6 +221,7 @@ test("drag handle reorders once and cancel restores; tapping content never start
   ).outputFiles[0].text;
   let component: any;
   const events: any[] = [];
+  const measurements: (() => void)[] = [];
   const rows = [
     { id: "one", title: "一" },
     { id: "two", title: "二" },
@@ -253,14 +254,21 @@ test("drag handle reorders once and cancel restores; tapping content never start
       return this;
     },
     boundingClientRect(fn: any) {
-      fn([
-        { top: 120, bottom: 220 },
-        { top: 220, bottom: 320 },
-      ]);
+      const measure = () =>
+        fn([
+          { top: 120, bottom: 220 },
+          { top: 220, bottom: 320 },
+        ]);
+      if (deferred) measurements.push(measure);
+      else measure();
       return this;
     },
     exec() {},
   });
+  return { component, events, rows, measurements };
+}
+test("drag handle reorders once and cancel restores; tapping content never starts a drag", async () => {
+  const { component, events, rows } = await sortList();
   component.open({ currentTarget: { dataset: { id: "one" } } });
   assert.equal(component.data.dragging, "");
   assert.equal(events[0].name, "open");
@@ -274,4 +282,40 @@ test("drag handle reorders once and cancel restores; tapping content never start
   component.start({ currentTarget: { dataset: { id: "two" } } });
   component.cancel();
   assert.deepEqual(component.data.rows, rows);
+});
+
+test("dropping before row measurement completes persists the final touch position once", async () => {
+  for (const moveY of [186.55, 286.55]) {
+    const { component, events, measurements } = await sortList(true);
+    component.start({ currentTarget: { dataset: { id: "two" } } });
+    component.move({ touches: [{ clientY: moveY }] });
+    component.end({ changedTouches: [{ clientY: 186.55 }] });
+    assert.equal(events.length, 0, "drop waits for the final row measurement");
+    for (const measure of measurements) measure();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].name, "reorder");
+    assert.deepEqual(Array.from(events[0].detail.ids), ["two", "one"]);
+    assert.equal(component.data.dragging, "");
+    component.end();
+    assert.equal(events.length, 1);
+  }
+});
+
+test("canceling a pending drop ignores late measurements even when the same row is dragged again", async () => {
+  for (const restart of [false, true]) {
+    const { component, events, rows, measurements } = await sortList(true);
+    component.start({ currentTarget: { dataset: { id: "two" } } });
+    component.move({ touches: [{ clientY: 186.55 }] });
+    component.end({ changedTouches: [{ clientY: 186.55 }] });
+    component.cancel();
+    if (restart) component.start({ currentTarget: { dataset: { id: "two" } } });
+    for (const measure of measurements) measure();
+    assert.deepEqual(component.data.rows, rows);
+    assert.equal(events.length, 0);
+    if (restart) {
+      component.end();
+      assert.equal(component.data.dragging, "");
+      assert.equal(events.length, 0);
+    }
+  }
 });
