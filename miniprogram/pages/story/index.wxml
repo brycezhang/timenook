@@ -37,7 +37,7 @@
   <button wx:if="{{error}}" class="tn-link" bindtap="refresh">重新查询</button>
   <view class="tn-dock">
     <block wx:if="{{displayState === 'processing'}}"><button class="tn-button tn-secondary" bindtap="returnToProject">回到这本书</button></block>
-    <block wx:elif="{{displayState === 'failed'}}"><button wx:if="{{retryable}}" class="tn-button" bindtap="retryLive" disabled="{{busy}}" loading="{{busy}}">重新整理</button><button wx:else class="tn-button" bindtap="recoverInterview" disabled="{{busy}}">{{story.task.errorCode === 'DEPENDENCY_FAILED' ? '返回讲述重试' : '继续讲述'}}</button><button class="tn-link" bindtap="returnToProject">回到这本书</button></block>
+    <block wx:elif="{{displayState === 'failed'}}"><button wx:if="{{retryable}}" class="tn-button" bindtap="retryLive" disabled="{{busy}}" loading="{{busy}}"><image wx:if="{{!busy}}" class="tn-icon" src="/assets/icons/rotate-ccw-light.svg"/>重新整理</button><button wx:else class="tn-button" bindtap="recoverInterview" disabled="{{busy}}">{{story.task.errorCode === 'DEPENDENCY_FAILED' ? '返回讲述重试' : '继续讲述'}}</button><button class="tn-link" bindtap="returnToProject">回到这本书</button></block>
     <block wx:else><button wx:if="{{canOrganize && !story.revision}}" class="tn-button" bindtap="submitLive" disabled="{{busy}}" loading="{{busy}}">整理故事</button><button wx:else class="tn-button" bindtap="recoverInterview" disabled="{{busy || !story}}"><image class="tn-icon" src="/assets/icons/mic-light.svg" />继续讲述</button></block>
   </view>
 </view>
