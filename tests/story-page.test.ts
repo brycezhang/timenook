@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { build } from "esbuild";
 import { runInNewContext } from "node:vm";
+import { readFile } from "node:fs/promises";
 const base = "https://example.test/timenook/v1",
   projectId = "33333333-3333-4333-8333-333333333333",
   interviewId = "44444444-4444-4444-8444-444444444444",
@@ -219,6 +220,20 @@ test("story placement and supplement entries preserve the selected project and s
   h.page.returnToProject();
   assert.equal(h.navigation.pop().url, "/pages/home/index");
   assert.ok([...h.storage.values()].includes(projectId));
+});
+
+test("ready story photo entry opens photo editing for the current project, interview and story", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await showAudioStory(h);
+  assert.equal(h.page.data.displayState, "ready");
+  const markup = await readFile("miniprogram/pages/story/index.wxml", "utf8");
+  assert.match(markup, /bindtap="editLivePhotos"/);
+  h.page.editLivePhotos();
+  assert.equal(
+    h.navigation.pop().url,
+    `/pages/photos/index?projectId=${projectId}&interviewId=${interviewId}&storyId=${storyId}`,
+  );
 });
 
 test("failed transcription dependencies expose recovery while retaining the saved original audio", async (t) => {

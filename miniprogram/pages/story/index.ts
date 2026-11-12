@@ -490,6 +490,12 @@ Page({
       else this.setData({ photoError: "照片暂未加载，请重试。" });
     }
   },
+  editLivePhotos() {
+    go(
+      "photos",
+      `projectId=${this.projectId}&interviewId=${this.interviewId}&storyId=${this.data.story?.id || ""}`,
+    );
+  },
   reloadLivePhotos() {
     if (
       !this.data.story ||
