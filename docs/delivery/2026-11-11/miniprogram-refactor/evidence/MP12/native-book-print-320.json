@@ -1,0 +1,63 @@
+{
+  "observedAt": "2026-11-12",
+  "builtCommit": "74d7185",
+  "profile": "release",
+  "window": {
+    "width": 320,
+    "height": 568
+  },
+  "businessBoundary": "real loopback API, PostgreSQL, Redis and protected files; synthetic external identity, payment, AI and storage providers",
+  "pdf": {
+    "version": 2,
+    "pageCount": 4,
+    "bytes": 187887,
+    "sha256": "1071d69a06af7de1bde75d8bd2d5f055d80170abeb7a25b82e5f9b440143eeed",
+    "openDocumentObserved": {
+      "fileType": "pdf",
+      "success": true,
+      "filename": "timenook-private-1794489999755-3ekeds74oik.pdf"
+    },
+    "desktopViewer": "WPS showed matching local filename, 4 pages, Chinese cover title/subtitle, red fixture photo and contents/story thumbnails; UI showed not uploaded",
+    "readerFailure": "Only external wx.openDocument failure was injected; restored actual method and native retry completed without error",
+    "phoneViewer": "pending external device acceptance"
+  },
+  "cover": {
+    "draftRoundTrip": "title and salutation retained through choose no photo and return",
+    "saved": {
+      "title": "我们共同记得的时光",
+      "salutation": "愿家人记得这些平凡而珍贵的日子",
+      "photo": false
+    },
+    "cancel": "unsaved title discarded; readback retained saved title",
+    "pending": "Unnecessary child-return unload prompt reproduced; root fix requires native recheck with photo"
+  },
+  "print": {
+    "address": "real form input, CUA delivery picker, save; confirmation read back edited recipient/detail and canSubmit=true",
+    "submission": "real API committed through response-loss proxy; native recovered directly to production because transport transparently retried; unknown state not yet observed",
+    "production": "in_production",
+    "fixedReader": {
+      "fixedProduction": true,
+      "editableVersionState": "obsolete",
+      "version": 1,
+      "sha256": "128d90c11166ceddeb223968a157733fc9527c8f0f331cf3f8cadf6115fc7fe8"
+    },
+    "shipping": "shipped; native copy tracking succeeded, 15 characters",
+    "delivered": "delivered",
+    "cancelled": "cancelled; actual view-current-book button opened current overview",
+    "pending": "390 states, persistent response-loss unknown recovery and cancelled resubmission"
+  },
+  "family": {
+    "newRelation": true,
+    "relation": "女儿",
+    "questionCreated": true,
+    "detailRouteObserved": true
+  },
+  "drag": {
+    "observedNativeTouchSequence": [
+      "start: clientY 290.32",
+      "move: clientY 186.55",
+      "end"
+    ],
+    "result": "No reorder persisted; async selector callback discarded after end. Focused fix and native recheck pending."
+  }
+}

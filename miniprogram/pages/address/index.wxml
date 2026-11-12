@@ -6,7 +6,7 @@
     <template is="print-book" data="{{book: context.book, coverImage, caption: '当前书稿 V' + context.book.version, subcaption: '首本实体书 × 1'}}" />
     <label class="tn-field">收件人<input class="tn-input" value="{{name}}" data-field="name" bindinput="input" bindkeyboardheightchange="keyboard" maxlength="80" cursor-spacing="120" placeholder="收件人姓名" /></label>
     <label class="tn-field">收货手机号<input class="tn-input" type="number" value="{{phone}}" data-field="phone" bindinput="input" bindkeyboardheightchange="keyboard" maxlength="11" cursor-spacing="120" placeholder="11 位手机号" /></label>
-    <view class="tn-field">省 / 市 / 区<picker range="{{regions}}" value="{{regionIndex}}" bindchange="region"><view class="tn-input address-region {{regionIndex < 0 ? 'placeholder' : ''}}">{{regionIndex >= 0 ? regions[regionIndex] : '请选择配送地区'}}<image src="/assets/icons/chevron-right.svg" /></view></picker></view>
+    <view class="tn-field">省 / 市 / 区<picker range="{{regions}}" value="{{regionIndex < 0 ? 0 : regionIndex}}" bindchange="region"><view class="tn-input address-region {{regionIndex < 0 ? 'placeholder' : ''}}">{{regionIndex >= 0 ? regions[regionIndex] : '请选择配送地区'}}<image src="/assets/icons/chevron-right.svg" /></view></picker></view>
     <label class="tn-field">详细地址<input class="tn-input" value="{{detail}}" data-field="detail" bindinput="input" bindkeyboardheightchange="keyboard" maxlength="300" cursor-spacing="120" placeholder="市、区县、街道、门牌号" /></label>
     <view class="tn-dock" style="bottom: {{keyboardHeight}}px; {{keyboardHeight ? 'padding-bottom:14px' : ''}}"><button class="tn-button" bindtap="save" disabled="{{busy}}" loading="{{busy}}"><image class="tn-icon" src="/assets/icons/arrow-right-light.svg" />下一步</button></view>
   </block>

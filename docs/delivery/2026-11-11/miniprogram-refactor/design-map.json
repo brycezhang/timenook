@@ -569,12 +569,11 @@
       "native320": "evidence/MP06/native/HomeEmpty-320.png",
       "native390": "evidence/MP06/native/HomeEmpty-390.png",
       "interactionEvidence": "MP06-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/HomeEmpty.png",
       "design320": "design-reference/320/HomeEmpty.png",
       "implementationEvidence": "MP06-delivery.md",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers",
-      "pendingReason": "320 compact-gap cascade corrected; affected page recapture pending. Existing 390 evidence remains valid."
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware"
     },
     {
       "board": "HomeActive.dc.html",
@@ -624,12 +623,11 @@
       "native320": "evidence/MP06/native/FamilyQuestionsEmpty-320.png",
       "native390": "evidence/MP06/native/FamilyQuestionsEmpty-390.png",
       "interactionEvidence": "MP06-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/FamilyQuestionsEmpty.png",
       "design320": "design-reference/320/FamilyQuestionsEmpty.png",
       "implementationEvidence": "MP06-delivery.md",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers",
-      "pendingReason": "320 compact-gap cascade corrected; affected page recapture pending. Existing 390 evidence remains valid."
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware"
     },
     {
       "board": "FamilyQuestionNew.dc.html",
@@ -643,12 +641,11 @@
       "native320": "evidence/MP06/native/FamilyQuestionNew-320.png",
       "native390": "evidence/MP06/native/FamilyQuestionNew-390.png",
       "interactionEvidence": "MP06-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/FamilyQuestionNew.png",
       "design320": "design-reference/320/FamilyQuestionNew.png",
       "implementationEvidence": "MP06-delivery.md",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers",
-      "pendingReason": "320 compact-gap cascade corrected; affected page recapture pending. Existing 390 evidence remains valid."
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware"
     },
     {
       "board": "FamilyQuestionDetail.dc.html",
@@ -977,12 +974,14 @@
       "state": "无入章书稿",
       "entry": "首页封面→空书稿",
       "interaction": "整理内容入口、禁止生成空稿",
-      "native320": null,
+      "native320": "evidence/MP10/native/BookEmpty-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP10-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookEmpty.png",
-      "design320": "design-reference/320/BookEmpty.png"
+      "design320": "design-reference/320/BookEmpty.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP10-delivery.md"
     },
     {
       "board": "BookOverview.dc.html",
@@ -993,12 +992,14 @@
       "state": "书稿概览／就绪",
       "entry": "首页封面→书稿",
       "interaction": "封面整卡、目录、预览、制作",
-      "native320": null,
+      "native320": "evidence/MP10/native/BookOverview-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP10-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookOverview.png",
-      "design320": "design-reference/320/BookOverview.png"
+      "design320": "design-reference/320/BookOverview.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP10-delivery.md"
     },
     {
       "board": "BookCover.dc.html",
@@ -1009,12 +1010,14 @@
       "state": "封面同次草稿",
       "entry": "书稿封面整卡",
       "interaction": "选图返回、保存全字段、取消无写入",
-      "native320": null,
+      "native320": "evidence/MP10/native/BookCover-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP10-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookCover.png",
-      "design320": "design-reference/320/BookCover.png"
+      "design320": "design-reference/320/BookCover.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP10-delivery.md"
     },
     {
       "board": "BookReader.dc.html",
@@ -1025,12 +1028,14 @@
       "state": "打开当前 PDF",
       "entry": "书稿→预览",
       "interaction": "真实文档打开、版本/页数",
-      "native320": null,
+      "native320": "evidence/MP10/native/BookReader-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP10-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookReader.png",
-      "design320": "design-reference/320/BookReader.png"
+      "design320": "design-reference/320/BookReader.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP10-delivery.md"
     },
     {
       "board": "PdfDocument.dc.html",
@@ -1057,12 +1062,14 @@
       "state": "稿件待更新",
       "entry": "修改封面／入书内容后",
       "interaction": "重新生成、固定制作稿仍可查",
-      "native320": null,
+      "native320": "evidence/MP10/native/BookChanged-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP10-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookChanged.png",
-      "design320": "design-reference/320/BookChanged.png"
+      "design320": "design-reference/320/BookChanged.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP10-delivery.md"
     },
     {
       "board": "BookGenerateFailed.dc.html",
@@ -1089,12 +1096,14 @@
       "state": "PDF 打开失败",
       "entry": "下载／打开失败",
       "interaction": "重试、返回",
-      "native320": null,
+      "native320": "evidence/MP10/native/ReaderFailed-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP10-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/ReaderFailed.png",
-      "design320": "design-reference/320/ReaderFailed.png"
+      "design320": "design-reference/320/ReaderFailed.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP10-delivery.md"
     },
     {
       "board": "OriginalAudio.dc.html",
@@ -1105,12 +1114,14 @@
       "state": "扫码固定版本原声",
       "entry": "书中二维码入口",
       "interaction": "登录恢复、权限、进度条与时间",
-      "native320": null,
+      "native320": "evidence/MP10/native/OriginalAudio-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP10-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/OriginalAudio.png",
-      "design320": "design-reference/320/OriginalAudio.png"
+      "design320": "design-reference/320/OriginalAudio.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP10-delivery.md"
     },
     {
       "board": "BookAddress.dc.html",
@@ -1121,12 +1132,14 @@
       "state": "收货地址",
       "entry": "就绪书稿→制作",
       "interaction": "选择/填写地址、校验、键盘",
-      "native320": null,
+      "native320": "evidence/MP11/native/BookAddress-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP11-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookAddress.png",
-      "design320": "design-reference/320/BookAddress.png"
+      "design320": "design-reference/320/BookAddress.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP11-delivery.md"
     },
     {
       "board": "BookPrintConfirm.dc.html",
@@ -1137,12 +1150,14 @@
       "state": "确认制作",
       "entry": "地址→继续",
       "interaction": "版本与地址事实、提交",
-      "native320": null,
+      "native320": "evidence/MP11/native/BookPrintConfirm-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP11-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookPrintConfirm.png",
-      "design320": "design-reference/320/BookPrintConfirm.png"
+      "design320": "design-reference/320/BookPrintConfirm.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP11-delivery.md"
     },
     {
       "board": "BookProduction.dc.html",
@@ -1153,12 +1168,14 @@
       "state": "制作中",
       "entry": "提交制作成功",
       "interaction": "固定稿、进度、允许时取消",
-      "native320": null,
+      "native320": "evidence/MP11/native/BookProduction-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP11-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookProduction.png",
-      "design320": "design-reference/320/BookProduction.png"
+      "design320": "design-reference/320/BookProduction.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP11-delivery.md"
     },
     {
       "board": "BookShipped.dc.html",
@@ -1169,12 +1186,14 @@
       "state": "已寄出",
       "entry": "制作进度更新",
       "interaction": "真实物流、固定稿",
-      "native320": null,
+      "native320": "evidence/MP11/native/BookShipped-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP11-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookShipped.png",
-      "design320": "design-reference/320/BookShipped.png"
+      "design320": "design-reference/320/BookShipped.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP11-delivery.md"
     },
     {
       "board": "BookDelivered.dc.html",
@@ -1185,12 +1204,14 @@
       "state": "已送达",
       "entry": "物流更新送达",
       "interaction": "送达事实与固定稿",
-      "native320": null,
+      "native320": "evidence/MP11/native/BookDelivered-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP11-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookDelivered.png",
-      "design320": "design-reference/320/BookDelivered.png"
+      "design320": "design-reference/320/BookDelivered.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP11-delivery.md"
     },
     {
       "board": "BookCancelled.dc.html",
@@ -1201,12 +1222,14 @@
       "state": "已取消",
       "entry": "确认取消成功",
       "interaction": "按权益修改重提",
-      "native320": null,
+      "native320": "evidence/MP11/native/BookCancelled-320.png",
       "native390": null,
-      "interactionEvidence": null,
+      "interactionEvidence": "MP11-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookCancelled.png",
-      "design320": "design-reference/320/BookCancelled.png"
+      "design320": "design-reference/320/BookCancelled.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Actual 320 native capture recorded; 390 and remaining interaction checks are documented in MP11-delivery.md"
     },
     {
       "board": "PrintUnknown.dc.html",

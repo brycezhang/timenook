@@ -33,4 +33,6 @@ node scripts/test-native-design.cjs family
 
 `stories` 复用已保存故事，`cover` 复用当前书稿；`capture <board> <actual-entry> <observed-interaction>` 只采集当前原生画面。实际操作时分别将 DevTools 内容宽度切到 390 与 320，脚本读取并校验 `wx.getWindowInfo()`，不通过改页面数据伪造尺寸或状态。失败/录音/PDF 查看器/制作状态继续使用各模块既有 provider fixture 和真实状态流进入，不能直接设置业务页面数据。
 
-剩余：录音/成书/制作跨模块走查、71 张画板缺失的 390/320 原生证据、必要整仓 CI。真机手机号授权、实际录音和供应商、支付资金、微信分享、扫码、印厂与实物验收各自独立。集成分支与 [PR #179](https://github.com/brycezhang/timenook/pull/179) 已由集成负责人推送；未部署或上传。
+当前已完成录音 320 真实上传／丢响应重试、书稿 320 实际 PDF 打开及地址保存／提交／生产状态读取；详见各票记录及[本轮书稿制作检查点](evidence/MP12/native-book-print-320.json)。实际拖动发现 sort-list 最后一次异步坐标查询被 touchend 提前清空，尚未成功保存顺序；封面照片返回的多余离开提示也已转修复轮，均待原生复验。
+
+剩余：71 张画板缺失的 390/320 原生证据、上述修复复验、长原声拖动与未知制作响应恢复。真机手机号授权、实际录音和供应商、支付资金、微信分享、扫码、印厂与实物验收各自独立。集成分支与 [PR #179](https://github.com/brycezhang/timenook/pull/179) 已由集成负责人推送；未部署或上传。

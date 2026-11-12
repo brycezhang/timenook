@@ -1,6 +1,6 @@
 # MP11 制作、收货地址与寄送状态
 
-范围：[#177](https://github.com/brycezhang/timenook/issues/177)。消费 MP10 的当前书稿、固定版本读取和系统 PDF 入口；沿用已付款套餐首本权益与运营人工履约。功能已实现，开发者工具 390px/320px 逐画板、键盘与真机验收由集成轮串行执行，当前不追认通过。
+范围：[#177](https://github.com/brycezhang/timenook/issues/177)。消费 MP10 的当前书稿、固定版本读取和系统 PDF 入口；沿用已付款套餐首本权益与运营人工履约。功能已实现，集成轮已完成下述 320px 原生提交与状态读取；390px、未知响应恢复和真机验收继续进行。
 
 实现提交 `5e5c799`；随后已合入集成 `662711c`（包含 `5733d92` 的 MP09/MP10 最终交付），合并提交 `a7148b6`，无冲突。合并后相关 17 项控制器、Frontend typecheck、正式构建与 37 页官方编译再次通过。
 
@@ -42,4 +42,15 @@
 
 数据库执行（在 `apps/api` 目录）：`node --env-file=../../.env --test --test-concurrency=2 --test-timeout=120000 dist-test/test/first-copy.test.js dist-test/test/fulfillment.test.js`。失败修正后按上述用例名称定向执行，未重复无影响的整套检查。
 
-未执行微信开发者工具可视走查、真机键盘/PDF、实际印厂交接、生产、物流或实物交付；未上传体验版、提审、部署或操作资金。
+真机键盘/PDF、实际印厂交接、生产、物流或实物交付仍待外部验收；未上传体验版、提审、部署或操作资金。
+
+## MP12 集成原生检查点（2026-11-12）
+
+正式 release 包 `74d7185` 的实际 320×568 窗口，真实本地 API／PostgreSQL／Redis，身份、支付、生产与物流状态均为明确合成夹具。[脱敏记录](evidence/MP12/native-book-print-320.json)和 [MP11/native 截图](evidence/MP11/native)记录以下结果：
+
+- 当前就绪 PDF → 去制作 → 地址：真实填写姓名、手机号、详细地址；用原生配送 picker 选择第一地区后保存。确认页从 API 读回新地址、V2 与 `canSubmit=true`。发现 picker 未选择时传入 `-1` 使原生滚轮先出现空项，已改为视觉默认第一项，页面未选占位和校验保留；修复后的首次确认待原生复验。
+- 实际点击提交后真实事务成功，进入制作页。首次单次响应丢失被开发者工具透明重试恢复，因此没有把该次记为 PrintUnknown；持久丢响应夹具与下一次真实未知状态查询仍待执行。
+- BookProduction／BookShipped／BookDelivered／BookCancelled 均从真实 API 状态采集。制作页实际点击「查看制作书稿」打开 `fixedProduction=true` 的预留 V1，即使可编辑版本已 obsolete，仍读取预留 PDF hash。寄出页实际复制物流单号成功；取消页实际点击查看当前书稿，回到当前概览。
+- BookAddress、BookPrintConfirm 与上述四个生产状态共六张 320 画板已采集。390、PrintUnknown、取消后实际重提和手机键盘继续待验；固定生产稿的 PDF 路径已在原生验证。
+
+上表保留初始验收清单；逐画板最新状态见 design-map。
