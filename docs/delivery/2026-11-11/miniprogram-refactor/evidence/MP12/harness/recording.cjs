@@ -385,10 +385,10 @@ function capture() {
         "return from photos preserves pause",
       );
       native.snap("RecordPaused", width);
-      native.tap(".record-actions .tn-button");
+      native.tap(".toggle-recording");
       waitFor((s) => s.screen === "recording" && !s.busy, "resume");
       control("hold");
-      native.tap(".record-actions .tn-button:nth-child(2)");
+      native.tap(".finish-recording");
       waitFor(
         (s) => s.screen === "saving" && s.hardware.pendingUpload,
         "real uploaded response held",
