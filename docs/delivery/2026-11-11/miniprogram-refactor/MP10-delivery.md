@@ -1,6 +1,6 @@
 # MP10 封面草稿、PDF 与固定版本原声
 
-范围：[#176](https://github.com/brycezhang/timenook/issues/176)，对应[模块票](tickets/MP10-book-pdf.md)。功能已实现，集成轮已完成下述 320px 原生路径；390px、尚未复验的交互及手机扫码分别待验。
+范围：[#176](https://github.com/brycezhang/timenook/issues/176)，对应[模块票](tickets/MP10-book-pdf.md)。功能及八个应用状态的 390／320 原生验收已完成，PDF 系统调用和实际内容单列通过；手机扫码、查看器及供应商另验。
 
 ## 可操作路径与接口
 
@@ -50,3 +50,7 @@
 - OriginalAudio 使用新夹具上传的真实 30.096 秒 MP3，实际播放、暂停于 1.744 秒，CUA 拖动原生 slider 到 16.4 秒，再点击继续播放推进到 17.072 秒。退出登录后 entry、照片、播放器和登录态均清除；[拖动补充图](evidence/MP10/native/OriginalAudioSeek-320.png)保留实际时间，未改页面业务数据或播放器时长。
 
 上表的待验列为初始验收清单；最新逐画板状态以 design-map 为准。其余 390 画板继续进行。PdfDocument 记录为系统调用与实际 PDF 内容已验证，两个应用视口截图字段保持空；手机微信查看器仍是独立待验项。
+
+## MP12 最终原生收尾（2026-11-12）
+
+剩余七张应用画板已补齐 390，八个应用状态全部双宽通过；待更新书稿实际点击重新生成后恢复 ready。封面草稿保存／取消、固定原声暂停拖动／退出以及实际 PDF 系统调用沿用已通过记录。PdfDocument 单列系统调用与实际 PDF 内容，两个 native 截图字段保持空；手机微信查看器外壳仍待设备验收。 详见[最终脱敏记录](evidence/MP12/native-final-acceptance.json)及 [design-map](design-map.json)；前文时间点的待验项以本段和映射为准。

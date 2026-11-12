@@ -54,3 +54,7 @@
 - 真机手机号授权、手机键盘、双手机分享与收礼仍待验；本轮不把 fixture 身份或签名支付回调当成平台实付证据。
 
 输入框垂直对齐修复后的 320px 已确认；390px 的 NewGift / SelfGift / GiftRecipient 复采因 Mac 再次锁定而待设备切换。旧图与已完成的两宽业务链路分别保留，design-map 未把待复采项标为通过。
+
+## MP12 最终原生收尾（2026-11-12）
+
+GiftRecipient 已补采最终输入对齐的 390 图。八个礼物状态的两宽原生流程沿用此前通过记录；实际微信分享及手机号授权仍另验。 详见[最终脱敏记录](evidence/MP12/native-final-acceptance.json)及 [design-map](design-map.json)；前文时间点的待验项以本段和映射为准。
