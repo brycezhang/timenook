@@ -271,6 +271,7 @@ export class FamilyQuestionsController {
     @Req() req: FastifyRequest,
   ) {
     return {
+      meta: { requestId: req.id },
       data: await this.questions.list(project, req.headers.authorization),
     };
   }
@@ -280,6 +281,7 @@ export class FamilyQuestionsController {
     @Req() req: FastifyRequest,
   ) {
     return {
+      meta: { requestId: req.id },
       data: await this.questions.create(
         project,
         body,
@@ -293,6 +295,7 @@ export class FamilyQuestionsController {
     @Req() req: FastifyRequest,
   ) {
     return {
+      meta: { requestId: req.id },
       data: await this.questions.read(project, id, req.headers.authorization),
     };
   }
@@ -303,6 +306,7 @@ export class FamilyQuestionsController {
     @Req() req: FastifyRequest,
   ) {
     return {
+      meta: { requestId: req.id },
       data: await this.questions.edit(
         project,
         id,
@@ -318,6 +322,7 @@ export class FamilyQuestionsController {
     @Req() req: FastifyRequest,
   ) {
     return {
+      meta: { requestId: req.id },
       data: await this.questions.state(
         project,
         id,
@@ -333,6 +338,7 @@ export class FamilyQuestionsController {
     @Req() req: FastifyRequest,
   ) {
     return {
+      meta: { requestId: req.id },
       data: await this.questions.remove(
         project,
         id,

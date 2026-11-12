@@ -5,6 +5,7 @@
 ## 页面与控件
 
 - 页面 JSON 设置 `navigationStyle: "custom"`，最前放 `<tn-navigation title="章节内容"/>`。Tab 页用 `brand="{{true}}"`，标题为当前功能（公开首页为「首页」）；`back` 默认 true。组件在 app.json 全局注册。正文不重复同名标题。
+- `tn-navigation` 可选 `interceptBack=true` 时触发 `back` 事件，由页面处理保存/离开；默认仍按真实页面栈返回。MP09 录音页使用此入口，原生系统返回另由页面开启返回提醒及生命周期保存。
 - 导航保留 68px 应用页头，读取真实状态栏高度和胶囊区域。左侧品牌／返回与功能标题对齐设计；320px 长于八字的标题使用15px，避免胶囊遮挡和孤字换行。返回走实际页面栈，无上一页时回首页。
 - `styles/modern.wxss` 由 app.wxss 导入。`tn-page` 白底、22px 边距、15px 正文；短屏高度不超过740px时上边距18px、间距16px。`tn-card`、`tn-heading`、`tn-muted`、`tn-row`、`tn-icon-tile`、`tn-grow`、`tn-field`、`tn-input` 可复用。
 - `tn-button` 至少52px；追加 `tn-secondary` 为次操作。轻操作 `tn-link`；图标按钮 `tn-icon-button` 至少44px；图标 `tn-icon`。

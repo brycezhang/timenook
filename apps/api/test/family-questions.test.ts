@@ -104,3 +104,36 @@ test("a family answer becomes a saved unassigned story, follows chapter moves, a
     "小时候有哪些难忘的事情？",
   );
 });
+
+test("all family question responses provide the envelope required by native clients", async () => {
+  const p = await f.joinedProject();
+  const path = `/v1/projects/${p.projectId}/family-questions`;
+  async function request(
+    method: "GET" | "POST",
+    url: string,
+    body?: Record<string, unknown>,
+  ) {
+    const response = await f.request(method, url, p.narrator.token, body);
+    const result = f.data(response, method === "GET" ? 200 : 201);
+    assert.equal(typeof response.json().meta?.requestId, "string");
+    assert.ok(response.json().meta.requestId.length > 0);
+    return result;
+  }
+  await request("GET", path);
+  let question = await request("POST", path, {
+    clientQuestionId: randomUUID(),
+    text: "哪段时光最难忘？",
+  });
+  question = await request("GET", `${path}/${question.id}`);
+  question = await request("POST", `${path}/${question.id}`, {
+    expectedVersion: question.version,
+    text: "哪段童年时光最难忘？",
+  });
+  question = await request("POST", `${path}/${question.id}/state`, {
+    expectedVersion: question.version,
+    state: "later",
+  });
+  await request("POST", `${path}/${question.id}/remove`, {
+    expectedVersion: question.version,
+  });
+});
