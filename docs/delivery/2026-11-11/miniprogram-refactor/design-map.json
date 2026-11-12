@@ -691,11 +691,13 @@
       "entry": "首页故事数",
       "interaction": "空态、处理中、打开故事",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP08/native/Stories-390.png",
+      "interactionEvidence": "MP08-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/Stories.png",
-      "design320": "design-reference/320/Stories.png"
+      "design320": "design-reference/320/Stories.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
+      "pendingReason": "390 native captured and compared; actual 320 capture pending."
     },
     {
       "board": "Story.dc.html",
@@ -707,11 +709,13 @@
       "entry": "列表／回答完成",
       "interaction": "原声进度、照片、文字编辑、补录、归章",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP08/native/Story-390.png",
+      "interactionEvidence": "MP08-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/Story.png",
-      "design320": "design-reference/320/Story.png"
+      "design320": "design-reference/320/Story.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
+      "pendingReason": "390 native captured and compared; actual 320 capture pending."
     },
     {
       "board": "StoryEdit.dc.html",
@@ -723,11 +727,13 @@
       "entry": "故事→编辑",
       "interaction": "保存、取消、键盘可操作",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP08/native/StoryEdit-390.png",
+      "interactionEvidence": "MP08-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/StoryEdit.png",
-      "design320": "design-reference/320/StoryEdit.png"
+      "design320": "design-reference/320/StoryEdit.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
+      "pendingReason": "390 native captured and compared; actual 320 capture pending."
     },
     {
       "board": "StoryProcessing.dc.html",
@@ -739,11 +745,13 @@
       "entry": "保存录音后",
       "interaction": "状态更新、离开与返回",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP08/native/StoryProcessing-390.png",
+      "interactionEvidence": "MP08-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/StoryProcessing.png",
-      "design320": "design-reference/320/StoryProcessing.png"
+      "design320": "design-reference/320/StoryProcessing.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
+      "pendingReason": "390 native captured and compared; actual 320 capture pending."
     },
     {
       "board": "StoryFailed.dc.html",
@@ -755,11 +763,13 @@
       "entry": "任务返回失败",
       "interaction": "原声可听、错误、重试与补录",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP08/native/StoryFailed-390.png",
+      "interactionEvidence": "MP08-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/StoryFailed.png",
-      "design320": "design-reference/320/StoryFailed.png"
+      "design320": "design-reference/320/StoryFailed.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
+      "pendingReason": "Captured expired task with continuation action; retryable task and actual retry plus 320 capture pending."
     },
     {
       "board": "StoryUnassigned.dc.html",
@@ -771,11 +781,13 @@
       "entry": "无章回答保存／移出章",
       "interaction": "原声正文、选章、不强制入书",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP08/native/StoryUnassigned-390.png",
+      "interactionEvidence": "MP08-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/StoryUnassigned.png",
-      "design320": "design-reference/320/StoryUnassigned.png"
+      "design320": "design-reference/320/StoryUnassigned.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
+      "pendingReason": "390 native captured and compared; actual 320 capture pending."
     },
     {
       "board": "UnassignedStories.dc.html",
@@ -787,11 +799,13 @@
       "entry": "目录→未归章故事",
       "interaction": "列表打开、选择归章",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP08/native/UnassignedStories-390.png",
+      "interactionEvidence": "MP08-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/UnassignedStories.png",
-      "design320": "design-reference/320/UnassignedStories.png"
+      "design320": "design-reference/320/UnassignedStories.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
+      "pendingReason": "390 native captured and compared; actual 320 capture pending."
     },
     {
       "board": "AssignStory.dc.html",
@@ -803,11 +817,13 @@
       "entry": "故事／未归章→选择章节",
       "interaction": "选择任一章、跨章、取消与保存",
       "native320": null,
-      "native390": null,
-      "interactionEvidence": null,
+      "native390": "evidence/MP08/native/AssignStory-390.png",
+      "interactionEvidence": "MP08-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/AssignStory.png",
-      "design320": "design-reference/320/AssignStory.png"
+      "design320": "design-reference/320/AssignStory.png",
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
+      "pendingReason": "390 native captured and compared; actual 320 capture pending."
     },
     {
       "board": "RecordReady.dc.html",

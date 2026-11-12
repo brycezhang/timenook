@@ -8,7 +8,45 @@ const capturesFile = path.join(h.evidence, "native-design-captures.json");
 function state() {
   return h.evaluate(function () {
     const p = getCurrentPages().slice(-1)[0];
-    return { route: p.route, projectId: p.projectId, data: p.data };
+    const d = p.data;
+    return {
+      route: p.route,
+      projectId: p.projectId,
+      data: {
+        busy: d.busy,
+        loading: d.loading,
+        pageLoading: d.pageLoading,
+        status: d.status,
+        title: d.title,
+        tab: d.tab,
+        screen: d.screen,
+        ready: d.ready,
+        placement: d.placement,
+        needsRelationship: d.needsRelationship,
+        overview: d.overview && {
+          projectId: d.overview.projectId,
+          summary: d.overview.summary,
+        },
+        context: !!d.context,
+        questions: d.questions?.map((q) => ({ id: q.id, state: q.state })),
+        question: d.question && {
+          id: d.question.id,
+          text: d.question.text,
+          chapterKey: d.question.chapterKey,
+          state: d.question.state,
+          story: !!d.question.story,
+        },
+        rows: d.rows?.map((row) => ({ id: row.id, title: row.title })),
+        story: d.story && {
+          revision: d.story.revision && { title: d.story.revision.title },
+        },
+        chapters: d.chapters?.map((chapter) => ({
+          key: chapter.key,
+          title: chapter.title,
+        })),
+        version: d.version && { state: d.version.state },
+      },
+    };
   });
 }
 function ready(name, condition = () => true) {
@@ -83,7 +121,9 @@ function family() {
   h.tap(".tn-dock .tn-button");
   const draft = ready("family-question-edit");
   capture(
-    draft.needsRelationship ? "FamilyQuestionNew" : "FamilyQuestionNewExistingRelation",
+    draft.needsRelationship
+      ? "FamilyQuestionNew"
+      : "FamilyQuestionNewExistingRelation",
     "Family questions → ask a question",
     "Optional chapter remains unset; author relationship is required when missing",
   );
