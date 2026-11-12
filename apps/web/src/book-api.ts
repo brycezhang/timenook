@@ -7,6 +7,10 @@ import type {
 import { memberRequest } from "./project-api";
 const base = (id: string) => `/projects/${encodeURIComponent(id)}/book`;
 export const bookApi = {
+  production: (id: string) =>
+    memberRequest<BookVersionView>(
+      `/projects/${encodeURIComponent(id)}/fulfillment/book`,
+    ),
   context: (id: string) => memberRequest<BookContext>(base(id)),
   version: (id: string, version: string) =>
     memberRequest<BookVersionView>(

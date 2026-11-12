@@ -230,6 +230,11 @@ export class SessionClient {
       `/projects/${projectId}/book/versions/${versionId}/pdf`,
     );
   }
+  async downloadProductionBook(projectId: string) {
+    if (!/^[a-f0-9-]{36}$/.test(projectId))
+      throw new ApiFailure("INVALID_RESPONSE");
+    return this.downloadContent(`/projects/${projectId}/fulfillment/book/pdf`);
+  }
   async downloadExport(projectId: string, caseId: string) {
     if (![projectId, caseId].every((id) => /^[a-f0-9-]{36}$/.test(id)))
       throw new ApiFailure("INVALID_RESPONSE");

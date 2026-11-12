@@ -214,7 +214,7 @@ test("concurrent same and distinct submission keys reserve exactly one first cop
   );
 });
 
-test("admin approval rechecks the same current PDF and permissions rather than overriding a stale reservation", async () => {
+test("admin approval rechecks the reserved PDF and permissions even when a story has since changed", async () => {
   const p = await confirmedFirstCopy();
   const reserved = data(
     await request("POST", p.base + "/submit", p.buyer.token, p.body),
@@ -272,7 +272,7 @@ test("admin approval rechecks the same current PDF and permissions rather than o
         payload: p.body,
       })
     ).statusCode,
-    409,
+    201,
   );
 });
 
@@ -370,7 +370,7 @@ test("first-copy addresses reject invalid mainland mobile numbers and replay a v
   );
 });
 
-test("a stored invalid phone blocks first-copy submission and administrative approval", async () => {
+test("an invalid draft address blocks submission while approval retains the already reserved address", async () => {
   const p = await confirmedFirstCopy();
   // Disposable restore-damage fixtures keep the old binding while invalidating its stored address value.
   await db.firstCopyAddress.update({
@@ -402,8 +402,17 @@ test("a stored invalid phone blocks first-copy submission and administrative app
     headers: { ...headers, "idempotency-key": randomUUID() },
     payload: q.body,
   });
-  assert.equal(response.statusCode, 409);
+  assert.equal(response.statusCode, 201);
   const current = data(await request("GET", q.base, q.buyer.token), 200);
-  assert.equal(current.production.state, "reserved");
+  assert.equal(current.production.state, "approved");
   assert.ok(current.blockers.includes("ADDRESS_REQUIRED"));
+  const progress = data(
+    await request(
+      "GET",
+      `/v1/projects/${q.projectId}/fulfillment`,
+      q.buyer.token,
+    ),
+    200,
+  );
+  assert.equal(progress.deliveryAddress.phone, addressBody.phone);
 });

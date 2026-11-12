@@ -161,7 +161,7 @@ const fixedBookId = computed(
 );
 const bookPath = computed(
   () =>
-    `/projects/${id.value}/book${fixedBookId.value ? `?version=${encodeURIComponent(fixedBookId.value)}` : ""}`,
+    `/projects/${id.value}/book${fixedBookId.value ? `?version=${encodeURIComponent(fixedBookId.value)}${submitted.value ? "&production=1" : ""}` : ""}`,
 );
 const editableBookPath = computed(() =>
   canEdit.value && context.value?.book

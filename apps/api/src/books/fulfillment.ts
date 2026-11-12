@@ -56,6 +56,7 @@ import { Participation } from "../identity/participation";
 import { AdminAccess } from "../admin/admin-access";
 import { idempotencyKey } from "../payments/orders";
 import { FirstCopies } from "./first-copy";
+import { Books } from "./books";
 import { API_CONFIG, ApiConfig } from "../config";
 import { participationNotice } from "../catalog/e2e-package";
 import { ProjectServiceTerms } from "../projects/service-terms";
@@ -143,6 +144,7 @@ export class Fulfillment implements OnModuleDestroy {
   constructor(
     private readonly participation: Participation,
     private readonly copies: FirstCopies,
+    private readonly books: Books,
     @Inject(API_CONFIG) private readonly config: ApiConfig,
   ) {
     this.terms = new ProjectServiceTerms(config.databaseUrl);
@@ -361,6 +363,34 @@ export class Fulfillment implements OnModuleDestroy {
       authorization,
       undefined,
       (tx, actor) => this.view(tx, projectId, actor),
+    );
+  }
+  bookScope(projectId: string, authorization?: string, expectedId?: string) {
+    return this.participation.withPlanAccess(
+      projectId,
+      authorization,
+      undefined,
+      async (tx, actor) => {
+        const progress = await this.view(tx, projectId, actor);
+        const binding = progress.current ?? progress.reservation;
+        if (!binding) throw new NotFoundException();
+        if (expectedId && expectedId !== binding.bookVersionId)
+          throw new ConflictException("Production reservation changed");
+        const output = await this.books.frozenOutputIn(
+          tx,
+          projectId,
+          binding.bookVersionId,
+          binding.pdfHash,
+        );
+        const version = await this.books.frozenViewIn(
+          tx,
+          projectId,
+          binding.bookVersionId,
+          binding.snapshotHash,
+          actor.accessExpiresAt,
+        );
+        return { ...output, version };
+      },
     );
   }
   async listIn(
@@ -1378,7 +1408,10 @@ export class Fulfillment implements OnModuleDestroy {
 @ApiTags("Fulfillment")
 @ApiBearerAuth()
 export class FulfillmentController {
-  constructor(private readonly fulfillment: Fulfillment) {}
+  constructor(
+    private readonly fulfillment: Fulfillment,
+    private readonly streams: ProjectStreams,
+  ) {}
 
   @Get() @Header("Cache-Control", "no-store") async progress(
     @Param("id", ParseUUIDPipe) id: string,
@@ -1388,6 +1421,45 @@ export class FulfillmentController {
       data: await this.fulfillment.progress(id, req.headers.authorization),
       meta: { requestId: req.id },
     };
+  }
+  @Get("book") @Header("Cache-Control", "no-store") async book(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: (await this.fulfillment.bookScope(id, req.headers.authorization))
+        .version,
+      meta: { requestId: req.id },
+    };
+  }
+  @Get("book/pdf") async pdf(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply,
+  ) {
+    const authorization = req.headers.authorization;
+    const fence = await this.streams.userFence(id, authorization);
+    const scope = await this.fulfillment.bookScope(id, authorization);
+    const bytes = await this.fulfillment.readPdf(scope.path, scope.pdf);
+    reply
+      .header("Cache-Control", "private, no-store")
+      .header("X-Content-Type-Options", "nosniff")
+      .header(
+        "Content-Disposition",
+        `attachment; filename="production-${scope.version.id}.pdf"`,
+      )
+      .type("application/pdf")
+      .header("Content-Length", bytes.length)
+      .send(
+        await this.streams.guard(
+          id,
+          fence.epoch,
+          bytes,
+          () => this.fulfillment.bookScope(id, authorization, scope.version.id),
+          authorization,
+          fence.sequence,
+        ),
+      );
   }
 }
 @Controller("v1/admin/fulfillment")
