@@ -1,6 +1,6 @@
 # MP11 · 制作、收货地址与寄送状态
 
-状态：ready-for-agent；GitHub [#177](https://github.com/brycezhang/timenook/issues/177)，父规格 [#166](https://github.com/brycezhang/timenook/issues/166)。父规格：[小程序全量重构](../spec.md)。
+状态：功能已实现，待集成原生逐画板与真实验收；GitHub [#177](https://github.com/brycezhang/timenook/issues/177)，父规格 [#166](https://github.com/brycezhang/timenook/issues/166)。父规格：[小程序全量重构](../spec.md)。实现与验证见 [MP11 交付](../MP11-delivery.md)，历史未验项不追认通过。
 
 ## 交付结果
 
@@ -31,4 +31,4 @@
 
 - [MP10 封面编辑、真实 PDF 与扫码回听](MP10-book-pdf.md)
 
-工程契约已具备即可推进；尚缺代码或数据契约时保持依赖，不能靠前端样例绕过。本票已确认，尚无已完成验收。
+已消费 MP10 固定版本与 PDF 工程契约，并合入集成分支 `662711c`（含 MP09/MP10 最终交付）。当前本地实现见 `5e5c799`；七张画板与真实环境验收继续按交付记录执行。

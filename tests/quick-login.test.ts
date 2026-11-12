@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { build } from "esbuild";
 import { runInNewContext } from "node:vm";
 import { USER_TERMS_VERSION } from "../packages/contracts/src";
+import { offer } from "./purchase-fixture";
 
 const base = "https://example.test/api/v1";
 const identity = {
@@ -80,6 +81,8 @@ function harness(name: "home" | "account" = "home", signedIn = false) {
   };
   runInNewContext(bundles[name === "home" ? 0 : 1], scope);
   runInNewContext(bundles[2], scope);
+  // Login scenarios start after the home catalog has enabled purchasing.
+  if (name === "home") page.setData({ offer: structuredClone(offer) });
   return {
     page,
     quick,

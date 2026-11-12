@@ -1,1 +1,6 @@
-{ "navigationBarTitleText": "制作与物流" }
+{
+  "navigationStyle": "custom",
+  "navigationBarTitleText": "制作进度",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark"
+}

@@ -37,6 +37,7 @@ export interface FulfillmentView {
   entitlementState: string | null;
   approvedSupplierRef: string | null;
   reservation: FirstCopyBinding | null;
+  deliveryAddress: (FirstCopyAddress & { regionLabel: string }) | null;
   accessExpiresAt: string | null;
   grantMaxMinutes: 30;
   canGrantNarrator: boolean;

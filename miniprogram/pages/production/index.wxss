@@ -1,0 +1,46 @@
+@import "../../styles/print.wxss";
+.production-recipient {
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tracking-number {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 10px;
+  row-gap: 3px;
+  padding: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.75;
+  color: #756859;
+}
+.tracking-number text {
+  overflow-wrap: anywhere;
+}
+.tracking-copy {
+  color: #46563c;
+}
+.delivered-book {
+  width: 100%;
+  min-height: 246px;
+  padding: 24px;
+  border-radius: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #edf0e7;
+}
+.delivered-book .book-model {
+  width: 142px;
+  min-height: 198px;
+  padding: 17px 12px;
+  gap: 10px;
+}
+.delivered-book .book-model-title {
+  font-size: 16px;
+}
+.delivered-book .book-model-image {
+  height: 88px;
+}

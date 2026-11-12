@@ -84,6 +84,14 @@ test("concurrent creation fixes one production attempt, handoff id and case owne
   );
   assert.equal(progress.current.id, a.id);
   assert.equal(progress.current.handoffId, a.handoffId);
+  assert.equal(progress.deliveryAddress.recipientName, "合成收件人");
+  assert.equal(progress.deliveryAddress.detail, "合成地址一号");
+  assert.equal(progress.deliveryAddress.regionLabel, "北京地区（合成）");
+  assert.equal(
+    views[0].deliveryAddress,
+    null,
+    "admin progress does not grant private address access",
+  );
   assert.equal(
     (await admin("GET", `${base}/attempts/${a.id}/materials`, h)).statusCode,
     200,
@@ -710,6 +718,20 @@ test("a cancelled attempt permits a corrected address and direct resubmission on
       detail: "合成更正后的新地址",
     }),
   );
+  const cancelled = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/fulfillment`,
+      p.buyer.token,
+    ),
+    200,
+  );
+  assert.equal(cancelled.current.state, "cancelled");
+  assert.equal(
+    cancelled.deliveryAddress.detail,
+    "合成地址一号",
+    "editing the next address preserves the cancelled attempt snapshot",
+  );
 
   const binding = { ...p.binding, addressHash: corrected.address.hash };
 
@@ -720,6 +742,21 @@ test("a cancelled attempt permits a corrected address and direct resubmission on
   assert.equal(submitted.production.id, p.order.id);
   assert.equal(submitted.production.addressHash, binding.addressHash);
   assert.equal(submitted.canReviseProduction, false);
+  const waiting = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/fulfillment`,
+      p.buyer.token,
+    ),
+    200,
+  );
+  assert.equal(
+    waiting.current,
+    null,
+    "the cancelled prior reservation is not the new production stage",
+  );
+  assert.equal(waiting.attempts[0].state, "cancelled");
+  assert.equal(waiting.deliveryAddress.detail, "合成更正后的新地址");
   data(
     await admin(
       "POST",
@@ -777,6 +814,7 @@ test("a corrected manuscript after definitive cancellation can be directly resub
     bookBase = `/v1/projects/${p.projectId}/book`;
   data(
     await request("POST", bookBase + "/cover", p.buyer.token, {
+      ...(await coverMetadata(p.projectId, p.buyer.token)),
       expectedVersion: 0,
       salutation: "本人要求更正的新版封面",
       photoAssetId: null,
@@ -801,11 +839,6 @@ test("a corrected manuscript after definitive cancellation can be directly resub
   };
   assert.notEqual(binding.bookVersionId, p.binding.bookVersionId);
   assert.notEqual(binding.pdfHash, p.binding.pdfHash);
-
-  const notice = {
-    noticeVersion: "synthetic-d08-v1",
-    evidenceRef: `synthetic:本人确认新书稿-${randomUUID()}`,
-  };
 
   const reserved = data(
     await request("POST", firstCopy + "/submit", p.buyer.token, binding),
