@@ -11,7 +11,7 @@ import {
 import { personalPlanClient } from "../../services/personal-plan";
 import { questionSession } from "../../services/question-recommendations";
 import { sessionClient } from "../../services/session";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 Page({
   data: {
     question: null as FamilyQuestion | null,

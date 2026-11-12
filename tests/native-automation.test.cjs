@@ -139,6 +139,12 @@ test("page readiness requires the requested route, real lifecycle, native conten
       route: "pages/story/index",
       ready: true,
       visible: true,
+      data: { pageLoading: true, confirmed: true },
+    },
+    {
+      route: "pages/story/index",
+      ready: true,
+      visible: true,
       data: { confirmed: true },
     },
   ]);
@@ -148,7 +154,7 @@ test("page readiness requires the requested route, real lifecycle, native conten
     ready: (data) => data.confirmed,
   });
   assert.equal(data.confirmed, true);
-  assert.equal(mp.reads(), 4);
+  assert.equal(mp.reads(), 5);
 });
 
 test("a routed page with an empty renderer does not satisfy readiness", async () => {
@@ -215,7 +221,7 @@ test("timed-out waits stop polling and retain only safe loading observations", a
     (error) => {
       assert.equal(
         JSON.stringify(error.observation),
-        '{"route":"pages/home/index","rendered":true,"busy":true,"loading":false}',
+        '{"route":"pages/home/index","rendered":true,"busy":true,"loading":false,"pageLoading":false}',
       );
       return true;
     },

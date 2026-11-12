@@ -6,7 +6,7 @@ import { personalPlanClient } from "../../services/personal-plan";
 import { projectOverviewClient } from "../../services/project-overview";
 import { sessionClient } from "../../services/session";
 import { startOutlineAnswer } from "../../services/outline";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 Page({
   data: {
     rows: [] as { id: string; title: string; subtitle: string }[],

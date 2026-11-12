@@ -6,7 +6,7 @@ import type {
   PaymentOrderView,
 } from "../../../packages/contracts/src";
 import { readCurrentPackage } from "../../services/catalog";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 import { switchProjectTab } from "../../services/navigation";
 type OrderIntent = { key: string; command: CreateOrderCommand };
 const decode = (v = "") => {

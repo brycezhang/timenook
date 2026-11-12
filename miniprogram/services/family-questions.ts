@@ -7,7 +7,7 @@ import { sessionClient } from "./session";
 import { paymentKey } from "./payments";
 import { recordingId } from "./local-audio-recorder";
 import { interviewRecordingClient } from "./interview-recording";
-import { go } from "./store";
+import { go } from "./navigation";
 export const familyQuestionClient = {
   list(projectId: string) {
     return sessionClient.request<FamilyQuestions>(

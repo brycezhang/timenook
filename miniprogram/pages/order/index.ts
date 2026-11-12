@@ -2,7 +2,7 @@ import { switchProjectTab } from "../../services/navigation";
 import { sessionClient } from "../../services/session";
 import { paymentClient } from "../../services/payments";
 import type { PaymentOrderView } from "../../../packages/contracts/src";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 Page({
   data: {
     activeOrder: null as PaymentOrderView | null,

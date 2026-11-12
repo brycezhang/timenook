@@ -8,7 +8,7 @@ import {
   saveStoryBody,
   markEditing,
 } from "../../services/book-editor";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 type Row = { id: string; title: string; body: string };
 Page({
   data: {

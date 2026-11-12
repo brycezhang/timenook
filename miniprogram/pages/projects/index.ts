@@ -7,7 +7,7 @@ import { paymentClient } from "../../services/payments";
 import { sessionClient } from "../../services/session";
 import { projectOverviewClient } from "../../services/project-overview";
 import { switchProjectTab } from "../../services/navigation";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 const categories = [
   { value: "sent", label: "我送出的" },
   { value: "received", label: "我收到的" },

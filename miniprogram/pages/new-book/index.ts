@@ -1,4 +1,4 @@
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 import { sessionClient } from "../../services/session";
 const relationships = ["爸爸", "妈妈", "爷爷", "奶奶", "自己", "自定义"];
 Page({

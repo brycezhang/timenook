@@ -1,7 +1,7 @@
 import { interviewRecordingClient } from "./interview-recording";
 import { recordingId } from "./local-audio-recorder";
 import { paymentKey } from "./payments";
-import { go } from "./store";
+import { go } from "./navigation";
 export async function startOutlineAnswer(
   projectId: string,
   revision: number,

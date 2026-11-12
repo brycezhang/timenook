@@ -1,7 +1,7 @@
 import type { FulfillmentView } from "../../../packages/contracts/src";
 import { fulfillmentClient } from "../../services/fulfillment";
 import { sessionClient } from "../../services/session";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 const labels = {
   approved: "已提交，等待制作",
   handoff_pending: "正在核实制作安排",

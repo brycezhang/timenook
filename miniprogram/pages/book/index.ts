@@ -9,7 +9,7 @@ import { paymentKey } from "../../services/payments";
 import { previewBookPhoto } from "../../services/book-editor";
 import { clearPhotoPreviews } from "../../services/story-photos";
 import { watchProjectAccess } from "../../services/project-access";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 import { switchProjectTab } from "../../services/navigation";
 Page({
   data: {

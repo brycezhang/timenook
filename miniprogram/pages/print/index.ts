@@ -5,7 +5,7 @@ import type {
 import { firstCopyClient } from "../../services/first-copy";
 import { sessionClient } from "../../services/session";
 import { paymentKey } from "../../services/payments";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 const labels: Record<FirstCopyBlocker, string> = {
   PHYSICAL_PRODUCTION_UNAVAILABLE: "当前项目没有实体书制作权益",
   PRODUCTION_PDF_UNAPPROVED: "书稿等待印前检查",

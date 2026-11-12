@@ -14,7 +14,7 @@ import { sessionClient, ApiFailure } from "../../services/session";
 import { paymentKey } from "../../services/payments";
 import { dataMode } from "../../services/mode";
 import { participationClient } from "../../services/participation";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 type E = {
   currentTarget: { dataset: Record<string, string> };
   detail: { value: string };
