@@ -1,5 +1,6 @@
-// Loopback transport fixture: drop one successful first-copy submit response
-// after the real upstream has completed it. All other API/binary bytes stream.
+// Loopback transport fixture: drop successful first-copy submit responses for
+// one armed project until disarmed, including transparent native HTTP retries.
+// Each real upstream command completes first. Other API/binary bytes stream.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -31,10 +32,10 @@ function control(action) {
       runId: manifest.runId,
       path: `/v1/projects/${projectId}/first-copy/submit`,
     });
-    console.log("Armed one successful print-submit response loss.");
+    console.log("Armed successful print-submit response loss until disarmed.");
   } else if (action === "disarm") {
     writePrivate(controlFile, { runId: manifest.runId, disarm: true });
-    console.log("Disarmed the next print-submit response loss.");
+    console.log("Disarmed print-submit response loss.");
   } else if (action === "status") {
     const status = JSON.parse(fs.readFileSync(statusFile, "utf8"));
     console.log(
@@ -61,7 +62,6 @@ function serve() {
   );
   const runId = randomUUID();
   let armedPath = null,
-    candidate = false,
     closing = false;
   const status = {
     phase: "idle",
@@ -119,9 +119,8 @@ function serve() {
       return;
     }
     const matches =
-      !candidate && incoming.method === "POST" && incoming.url === armedPath;
+      incoming.method === "POST" && incoming.url === armedPath;
     if (matches) {
-      candidate = true;
       status.phase = "awaiting-upstream";
       save();
     }
@@ -140,8 +139,6 @@ function serve() {
           // Do not fabricate a response or abort the command. Wait until the
           // successful API response has completely arrived, then lose it locally.
           response.once("end", () => {
-            candidate = false;
-            armedPath = null;
             status.phase = "dropped-after-upstream-success";
             status.lastUpstreamStatus = response.statusCode;
             ++status.droppedResponses;
@@ -149,7 +146,6 @@ function serve() {
             outgoing.destroy();
           });
           response.once("error", () => {
-            candidate = false;
             status.phase = "upstream-response-error";
             save();
             outgoing.destroy();
@@ -158,7 +154,6 @@ function serve() {
           return;
         }
         if (matches) {
-          candidate = false;
           status.phase = "forwarded-upstream-rejection";
           status.lastUpstreamStatus = response.statusCode;
           save();
@@ -178,7 +173,6 @@ function serve() {
     );
     forwarded.once("error", () => {
       if (matches) {
-        candidate = false;
         status.phase = "upstream-request-error";
         save();
       }
@@ -208,7 +202,7 @@ function serve() {
       controlFile,
       statusFile,
       boundary:
-        "Real upstream API. One opt-in successful submit response is discarded only after upstream completion. No business response mocks.",
+        "Real upstream API. Armed project submit responses are discarded after upstream completion until disarmed, including native HTTP retries. No business response mocks.",
     });
     console.log(
       `MP12 loopback transport ready on ${actualPort}; private manifest saved outside Git.`,
