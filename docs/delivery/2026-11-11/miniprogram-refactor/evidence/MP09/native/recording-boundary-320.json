@@ -1,0 +1,23 @@
+{
+  "clipCount": 1,
+  "sealed": 1,
+  "nativeWidth": 320,
+  "syntheticHardware": true,
+  "syntheticDurationMs": 1080,
+  "realApi": true,
+  "realUploadBeforeLostResponse": true,
+  "ambientMicrophone": false,
+  "events": [
+    "error",
+    "start",
+    "pause",
+    "resume",
+    "stopping",
+    "stop",
+    "upload-request-real",
+    "upload-response-real:204",
+    "upload-response-lost",
+    "upload-request-real",
+    "upload-response-real:204"
+  ]
+}

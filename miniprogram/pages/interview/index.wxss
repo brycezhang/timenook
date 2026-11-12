@@ -48,5 +48,9 @@ page { background:#fff; }
 
 @media (max-height:740px) {
  .recording-photos,.record-photo,.recording .recording-photos,.paused .recording-photos,.recording .record-photo,.paused .record-photo { width:120px;height:90px; }
- .record-stage { min-height:150px;gap:10px; }
+ .record-stage { height:150px;min-height:150px;flex:0 0 150px;gap:10px; }
+ .recording .record-stage { height:66px;min-height:66px;flex-basis:66px;padding:0;gap:4px;justify-content:flex-start; }
+ .recording .wave { height:20px;flex-shrink:0; }
+ .recording .record-time { font-size:38px;line-height:1.1; }
+ .recording .record-state { display:none; }
 }

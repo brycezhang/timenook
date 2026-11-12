@@ -516,10 +516,11 @@
       "native320": "evidence/MP05/native/QuestionEdit-320.png",
       "native390": "evidence/MP05/native/QuestionEdit-390.png",
       "interactionEvidence": "MP05-delivery.md",
-      "result": "passed",
+      "result": "pending",
       "design390": "design-reference/390/QuestionEdit.png",
       "design320": "design-reference/320/QuestionEdit.png",
-      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
+      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input",
+      "pendingReason": "Both-width flow passed; required-label typography corrected, updated captures pending."
     },
     {
       "board": "ChapterEdit.dc.html",
@@ -554,7 +555,7 @@
       "design390": "design-reference/390/ChapterStories.png",
       "design320": "design-reference/320/ChapterStories.png",
       "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input",
-      "pendingReason": "Both-width screenshots and page controls verified; native custom-component drag/reorder remains pending while Mac locked."
+      "pendingReason": "Both-width flow passed; available-story heading corrected and native drag/remove verification pending."
     },
     {
       "board": "HomeEmpty.dc.html",
@@ -711,14 +712,13 @@
       "state": "故事列表",
       "entry": "首页故事数",
       "interaction": "空态、处理中、打开故事",
-      "native320": null,
+      "native320": "evidence/MP08/native/Stories-320.png",
       "native390": "evidence/MP08/native/Stories-390.png",
       "interactionEvidence": "MP08-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/Stories.png",
       "design320": "design-reference/320/Stories.png",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
-      "pendingReason": "390 native captured and compared; actual 320 capture pending."
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware"
     },
     {
       "board": "Story.dc.html",
@@ -729,14 +729,14 @@
       "state": "已归章故事",
       "entry": "列表／回答完成",
       "interaction": "原声进度、照片、文字编辑、补录、归章",
-      "native320": null,
+      "native320": "evidence/MP08/native/Story-320.png",
       "native390": "evidence/MP08/native/Story-390.png",
       "interactionEvidence": "MP08-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/Story.png",
       "design320": "design-reference/320/Story.png",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
-      "pendingReason": "390 native captured and compared; actual 320 capture pending."
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "Both-width layout captured; native audio pause/scrub pending a longer valid audio fixture."
     },
     {
       "board": "StoryEdit.dc.html",
@@ -747,14 +747,14 @@
       "state": "文字编辑",
       "entry": "故事→编辑",
       "interaction": "保存、取消、键盘可操作",
-      "native320": null,
+      "native320": "evidence/MP08/native/StoryEdit-320.png",
       "native390": "evidence/MP08/native/StoryEdit-390.png",
       "interactionEvidence": "MP08-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/StoryEdit.png",
       "design320": "design-reference/320/StoryEdit.png",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
-      "pendingReason": "390 native captured and compared; actual 320 capture pending."
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "320 native input alignment fixed and captured; updated390 input capture pending."
     },
     {
       "board": "StoryProcessing.dc.html",
@@ -765,14 +765,13 @@
       "state": "整理中",
       "entry": "保存录音后",
       "interaction": "状态更新、离开与返回",
-      "native320": null,
+      "native320": "evidence/MP08/native/StoryProcessing-320.png",
       "native390": "evidence/MP08/native/StoryProcessing-390.png",
       "interactionEvidence": "MP08-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/StoryProcessing.png",
       "design320": "design-reference/320/StoryProcessing.png",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
-      "pendingReason": "390 native captured and compared; actual 320 capture pending."
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware"
     },
     {
       "board": "StoryFailed.dc.html",
@@ -783,14 +782,14 @@
       "state": "整理失败",
       "entry": "任务返回失败",
       "interaction": "原声可听、错误、重试与补录",
-      "native320": null,
+      "native320": "evidence/MP08/native/StoryFailed-320.png",
       "native390": "evidence/MP08/native/StoryFailed-390.png",
       "interactionEvidence": "MP08-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/StoryFailed.png",
       "design320": "design-reference/320/StoryFailed.png",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
-      "pendingReason": "Captured expired task with continuation action; retryable task and actual retry plus 320 capture pending."
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "320 retryable failure captured; native retry exposed empty idempotency-key cache miss. Targeted fix and fresh native retry pending;390 expired-state image needs replacement."
     },
     {
       "board": "StoryUnassigned.dc.html",
@@ -801,14 +800,13 @@
       "state": "未归章故事",
       "entry": "无章回答保存／移出章",
       "interaction": "原声正文、选章、不强制入书",
-      "native320": null,
+      "native320": "evidence/MP08/native/StoryUnassigned-320.png",
       "native390": "evidence/MP08/native/StoryUnassigned-390.png",
       "interactionEvidence": "MP08-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/StoryUnassigned.png",
       "design320": "design-reference/320/StoryUnassigned.png",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
-      "pendingReason": "390 native captured and compared; actual 320 capture pending."
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware"
     },
     {
       "board": "UnassignedStories.dc.html",
@@ -819,14 +817,13 @@
       "state": "未归章列表",
       "entry": "目录→未归章故事",
       "interaction": "列表打开、选择归章",
-      "native320": null,
+      "native320": "evidence/MP08/native/UnassignedStories-320.png",
       "native390": "evidence/MP08/native/UnassignedStories-390.png",
       "interactionEvidence": "MP08-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/UnassignedStories.png",
       "design320": "design-reference/320/UnassignedStories.png",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
-      "pendingReason": "390 native captured and compared; actual 320 capture pending."
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware"
     },
     {
       "board": "AssignStory.dc.html",
@@ -837,14 +834,13 @@
       "state": "选择所属章节",
       "entry": "故事／未归章→选择章节",
       "interaction": "选择任一章、跨章、取消与保存",
-      "native320": null,
+      "native320": "evidence/MP08/native/AssignStory-320.png",
       "native390": "evidence/MP08/native/AssignStory-390.png",
       "interactionEvidence": "MP08-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/AssignStory.png",
       "design320": "design-reference/320/AssignStory.png",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic identity, audio and AI providers",
-      "pendingReason": "390 native captured and compared; actual 320 capture pending."
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware"
     },
     {
       "board": "RecordReady.dc.html",
@@ -855,12 +851,14 @@
       "state": "准备／无照片",
       "entry": "首页当前题→开始讲述",
       "interaction": "问题来源、整块开始、换题、添加照片",
-      "native320": null,
+      "native320": "evidence/MP09/native/RecordReady-320.png",
       "native390": null,
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/RecordReady.png",
-      "design320": "design-reference/320/RecordReady.png"
+      "design320": "design-reference/320/RecordReady.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "320 native recovery, photos, pause/resume, real upload loss/retry and sealed clip verified; 390 capture pending."
     },
     {
       "board": "RecordReadyPhoto.dc.html",
@@ -871,12 +869,14 @@
       "state": "准备／有照片",
       "entry": "照片起讲／准备页加图",
       "interaction": "选图、逐张移除、开始",
-      "native320": null,
+      "native320": "evidence/MP09/native/RecordReadyPhoto-320.png",
       "native390": null,
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/RecordReadyPhoto.png",
-      "design320": "design-reference/320/RecordReadyPhoto.png"
+      "design320": "design-reference/320/RecordReadyPhoto.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "320 native recovery, photos, pause/resume, real upload loss/retry and sealed clip verified; 390 capture pending."
     },
     {
       "board": "Recording.dc.html",
@@ -887,12 +887,14 @@
       "state": "正在录音",
       "entry": "准备→开始",
       "interaction": "计时、暂停、结束、加图先暂停",
-      "native320": null,
+      "native320": "evidence/MP09/native/Recording-320.png",
       "native390": null,
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/Recording.png",
-      "design320": "design-reference/320/Recording.png"
+      "design320": "design-reference/320/Recording.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "320 native recovery, photos, pause/resume, real upload loss/retry and sealed clip verified; 390 capture pending."
     },
     {
       "board": "RecordPaused.dc.html",
@@ -903,12 +905,14 @@
       "state": "录音暂停",
       "entry": "录制→暂停／添加照片",
       "interaction": "继续、保留时长、结束、照片返回",
-      "native320": null,
+      "native320": "evidence/MP09/native/RecordPaused-320.png",
       "native390": null,
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/RecordPaused.png",
-      "design320": "design-reference/320/RecordPaused.png"
+      "design320": "design-reference/320/RecordPaused.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "320 native recovery, photos, pause/resume, real upload loss/retry and sealed clip verified; 390 capture pending."
     },
     {
       "board": "Upload.dc.html",
@@ -919,12 +923,14 @@
       "state": "保存录音",
       "entry": "结束／到时自动保存",
       "interaction": "局部状态、离开和恢复",
-      "native320": null,
+      "native320": "evidence/MP09/native/Upload-320.png",
       "native390": null,
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/Upload.png",
-      "design320": "design-reference/320/Upload.png"
+      "design320": "design-reference/320/Upload.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "320 native recovery, photos, pause/resume, real upload loss/retry and sealed clip verified; 390 capture pending."
     },
     {
       "board": "UploadFailed.dc.html",
@@ -935,12 +941,14 @@
       "state": "保存失败",
       "entry": "上传实际失败",
       "interaction": "原片段保留、重试、不重复故事",
-      "native320": null,
+      "native320": "evidence/MP09/native/UploadFailed-320.png",
       "native390": null,
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/UploadFailed.png",
-      "design320": "design-reference/320/UploadFailed.png"
+      "design320": "design-reference/320/UploadFailed.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "320 native recovery, photos, pause/resume, real upload loss/retry and sealed clip verified; 390 capture pending."
     },
     {
       "board": "RecordBlocked.dc.html",
@@ -951,12 +959,14 @@
       "state": "麦克风权限受阻",
       "entry": "拒绝麦克风权限",
       "interaction": "权限恢复、返回不丢问题",
-      "native320": null,
+      "native320": "evidence/MP09/native/RecordBlocked-320.png",
       "native390": null,
       "interactionEvidence": null,
       "result": "pending",
       "design390": "design-reference/390/RecordBlocked.png",
-      "design320": "design-reference/320/RecordBlocked.png"
+      "design320": "design-reference/320/RecordBlocked.png",
+      "validationEnvironment": "WeChat DevTools release package; real local API/PostgreSQL/Redis and protected files; declared synthetic external providers/hardware",
+      "pendingReason": "320 native recovery, photos, pause/resume, real upload loss/retry and sealed clip verified; 390 capture pending."
     },
     {
       "board": "BookEmpty.dc.html",
