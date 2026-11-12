@@ -817,8 +817,8 @@ Page({
       success: (result) => {
         if (!this.current(g, owner)) return;
         if (result.authSetting["scope.record"]) {
-          this.showScreen("ready");
-          this.setData({ status: "", state: "idle" });
+          this.liveRecorder?.resetDeviceError();
+          this.setData({ status: "" });
         }
       },
       complete: () => {

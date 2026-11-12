@@ -120,6 +120,19 @@ export class LocalAudioRecorder {
     this.current = { ...this.current, stage, message };
     this.listener?.(this.snapshot());
   }
+  resetDeviceError() {
+    if (
+      this.current.stage !== "device-error" ||
+      this.active ||
+      this.pending ||
+      this.saving
+    )
+      return;
+    this.update(
+      this.current.clips.length ? "local" : "idle",
+      "准备好就开始说，结束后先保存到本机",
+    );
+  }
   start(actualQuestionId?: string, maxDurationMs = 300000) {
     if (
       !Number.isSafeInteger(maxDurationMs) ||
