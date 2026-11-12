@@ -23,6 +23,9 @@ Page({
     purchaseKind: "gift" as "self" | "gift",
     packageVersionId: "",
     packagePrice: "",
+    priceWhole: "",
+    priceFraction: "",
+    payPrice: "",
     purchasable: false,
     loading: true,
     busy: false,
@@ -74,6 +77,13 @@ Page({
         packagePrice: offer.version
           ? (offer.version.price.value / 100).toFixed(2)
           : "",
+        priceWhole: offer.version
+          ? Math.floor(offer.version.price.value / 100).toString()
+          : "",
+        priceFraction: offer.version
+          ? (offer.version.price.value / 100).toFixed(2).split(".")[1]
+          : "",
+        payPrice: offer.version ? (offer.version.price.value / 100).toFixed(2).replace(/\.00$/, "") : "",
         purchasable: offer.purchasable,
       });
     } catch (e) {
