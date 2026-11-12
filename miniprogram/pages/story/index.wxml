@@ -30,7 +30,6 @@
   <view wx:if="{{audioError || error || privateError || saveWarning}}" class="tn-error">{{audioError || error || privateError || saveWarning}}</view>
   <view wx:if="{{displayState === 'processing' && !story.revision}}" class="story-processing-preview" aria-label="正在整理故事"><view class="processing-heading" /><view /><view /><view /><view /><view /><view class="processing-photo" /></view>
   <view wx:if="{{liveParagraphs.length}}" class="story-body"><text wx:for="{{liveParagraphs}}" wx:key="index" selectable>{{item.text}}</text></view>
-  <block wx:if="{{liveTranscripts.length}}"><view class="tn-muted">已识别的文字</view><view wx:for="{{liveTranscripts}}" wx:key="clipId" class="story-body"><text selectable>{{item.text}}</text></view></block>
   <view wx:for="{{livePhotos}}" wx:key="photoId" class="live-story-photo"><image wx:if="{{item.image}}" class="live-photo-image" src="{{item.image}}" mode="aspectFill" aria-label="{{item.caption || '讲述的照片'}}" /><view wx:else class="live-photo-placeholder"><app-loading variant="photo" /></view><view wx:if="{{item.caption}}" class="live-photo-caption">{{item.caption}}</view></view>
   <view wx:if="{{photoError}}" class="tn-error">{{photoError}}</view><button wx:if="{{photoError}}" class="tn-link" bindtap="reloadLivePhotos">重新加载照片</button>
   <button wx:if="{{story.revision && displayState === 'ready'}}" class="tn-link story-photo-entry" bindtap="editLivePhotos">{{livePhotos.length ? '照片与说明' : '添加照片'}}<image class="tn-icon" src="/assets/icons/image.svg" /></button>
