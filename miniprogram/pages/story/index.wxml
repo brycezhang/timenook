@@ -33,7 +33,7 @@
   <block wx:if="{{liveTranscripts.length}}"><view class="tn-muted">已识别的文字</view><view wx:for="{{liveTranscripts}}" wx:key="clipId" class="story-body"><text selectable>{{item.text}}</text></view></block>
   <view wx:for="{{livePhotos}}" wx:key="photoId" class="live-story-photo"><image wx:if="{{item.image}}" class="live-photo-image" src="{{item.image}}" mode="aspectFill" aria-label="{{item.caption || '讲述的照片'}}" /><view wx:else class="live-photo-placeholder"><app-loading variant="photo" /></view><view wx:if="{{item.caption}}" class="live-photo-caption">{{item.caption}}</view></view>
   <view wx:if="{{photoError}}" class="tn-error">{{photoError}}</view><button wx:if="{{photoError}}" class="tn-link" bindtap="reloadLivePhotos">重新加载照片</button>
-  <button wx:if="{{story.revision && displayState === 'ready'}}" class="tn-link" bindtap="editLivePhotos">{{livePhotos.length ? '照片与说明' : '添加照片'}}<image class="tn-icon" src="/assets/icons/image.svg" /></button>
+  <button wx:if="{{story.revision && displayState === 'ready'}}" class="tn-link story-photo-entry" bindtap="editLivePhotos">{{livePhotos.length ? '照片与说明' : '添加照片'}}<image class="tn-icon" src="/assets/icons/image.svg" /></button>
   <button wx:if="{{error}}" class="tn-link" bindtap="refresh">重新查询</button>
   <view class="tn-dock">
     <block wx:if="{{displayState === 'processing'}}"><button class="tn-button tn-secondary" bindtap="returnToProject">回到这本书</button></block>

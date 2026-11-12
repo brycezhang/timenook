@@ -9,6 +9,7 @@ import {
 } from "../../services/story-photos";
 import {
   storyDuration,
+  storyDate,
   storyPlacement,
   storyState,
 } from "../../services/story-presentation";
@@ -86,12 +87,16 @@ Page({
       const row = (s: StoryView): Row => ({
         id: s.id,
         title: s.revision?.title || "新记录的故事",
-        state:
+        state: [
+          storyDate(s),
           storyState(s) === "processing"
             ? "正在整理"
             : storyState(s) === "failed"
               ? "整理未完成"
               : storyPlacement(s),
+        ]
+          .filter(Boolean)
+          .join(" · "),
         excerpt:
           s.revision?.paragraphs
             .map((p) => p.text)

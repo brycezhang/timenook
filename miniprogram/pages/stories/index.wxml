@@ -1,4 +1,4 @@
-<tn-navigation title="{{unassigned ? '未归章故事' : '故事'}}" />
+<tn-navigation title="{{unassigned ? '未归章故事' : '故事列表'}}" />
 <app-loading wx:if="{{pageLoading}}" variant="list" />
 <view wx:else class="tn-page {{unassigned ? '' : 'with-dock'}}">
   <block wx:if="{{unassigned}}">
