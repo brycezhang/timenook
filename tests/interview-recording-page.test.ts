@@ -722,7 +722,7 @@ test("failed native persistence stays recoverable on the original recorder and n
   assert.equal(h.page.data.screen, "saving");
 });
 
-test("microphone rejection opens settings and returns to the unchanged question when permission is enabled", async (t) => {
+test("microphone permission enabled in settings stays ready after adding photos and returning", async (t) => {
   const h = harness();
   t.after(() => h.page.onUnload());
   await ready(h);
@@ -738,6 +738,28 @@ test("microphone rejection opens settings and returns to the unchanged question 
   assert.equal(h.page.data.question, question.snapshot.text);
   assert.equal(h.page.data.interview.id, interviewId);
   assert.equal(h.saves, 0);
+  await h.page.photos();
+  assert.match(h.navigation[0].url, new RegExp("interviewId=" + interviewId));
+  h.page.onHide();
+  const returning = h.page.onShow();
+  respond(h.requests.shift(), { allowed: true });
+  await tick();
+  respond(h.requests.shift(), {
+    id: "selected-photos",
+    projectId,
+    interviewId,
+    revision: 1,
+    hash: "h",
+    entries: [{ photoId: "photo-a", caption: "小时候", assets: [] }],
+  });
+  await returning;
+  assert.equal(h.page.data.recordingPhotos.length, 1);
+  assert.equal(h.page.data.screen, "ready");
+  assert.equal(h.page.data.state, "idle");
+  assert.equal(h.page.data.question, question.snapshot.text);
+  await start(h);
+  assert.equal(h.page.data.screen, "recording");
+  assert.equal(h.starts, 2);
 });
 
 test("the visible back action offers save or continue, and save leaves only after the recording is sealed", async (t) => {

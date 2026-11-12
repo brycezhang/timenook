@@ -121,6 +121,9 @@ test("decode failure keeps the recording pending so saving can be retried", asyn
   assert.equal(failed.hasPendingSave, true);
   assert.equal(failed.clips.length, 0);
   assert.ok(h.files.has("temp.mp3"));
+  h.recorder.resetDeviceError();
+  assert.equal(h.recorder.snapshot().stage, "device-error");
+  assert.equal(h.recorder.snapshot().hasPendingSave, true);
   h.setFailDecode(false);
   await h.recorder.retrySave();
   assert.equal(h.recorder.snapshot().stage, "local");
