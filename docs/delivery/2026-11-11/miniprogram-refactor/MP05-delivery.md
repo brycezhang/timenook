@@ -31,12 +31,12 @@
 
 | 画板           | 390px 原生截图与观察                                                                                            | 320px |
 | -------------- | --------------------------------------------------------------------------------------------------------------- | ----- |
-| BookDirectory  | [截图](evidence/MP05/native/BookDirectory-390.png)：六章、未归章提示、总数包含未归章，整章排序入口              | 待验  |
-| ChapterOutline | [截图](evidence/MP05/native/ChapterOutline-390.png)：章节身份、问题/故事切换、已回答状态、编辑入口              | 待验  |
-| QuestionDetail | [截图](evidence/MP05/native/QuestionDetail-390.png)：真实问题、章节、稍后/跳过/移除、开始回答                   | 待验  |
-| QuestionEdit   | [截图](evidence/MP05/native/QuestionEdit-390.png)：已修正文案字体继承粗体；题目及必选章节                       | 待验  |
-| ChapterEdit    | [截图](evidence/MP05/native/ChapterEdit-390.png)：已修正原生输入垂直偏移、正文粗体和底色；章名/正文均已实际保存 | 待验  |
-| ChapterStories | [截图](evidence/MP05/native/ChapterStories-390.png)：已修正摘要间距；章内故事与可加入列表使用实际业务数据       | 待验  |
+| BookDirectory  | [截图](evidence/MP05/native/BookDirectory-390.png)：六章、未归章提示、总数包含未归章，整章排序入口              | 已采集 |
+| ChapterOutline | [截图](evidence/MP05/native/ChapterOutline-390.png)：章节身份、问题/故事切换、已回答状态、编辑入口              | 已采集 |
+| QuestionDetail | [截图](evidence/MP05/native/QuestionDetail-390.png)：真实问题、章节、稍后/跳过/移除、开始回答                   | 已采集 |
+| QuestionEdit   | [截图](evidence/MP05/native/QuestionEdit-390.png)：已修正文案字体继承粗体；题目及必选章节                       | 已采集 |
+| ChapterEdit    | [截图](evidence/MP05/native/ChapterEdit-390.png)：已修正原生输入垂直偏移、正文粗体和底色；章名/正文均已实际保存 | 已采集 |
+| ChapterStories | [截图](evidence/MP05/native/ChapterStories-390.png)：已修正摘要间距；章内故事与可加入列表使用实际业务数据       | 已采集 |
 
 运行中使用三篇明确合成故事；截图中故事数和题目状态相对画稿的差别来自真实测试数据。固定页头为微信状态栏、胶囊与底部安全区保留原生空间。设计参考在 `design-reference/{390,320}`。
 
@@ -48,7 +48,7 @@
 
 [运行清单](evidence/MP05/manifest.json)、[官方 CLI 操作记录](evidence/MP05/cli-actions.jsonl)和[步骤记录](evidence/MP05/cli-results.json)保留当前证据。早期脚本失败是混用持久 SDK 与 CLI、选择器能力和访谈提示文案判断问题，均已识别；不将这些脚本错误计作产品通过或失败。
 
-**尚未完成**：320×568 六页、GUI 真实拖章/拖故事、组件内「移出」后加入，以及最终全部画板验收。CUA 明确返回 Mac 已锁屏且自动解锁失败，已请用户手动解锁；没有反复重试或绕过。390 截图与已通过操作不代表本票全部原生验收完成。
+**尚未完成**：GUI 真实拖章/拖故事、组件内「移出」后加入，以及最终全部画板验收。CUA 明确返回 Mac 已锁屏且自动解锁失败，已请用户手动解锁；没有反复重试或绕过。390 截图与已通过操作不代表本票全部原生验收完成。
 
 ## 恢复验证与交接
 
@@ -61,3 +61,7 @@
 新建同类隔离服务可参考 [API harness](evidence/MP05/harness/api.cjs)，会把合成登录态写入系统临时目录的 0600 文件；该重建入口仅做语法检查，当前验收仍使用已有进程。工作目录保留独立 node_modules、Prisma、dist-test、release 包和安全本地 `.env` 链接。
 
 旧 `scripts/test-native-design.cjs` 含删除前的 `/book/directory` mock，已交 MP12 更新全链路脚本，不用于本票验收。未执行部署、上传、提审、真实购买或实物制作。iOS／Android 微信真机、真实录音供应商结果由相应验收记录另行确认。
+
+## 2026-11-12 320px 集成续验
+
+六张原生图已补齐并对照，使用真实 MP06 API/PG/Redis 与 release 包。首页进入书稿、目录后，章内入口用真实路由打开；Mac 锁定时没有将 CLI 直接路由当作自定义组件点击或拖动证据。章内显示 11 题（10 个大纲题、1 个家人题），编辑问题、章节名称和故事正文均通过真实输入/保存返回确认。点击“移到本章”完成真实跨章移动，章内故事与章节正文随之显示。目录及故事拖排仍明确待验。

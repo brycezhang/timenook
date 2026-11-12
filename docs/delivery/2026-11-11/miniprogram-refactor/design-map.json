@@ -461,13 +461,14 @@
       "state": "六章目录",
       "entry": "首页／书稿→大纲目录",
       "interaction": "章节拖动、新增、进入章",
-      "native320": null,
+      "native320": "evidence/MP05/native/BookDirectory-320.png",
       "native390": "evidence/MP05/native/BookDirectory-390.png",
       "interactionEvidence": "MP05-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/BookDirectory.png",
       "design320": "design-reference/320/BookDirectory.png",
-      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
+      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input",
+      "pendingReason": "Both-width screenshots and page controls verified; native custom-component drag/reorder remains pending while Mac locked."
     },
     {
       "board": "ChapterOutline.dc.html",
@@ -478,10 +479,10 @@
       "state": "章内问题／故事",
       "entry": "大纲目录→某章",
       "interaction": "页签、题目状态、故事排序入口",
-      "native320": null,
+      "native320": "evidence/MP05/native/ChapterOutline-320.png",
       "native390": "evidence/MP05/native/ChapterOutline-390.png",
       "interactionEvidence": "MP05-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/ChapterOutline.png",
       "design320": "design-reference/320/ChapterOutline.png",
       "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
@@ -495,10 +496,10 @@
       "state": "大纲问题待回答",
       "entry": "章节问题列表→题目",
       "interaction": "回答、稍后、跳过、编辑",
-      "native320": null,
+      "native320": "evidence/MP05/native/QuestionDetail-320.png",
       "native390": "evidence/MP05/native/QuestionDetail-390.png",
       "interactionEvidence": "MP05-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/QuestionDetail.png",
       "design320": "design-reference/320/QuestionDetail.png",
       "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
@@ -512,10 +513,10 @@
       "state": "新增／编辑大纲题",
       "entry": "章内新增／题目编辑",
       "interaction": "文字和章节保存、取消",
-      "native320": null,
+      "native320": "evidence/MP05/native/QuestionEdit-320.png",
       "native390": "evidence/MP05/native/QuestionEdit-390.png",
       "interactionEvidence": "MP05-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/QuestionEdit.png",
       "design320": "design-reference/320/QuestionEdit.png",
       "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
@@ -529,10 +530,10 @@
       "state": "编辑章名和正文",
       "entry": "目录／章内→编辑章节",
       "interaction": "保存、取消、删除保留故事",
-      "native320": null,
+      "native320": "evidence/MP05/native/ChapterEdit-320.png",
       "native390": "evidence/MP05/native/ChapterEdit-390.png",
       "interactionEvidence": "MP05-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/ChapterEdit.png",
       "design320": "design-reference/320/ChapterEdit.png",
       "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
@@ -546,13 +547,14 @@
       "state": "本章故事",
       "entry": "章节→本章故事",
       "interaction": "选取、章内拖动、移出、跨章",
-      "native320": null,
+      "native320": "evidence/MP05/native/ChapterStories-320.png",
       "native390": "evidence/MP05/native/ChapterStories-390.png",
       "interactionEvidence": "MP05-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/ChapterStories.png",
       "design320": "design-reference/320/ChapterStories.png",
-      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
+      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input",
+      "pendingReason": "Both-width screenshots and page controls verified; native custom-component drag/reorder remains pending while Mac locked."
     },
     {
       "board": "HomeEmpty.dc.html",
@@ -585,12 +587,11 @@
       "native320": "evidence/MP06/native/HomeActive-320.png",
       "native390": "evidence/MP06/native/HomeActive-390.png",
       "interactionEvidence": "MP06-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/HomeActive.png",
       "design320": "design-reference/320/HomeActive.png",
       "implementationEvidence": "MP06-delivery.md",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers",
-      "pendingReason": "320 compact-gap cascade corrected; affected page recapture pending. Existing 390 evidence remains valid."
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers"
     },
     {
       "board": "FamilyQuestions.dc.html",
@@ -604,12 +605,11 @@
       "native320": "evidence/MP06/native/FamilyQuestions-320.png",
       "native390": "evidence/MP06/native/FamilyQuestions-390.png",
       "interactionEvidence": "MP06-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/FamilyQuestions.png",
       "design320": "design-reference/320/FamilyQuestions.png",
       "implementationEvidence": "MP06-delivery.md",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers",
-      "pendingReason": "320 compact-gap cascade corrected; affected page recapture pending. Existing 390 evidence remains valid."
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers"
     },
     {
       "board": "FamilyQuestionsEmpty.dc.html",
@@ -661,12 +661,11 @@
       "native320": "evidence/MP06/native/FamilyQuestionDetail-320.png",
       "native390": "evidence/MP06/native/FamilyQuestionDetail-390.png",
       "interactionEvidence": "MP06-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/FamilyQuestionDetail.png",
       "design320": "design-reference/320/FamilyQuestionDetail.png",
       "implementationEvidence": "MP06-delivery.md",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers",
-      "pendingReason": "320 compact-gap cascade corrected; affected page recapture pending. Existing 390 evidence remains valid."
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers"
     },
     {
       "board": "FamilyQuestionAnswered.dc.html",
@@ -680,12 +679,11 @@
       "native320": "evidence/MP06/native/FamilyQuestionAnswered-320.png",
       "native390": "evidence/MP06/native/FamilyQuestionAnswered-390.png",
       "interactionEvidence": "MP06-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/FamilyQuestionAnswered.png",
       "design320": "design-reference/320/FamilyQuestionAnswered.png",
       "implementationEvidence": "MP06-delivery.md",
-      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers",
-      "pendingReason": "320 compact-gap cascade corrected; affected page recapture pending. Existing 390 evidence remains valid."
+      "validationEnvironment": "WeChat DevTools; real local API/PostgreSQL/Redis; synthetic external identity, audio and AI providers"
     },
     {
       "board": "Photos.dc.html",
@@ -696,10 +694,10 @@
       "state": "项目照片空态／有照片",
       "entry": "首页照片数／讲述选图",
       "interaction": "上传、预览、选择、照片起讲",
-      "native320": null,
+      "native320": "evidence/MP07/native/Photos-320.png",
       "native390": "evidence/MP07/native/Photos-390.png",
       "interactionEvidence": "MP07-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/Photos.png",
       "design320": "design-reference/320/Photos.png",
       "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; synthetic external identity/media input"
