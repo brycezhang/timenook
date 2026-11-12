@@ -49,8 +49,8 @@
 正式 release 包 `74d7185` 的实际 320×568 窗口，真实本地 API／PostgreSQL／Redis，身份、支付、生产与物流状态均为明确合成夹具。[脱敏记录](evidence/MP12/native-book-print-320.json)和 [MP11/native 截图](evidence/MP11/native)记录以下结果：
 
 - 当前就绪 PDF → 去制作 → 地址：真实填写姓名、手机号、详细地址；用原生配送 picker 选择第一地区后保存。确认页从 API 读回新地址、V2 与 `canSubmit=true`。发现 picker 未选择时传入 `-1` 使原生滚轮先出现空项，已改为视觉默认第一项，页面未选占位和校验保留；修复后的首次确认待原生复验。
-- 实际点击提交后真实事务成功，进入制作页。首次单次响应丢失被开发者工具透明重试恢复，因此没有把该次记为 PrintUnknown；持久丢响应夹具与下一次真实未知状态查询仍待执行。
+- 实际点击提交后真实事务成功，进入制作页。首次单次响应丢失被开发者工具透明重试恢复，因此没有把该次记为 PrintUnknown。后续在真实已取消订单执行当前书稿→确认→重新提交，代理丢弃三次真实 201 响应，原生进入 unknown 并保留 intent；采集 [PrintUnknown-320](evidence/MP11/native/PrintUnknown-320.png) 后解除丢响应，实际点击查询恢复同一原订单的预留。当前尝试为 null，旧取消尝试没有被当作新制作结果。
 - BookProduction／BookShipped／BookDelivered／BookCancelled 均从真实 API 状态采集。制作页实际点击「查看制作书稿」打开 `fixedProduction=true` 的预留 V1，即使可编辑版本已 obsolete，仍读取预留 PDF hash。寄出页实际复制物流单号成功；取消页实际点击查看当前书稿，回到当前概览。
-- BookAddress、BookPrintConfirm 与上述四个生产状态共六张 320 画板已采集。390、PrintUnknown、取消后实际重提和手机键盘继续待验；固定生产稿的 PDF 路径已在原生验证。
+- 七张 320 画板均已采集。390、地址 picker 初始项修复复验和手机键盘继续待验；固定生产稿的 PDF 路径、取消后重提和未知提交查询均已在原生验证。
 
 上表保留初始验收清单；逐画板最新状态见 design-map。

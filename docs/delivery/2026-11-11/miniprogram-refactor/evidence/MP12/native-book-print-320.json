@@ -59,5 +59,42 @@
       "end"
     ],
     "result": "No reorder persisted; async selector callback discarded after end. Focused fix and native recheck pending."
+  },
+  "followup": {
+    "builtCommit": "4e38b3f",
+    "bookFailure": "Final retry-icon state captured at390 and320; actual retry reached ready overview",
+    "coverPhoto": "Actual title/message edit, protected-photo selection, child return without dialog, draft retention and combined save all succeeded at320",
+    "audio": {
+      "durationSeconds": 30.096,
+      "pausedAtSeconds": 1.744,
+      "nativeSliderSeekSeconds": 16.4,
+      "resumedPositionSeconds": 17.072,
+      "logoutClearedEntryPhotoPlayer": true
+    },
+    "unknownPrint": {
+      "width": 320,
+      "entry": "cancelled order -> current book -> confirmation -> real resubmission",
+      "upstreamStatus": 201,
+      "droppedSuccessfulResponses": 3,
+      "unknown": true,
+      "retainedIntent": true,
+      "queryRecoveredSameOrder": true,
+      "currentAttemptAfterResubmit": null,
+      "reservation": true
+    },
+    "chapterDrag": {
+      "width": 320,
+      "input": "actual CUA drag of childhood handle to learning row",
+      "nativeAndApiOrder": [
+        "learning",
+        "childhood",
+        "society",
+        "family",
+        "turning-points",
+        "today"
+      ],
+      "passed": true
+    },
+    "remaining": "390 primary captures, story row drag/remove, address initial picker confirmation and paused recording header-back check; Mac currently locked awaiting manual unlock"
   }
 }
