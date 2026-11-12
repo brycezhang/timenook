@@ -16,6 +16,7 @@ import { go, switchProjectTab } from "../../services/navigation";
 import {
   audioTime,
   storyDuration,
+  storyDate,
   storyPlacement,
   storySources,
   storyState,
@@ -326,7 +327,7 @@ Page({
             displayState: storyState(full),
             placement: storyPlacement(full),
             storyMeta: [
-              full.task?.allSavedAt?.slice(0, 10),
+              storyDate(full),
               storyDuration(full) ? `${storyDuration(full)} 讲述` : "",
             ]
               .filter(Boolean)

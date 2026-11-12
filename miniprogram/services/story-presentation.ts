@@ -17,6 +17,12 @@ export function storyDuration(story: StoryView) {
   );
   return duration ? audioTime(duration / 1000) : "";
 }
+export function storyDate(story: StoryView) {
+  const date = story.task?.allSavedAt?.slice(0, 10);
+  return date
+    ? `${Number(date.slice(5, 7))} 月 ${Number(date.slice(8, 10))} 日`
+    : "";
+}
 export function storyPlacement(story: StoryView) {
   return story.included === false
     ? "暂不入书"
