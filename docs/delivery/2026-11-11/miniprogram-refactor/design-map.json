@@ -342,13 +342,13 @@
       "state": "我送出的",
       "entry": "我的→我的礼物",
       "interaction": "卡片打开、待付恢复、自购标识",
-      "native320": null,
+      "native320": "evidence/MP04/native/MyProjects-320.png",
       "native390": "evidence/MP04/native/MyProjects-390.png",
       "interactionEvidence": "MP04-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/MyProjects.png",
       "design320": "design-reference/320/MyProjects.png",
-      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; external identity/payment fixtures; 320px pending"
+      "validationEnvironment": "WeChat DevTools 390px/320px; real local API/PostgreSQL/Redis; external identity/payment fixtures"
     },
     {
       "board": "MyGiftsReceived.dc.html",
@@ -359,13 +359,13 @@
       "state": "我收到的",
       "entry": "我的礼物→收到",
       "interaction": "指定领取、自购同项目",
-      "native320": null,
+      "native320": "evidence/MP04/native/MyGiftsReceived-320.png",
       "native390": "evidence/MP04/native/MyGiftsReceived-390.png",
       "interactionEvidence": "MP04-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/MyGiftsReceived.png",
       "design320": "design-reference/320/MyGiftsReceived.png",
-      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; external identity/payment fixtures; 320px pending"
+      "validationEnvironment": "WeChat DevTools 390px/320px; real local API/PostgreSQL/Redis; external identity/payment fixtures"
     },
     {
       "board": "MyGiftsParticipating.dc.html",
@@ -376,13 +376,13 @@
       "state": "我参与的",
       "entry": "我的礼物→参与",
       "interaction": "普通邀请分类、进入原书",
-      "native320": null,
+      "native320": "evidence/MP04/native/MyGiftsParticipating-320.png",
       "native390": "evidence/MP04/native/MyGiftsParticipating-390.png",
       "interactionEvidence": "MP04-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/MyGiftsParticipating.png",
       "design320": "design-reference/320/MyGiftsParticipating.png",
-      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; external identity/payment fixtures; 320px pending"
+      "validationEnvironment": "WeChat DevTools 390px/320px; real local API/PostgreSQL/Redis; external identity/payment fixtures"
     },
     {
       "board": "SwitchProject.dc.html",
@@ -393,13 +393,13 @@
       "state": "切换故事书",
       "entry": "故事书首页→切换",
       "interaction": "三分类、选择与返回当前书",
-      "native320": null,
+      "native320": "evidence/MP04/native/SwitchProject-320.png",
       "native390": "evidence/MP04/native/SwitchProject-390.png",
       "interactionEvidence": "MP04-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/SwitchProject.png",
       "design320": "design-reference/320/SwitchProject.png",
-      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; external identity/payment fixtures; 320px pending"
+      "validationEnvironment": "WeChat DevTools 390px/320px; real local API/PostgreSQL/Redis; external identity/payment fixtures"
     },
     {
       "board": "InviteShare.dc.html",
@@ -410,13 +410,13 @@
       "state": "购买者邀请",
       "entry": "购买者邀请家人入口",
       "interaction": "分享、权限与返回",
-      "native320": null,
+      "native320": "evidence/MP04/native/InviteShare-320.png",
       "native390": "evidence/MP04/native/InviteShare-390.png",
       "interactionEvidence": "MP04-delivery.md",
-      "result": "pending",
+      "result": "passed",
       "design390": "design-reference/390/InviteShare.png",
       "design320": "design-reference/320/InviteShare.png",
-      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; external identity/payment fixtures; 320px pending"
+      "validationEnvironment": "WeChat DevTools 390px/320px; real local API/PostgreSQL/Redis; external identity/payment fixtures"
     },
     {
       "board": "InviteJoin.dc.html",
@@ -427,13 +427,13 @@
       "state": "待接受家人邀请",
       "entry": "微信普通邀请",
       "interaction": "登录恢复、关系必填、自定义及加入",
-      "native320": null,
+      "native320": "evidence/MP04/native/InviteJoin-320.png",
       "native390": "evidence/MP04/native/InviteJoin-390.png",
       "interactionEvidence": "MP04-delivery.md",
       "result": "pending",
       "design390": "design-reference/390/InviteJoin.png",
       "design320": "design-reference/320/InviteJoin.png",
-      "validationEnvironment": "WeChat DevTools 390px; real local API/PostgreSQL/Redis; external identity/payment fixtures; 320px pending"
+      "validationEnvironment": "WeChat DevTools 390px/320px; real local API/PostgreSQL/Redis; external identity/payment fixtures; fixed icon verified at320,390 recapture pending"
     },
     {
       "board": "BookDirectory.dc.html",

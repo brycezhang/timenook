@@ -22,7 +22,7 @@ GitHub：[#17](https://github.com/brycezhang/timenook/issues/17) · 状态以 Gi
 
 - 覆盖模块：Media、Story 照片。
 - 主入口：照片封存/关联 HTTP + 页面操作及实际图片产物。通用约定见[父规格测试决策](../spec.md#测试决策)。
-- 现有范例：[project-media.test.ts](../../../../tests/project-media.test.ts)、[photo.test.mjs](../../../../tests/print-probe/photo.test.mjs)、[audio-probe.test.ts](../../../../apps/api/test/audio-probe.test.ts)；仅作测试方式参考。
+- 现有范例：[story-photos.test.ts](../../../../apps/api/test/story-photos.test.ts)、[photo.test.mjs](../../../../tests/print-probe/photo.test.mjs)、[audio-probe.test.ts](../../../../apps/api/test/audio-probe.test.ts)；仅作测试方式参考。
 
 ## 阻塞依赖
 
