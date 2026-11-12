@@ -7,7 +7,7 @@ export const TERMS_VERSION = USER_TERMS_VERSION;
 export async function acceptTermsIn(
   tx: Prisma.TransactionClient,
   userId: string,
-  source: "wechat_login" | "invitation" | "web_login",
+  source: "wechat_login" | "invitation" | "web_login" | "gift",
 ) {
   return tx.termsAcceptance.upsert({
     where: { userId_version: { userId, version: TERMS_VERSION } },

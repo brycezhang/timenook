@@ -1,10 +1,10 @@
-<view class="sort-row {{dragging === item.id ? 'dragging' : ''}}" wx:for="{{rows}}" wx:key="id">
-  <button class="sort-content" data-id="{{item.id}}" bindtap="open" disabled="{{disabled}}">
+<view class="sort-row {{modern ? 'modern' : ''}} {{compact ? 'compact' : ''}} {{dragging === item.id ? 'dragging' : ''}}" wx:for="{{rows}}" wx:key="id">
+  <button class="sort-content" id="open-{{item.id}}" data-id="{{item.id}}" bindtap="open" disabled="{{disabled}}">
     <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" />
     <view wx:elif="{{editable}}" class="sort-image-placeholder"><app-loading wx:if="{{item.imageLoading}}" variant="spinner" /><image wx:else src="/assets/icons/image.svg" aria-label="照片暂未加载" /></view>
-    <text wx:if="{{numbered}}" class="sort-number">第{{index + 1}}章</text><text wx:if="{{!editable}}" class="sort-title">{{item.title}}</text>
+    <text wx:if="{{numbered}}" class="sort-number">{{modern ? (index < 9 ? '0' + (index + 1) : index + 1) : '第' + (index + 1) + '章'}}</text><view wx:if="{{!editable}}" class="sort-copy"><text class="sort-title">{{item.title}}</text><text wx:if="{{item.subtitle}}" class="sort-subtitle">{{item.subtitle}}</text></view>
   </button>
   <input wx:if="{{editable}}" class="sort-caption" value="{{item.title}}" data-id="{{item.id}}" bindinput="input" maxlength="1000" placeholder="添加照片说明" disabled="{{disabled}}" />
-  <button wx:if="{{actionLabel}}" class="sort-action" data-id="{{item.id}}" catchtap="action" disabled="{{disabled}}">{{actionLabel}}</button>
-  <view class="sort-handle" data-id="{{item.id}}" aria-label="拖动调整顺序" catchtouchstart="start" catchtouchmove="move" catchtouchend="end" catchtouchcancel="cancel"><text>☰</text><text class="sort-hint">拖动</text></view>
+  <button wx:if="{{actionLabel}}" class="sort-action" id="remove-{{item.id}}" data-id="{{item.id}}" catchtap="action" disabled="{{disabled}}">{{actionLabel}}</button>
+  <view class="sort-handle" id="handle-{{item.id}}" data-id="{{item.id}}" aria-label="拖动调整顺序" catchtouchstart="start" catchtouchmove="move" catchtouchend="end" catchtouchcancel="cancel"><image wx:if="{{modern}}" class="sort-grip" src="/assets/icons/grip.svg"/><text wx:else>☰</text><text class="sort-hint">拖动</text></view>
 </view>

@@ -1,6 +1,7 @@
 import { memberRequest } from "./project-api";
 import { WebApiError } from "./api";
 export interface PurchaseOrder {
+  purchaseKind: "self" | "gift";
   id: string;
   bookTitle: string;
   subjectName: string | null;
@@ -53,13 +54,14 @@ export const purchaseApi = {
   catalog: () =>
     request<{
       purchasable: boolean;
-      version: { id: string; title: string } | null;
+      version: { id: string; title: string; price: { value: number } } | null;
     }>("/catalog"),
   list: () => request<{ orders: PurchaseOrder[] }>(""),
   create: (
     input: {
       packageVersionId: string;
-      recipient: { relationshipLabel: string };
+      purchaseKind: "self" | "gift";
+      recipient: { typeCode?: string; relationshipLabel: string };
       subjectName?: string;
       bookTitle: string;
       channel: "alipay_page" | "alipay_wap";

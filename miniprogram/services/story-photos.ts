@@ -1,4 +1,4 @@
-import type { StoryPhoto, ProbeUploadForm } from "../../packages/contracts/src";
+import type { ProjectPhoto, ProbeUploadForm } from "../../packages/contracts/src";
 import { paymentKey } from "./payments";
 import { sessionClient, ApiFailure } from "./session";
 import { recordingId } from "./local-audio-recorder";
@@ -26,17 +26,17 @@ type Pending = {
   tempFilePath: string;
   savedPath?: string;
 };
-/** Stable account/project/interview file ownership, independent of page lifetime. */
+/** Stable account/project file ownership, independent of page lifetime. */
 export class PhotoFiles {
   private static owners = new Map<string, PhotoFiles>();
-  static open(projectId: string, interviewId: string) {
+  static open(projectId: string) {
     const account = sessionClient.context().split(":")[0];
     if (!account) throw Error("请先登录");
     const appId = wx.getAccountInfoSync?.().miniProgram.appId ?? "";
-    const key = `timenook.photos.v1:${API_BASE_URL}:${appId}:${account}:${projectId}:${interviewId}`;
+    const key = `timenook.photos.v2:${API_BASE_URL}:${appId}:${account}:${projectId}`;
     let owner = this.owners.get(key);
     if (!owner) {
-      owner = new PhotoFiles(key, projectId, interviewId);
+      owner = new PhotoFiles(key, projectId);
       this.owners.set(key, owner);
     }
     return owner;
@@ -49,7 +49,6 @@ export class PhotoFiles {
   private constructor(
     private key: string,
     readonly projectId: string,
-    readonly interviewId: string,
   ) {
     const stored = this.stored();
     this.items = stored.map((p) => ({
@@ -200,13 +199,12 @@ export class PhotoFiles {
         if (context !== sessionClient.context())
           throw Error("账号已变化，请重新查询");
       };
-    const base = `/projects/${this.projectId}/interviews/${this.interviewId}/photos`,
+    const base = `/projects/${this.projectId}/photos`,
       body = assistedSessionId ? { assistedSessionId } : {};
-    const matches = (remote: StoryPhoto) => {
+    const matches = (remote: ProjectPhoto) => {
       if (
         remote.clientPhotoId !== id ||
         remote.projectId !== this.projectId ||
-        remote.interviewId !== this.interviewId ||
         remote.sha256 !== item.sha256 ||
         remote.bytes !== item.bytes
       )
@@ -223,11 +221,11 @@ export class PhotoFiles {
           .access({ path: item.path, success: () => resolve(), fail: reject }),
       );
       let result = item.serverId
-        ? await sessionClient.request<StoryPhoto>(
+        ? await sessionClient.request<ProjectPhoto>(
             `${base}/${item.serverId}/status`,
             { key: paymentKey(), data: body },
           )
-        : await sessionClient.request<StoryPhoto>(base, {
+        : await sessionClient.request<ProjectPhoto>(base, {
             key: id,
             data: {
               ...body,
@@ -253,7 +251,7 @@ export class PhotoFiles {
         item.state = "verifying";
         item.message = "上传完成，正在校验方向与图片产物；尚未封存";
         this.emit();
-        result = await sessionClient.request<StoryPhoto>(
+        result = await sessionClient.request<ProjectPhoto>(
           `${base}/${result.id}/seal`,
           { key: paymentKey(), data: body },
         );
@@ -286,8 +284,8 @@ export class PhotoFiles {
     if (!item?.serverId || item.state === "sealed" || this.uploading.has(id))
       return;
     const context = sessionClient.context();
-    const result = await sessionClient.request<StoryPhoto>(
-      `/projects/${this.projectId}/interviews/${this.interviewId}/photos/${item.serverId}/release`,
+    const result = await sessionClient.request<ProjectPhoto>(
+      `/projects/${this.projectId}/photos/${item.serverId}/release`,
       {
         key: paymentKey(),
         data: assistedSessionId ? { assistedSessionId } : {},
@@ -360,7 +358,6 @@ export function clearPhotoPreviews(only?: string[]) {
 }
 export async function privatePhotoPreview(
   projectId: string,
-  interviewId: string,
   photoId: string,
   asset: { id: string; bytes: number; sha256: string },
   current: () => boolean,
@@ -379,7 +376,6 @@ export async function privatePhotoPreview(
   const context = sessionClient.context();
   const result = await sessionClient.downloadPhoto(
     projectId,
-    interviewId,
     photoId,
     asset.id,
   );

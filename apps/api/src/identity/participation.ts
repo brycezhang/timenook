@@ -48,6 +48,7 @@ import {
   IsUUID,
   IsOptional,
   ValidateIf,
+  MaxLength,
 } from "class-validator";
 import {
   Prisma,
@@ -75,6 +76,9 @@ import type {
   CareCase,
   AssistedSessionView,
   AssistedPurpose,
+  ProjectMembership,
+  ProjectMemberProfile,
+  GiftCategory,
 } from "@timenook/contracts";
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -114,7 +118,14 @@ function careView(
     createdAt: row.createdAt.toISOString(),
   };
 }
-class AcceptInvitationDto {
+class MemberRelationshipDto {
+  @ApiProperty({ description: "你是主讲人的谁", maxLength: 32 })
+  @IsString()
+  @MaxLength(32)
+  @Matches(/^[^\r\n\x00-\x1f]+$/)
+  relationship!: string;
+}
+class AcceptInvitationDto extends MemberRelationshipDto {
   @ApiProperty({ enum: [TERMS_VERSION] })
   @IsIn([TERMS_VERSION])
   termsVersion!: string;
@@ -328,10 +339,13 @@ export class Participation
   async preview(token: string) {
     const invite = await this.invitation(this.db, token);
     const p = await this.project(this.db, invite.projectId);
+    const giver = await this.db.user.findUnique({
+      where: { id: p.initiatorUserId },
+    });
     return {
       projectId: p.id,
-      bookTitle: p.bookTitle ?? "人生故事书",
-      inviter: "家人邀请你一起完成这本书",
+      bookTitle: p.bookTitle ?? "时光故事书",
+      inviter: giver?.nickname ?? "家人",
       process: ["记录故事", "一起编辑", "成书与印刷"],
       purposes: [],
       ...participationNotice(p.snapshot, !!this.config.acceptance),
@@ -348,6 +362,8 @@ export class Participation
     this.policy();
     if (body.termsVersion !== TERMS_VERSION)
       throw new BadRequestException("请阅读当前使用条款");
+    const relationship = body.relationship.trim();
+    if (!relationship) throw new BadRequestException("请填写你是主讲人的谁");
     return this.db.$transaction(async (tx) => {
       const user = await this.identity.current(authorization, tx);
       const found = await this.invitation(tx, token);
@@ -363,8 +379,9 @@ export class Participation
           userId: user.id,
           invitationId: invite.id,
           termsVersion: TERMS_VERSION,
+          relationship,
         },
-        update: {},
+        update: { relationship },
       });
       return { projectId: p.id, state: "active" };
     });
@@ -379,23 +396,126 @@ export class Participation
         ],
       },
       orderBy: { id: "asc" },
-      select: { id: true, bookTitle: true, createdBy: true, orderId: true },
+      select: {
+        id: true,
+        bookTitle: true,
+        createdBy: true,
+        orderId: true,
+        gift: { select: { claimedByUserId: true } },
+        members: { where: { userId: user.id }, select: { invitationId: true } },
+      },
     });
     const orders = await this.db.paymentOrder.findMany({
       where: {
         id: { in: projects.flatMap((p) => (p.orderId ? [p.orderId] : [])) },
       },
-      select: { id: true, bookTitle: true },
+      select: {
+        id: true,
+        bookTitle: true,
+        purchaseKind: true,
+        recipient: true,
+      },
     });
-    const titles = new Map(orders.map((order) => [order.id, order.bookTitle]));
+    const orderById = new Map(orders.map((order) => [order.id, order]));
+    const [givers, stories] = await Promise.all([
+      this.db.user.findMany({
+        where: { id: { in: projects.map((p) => p.createdBy) } },
+        select: { id: true, nickname: true },
+      }),
+      this.db.story.groupBy({
+        by: ["projectId"],
+        where: {
+          projectId: { in: projects.map((p) => p.id) },
+          currentRevisionId: { not: null },
+        },
+        _count: true,
+      }),
+    ]);
+    const names = new Map(
+      givers.map((giver) => [giver.id, giver.nickname ?? "家人"]),
+    );
+    const counts = new Map(
+      stories.map((story) => [story.projectId, story._count]),
+    );
     return {
-      projects: projects.map((p) => ({
-        projectId: p.id,
-        bookTitle: p.bookTitle ?? titles.get(p.orderId ?? "") ?? "人生故事书",
-        state: "active",
-        origin: p.createdBy === user.id ? "purchased" : "invited",
-      })),
+      projects: projects.map((p): ProjectMembership => {
+        const order = orderById.get(p.orderId ?? "");
+        const isSelfGift = order?.purchaseKind === "self";
+        const categories: GiftCategory[] = [];
+        if (p.createdBy === user.id) categories.push("sent");
+        if (
+          (isSelfGift && p.createdBy === user.id) ||
+          p.gift?.claimedByUserId === user.id
+        )
+          categories.push("received");
+        if (
+          p.createdBy !== user.id &&
+          p.members.some((member) => member.invitationId !== null)
+        )
+          categories.push("participating");
+        return {
+          projectId: p.id,
+          bookTitle: p.bookTitle ?? order?.bookTitle ?? "时光故事书",
+          state: "active",
+          categories,
+          isSelfGift,
+          giftState:
+            !order || isSelfGift
+              ? null
+              : p.gift?.claimedByUserId
+                ? "claimed"
+                : p.gift
+                  ? "unclaimed"
+                  : "unissued",
+          giverNickname: names.get(p.createdBy) ?? "家人",
+          giftRelationship:
+            (order?.recipient as { relationshipLabel?: string } | null)
+              ?.relationshipLabel ?? null,
+          storyCount: counts.get(p.id) ?? 0,
+        };
+      }),
     };
+  }
+  async memberProfile(
+    id: string,
+    authorization?: string,
+    body?: MemberRelationshipDto,
+  ): Promise<ProjectMemberProfile> {
+    return this.db.$transaction(async (tx) => {
+      const user = await this.identity.current(authorization, tx);
+      await this.project(tx, id, !!body);
+      await requireProjectMemberIn(tx, id, user.id);
+      const subject = await tx.projectSubject.findUnique({
+        where: { projectId: id },
+      });
+      const isNarrator = subject?.boundUserId === user.id;
+      if (body) {
+        const relationship = body.relationship.trim();
+        if (!relationship)
+          throw new BadRequestException("请填写你是主讲人的谁");
+        if (isNarrator) throw new BadRequestException("主讲人的关系为本人");
+        await tx.projectMember.upsert({
+          where: { projectId_userId: { projectId: id, userId: user.id } },
+          create: {
+            projectId: id,
+            userId: user.id,
+            termsVersion: TERMS_VERSION,
+            relationship,
+          },
+          update: { relationship },
+        });
+      }
+      const member = await tx.projectMember.findUnique({
+        where: { projectId_userId: { projectId: id, userId: user.id } },
+      });
+      return {
+        projectId: id,
+        userId: user.id,
+        nickname: user.nickname ?? "家人",
+        relationship: isNarrator ? "本人" : (member?.relationship ?? null),
+        isNarrator,
+      };
+    });
   }
   async requests(id: string, authorization?: string) {
     const user = await this.identity.current(authorization);
@@ -707,7 +827,7 @@ export class Participation
     const canRead = member && !deleted;
     return {
       projectId: p.id,
-      bookTitle: canRead ? (p.bookTitle ?? "人生故事书") : undefined,
+      bookTitle: canRead ? (p.bookTitle ?? "时光故事书") : undefined,
       subjectId: subject.id,
       bindingVersion: subject.bindingVersion,
       accessEpoch: p.accessEpoch,
@@ -1374,7 +1494,7 @@ export class Participation
       return {
         ...state,
         bookTitle: active
-          ? (p.bookTitle ?? p.snapshot.bookTitle ?? "人生故事书")
+          ? (p.bookTitle ?? p.snapshot.bookTitle ?? "时光故事书")
           : null,
         subjectName: active ? subject.name : null,
       };
@@ -2283,6 +2403,37 @@ export class ParticipationController {
   async memberships(@Req() req: FastifyRequest) {
     return {
       data: await this.participation.memberships(req.headers.authorization),
+      meta: { requestId: req.id },
+    };
+  }
+
+  @Get("projects/:id/member-profile")
+  @Header("Cache-Control", "no-store")
+  async memberProfile(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.participation.memberProfile(
+        id,
+        req.headers.authorization,
+      ),
+      meta: { requestId: req.id },
+    };
+  }
+  @Post("projects/:id/member-profile")
+  @Header("Cache-Control", "no-store")
+  async setMemberProfile(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: MemberRelationshipDto,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: await this.participation.memberProfile(
+        id,
+        req.headers.authorization,
+        body,
+      ),
       meta: { requestId: req.id },
     };
   }

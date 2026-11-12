@@ -1,2 +1,11 @@
-<view class="s-page"><view class="s-muted">开始一个新项目</view><view class="s-title s-space">给这本书<text>
-</text>起个名字。</view><label class="s-field">书名<input class="s-input" value="{{name}}" data-field="name" bindinput="input" maxlength="80" placeholder="例如：妈妈的一生"/></label><label class="s-field">书中的称呼（选填）<input class="s-input" value="{{salutation}}" data-field="salutation" bindinput="input" maxlength="40" placeholder="例如：妈妈、老陈、我"/></label><view class="s-muted s-space">可以为自己记录，也可以邀请家人一起完成。</view></view><view class="s-dock"><button class="s-button" bindtap="next" disabled="{{!name}}">下一步</button></view>
+<tn-navigation title="购买礼物"/>
+<view class="tn-page with-dock purchase-form">
+ <view class="relation-field"><view class="tn-field">送给谁 <text class="required">必选</text></view><view class="relations"><button wx:for="{{relationships}}" wx:key="*this" class="relation {{relationship === item ? 'selected' : ''}}" data-relationship="{{item}}" bindtap="chooseRelationship" aria-pressed="{{relationship === item}}">{{item}}</button></view></view>
+ <label wx:if="{{relationship === '自定义'}}" class="tn-field">自定义关系<input class="tn-input" value="{{customRelationship}}" data-field="customRelationship" bindinput="input" maxlength="40" placeholder="例如：外婆、姐姐、朋友" adjust-position="{{true}}" cursor-spacing="24"/></label>
+ <view class="gift-preview"><view class="mini-book simple"><text class="mini-title">时光故事</text><image class="mini-photo" src="/assets/purchase-cover.jpg" mode="aspectFill"/></view><view class="gift-preview-copy"><view class="gift-preview-title">{{bookTitle || '时光故事书'}}</view><view class="purchase-caption">含首本实体书</view></view></view>
+ <label class="tn-field">书名<input class="tn-input" value="{{bookTitle}}" data-field="bookTitle" bindinput="input" maxlength="80" placeholder="例如：爸爸的故事" adjust-position="{{true}}" cursor-spacing="24"/></label>
+ <view class="purchase-caption">{{relationship === '自己' ? '付款后直接进入自己的故事书。' : '付款后指定收礼手机号，成书后寄送。'}}</view>
+ <view wx:if="{{error}}" class="tn-error" role="alert">{{error}}</view>
+</view>
+<view class="tn-dock"><button class="tn-button" bindtap="next">下一步</button></view>
+<quick-login id="quick-login" visible="{{loginVisible}}" bind:success="loginSucceeded" bind:close="closeLogin"/>

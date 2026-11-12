@@ -20,6 +20,7 @@ import { startProductionWorker } from "../src/tasks/worker";
 import { createOpenApiDocument, createApplication } from "../src/application";
 import { ProductionTasks } from "../src/tasks/tasks";
 import {
+  coverMetadata,
   startBookFixture,
   stopBookFixture,
   app,
@@ -32,6 +33,7 @@ import {
   data,
   readyStory,
   storyPhoto,
+  projectPhoto,
   restartBookApplication,
   state,
 } from "./book-fixture";
@@ -516,16 +518,42 @@ test("the actual directory omits empty chapters and the full long manuscript ret
   const p = await confirmedStory(undefined, true, true),
     second = await confirmedStory(p),
     base = `/v1/projects/${p.projectId}/book`;
-  const initial = data(await request("GET", base, p.narrator.token), 200);
+  const initial = data(
+    await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token),
+    200,
+  );
   data(
-    await request("POST", base + "/directory", p.narrator.token, {
-      expectedVersion: initial.directory.version,
-      chapters: [
-        { key: "empty", title: "不应补写的空章节", storyRefs: [] },
-        { key: "later", title: "后来的日子", storyRefs: [second.story.id] },
-        { key: "childhood", title: "家门前的红墙", storyRefs: [p.story.id] },
-      ],
-    }),
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/plan`,
+      p.narrator.token,
+      {
+        expectedVersion: initial.revision,
+        content: {
+          starters: initial.starters,
+          chapters: [
+            {
+              key: "empty",
+              title: "不应补写的空章节",
+              storyRefs: [],
+              questions: [],
+            },
+            {
+              key: "later",
+              title: "后来的日子",
+              storyRefs: [second.story.id],
+              questions: [],
+            },
+            {
+              key: "childhood",
+              title: "家门前的红墙",
+              storyRefs: [p.story.id],
+              questions: [],
+            },
+          ],
+        },
+      },
+    ),
   );
   const contextBeforeCover = data(
       await request("GET", base, p.narrator.token),
@@ -533,6 +561,7 @@ test("the actual directory omits empty chapters and the full long manuscript ret
     ),
     context = data(
       await request("POST", base + "/cover", p.narrator.token, {
+        ...(await coverMetadata(p.projectId, p.buyer.token)),
         expectedVersion: contextBeforeCover.cover.version,
         salutation: "献给这些年一路相伴的家人",
         photoAssetId: contextBeforeCover.coverPhotoOptions[0].assetId,
@@ -611,14 +640,30 @@ test("future questions preserve a frozen book while actual directory changes obs
   );
   assert.equal(same.state, "queued");
   assert.equal(same.snapshotHash, book.snapshotHash);
-  assert.equal(same.snapshot.plan.revision, 1);
-  const changed = data(
-    await request("POST", base + "/book/directory", p.narrator.token, {
-      expectedVersion: ctx.directory.version,
-      chapters: [
-        { key: "my-days", title: "我的那些日子", storyRefs: [p.story.id] },
-      ],
+  assert.equal(same.snapshot.plan.revision, plan.revision);
+  const currentPlan = data(
+    await request("GET", base + "/plan", p.narrator.token),
+    200,
+  );
+  data(
+    await request("POST", base + "/plan", p.narrator.token, {
+      expectedVersion: currentPlan.revision,
+      content: {
+        starters: currentPlan.starters,
+        chapters: [
+          {
+            key: "my-days",
+            title: "我的那些日子",
+            storyRefs: [p.story.id],
+            questions: [],
+          },
+        ],
+      },
     }),
+  );
+  const changed = data(
+    await request("GET", base + "/book", p.narrator.token),
+    200,
   );
   assert.equal(changed.current.state, "obsolete");
   assert.equal(
@@ -636,7 +681,7 @@ test("future questions preserve a frozen book while actual directory changes obs
     202,
   );
   assert.equal(next.version, 2);
-  assert.equal(next.snapshot.plan.revision, 2);
+  assert.equal(next.snapshot.plan.revision, currentPlan.revision + 1);
   assert.equal(next.snapshot.chapters[0].title, "我的那些日子");
   assert.equal(
     next.snapshot.chapters[0].stories[0].entry.id,
@@ -870,7 +915,7 @@ test("body mentions of page numbers and the page header remain complete in the r
       undefined,
       false,
       false,
-      "我在第1页写下门前的那条路。书稿预览 · 制作规格待核验，是我当时记下的话。",
+      "我在第1页写下门前的那条路。时光故事，是我当时记下的话。",
     ),
     base = `/v1/projects/${p.projectId}/book`,
     ctx = data(await request("GET", base, p.narrator.token), 200),
@@ -960,7 +1005,7 @@ async function inspectDownloadedBook(bytes: Uint8Array) {
       let text = content.items
         .map((item) => ("str" in item ? item.str : ""))
         .join("")
-        .replace(/^书稿预览 · 制作规格待核验/, "")
+        .replace(/^时光故事/, "")
         .replace(new RegExp(`第${number}[页⻚]$`), "");
       pages.push({
         text: normalize(text),
@@ -1074,6 +1119,30 @@ test("a valid4500-character participant note is complete across actual PDF pages
   await preserveReviewBook(book.id, "participant-note");
 });
 
+test("a zero-story project can choose its uploaded project photo for the cover", async () => {
+  const p = await joinedProject();
+  const photo = await projectPhoto(p);
+  const base = `/v1/projects/${p.projectId}/book`;
+  const context = data(await request("GET", base, p.narrator.token), 200);
+  assert.deepEqual(context.eligibleStories, []);
+  assert.equal(context.coverPhotoOptions.length, 1);
+  assert.equal(context.coverPhotoOptions[0].id, photo.id);
+  const chosen = data(
+    await request("POST", `${base}/cover`, p.buyer.token, {
+      ...(await coverMetadata(p.projectId, p.buyer.token)),
+      expectedVersion: 0,
+      salutation: "家人的故事",
+      photoAssetId: context.coverPhotoOptions[0].assetId,
+    }),
+  );
+  assert.equal(chosen.cover.photoAssetId, context.coverPhotoOptions[0].assetId);
+  const photos = data(
+    await request("GET", `/v1/projects/${p.projectId}/photos`, p.buyer.token),
+    200,
+  );
+  assert.deepEqual(photos.usage, { reservedCount: 0, consumedCount: 1 });
+});
+
 test("cover settings freeze an allowed salutation and photo and invalidate an earlier book on optimistic change", async () => {
   const p = await confirmedStory(undefined, true, false, undefined, {
       portrait: true,
@@ -1087,7 +1156,7 @@ test("cover settings freeze an allowed salutation and photo and invalidate an ea
   });
   assert.equal(context.coverPhotoOptions.length, 1);
   const photo = context.coverPhotoOptions[0];
-  assert.equal(photo.interviewId, p.interviewId);
+  assert.equal("interviewId" in photo, false);
   assert.ok(photo.bytes > 0);
   const before = data(
       await request("POST", base + "/versions", p.narrator.token, {
@@ -1096,6 +1165,7 @@ test("cover settings freeze an allowed salutation and photo and invalidate an ea
       202,
     ),
     body = {
+      ...(await coverMetadata(p.projectId, p.buyer.token)),
       expectedVersion: 0,
       salutation: "献给我亲爱的家人",
       photoAssetId: photo.assetId,
@@ -1149,12 +1219,15 @@ test("cover settings freeze an allowed salutation and photo and invalidate an ea
     inspected.pages[0].text.includes(inspected.normalize(body.salutation)),
   );
   assert.equal(inspected.pages[0].images, 1);
+  assert.ok(inspected.pages[1].text.startsWith("目录"));
+  assert.ok(!inspected.pages[0].text.includes("技术试验文件"));
   assert.equal(
     inspected.pages.reduce((n, p) => n + p.images, 0),
     3,
   );
   const cleared = data(
     await request("POST", base + "/cover", p.buyer.token, {
+      ...(await coverMetadata(p.projectId, p.buyer.token)),
       expectedVersion: 1,
       salutation: "另一份称呼",
       photoAssetId: null,

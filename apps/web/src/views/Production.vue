@@ -131,14 +131,7 @@ const blockerMessages = computed(
       .filter((b) => b !== "ALREADY_SUBMITTED")
       .map((b) => blockers[b]) ?? [],
 );
-const currentAttempt = computed(() => {
-  const attempt = progress.value?.current;
-  return attempt?.state === "cancelled" &&
-    context.value?.production &&
-    !context.value.canReviseProduction
-    ? null
-    : attempt;
-});
+const currentAttempt = computed(() => progress.value?.current ?? null);
 const pastAttempts = computed(
   () =>
     progress.value?.attempts.filter(
@@ -168,7 +161,7 @@ const fixedBookId = computed(
 );
 const bookPath = computed(
   () =>
-    `/projects/${id.value}/book${fixedBookId.value ? `?version=${encodeURIComponent(fixedBookId.value)}` : ""}`,
+    `/projects/${id.value}/book${fixedBookId.value ? `?version=${encodeURIComponent(fixedBookId.value)}${submitted.value ? "&production=1" : ""}` : ""}`,
 );
 const editableBookPath = computed(() =>
   canEdit.value && context.value?.book

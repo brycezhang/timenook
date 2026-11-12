@@ -22,6 +22,8 @@ function order(value: unknown): value is PaymentOrderView {
     value.currency !== "CNY" ||
     !["local-verification", "wechat"].includes(String(value.mode)) ||
     !["pending", "paid", "closed"].includes(String(value.state)) ||
+    !["self", "gift"].includes(String(value.purchaseKind)) ||
+    !["pending", "unknown", "paid", "closed"].includes(String(value.paymentStatus)) ||
     !record(value.recipient) ||
     typeof value.recipient.relationshipLabel !== "string" ||
     typeof value.bookTitle !== "string"

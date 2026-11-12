@@ -1,0 +1,352 @@
+TAP version 13
+# Subtest: a scanned stable ID opens live mode and keeps private metadata hidden until authorized
+ok 1 - a scanned stable ID opens live mode and keeps private metadata hidden until authorized
+  ---
+  duration_ms: 1.832333
+  type: 'test'
+  ...
+# Subtest: authorized readers resolve the exact printed story and ordered original clips
+ok 2 - authorized readers resolve the exact printed story and ordered original clips
+  ---
+  duration_ms: 2.502416
+  type: 'test'
+  ...
+# Subtest: playback verifies gateway bytes and current authorization before playing; end removes temporary audio
+ok 3 - playback verifies gateway bytes and current authorization before playing; end removes temporary audio
+  ---
+  duration_ms: 1.579416
+  type: 'test'
+  ...
+# Subtest: scanned audio returns from the shared phone login without losing its entry
+ok 4 - scanned audio returns from the shared phone login without losing its entry
+  ---
+  duration_ms: 0.940417
+  type: 'test'
+  ...
+# Subtest: logout removes local identity even when temporary audio cleanup needs a retry
+ok 5 - logout removes local identity even when temporary audio cleanup needs a retry
+  ---
+  duration_ms: 2.454583
+  type: 'test'
+  ...
+# Subtest: hiding while the gateway download is late removes its file and never starts playback
+ok 6 - hiding while the gateway download is late removes its file and never starts playback
+  ---
+  duration_ms: 0.921459
+  type: 'test'
+  ...
+# Subtest: a changed epoch after a download refuses playback and removes the downloaded private file
+ok 7 - a changed epoch after a download refuses playback and removes the downloaded private file
+  ---
+  duration_ms: 1.228458
+  type: 'test'
+  ...
+# Subtest: mismatched gateway bytes never reach the player and remain scheduled for cleanup
+ok 8 - mismatched gateway bytes never reach the player and remain scheduled for cleanup
+  ---
+  duration_ms: 1.160583
+  type: 'test'
+  ...
+# Subtest: the exact online expiry clears the story and destroys temporary playback without claiming deletion
+ok 9 - the exact online expiry clears the story and destroys temporary playback without claiming deletion
+  ---
+  duration_ms: 2.502334
+  type: 'test'
+  ...
+# Subtest: a local account switch clears the printed-story metadata and downloaded playback
+ok 10 - a local account switch clears the printed-story metadata and downloaded playback
+  ---
+  duration_ms: 1.361
+  type: 'test'
+  ...
+# Subtest: anonymous or unknown access never exposes private titles and late authorized responses cannot restore a hidden page
+ok 11 - anonymous or unknown access never exposes private titles and late authorized responses cannot restore a hidden page
+  ---
+  duration_ms: 0.710667
+  type: 'test'
+  ...
+# Subtest: malformed scans never issue a request or display private content
+ok 12 - malformed scans never issue a request or display private content
+  ---
+  duration_ms: 0.976167
+  type: 'test'
+  ...
+# Subtest: the session is invalidated and a denied gateway file removed after a 401
+ok 13 - the session is invalidated and a denied gateway file removed after a 401
+  ---
+  duration_ms: 0.925917
+  type: 'test'
+  ...
+# Subtest: a stale expiry callback cannot clear a newer successful entry query
+ok 14 - a stale expiry callback cannot clear a newer successful entry query
+  ---
+  duration_ms: 0.853709
+  type: 'test'
+  ...
+# Subtest: a device session-removal failure stops playback and reports that logout is incomplete
+ok 15 - a device session-removal failure stops playback and reports that logout is incomplete
+  ---
+  duration_ms: 1.129292
+  type: 'test'
+  ...
+# Subtest: a late post-download resolver 200 cannot stop a newer page playback
+ok 16 - a late post-download resolver 200 cannot stop a newer page playback
+  ---
+  duration_ms: 1.306583
+  type: 'test'
+  ...
+# Subtest: a late post-download resolver 403 cannot stop a newer page playback
+ok 17 - a late post-download resolver 403 cannot stop a newer page playback
+  ---
+  duration_ms: 2.000791
+  type: 'test'
+  ...
+# Subtest: server withdrawal while the printed original is playing clears the local file without another user action
+ok 18 - server withdrawal while the printed original is playing clears the local file without another user action
+  ---
+  duration_ms: 1.748667
+  type: 'test'
+  ...
+# Subtest: home renders the selected project in place and never opens an order
+ok 19 - home renders the selected project in place and never opens an order
+  ---
+  duration_ms: 28.003791
+  type: 'test'
+  ...
+# Subtest: home without memberships shows the purchase entry
+ok 20 - home without memberships shows the purchase entry
+  ---
+  duration_ms: 15.4055
+  type: 'test'
+  ...
+# Subtest: home keeps the current book visible while returning from another page
+ok 21 - home keeps the current book visible while returning from another page
+  ---
+  duration_ms: 13.4655
+  type: 'test'
+  ...
+# Subtest: home clears a retained book after rejected membership
+ok 22 - home clears a retained book after rejected membership
+  ---
+  duration_ms: 13.08575
+  type: 'test'
+  ...
+# Subtest: home clears the retained book immediately when returning after logout
+ok 23 - home clears the retained book immediately when returning after logout
+  ---
+  duration_ms: 13.109709
+  type: 'test'
+  ...
+# Subtest: home opens the shared quick login without starting checkout
+ok 24 - home opens the shared quick login without starting checkout
+  ---
+  duration_ms: 12.922666
+  type: 'test'
+  ...
+# Subtest: the public homepage opens the public sample without signing in
+ok 25 - the public homepage opens the public sample without signing in
+  ---
+  duration_ms: 11.767333
+  type: 'test'
+  ...
+# Subtest: a standalone login adapter returns home without orders or payment
+ok 26 - a standalone login adapter returns home without orders or payment
+  ---
+  duration_ms: 2.579875
+  type: 'test'
+  ...
+# Subtest: a direct new-book entry preserves its draft in the shared login sheet
+ok 27 - a direct new-book entry preserves its draft in the shared login sheet
+  ---
+  duration_ms: 4.116416
+  type: 'test'
+  ...
+# Subtest: My shows an existing local session while validating it
+ok 28 - My shows an existing local session while validating it
+  ---
+  duration_ms: 2.449416
+  type: 'test'
+  ...
+# Subtest: native tab taps navigate even when the custom bar selection lags behind the page
+ok 29 - native tab taps navigate even when the custom bar selection lags behind the page
+  ---
+  duration_ms: 2.115042
+  type: 'test'
+  ...
+# Subtest: My provides project, new purchase and terms entries without loading private projects
+ok 30 - My provides project, new purchase and terms entries without loading private projects
+  ---
+  duration_ms: 2.479833
+  type: 'test'
+  ...
+# Subtest: the standalone adapter returns to My after shared login succeeds
+ok 31 - the standalone adapter returns to My after shared login succeeds
+  ---
+  duration_ms: 1.909459
+  type: 'test'
+  ...
+# Subtest: an unsigned home purchase opens quick login before entering the new-book form
+ok 32 - an unsigned home purchase opens quick login before entering the new-book form
+  ---
+  duration_ms: 11.50225
+  type: 'test'
+  ...
+# Subtest: cancelled purchase login stays on home and does not retain the purchase destination
+ok 33 - cancelled purchase login stays on home and does not retain the purchase destination
+  ---
+  duration_ms: 13.699791
+  type: 'test'
+  ...
+# Subtest: My displays the saved nickname immediately and refreshes it from the server
+ok 34 - My displays the saved nickname immediately and refreshes it from the server
+  ---
+  duration_ms: 1.288416
+  type: 'test'
+  ...
+# Subtest: My saves the submitted nickname and retains it when returning
+ok 35 - My saves the submitted nickname and retains it when returning
+  ---
+  duration_ms: 0.697041
+  type: 'test'
+  ...
+# Subtest: returning during logout preserves the pending exit and clears the nickname
+ok 36 - returning during logout preserves the pending exit and clears the nickname
+  ---
+  duration_ms: 0.345166
+  type: 'test'
+  ...
+# Subtest: a failed nickname save leaves editing and retry available
+ok 37 - a failed nickname save leaves editing and retry available
+  ---
+  duration_ms: 0.27775
+  type: 'test'
+  ...
+# Subtest: an older foreground restore cannot overwrite the next account after logout
+ok 38 - an older foreground restore cannot overwrite the next account after logout
+  ---
+  duration_ms: 0.322291
+  type: 'test'
+  ...
+# Subtest: uploaded native package registers every route without modules outside miniprogramRoot
+ok 39 - uploaded native package registers every route without modules outside miniprogramRoot
+  ---
+  duration_ms: 21.335708
+  type: 'test'
+  ...
+# Subtest: native tab handlers use cached tab navigation and the package supplies its custom bar
+ok 40 - native tab handlers use cached tab navigation and the package supplies its custom bar
+  ---
+  duration_ms: 2.76375
+  type: 'test'
+  ...
+# Subtest: built new-book preserves an encoded user title and salutation
+ok 41 - built new-book preserves an encoded user title and salutation
+  ---
+  duration_ms: 2.844666
+  type: 'test'
+  ...
+# Subtest: release package excludes website and probe routes and ignores stored demo mode
+ok 42 - release package excludes website and probe routes and ignores stored demo mode
+  ---
+  duration_ms: 121.857375
+  type: 'test'
+  ...
+# Subtest: purchase page offers checkout without collecting a shipping region
+ok 43 - purchase page offers checkout without collecting a shipping region
+  ---
+  duration_ms: 0.952583
+  type: 'test'
+  ...
+# Subtest: actual purchase action persists one local order intent, skips native payment for synthetic parameters and opens server order recovery
+ok 44 - actual purchase action persists one local order intent, skips native payment for synthetic parameters and opens server order recovery
+  ---
+  duration_ms: 3.457791
+  type: 'test'
+  ...
+# Subtest: a definitive create rejection lets the purchase page correct the recipient with a new intent
+ok 45 - a definitive create rejection lets the purchase page correct the recipient with a new intent
+  ---
+  duration_ms: 0.686666
+  type: 'test'
+  ...
+# Subtest: unknown or non-validation create failures preserve the original intent across page reentry and edited inputs
+ok 46 - unknown or non-validation create failures preserve the original intent across page reentry and edited inputs
+  ---
+  duration_ms: 3.973209
+  type: 'test'
+  ...
+# Subtest: a late rejection from the previous account cannot clear or replace either account's pending purchase
+ok 47 - a late rejection from the previous account cannot clear or replace either account's pending purchase
+  ---
+  duration_ms: 0.816667
+  type: 'test'
+  ...
+# Subtest: a fresh book opens native payment for a new order even when a previous order is cached
+ok 48 - a fresh book opens native payment for a new order even when a previous order is cached
+  ---
+  duration_ms: 3.008
+  type: 'test'
+  ...
+# Subtest: release checkout keeps the created order on the same page and queries it after cancellation
+ok 49 - release checkout keeps the created order on the same page and queries it after cancellation
+  ---
+  duration_ms: 1.131375
+  type: 'test'
+  ...
+# Subtest: home purchase opens shared phone login and enters new-book only after successful authorization
+ok 50 - home purchase opens shared phone login and enters new-book only after successful authorization
+  ---
+  duration_ms: 4.843625
+  type: 'test'
+  ...
+# Subtest: account purchase opens shared phone login and enters new-book only after successful authorization
+ok 51 - account purchase opens shared phone login and enters new-book only after successful authorization
+  ---
+  duration_ms: 0.93225
+  type: 'test'
+  ...
+# Subtest: a signed-in home purchase goes directly to new-book without another login
+ok 52 - a signed-in home purchase goes directly to new-book without another login
+  ---
+  duration_ms: 0.555917
+  type: 'test'
+  ...
+# Subtest: unchecked login offers consent and Continue authorizes without a second login tap
+ok 53 - unchecked login offers consent and Continue authorizes without a second login tap
+  ---
+  duration_ms: 0.775709
+  type: 'test'
+  ...
+# Subtest: canceling consent and reading terms preserve the originating action without logging in
+ok 54 - canceling consent and reading terms preserve the originating action without logging in
+  ---
+  duration_ms: 0.386708
+  type: 'test'
+  ...
+# Subtest: declining phone access and closing the popup never advances the purchase
+ok 55 - declining phone access and closing the popup never advances the purchase
+  ---
+  duration_ms: 0.4895
+  type: 'test'
+  ...
+# Subtest: the same popup logs in on My and displays the returned nickname
+ok 56 - the same popup logs in on My and displays the returned nickname
+  ---
+  duration_ms: 0.966083
+  type: 'test'
+  ...
+# Subtest: a failed phone login keeps the popup and purchase destination available for retry
+ok 57 - a failed phone login keeps the popup and purchase destination available for retry
+  ---
+  duration_ms: 0.579041
+  type: 'test'
+  ...
+1..57
+# tests 57
+# suites 0
+# pass 57
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 443.42275

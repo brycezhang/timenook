@@ -43,22 +43,31 @@ test("project lists show the purchase title for owners and members, then prefer 
       `/v1/invitations/${invite.token}/accept`,
       member.token,
       {
+        relationship: "家人",
         termsVersion: TERMS_VERSION,
       },
     ),
   );
   const list = async (token: string) =>
     data(await request("GET", "/v1/participations", token), 200).projects;
-  for (const [user, origin] of [
-    [p.buyer, "purchased"],
-    [member, "invited"],
+  for (const [user, category] of [
+    [p.buyer, "sent"],
+    [member, "participating"],
   ] as const) {
     assert.deepEqual(await list(user.token), [
       {
         projectId: p.projectId,
         bookTitle: "私人标题不能泄露",
         state: "active",
-        origin,
+        categories: [category],
+        isSelfGift: false,
+        giftState: "unissued",
+        giverNickname: data(
+          await request("GET", "/v1/users/me", p.buyer.token),
+          200,
+        ).nickname,
+        giftRelationship: "恩师",
+        storyCount: 0,
       },
     ]);
   }
@@ -121,7 +130,7 @@ test("payer and multiple invited members can create, edit, preview and submit wi
         "POST",
         `/v1/invitations/${invite.token}/accept`,
         user.token,
-        { termsVersion: TERMS_VERSION },
+        { relationship: "家人", termsVersion: TERMS_VERSION },
       ),
     );
     const state = data(
@@ -181,12 +190,25 @@ test("payer and multiple invited members can create, edit, preview and submit wi
     ),
   );
   assert.equal(story.included, true);
-  const book = data(await request("GET", `${base}/book`, second.token), 200);
+  const unassigned = data(
+    await request("GET", `${base}/book`, second.token),
+    200,
+  );
   assert.ok(
-    book.directory.chapters.some((c: { storyRefs: string[] }) =>
-      c.storyRefs.includes(story.id),
+    unassigned.directory.chapters.every(
+      (c: { storyRefs: string[] }) => !c.storyRefs.includes(story.id),
     ),
   );
+  const outline = data(await request("GET", `${base}/plan`, second.token), 200);
+  outline.chapters[0].storyRefs.push(story.id);
+  data(
+    await request("POST", `${base}/plan`, second.token, {
+      expectedVersion: outline.revision,
+      content: { chapters: outline.chapters, starters: outline.starters },
+    }),
+  );
+  const book = data(await request("GET", `${base}/book`, second.token), 200);
+  assert.ok(book.directory.chapters[0].storyRefs.includes(story.id));
   assert.ok(
     book.eligibleStories.some((s: { id: string }) => s.id === story.id),
   );
@@ -234,6 +256,20 @@ test("payer and multiple invited members can create, edit, preview and submit wi
       { expectedVersion: excluded.version, included: true },
     ),
   );
+  const restoredOutline = data(
+    await request("GET", `${base}/plan`, second.token),
+    200,
+  );
+  restoredOutline.chapters[0].storyRefs.push(story.id);
+  data(
+    await request("POST", `${base}/plan`, second.token, {
+      expectedVersion: restoredOutline.revision,
+      content: {
+        chapters: restoredOutline.chapters,
+        starters: restoredOutline.starters,
+      },
+    }),
+  );
   const address = data(
     await request("POST", `${base}/first-copy/address`, second.token, {
       expectedVersion: 0,
@@ -267,7 +303,7 @@ test("payer and multiple invited members can create, edit, preview and submit wi
     await request("GET", `${base}/book/versions/${generated.id}`, second.token),
     200,
   );
-  assert.equal(ready.state, "ready");
+  assert.equal(ready.state, "ready", JSON.stringify(ready));
   assert.ok(ready.pdf.sha256);
   assert.equal(
     (

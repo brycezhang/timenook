@@ -1,3 +1,7 @@
+import type {
+  PersonalPlan,
+  PlanContent,
+} from "../../../packages/contracts/src";
 import { request, USER_TERMS_VERSION, WebApiError } from "./api";
 import { auth } from "./session";
 export interface StoryRevision {
@@ -16,6 +20,8 @@ export interface StoryRevision {
     import("../../../packages/contracts/src").StorySourceView[] | null;
 }
 export interface StoryRecord {
+  chapter: { key: string; title: string } | null;
+  questionKey: string | null;
   id: string;
   interviewId: string;
   version: number;
@@ -57,6 +63,13 @@ export function memberRequest<T>(
 }
 const base = (id: string) => `/projects/${encodeURIComponent(id)}`;
 export const projectApi = {
+  plan: (id: string) => memberRequest<PersonalPlan>(`${base(id)}/plan`),
+  revisePlan: (id: string, expectedVersion: number, content: PlanContent) =>
+    memberRequest<PersonalPlan>(
+      `${base(id)}/plan`,
+      { expectedVersion, content },
+      crypto.randomUUID(),
+    ),
   overview: (id: string) =>
     memberRequest<ProjectOverview>(`${base(id)}/overview`),
   rename: (id: string, expectedVersion: number, bookTitle: string) =>
@@ -102,10 +115,10 @@ export const projectApi = {
     request<Invitation>(`/invitations/${encodeURIComponent(token)}`, {
       signal,
     }),
-  accept: (token: string) =>
+  accept: (token: string, relationship: string) =>
     memberRequest<{ projectId: string }>(
       `/invitations/${encodeURIComponent(token)}/accept`,
-      { termsVersion: USER_TERMS_VERSION },
+      { termsVersion: USER_TERMS_VERSION, relationship },
     ),
   nickname: (nickname: string) =>
     memberRequest<{ id: string; nickname: string }>("/users/me/profile", {
@@ -127,7 +140,12 @@ export function projectError(error: unknown) {
 export const storyTitle = (story: StoryRecord) =>
   story.revision?.title || "正在整理的故事";
 export function storyState(story: StoryRecord) {
-  if (story.revision) return story.included ? "已编入书稿" : "未编入书稿";
+  if (story.revision)
+    return !story.included
+      ? "暂不入书"
+      : story.chapter
+        ? story.chapter.title
+        : "未归章";
   if (story.task?.state === "no_content") return "等待补充讲述";
   if (
     story.task &&

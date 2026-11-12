@@ -195,18 +195,17 @@ export class SessionClient {
 
   async downloadPhoto(
     projectId: string,
-    interviewId: string,
     photoId: string,
     assetId: string,
   ) {
     if (
-      ![projectId, interviewId, photoId, assetId].every((id) =>
+      ![projectId, photoId, assetId].every((id) =>
         /^[a-f0-9-]{36}$/.test(id),
       )
     )
       throw new ApiFailure("INVALID_RESPONSE");
     return this.downloadContent(
-      `/projects/${projectId}/interviews/${interviewId}/photos/${photoId}/assets/${assetId}/content`,
+      `/projects/${projectId}/photos/${photoId}/assets/${assetId}/content`,
     );
   }
   async downloadRecording(
@@ -230,6 +229,11 @@ export class SessionClient {
     return this.downloadContent(
       `/projects/${projectId}/book/versions/${versionId}/pdf`,
     );
+  }
+  async downloadProductionBook(projectId: string) {
+    if (!/^[a-f0-9-]{36}$/.test(projectId))
+      throw new ApiFailure("INVALID_RESPONSE");
+    return this.downloadContent(`/projects/${projectId}/fulfillment/book/pdf`);
   }
   async downloadExport(projectId: string, caseId: string) {
     if (![projectId, caseId].every((id) => /^[a-f0-9-]{36}$/.test(id)))
@@ -292,6 +296,7 @@ export class SessionClient {
     form: import("../../packages/contracts/src/audio-probe").ProbeUploadForm,
     filePath: string,
     kind: "recordings" | "photos" = "recordings",
+    onProgress?: (progress: number) => void,
   ): Promise<void> {
     if (this.cookie) return this.cookie.upload(form, filePath, kind);
     const generation = this.generation,
@@ -300,8 +305,8 @@ export class SessionClient {
       throw new ApiFailure("UNAUTHENTICATED", 401);
     this.checkBaseUrl();
     const { local, url } = recordingUploadTarget(form, this.apiBaseUrl, kind);
-    const result = await new Promise<number>((resolve, reject) =>
-      wx.uploadFile({
+    const result = await new Promise<number>((resolve, reject) => {
+      const task = wx.uploadFile({
         url,
         name: "file",
         filePath,
@@ -312,8 +317,15 @@ export class SessionClient {
           : {}),
         success: (r) => resolve(r.statusCode),
         fail: () => reject(new ApiFailure("NETWORK_ERROR")),
-      }),
-    );
+      });
+      task?.onProgressUpdate?.((event) => {
+        if (
+          generation === this.generation &&
+          this.persisted()?.session.token === stored.session.token
+        )
+          onProgress?.(Math.min(100, Math.max(0, event.progress)));
+      });
+    });
     this.assertCurrent(generation);
     if (
       result === 401 &&
@@ -468,6 +480,9 @@ export class SessionClient {
     return result;
   }
 
+  maskedPhone(): string {
+    return this.stored()?.user.maskedPhone ?? "";
+  }
   nickname(): string {
     return this.stored()?.user.nickname ?? "";
   }

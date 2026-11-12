@@ -1,5 +1,6 @@
 @import "./styles/tokens.wxss";
 @import "./styles/senior.wxss";
+@import "./styles/modern.wxss";
 page {
   background: var(--paper);
   color: var(--ink);

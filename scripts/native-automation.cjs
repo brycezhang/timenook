@@ -74,19 +74,21 @@ async function waitForPage(
             rendered: snapshot?.rendered === true,
             busy: snapshot?.data?.busy === true,
             loading: snapshot?.data?.loading === true,
+            pageLoading: snapshot?.data?.pageLoading === true,
           };
           if (
             snapshot?.route === `pages/${name}/index` &&
             snapshot.rendered &&
             snapshot.data.busy !== true &&
             snapshot.data.loading !== true &&
+            snapshot.data.pageLoading !== true &&
             ready(snapshot.data)
           ) {
             const visible = await mp.evaluate(function () {
               return new Promise(function (resolve) {
                 wx.createSelectorQuery()
                   .selectAll(
-                    ".s-page, .landing, .page, .home, .book-page, .interview-focus, .focus-sheet, .original-audio-page, .photos-page",
+                    ".tn-page, .s-page, .landing, .page, .home, .book-page, .interview-focus, .focus-sheet, .original-audio-page, .photos-page",
                   )
                   .boundingClientRect(function (rects) {
                     resolve(

@@ -104,13 +104,14 @@ model Project {
   currentPlan           PlanRevision           @relation("CurrentPlan", fields: [id, currentRevision], references: [projectId, revision], onDelete: NoAction, onUpdate: NoAction)
   preferences           InterviewPreferences?
   preferenceDecisions   PlanPreferenceDecision[]
-  directoryVersions     PlanDirectoryVersion[]
   members               ProjectMember[]
+  gift                  ProjectGift?
 
   @@map("projects")
 }
 
 model PlanRevision {
+  directoryHash String? @map("directory_hash") @db.Char(64)
   projectId   String    @map("project_id") @db.Uuid
   revision    Int
   content     Json?
@@ -161,6 +162,7 @@ model TermsAcceptance {
 }
 
 model ProjectMember {
+  relationship String? @db.VarChar(32)
   projectId String @map("project_id") @db.Uuid
   userId String @map("user_id") @db.Uuid
   invitationId String? @map("invitation_id") @db.Uuid
@@ -172,6 +174,21 @@ model ProjectMember {
   @@id([projectId, userId])
   @@index([userId])
   @@map("project_members")
+}
+
+model ProjectGift {
+  projectId String @id @map("project_id") @db.Uuid
+  project Project @relation(fields: [projectId], references: [id])
+  recipientName String? @map("recipient_name") @db.VarChar(32)
+  recipientPhone String? @map("recipient_phone") @db.VarChar(32)
+  version Int @default(1)
+  token String? @db.VarChar(43)
+  tokenHash String? @unique @map("token_hash") @db.Char(64)
+  claimedByUserId String? @map("claimed_by_user_id") @db.Uuid
+  claimedAt DateTime? @map("claimed_at") @db.Timestamptz(3)
+  issuedAt DateTime @default(now()) @map("issued_at") @db.Timestamptz(3)
+  @@index([claimedByUserId])
+  @@map("project_gifts")
 }
 
 model WechatIdentity {
@@ -407,6 +424,7 @@ model ProbeAiGeneration {
 
 // Local verification and ordinary merchant orders. Financial fields/snapshots are immutable.
 model PaymentOrder {
+  purchaseKind String @map("purchase_kind")
   firstCopyCancellationRequired Boolean @default(false) @map("first_copy_cancellation_required")
   productionFrozen Boolean @default(false) @map("production_frozen")
   creationState String @default("active") @map("creation_state")
@@ -761,16 +779,6 @@ model ActualPlanQuestion {
   @@map("actual_plan_questions")
 }
 
-model PlanDirectoryVersion {
-  projectId String @map("project_id") @db.Uuid
-  version Int
-  chapters Json?
-  contentHash String @map("content_hash") @db.Char(64)
-  createdBy String @map("created_by")
-  project Project @relation(fields: [projectId], references: [id])
-  @@id([projectId, version])
-  @@map("plan_directory_versions")
-}
 
 model Interview {
   id String @id @db.Uuid
@@ -883,8 +891,6 @@ model RecordingCommand {
 model PhotoIntent {
  id String @id @db.Uuid
  projectId String @map("project_id") @db.Uuid
- interviewId String @map("interview_id") @db.Uuid
- actualQuestionId String @map("actual_question_id") @db.Uuid
  clientPhotoId String @map("client_photo_id") @db.Uuid
  subjectId String @map("subject_id") @db.Uuid
  operatorUserId String @map("operator_user_id") @db.Uuid
@@ -901,7 +907,6 @@ model PhotoIntent {
  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
  @@unique([projectId,clientPhotoId])
  @@unique([projectId,id])
- @@unique([projectId,interviewId,id])
  @@map("photo_intents")
 }
 
@@ -1591,4 +1596,20 @@ model AdminUserNote {
  @@unique([userId,operatorId,key])
  @@index([userId,createdAt])
  @@map("admin_user_notes")
+}
+
+model FamilyQuestion {
+  removed Boolean @default(false)
+  id String @id @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  version Int @default(1)
+  text String?
+  chapterKey String? @map("chapter_key")
+  authorId String? @map("author_id") @db.Uuid
+  authorNickname String? @map("author_nickname")
+  authorRelationship String? @map("author_relationship") @db.VarChar(32)
+  state String @default("ready")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  @@index([projectId])
+  @@map("family_questions")
 }

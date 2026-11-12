@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { build } from "esbuild";
+import { offer } from "./purchase-fixture";
 
 const phoneEvent = {
   detail: { code: "synthetic-phone-code", errMsg: "getPhoneNumber:ok" },
@@ -75,28 +76,59 @@ async function harness(
           });
           return;
         }
+        const extra =
+          route === "/packages/current"
+            ? offer
+            : route.endsWith("/plan")
+              ? {
+                  projectId: route.split("/")[2],
+                  revision: 1,
+                  chapters: [],
+                  starters: [],
+                  preferences: { version: 1, blockedTopics: [] },
+                  questionStates: [],
+                  actualQuestions: [],
+                  answers: [],
+                  subjectDecision: "member",
+                  accessExpiresAt: null,
+                }
+              : route.endsWith("/family-questions")
+                ? { projectId: route.split("/")[2], questions: [] }
+                : route.endsWith("/book")
+                  ? {}
+                  : undefined;
         const data =
-          route === "/users/me"
+          extra ??
+          (route === "/users/me"
             ? session.user
             : route === "/sessions/wechat"
               ? session
               : route === "/participations"
                 ? { projects }
-                : route.endsWith("/overview")
-                  ? {
-                      projectId: route.split("/")[2],
-                      bookTitle: "当前的书",
-                      metadataVersion: 1,
-                      canDecide: true,
-                      canRecord: true,
-                      canInvite: true,
-                      stories: [],
-                      interviews: [],
-                      tasks: [],
-                      summary: {},
-                      nextStep: "record",
-                    }
-                  : undefined;
+                : route.startsWith("/invitations/")
+                  ? route.endsWith("/accept")
+                    ? { projectId }
+                    : {
+                        inviter: "家人",
+                        process: [],
+                        purposes: [],
+                        noticeVersion: "current-terms",
+                      }
+                  : route.endsWith("/overview")
+                    ? {
+                        projectId: route.split("/")[2],
+                        bookTitle: "当前的书",
+                        metadataVersion: 1,
+                        canDecide: true,
+                        canRecord: true,
+                        canInvite: true,
+                        stories: [],
+                        interviews: [],
+                        tasks: [],
+                        summary: {},
+                        nextStep: "record",
+                      }
+                    : undefined);
         assert.ok(data, `unexpected request: ${route}`);
         const complete = () =>
           options.success({
@@ -123,6 +155,34 @@ async function harness(
     },
   };
 }
+
+test("invitation login stays in place until the user explicitly accepts", async () => {
+  const h = await harness("welcome", [], false);
+  h.page.onLoad({ token: "c".repeat(43) });
+  await h.page.onShow();
+  h.page.chooseRelationship({
+    currentTarget: { dataset: { relationship: "女儿" } },
+  });
+  h.page.agreementChange({ detail: { value: ["agree"] } });
+  await h.page.accept();
+  assert.equal(h.page.data.loginVisible, true);
+  h.storage.set(`timenook.session.v1:${base}`, session);
+  h.page.loginSucceeded();
+  await h.page.onShow();
+  assert.equal(h.page.data.loginVisible, false);
+  assert.equal(h.page.data.loggedIn, true);
+  assert.equal(
+    h.requests.some((route) => route.endsWith("/accept")),
+    false,
+  );
+  assert.deepEqual(h.routes, []);
+  await h.page.accept();
+  assert.equal(
+    h.requests.filter((route) => route.endsWith("/accept")).length,
+    1,
+  );
+  assert.equal(h.routes[0], "/pages/home/index");
+});
 
 test("home renders the selected project in place and never opens an order", async () => {
   const second = "44444444-4444-4444-8444-444444444444";
@@ -181,6 +241,13 @@ test("home opens the shared quick login without starting checkout", async () => 
   assert.deepEqual(h.routes, []);
   assert.equal(h.page.data.loginVisible, true);
 });
+test("the public homepage opens the public sample without signing in", async () => {
+  const h = await harness("home", [], false);
+  await h.page.onShow();
+  h.page.sample();
+  assert.deepEqual(h.routes, ["/pages/sample/index"]);
+  assert.equal(h.page.data.loginVisible, false);
+});
 test("a standalone login adapter returns home without orders or payment", async () => {
   const h = await harness("login", [], false);
   h.page.onLoad({});
@@ -188,19 +255,24 @@ test("a standalone login adapter returns home without orders or payment", async 
   assert.deepEqual(h.routes, ["/pages/home/index"]);
   assert.deepEqual(h.requests, []);
 });
-test("a direct new-book entry preserves its draft through the shared login adapter", async () => {
+test("a direct new-book entry preserves its draft in the shared login sheet", async () => {
   const h = await harness("new-book", [], false);
-  h.page.setData({ name: "妈妈 & 回忆", salutation: "妈妈" });
+  h.page.chooseRelationship({
+    currentTarget: { dataset: { relationship: "妈妈" } },
+  });
+  h.page.input({
+    currentTarget: { dataset: { field: "bookTitle" } },
+    detail: { value: "妈妈 & 回忆" },
+  });
   h.page.next();
-  const route = new URL(h.routes[0], "https://example.test");
-  assert.equal(route.pathname, "/pages/login/index");
-  const login = await harness("login", [], false);
-  login.page.onLoad(Object.fromEntries(route.searchParams));
-  login.page.loginSucceeded();
-  const destination = new URL(login.routes[0], "https://example.test");
+  assert.deepEqual(h.routes, []);
+  assert.equal(h.page.data.loginVisible, true);
+  h.storage.set(`timenook.session.v1:${base}`, session);
+  h.page.loginSucceeded();
+  const destination = new URL(h.routes[0], "https://example.test");
   assert.equal(destination.pathname, "/pages/purchase/index");
   assert.equal(destination.searchParams.get("bookTitle"), "妈妈 & 回忆");
-  assert.equal(destination.searchParams.get("salutation"), "妈妈");
+  assert.equal(destination.searchParams.get("relationship"), "妈妈");
 });
 test("My shows an existing local session while validating it", async () => {
   const h = await harness("account", []);

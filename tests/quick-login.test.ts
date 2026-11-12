@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { build } from "esbuild";
 import { runInNewContext } from "node:vm";
 import { USER_TERMS_VERSION } from "../packages/contracts/src";
+import { offer } from "./purchase-fixture";
 
 const base = "https://example.test/api/v1";
 const identity = {
@@ -80,6 +81,8 @@ function harness(name: "home" | "account" = "home", signedIn = false) {
   };
   runInNewContext(bundles[name === "home" ? 0 : 1], scope);
   runInNewContext(bundles[2], scope);
+  // Login scenarios start after the home catalog has enabled purchasing.
+  if (name === "home") page.setData({ offer: structuredClone(offer) });
   return {
     page,
     quick,
@@ -131,6 +134,35 @@ test("a signed-in home purchase goes directly to new-book without another login"
   h.page.purchase();
   assert.deepEqual(h.routes, ["/pages/new-book/index"]);
   assert.equal(h.quick.data.visible, false);
+  assert.equal(h.requests.length, 0);
+});
+
+test("unchecked login offers consent and Continue authorizes without a second login tap", async () => {
+  const h = harness();
+  h.page.purchase();
+  h.quick.requestConsent();
+  assert.equal(h.quick.data.consentConfirm, true);
+  assert.equal(h.quick.data.agreed, false);
+  assert.equal(h.requests.length, 0);
+  const pending = h.quick.continueLogin(phoneEvent);
+  await tick();
+  h.respond();
+  await pending;
+  assert.deepEqual(h.routes, ["/pages/new-book/index"]);
+  assert.equal(h.quick.data.visible, false);
+});
+
+test("canceling consent and reading terms preserve the originating action without logging in", () => {
+  const h = harness("account");
+  h.page.purchase();
+  h.quick.requestConsent();
+  h.quick.cancelConsent();
+  assert.equal(h.quick.data.agreed, false);
+  assert.equal(h.quick.data.consentConfirm, false);
+  h.quick.terms();
+  assert.deepEqual(h.routes, ["/pages/terms/index"]);
+  assert.equal(h.page.loginDestination, "new-book");
+  assert.equal(h.quick.data.visible, true);
   assert.equal(h.requests.length, 0);
 });
 

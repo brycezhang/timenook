@@ -72,16 +72,18 @@ test("ready book exposes separate cover, directory, exact PDF and printing entri
     `/pages/manuscript/index?projectId=${projectId}&versionId=${versionId}`,
     `/pages/print/index?projectId=${projectId}`,
   ]);
-  assert.equal(h.page.data.stateLabel, "电子书已生成");
+  assert.equal(h.page.data.stateLabel, "PDF 已生成 · V3");
 });
-test("changed inputs require a new version while keeping the previous exact PDF available", async () => {
+test("changed inputs require a new version before preview or printing", async () => {
   const c = context();
   c.inputHash = "9".repeat(64);
   const h = await book(c);
   assert.equal(h.page.data.dirty, true);
-  assert.match(h.page.data.stateLabel, /内容已更新/);
+  assert.equal(h.page.data.stateLabel, "书稿待更新");
   h.page.manuscript();
-  assert.match(h.routes[0], new RegExp("versionId=" + versionId + "$"));
+  h.page.print();
+  assert.equal(h.routes.length, 0);
+  assert.equal(h.page.data.screen, "changed");
   const pending = h.page.generate();
   assert.equal(h.requests[2].data.expectedInputHash, c.inputHash);
   h.respond(2, version("queued"));
@@ -154,6 +156,31 @@ test("a non-ready version never issues a PDF download", async () => {
   await h.page.openPdf();
   assert.equal(h.downloads.length, 0);
 });
+test("production preview opens its reserved PDF after draft changes without enabling a new print submission", async (t) => {
+  const h = harness("manuscript");
+  t.after(() => h.page.onUnload());
+  h.page.onLoad({ projectId, versionId, production: "1" });
+  const loading = h.page.onShow();
+  assert.equal(
+    h.requests[0].url,
+    `${base}/projects/${projectId}/fulfillment/book`,
+  );
+  h.respond(0, { ...version(), state: "obsolete" });
+  await loading;
+  const opening = h.page.openPdf();
+  assert.equal(
+    h.downloads[0].url,
+    `${base}/projects/${projectId}/fulfillment/book/pdf`,
+  );
+  h.downloads[0].success({
+    statusCode: 200,
+    tempFilePath: "/tmp/fixed-production.pdf",
+  });
+  await opening;
+  assert.equal(h.opened[0].filePath, "/tmp/fixed-production.pdf");
+  h.page.print();
+  assert.equal(h.routes.length, 0);
+});
 test("failed PDF HTTP response is removed without opening a viewer", async () => {
   const h = await manuscript();
   const opening = h.page.openPdf();
@@ -189,4 +216,48 @@ test("a 401 during PDF download removes bytes and the expired session", async ()
   assert.equal(h.opened.length, 0);
   assert.equal(h.page.data.version, null);
   assert.equal(h.storage.has(`timenook.session.v1:${base}`), false);
+});
+
+test("PDF viewer failure clears its temporary file and retries the same fixed version", async () => {
+  const h = await manuscript();
+  h.faults.openDocument = true;
+  const failed = h.page.openPdf();
+  h.downloads[0].success({
+    statusCode: 200,
+    tempFilePath: "/tmp/not-opened.pdf",
+  });
+  await failed;
+  assert.equal(h.page.data.openFailed, true);
+  assert.ok(h.removed.includes("/tmp/not-opened.pdf"));
+  h.faults.openDocument = false;
+  const retry = h.page.openPdf();
+  h.downloads[1].success({ statusCode: 200, tempFilePath: "/tmp/retried.pdf" });
+  await retry;
+  assert.equal(h.page.data.openFailed, false);
+  assert.equal(h.opened[1].fileType, "pdf");
+  h.page.onUnload();
+  assert.ok(h.removed.includes("/tmp/retried.pdf"));
+});
+
+test("ordinary unassigned stories never block the already assigned manuscript", async () => {
+  const c = context(null);
+  c.eligibleStories.push({
+    ...c.eligibleStories[0],
+    id: "88888888-8888-4888-8888-888888888888",
+  });
+  const h = await book(c);
+  assert.equal(h.page.data.storyCount, 1);
+  assert.equal(h.page.data.unassignedCount, 1);
+  const creating = h.page.generate();
+  h.respond(2, version("queued"));
+  await creating;
+  assert.equal(h.page.data.rendering, true);
+  h.page.onUnload();
+
+  c.directory.chapters = [];
+  const empty = await book(c);
+  await empty.page.generate();
+  assert.equal(empty.requests.length, 2);
+  assert.match(empty.routes[0], /directory/);
+  empty.page.onUnload();
 });

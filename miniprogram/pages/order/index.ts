@@ -1,192 +1,157 @@
 import { switchProjectTab } from "../../services/navigation";
-import { dataMode } from "../../services/mode";
 import { sessionClient } from "../../services/session";
-import { paymentClient, paymentStatus } from "../../services/payments";
+import { paymentClient } from "../../services/payments";
 import type { PaymentOrderView } from "../../../packages/contracts/src";
-import { type Project } from "../../domain/model";
-import { asset, go, home, read } from "../../services/store";
-type E = {
-  currentTarget: { dataset: Record<string, string> };
-  detail: { value: string };
-};
+import { go } from "../../services/navigation";
 Page({
-  account() {
-    switchProjectTab("account", this.data.activeOrder?.project?.id ?? "");
-  },
   data: {
-    p: null as Project | null,
-    bookImage: "",
-    mode: dataMode(),
-    orders: [] as PaymentOrderView[],
     activeOrder: null as PaymentOrderView | null,
+    bookTitle: "",
     packagePrice: "",
-    paymentStatus: "",
+    title: "确认付款结果",
+    unknown: false,
     paymentError: "",
     loading: false,
-  },
-  refunds() {
-    const order = this.data.activeOrder;
-    if (order?.state === "paid") go("refunds", `orderId=${order.id}`);
-  },
-  quality() {
-    const order = this.data.activeOrder;
-    if (order?.state === "paid" && order.project)
-      go("quality", `orderId=${order.id}&projectId=${order.project.id}`);
+    busy: false,
+    loginVisible: false,
   },
   orderGeneration: 0,
   selectedOrderId: "",
+  ownerContext: "",
   onLoad(q) {
     this.selectedOrderId = q.id ?? "";
+    try {
+      this.setData({ bookTitle: decodeURIComponent(q.bookTitle ?? "") });
+    } catch {
+      /* Server title is loaded below. */
+    }
+  },
+  onShow() {
+    if (!this.data.busy) return this.restoreOrders();
   },
   onHide() {
-    ++this.orderGeneration;
+    if (!this.data.busy) ++this.orderGeneration;
   },
   onUnload() {
     ++this.orderGeneration;
   },
-  async onShow() {
-    if (dataMode() === "live") {
-      await this.restoreOrders();
-      return;
-    }
-    this.setData({ mode: "demo" });
-    const p = read();
-    if (!p) {
-      home("home");
-      return;
-    }
-    this.setData({ p, bookImage: asset(p) });
-  },
   async restoreOrders() {
-    const generation = ++this.orderGeneration;
-    const context = sessionClient.context();
-    this.setData({
-      mode: "live",
-      orders: [],
-      activeOrder: null,
-      paymentError: "",
-      paymentStatus: "",
-      loading: true,
-    });
+    const generation = ++this.orderGeneration,
+      context = sessionClient.context();
+    if (!context) {
+      this.setData({ activeOrder: null, loginVisible: true, loading: false });
+      return;
+    }
+    if (this.ownerContext && context !== this.ownerContext)
+      this.setData({ activeOrder: null, bookTitle: "", packagePrice: "" });
+    this.ownerContext = context;
     const current = () =>
       generation === this.orderGeneration &&
-      dataMode() === "live" &&
       context === sessionClient.context();
+    this.setData({ loading: true, paymentError: "" });
     try {
-      const orders = await paymentClient.list();
+      let id = this.selectedOrderId;
+      if (!id) id = (await paymentClient.list())[0]?.id ?? "";
       if (!current()) return;
-      const id = this.selectedOrderId || orders[0]?.id;
-      this.setData({ orders });
-      if (id) {
-        const activeOrder = await paymentClient.get(id);
-        if (!current()) return;
-        this.selectedOrderId = id;
-        this.setData({
-          activeOrder,
-          paymentStatus: paymentStatus(activeOrder),
-          packagePrice: (activeOrder.listAmount / 100).toFixed(2),
-        });
+      if (!id) {
+        this.setData({ title: "我的订单", paymentError: "暂无购买记录" });
+        return;
       }
-    } catch (error) {
+      this.selectedOrderId = id;
+      const order = await paymentClient.get(id);
+      if (current()) this.showOrder(order);
+    } catch (e) {
       if (current())
         this.setData({
+          unknown: true,
+          title: "确认付款结果",
           paymentError:
-            error instanceof Error ? error.message : "订单查询失败，请稍后重试",
+            e instanceof Error ? e.message : "付款结果未确认，请稍后查询原单",
         });
     } finally {
       if (current()) this.setData({ loading: false });
     }
   },
-  async chooseOrder(e: E) {
-    this.selectedOrderId = e.currentTarget.dataset.id;
-    await this.restoreOrders();
+  showOrder(order: PaymentOrderView) {
+    this.setData({
+      activeOrder: order,
+      bookTitle: order.bookTitle,
+      packagePrice: (order.listAmount / 100).toFixed(2),
+      unknown: order.paymentStatus === "unknown",
+      title:
+        order.state === "paid"
+          ? "购买成功"
+          : order.state === "closed"
+            ? "订单已关闭"
+            : order.paymentStatus === "unknown"
+              ? "确认付款结果"
+              : "待付款",
+    });
+    if (
+      order.state === "paid" &&
+      order.purchaseKind === "self" &&
+      order.project
+    )
+      switchProjectTab("home", order.project.id);
   },
   async retryPayment() {
     const order = this.data.activeOrder;
-    if (!order || order.state !== "pending" || this.data.loading) return;
-    const context = sessionClient.context();
-    const generation = this.orderGeneration;
-    this.setData({ loading: true, paymentError: "" });
+    if (
+      !order ||
+      order.state !== "pending" ||
+      this.data.busy ||
+      this.data.loading ||
+      this.data.unknown
+    )
+      return;
+    const context = sessionClient.context(),
+      generation = this.orderGeneration;
     const current = () =>
       context === sessionClient.context() &&
       generation === this.orderGeneration;
+    this.setData({ busy: true, paymentError: "" });
     try {
-      const activeOrder = await paymentClient.pay(order.id, {
+      const result = await paymentClient.pay(order.id, {
         localOnly: false,
         isCurrent: current,
       });
+      if (current()) this.showOrder(result);
+    } catch (e) {
       if (current())
         this.setData({
-          activeOrder,
-          paymentStatus: paymentStatus(activeOrder),
-          packagePrice: (activeOrder.listAmount / 100).toFixed(2),
-        });
-    } catch (error) {
-      if (current())
-        this.setData({
-          paymentError: error instanceof Error ? error.message : "核验失败",
-        });
-    } finally {
-      if (current()) this.setData({ loading: false });
-    }
-  },
-  async closeOrder() {
-    const order = this.data.activeOrder;
-    if (!order || order.state !== "pending" || this.data.loading) return;
-    const context = sessionClient.context();
-    const generation = this.orderGeneration;
-    this.setData({ loading: true, paymentError: "" });
-    try {
-      const activeOrder = await paymentClient.close(order.id);
-      if (
-        context === sessionClient.context() &&
-        generation === this.orderGeneration
-      )
-        this.setData({
-          activeOrder,
-          paymentStatus: paymentStatus(activeOrder),
-          packagePrice: (activeOrder.listAmount / 100).toFixed(2),
-        });
-    } catch (error) {
-      if (
-        context === sessionClient.context() &&
-        generation === this.orderGeneration
-      )
-        this.setData({
+          unknown: true,
+          title: "确认付款结果",
           paymentError:
-            error instanceof Error ? error.message : "关闭结果未知，请重新查询",
+            e instanceof Error ? e.message : "付款结果未确认，请查询原单",
         });
     } finally {
-      if (
-        context === sessionClient.context() &&
-        generation === this.orderGeneration
-      )
-        this.setData({ loading: false });
+      if (current()) this.setData({ busy: false });
     }
   },
-  production() {
-    const project = this.data.activeOrder?.project;
-    if (project) go("production", `projectId=${project.id}`);
+  loginSucceeded() {
+    this.setData({ loginVisible: false });
+    return this.restoreOrders();
+  },
+  closeLogin() {
+    this.setData({ loginVisible: false });
+  },
+  gifts() {
+    go("projects");
   },
   catalog() {
     go("new-book");
   },
-  invite() {
-    const project = this.data.activeOrder?.project;
-    if (project) go("invite", `projectId=${project.id}`);
+  giftRecipient() {
+    const order = this.data.activeOrder;
+    if (
+      order?.state === "paid" &&
+      order.project &&
+      order.purchaseKind === "gift"
+    )
+      go("gift-recipient", `projectId=${order.project.id}`);
   },
   project() {
     const project = this.data.activeOrder?.project;
-    if (dataMode() === "live") {
-      if (project) switchProjectTab("home", project.id);
-      return;
-    }
-    home();
-  },
-  book() {
-    home("book");
-  },
-  support() {
-    go("terms");
+    if (project) switchProjectTab("home", project.id);
   },
 });

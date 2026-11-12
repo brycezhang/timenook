@@ -38,7 +38,7 @@ async function load() {
           props.interviewId,
           props.snapshotId,
         )
-      : (await photoApi.list(props.projectId, props.interviewId)).snapshot;
+      : await photoApi.materials(props.projectId, props.interviewId);
     if (current === generation) snapshot.value = value;
   } catch (reason) {
     if (current !== generation) return;
@@ -85,7 +85,6 @@ onUnmounted(() => {
         <PrivatePhoto
           v-if="entry.assets.find((a) => a.kind === 'preview')"
           :project-id="projectId"
-          :interview-id="interviewId"
           :photo-id="entry.photoId"
           :asset="entry.assets.find((a) => a.kind === 'preview')!"
           :alt="entry.caption || `故事照片 ${index + 1}`"

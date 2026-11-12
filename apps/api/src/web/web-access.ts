@@ -17,7 +17,7 @@ import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
 import type { FastifyRequest } from "fastify";
 import { API_CONFIG, ApiConfig } from "../config";
-import { phoneAccountIn } from "../identity/phone-account";
+import { accountView, phoneAccountIn } from "../identity/phone-account";
 import { acceptTermsIn } from "../identity/project-members";
 import { IdentityAccess } from "../identity/identity-access";
 import {
@@ -55,11 +55,11 @@ export class WebAccess implements OnModuleDestroy {
       id: string;
       userId: string;
       expiresAt: Date;
-      user?: { nickname: string | null };
+      user: { id: string; nickname: string | null; phoneNumber: string | null };
     },
   ) {
     return {
-      user: { id: session.userId, nickname: session.user?.nickname ?? null },
+      user: accountView(session.user),
       session: { id: session.id, expiresAt: session.expiresAt.toISOString() },
       csrfToken: createHmac(
         "sha256",
@@ -115,7 +115,9 @@ export class WebAccess implements OnModuleDestroy {
           data: { revokedAt: new Date() },
         });
       return tx.session.create({
-        include: { user: { select: { nickname: true } } },
+        include: {
+          user: { select: { id: true, nickname: true, phoneNumber: true } },
+        },
         data: {
           id: randomUUID(),
           userId: user.id,
@@ -164,6 +166,9 @@ export class WebAccess implements OnModuleDestroy {
           data: { revokedAt: now },
         });
       return tx.session.create({
+        include: {
+          user: { select: { id: true, nickname: true, phoneNumber: true } },
+        },
         data: {
           id: randomUUID(),
           userId: issued.userId,
@@ -196,7 +201,10 @@ export class WebAccess implements OnModuleDestroy {
       throw new UnauthorizedException();
     const session = await this.db.session.findUnique({
       where: { tokenHash: webDigest(token) },
-      include: { webSession: true, user: { select: { nickname: true } } },
+      include: {
+        webSession: true,
+        user: { select: { id: true, nickname: true, phoneNumber: true } },
+      },
     });
     if (
       !session ||

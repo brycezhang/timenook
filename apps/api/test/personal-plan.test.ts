@@ -161,6 +161,7 @@ async function project() {
   const buyer = await login();
   const order = data(
     await request("POST", "/v1/orders", buyer.token, {
+      purchaseKind: "gift",
       packageVersionId: packageId,
       recipient: { typeCode: "mentor", relationshipLabel: "恩师" },
       bookTitle: "私人标题不能泄露",
@@ -209,7 +210,7 @@ async function joinedProject() {
       "POST",
       `/v1/invitations/${invite.token}/accept`,
       narrator.token,
-      { termsVersion: TERMS_VERSION },
+      { relationship: "家人", termsVersion: TERMS_VERSION },
     ),
   );
   return { ...p, narrator };
@@ -237,7 +238,7 @@ test("personal plan is private to currently authorized participants and supports
   assert.equal(original.revision, 1);
   assert.equal(
     original.chapters[0].questions[0].text,
-    "有没有一个地方，你现在还想说说它的样子？",
+    "我出生在什么地方，家人怎样讲起我的出生？",
   );
 
   const blank = data(
@@ -271,7 +272,12 @@ test("two authorized roles atomically conflict while chapter and question edits 
   };
   const content = {
     chapters: [
-      { key: "my-place", title: "我的小屋", questions: [custom] },
+      {
+        key: "my-place",
+        title: "我的小屋",
+        questions: [custom],
+        storyRefs: [],
+      },
       ...original.chapters.slice(0, 2).reverse(),
     ],
     starters: original.starters,
@@ -289,7 +295,7 @@ test("two authorized roles atomically conflict while chapter and question edits 
   const current = data(await request("GET", url, p.narrator.token), 200);
   assert.deepEqual(
     current.chapters.map((c: any) => c.title),
-    ["我的小屋", "生活里的片段", "记得的地方"],
+    ["我的小屋", "求学与成长", "我的童年"],
   );
   assert.equal(current.chapters[0].questions[0].text, "那间小屋是什么样的？");
   assert.equal(current.revision, 2);
@@ -453,7 +459,7 @@ test("actual questions and answered associations survive later wording, chapter 
       );
     assert.equal(
       linked.snapshot.text,
-      "有没有一个地方，你现在还想说说它的样子？",
+      "我出生在什么地方，家人怎样讲起我的出生？",
     );
     const changed = structuredClone(original.chapters);
     changed[0].questions[0].text = "以后换一个问法";
@@ -488,7 +494,7 @@ test("actual questions and answered associations survive later wording, chapter 
       assert.equal(restored.actualQuestions.length, 1);
       assert.equal(
         restored.actualQuestions[0].snapshot.text,
-        "有没有一个地方，你现在还想说说它的样子？",
+        "我出生在什么地方，家人怎样讲起我的出生？",
       );
       assert.equal(
         restored.actualQuestions[0].answerRef,
@@ -503,103 +509,45 @@ test("actual questions and answered associations survive later wording, chapter 
   }
 });
 
-test("future-question edits leave the actual directory token valid and only actual directory changes fence a future Book consumer", async () => {
-  const p = await joinedProject();
-
-  const plans = new ProjectPlans(config.databaseUrl);
-  const access = <T>(
-    work: (tx: import("@prisma/client").Prisma.TransactionClient) => Promise<T>,
-  ) =>
-    app
-      .get(Participation)
-      .withPlanAccess(
-        p.projectId,
-        `Bearer ${p.narrator.token}`,
-        undefined,
-        work,
-      );
-  try {
-    const original = await access((tx) => plans.directory(p.projectId, tx));
-    assert.deepEqual(original.chapters, []);
-    const first = await access((tx) =>
-      plans.reviseDirectory(
-        {
-          projectId: p.projectId,
-          expectedVersion: original.version,
-          createdBy: p.narrator.id,
-          chapters: [
-            {
-              key: "places",
-              title: "实际入书章节",
-              storyRefs: ["synthetic-story:confirmed-version-1"],
-            },
-          ],
-        },
-        tx,
-      ),
-    );
-    const url = `/v1/projects/${p.projectId}/plan`;
-    const plan = data(await request("GET", url, p.narrator.token), 200);
-    plan.chapters[0].questions[0].text = "仅修改未来问题";
-    data(
-      await request("POST", url, p.narrator.token, {
-        expectedVersion: plan.revision,
-        content: { chapters: plan.chapters, starters: plan.starters },
-      }),
-    );
-    await access((tx) =>
-      plans.assertDirectoryVersion(p.projectId, first.version, tx),
-    );
-    assert.deepEqual(
-      await access((tx) => plans.directory(p.projectId, tx)),
-      first,
-    );
-    const changed = await access((tx) =>
-      plans.reviseDirectory(
-        {
-          projectId: p.projectId,
-          expectedVersion: first.version,
-          createdBy: p.narrator.id,
-          chapters: [
-            {
-              key: "places",
-              title: "新的实际目录标题",
-              storyRefs: ["synthetic-story:confirmed-version-1"],
-            },
-          ],
-        },
-        tx,
-      ),
-    );
-    assert.equal(changed.version, first.version + 1);
-    await assert.rejects(
-      access((tx) =>
-        plans.assertDirectoryVersion(p.projectId, first.version, tx),
-      ),
-      { code: "VERSION_CONFLICT" },
-    );
-    await assert.rejects(
-      access(async (tx) => {
-        await plans.reviseDirectory(
-          {
-            projectId: p.projectId,
-            expectedVersion: changed.version,
-            createdBy: p.narrator.id,
-            chapters: [],
-          },
-          tx,
-        );
-        throw new Error("Synthetic Book consumer rolled back");
-      }),
-      /Synthetic Book consumer rolled back/,
-    );
-    assert.deepEqual(
-      await access((tx) => plans.directory(p.projectId, tx)),
-      changed,
-    );
-  } finally {
-    await plans.close();
-  }
+test("chapters have one revision and concurrent edits cannot overwrite one another", async () => {
+  const p = await joinedProject(),
+    url = `/v1/projects/${p.projectId}/plan`;
+  const original = data(await request("GET", url, p.narrator.token), 200);
+  assert.equal(original.chapters.length, 6);
+  const content = {
+    chapters: structuredClone(original.chapters),
+    starters: original.starters,
+  };
+  content.chapters.reverse();
+  content.chapters[0].title = "我自己的章节";
+  const changed = data(
+    await request("POST", url, p.narrator.token, {
+      expectedVersion: original.revision,
+      content,
+    }),
+  );
+  assert.equal(changed.chapters[0].key, "today");
+  assert.equal(changed.chapters[0].title, "我自己的章节");
+  const stale = await request("POST", url, p.narrator.token, {
+    expectedVersion: original.revision,
+    content: { chapters: [], starters: original.starters },
+  });
+  assert.equal(stale.statusCode, 409);
+  assert.deepEqual(
+    data(await request("GET", url, p.narrator.token), 200).chapters,
+    changed.chapters,
+  );
+  assert.equal(
+    (
+      await request(
+        "POST",
+        `/v1/projects/${p.projectId}/book/directory`,
+        p.narrator.token,
+        {},
+      )
+    ).statusCode,
+    404,
+  );
 });
 
 test("future actual-question capture honors a subject's blocked question key without removing its historical snapshot", async () => {
@@ -719,4 +667,117 @@ test("authorized plan edits and subject decisions roll back with their actual ca
 
 after(async () => {
   await closePrivacyFixture(config);
+});
+
+test("family text questions retain original author, optional chapter and remain unanswered after interview creation", async () => {
+  const p = await joinedProject();
+  const url = `/v1/projects/${p.projectId}/family-questions`;
+  const outsider = await login();
+  assert.equal((await request("GET", url, outsider.token)).statusCode, 403);
+  assert.equal(
+    (
+      await request("POST", url, p.buyer.token, {
+        clientQuestionId: randomUUID(),
+        text: "小时候最喜欢什么？",
+        chapterKey: null,
+      })
+    ).statusCode,
+    400,
+  );
+  data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/member-profile`,
+      p.buyer.token,
+      { relationship: "女儿" },
+    ),
+  );
+  const created = data(
+    await request("POST", url, p.buyer.token, {
+      clientQuestionId: randomUUID(),
+      text: "小时候最喜欢什么？",
+      chapterKey: null,
+    }),
+  );
+  assert.equal(created.authorId, p.buyer.id);
+  assert.equal(created.authorRelationship, "女儿");
+  assert.equal(created.chapterKey, null);
+  assert.equal(created.story, null);
+  const edited = data(
+    await request("POST", `${url}/${created.id}`, p.narrator.token, {
+      expectedVersion: created.version,
+      text: "小时候最喜欢在哪里玩？",
+      chapterKey: null,
+    }),
+  );
+  assert.equal(edited.authorId, created.authorId);
+  assert.equal(edited.authorNickname, created.authorNickname);
+  assert.equal(edited.authorRelationship, "女儿");
+  data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/member-profile`,
+      p.buyer.token,
+      { relationship: "朋友" },
+    ),
+  );
+  const plan = data(
+    await request("GET", `/v1/projects/${p.projectId}/plan`, p.narrator.token),
+    200,
+  );
+  const interview = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/interviews`,
+      p.narrator.token,
+      {
+        clientInterviewId: randomUUID(),
+        expectedPlanRevision: plan.revision,
+        familyQuestionId: created.id,
+      },
+    ),
+  );
+  assert.equal(interview.actualQuestion.capturedBy, p.narrator.id);
+  assert.deepEqual(interview.actualQuestion.source, {
+    kind: "family",
+    familyQuestionId: created.id,
+    authorId: created.authorId,
+    authorNickname: created.authorNickname,
+    authorRelationship: "女儿",
+  });
+  assert.equal(interview.actualQuestion.snapshot.text, edited.text);
+  const listed = data(await request("GET", url, p.buyer.token), 200);
+  assert.equal(listed.questions[0].state, "ready");
+  assert.equal(listed.questions[0].story, null);
+  const skipped = data(
+    await request("POST", `${url}/${created.id}/state`, p.narrator.token, {
+      expectedVersion: edited.version,
+      state: "skipped",
+    }),
+  );
+  assert.equal(skipped.state, "skipped");
+  const restored = data(
+    await request("POST", `${url}/${created.id}/state`, p.narrator.token, {
+      expectedVersion: skipped.version,
+      state: "ready",
+    }),
+  );
+  data(
+    await request("POST", `${url}/${created.id}/remove`, p.buyer.token, {
+      expectedVersion: restored.version,
+    }),
+  );
+  assert.deepEqual(
+    data(await request("GET", url, p.buyer.token), 200).questions,
+    [],
+  );
+  const resumed = data(
+    await request(
+      "GET",
+      `/v1/projects/${p.projectId}/interviews/${interview.id}`,
+      p.narrator.token,
+    ),
+    200,
+  );
+  assert.equal(resumed.actualQuestion.snapshot.text, edited.text);
 });

@@ -1,6 +1,39 @@
 /** Explicit private payload inventory. Unknown category/layer overlaps stay pending. */
 export const ERASURE_REGISTRY = [
   {
+    table: "family_questions",
+    category: "activeData",
+    columns: [
+      "text",
+      "chapter_key",
+      "author_id",
+      "author_nickname",
+      "author_relationship",
+    ],
+    keys: ["id"],
+    owner: "r.project_id",
+  },
+  {
+    table: "project_members",
+    category: "activeData",
+    columns: ["relationship"],
+    keys: ["project_id", "user_id"],
+    owner: "r.project_id",
+  },
+  {
+    table: "project_gifts",
+    category: "activeData",
+    columns: [
+      "recipient_name",
+      "recipient_phone",
+      "token",
+      "token_hash",
+      "claimed_by_user_id",
+    ],
+    keys: ["project_id"],
+    owner: "r.project_id",
+  },
+  {
     table: "projects",
     category: "activeData",
     columns: ["book_title"],
@@ -53,13 +86,6 @@ export const ERASURE_REGISTRY = [
     table: "plan_preference_decisions",
     category: "activeData",
     columns: ["blocked_topics", "question_states"],
-    keys: ["project_id", "version"],
-    owner: "r.project_id",
-  },
-  {
-    table: "plan_directory_versions",
-    category: "activeData",
-    columns: ["chapters"],
     keys: ["project_id", "version"],
     owner: "r.project_id",
   },

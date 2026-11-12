@@ -1,0 +1,106 @@
+TAP version 13
+# Subtest: invitation login stays in place until the user explicitly accepts
+ok 1 - invitation login stays in place until the user explicitly accepts
+  ---
+  duration_ms: 15.367583
+  type: 'test'
+  ...
+# Subtest: home renders the selected project in place and never opens an order
+ok 2 - home renders the selected project in place and never opens an order
+  ---
+  duration_ms: 18.587041
+  type: 'test'
+  ...
+# Subtest: home without memberships shows the purchase entry
+ok 3 - home without memberships shows the purchase entry
+  ---
+  duration_ms: 14.750166
+  type: 'test'
+  ...
+# Subtest: home keeps the current book visible while returning from another page
+ok 4 - home keeps the current book visible while returning from another page
+  ---
+  duration_ms: 13.883709
+  type: 'test'
+  ...
+# Subtest: home clears a retained book after rejected membership
+ok 5 - home clears a retained book after rejected membership
+  ---
+  duration_ms: 17.5235
+  type: 'test'
+  ...
+# Subtest: home clears the retained book immediately when returning after logout
+ok 6 - home clears the retained book immediately when returning after logout
+  ---
+  duration_ms: 13.650208
+  type: 'test'
+  ...
+# Subtest: home opens the shared quick login without starting checkout
+ok 7 - home opens the shared quick login without starting checkout
+  ---
+  duration_ms: 14.100625
+  type: 'test'
+  ...
+# Subtest: the public homepage opens the public sample without signing in
+ok 8 - the public homepage opens the public sample without signing in
+  ---
+  duration_ms: 13.291833
+  type: 'test'
+  ...
+# Subtest: a standalone login adapter returns home without orders or payment
+ok 9 - a standalone login adapter returns home without orders or payment
+  ---
+  duration_ms: 2.95525
+  type: 'test'
+  ...
+# Subtest: a direct new-book entry preserves its draft in the shared login sheet
+ok 10 - a direct new-book entry preserves its draft in the shared login sheet
+  ---
+  duration_ms: 3.940625
+  type: 'test'
+  ...
+# Subtest: My shows an existing local session while validating it
+ok 11 - My shows an existing local session while validating it
+  ---
+  duration_ms: 2.982208
+  type: 'test'
+  ...
+# Subtest: native tab taps navigate even when the custom bar selection lags behind the page
+ok 12 - native tab taps navigate even when the custom bar selection lags behind the page
+  ---
+  duration_ms: 1.9655
+  type: 'test'
+  ...
+# Subtest: My provides project, new purchase and terms entries without loading private projects
+ok 13 - My provides project, new purchase and terms entries without loading private projects
+  ---
+  duration_ms: 1.824958
+  type: 'test'
+  ...
+# Subtest: the standalone adapter returns to My after shared login succeeds
+ok 14 - the standalone adapter returns to My after shared login succeeds
+  ---
+  duration_ms: 1.784125
+  type: 'test'
+  ...
+# Subtest: an unsigned home purchase opens quick login before entering the new-book form
+ok 15 - an unsigned home purchase opens quick login before entering the new-book form
+  ---
+  duration_ms: 13.99825
+  type: 'test'
+  ...
+# Subtest: cancelled purchase login stays on home and does not retain the purchase destination
+ok 16 - cancelled purchase login stays on home and does not retain the purchase destination
+  ---
+  duration_ms: 15.246292
+  type: 'test'
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 241.324458

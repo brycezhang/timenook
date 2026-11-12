@@ -17,6 +17,7 @@ export async function readyFirstCopyBook(
     bleedMm?: number;
   } = {},
   physicalProduction?: false,
+  audio?: Buffer,
 ) {
   const snapshot = JSON.parse(
     readFileSync("test/fixtures/catalog-synthetic.json", "utf8"),
@@ -44,7 +45,7 @@ export async function readyFirstCopyBook(
       },
     },
   });
-  const p = await readyStory(await joinedProject(packageId));
+  const p = await readyStory(await joinedProject(packageId), undefined, audio);
   const story = data(
     await request(
       "POST",

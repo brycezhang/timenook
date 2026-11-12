@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import { cp, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import {
+  appendFile,
+  cp,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -178,7 +187,7 @@ test("native tab handlers use cached tab navigation and the package supplies its
   }
 });
 
-test("built new-book preserves an encoded user title and salutation", async () => {
+test("built new-book preserves an encoded user title and relationship", async () => {
   const app = await harness("live");
   app.storage.set("timenook.session.v1:https://example.test/api/v1", {
     user: { id: "11111111-1111-4111-8111-111111111111" },
@@ -190,12 +199,11 @@ test("built new-book preserves an encoded user title and salutation", async () =
   });
   const p = await app.open("pages/new-book/index");
   p.input({
-    currentTarget: { dataset: { field: "name" } },
+    currentTarget: { dataset: { field: "bookTitle" } },
     detail: { value: "妈妈的一生 & 回忆" },
   });
-  p.input({
-    currentTarget: { dataset: { field: "salutation" } },
-    detail: { value: "妈妈" },
+  p.chooseRelationship({
+    currentTarget: { dataset: { relationship: "妈妈" } },
   });
   p.next();
   const [route, query] = app.route().slice(1).split("?");
@@ -204,10 +212,18 @@ test("built new-book preserves an encoded user title and salutation", async () =
     Object.fromEntries(query.split("&").map((pair) => pair.split("="))),
   );
   assert.equal(purchase.data.bookTitle, "妈妈的一生 & 回忆");
-  assert.equal(purchase.requestedRecipient, "妈妈");
+  assert.equal(purchase.data.relationship, "妈妈");
 });
 
-test("release package excludes website and probe routes and ignores stored demo mode", async () => {
+test("release package excludes website and probe routes and ignores stored demo mode", async (t) => {
+  await appendFile(
+    path.join(fixture, "miniprogram/templates/print-book.wxml"),
+    '\n<include src="/templates/print-summary.wxml" />\n',
+  );
+  await writeFile(
+    path.join(fixture, "miniprogram/templates/print-summary.wxml"),
+    "<view>当前制作书稿</view>\n",
+  );
   const release = spawnSync(
     process.execPath,
     [path.resolve("scripts/build.mjs")],
@@ -224,6 +240,19 @@ test("release package excludes website and probe routes and ignores stored demo 
     },
   );
   assert.equal(release.status, 0, release.stderr);
+  await t.test(
+    "release keeps imported print templates and their included content",
+    async () => {
+      for (const file of ["print-book.wxml", "print-summary.wxml"])
+        assert.equal(
+          await readFile(path.join(root, "templates", file), "utf8"),
+          await readFile(
+            path.join(fixture, "miniprogram/templates", file),
+            "utf8",
+          ),
+        );
+    },
+  );
   const media = (await readdir(root, { recursive: true })).filter((file) =>
     /\.(?:jpe?g|png|svg|webp|gif|flac|m4a|ogg|ape|amr|wma|wav|mp3|mp4|aac|aiff|caf)$/i.test(
       file,
@@ -243,7 +272,19 @@ test("release package excludes website and probe routes and ignores stored demo 
   );
   assert.ok(config.pages.includes("pages/interview/index"));
   assert.ok(config.pages.includes("pages/manuscript/index"));
-  for (const name of ["account-link", "audio-probe"]) {
+  for (const name of [
+    "account-link",
+    "audio-probe",
+    "login",
+    "project",
+    "assisted",
+    "settings",
+    "service",
+    "refunds",
+    "quality",
+    "export",
+    "deletion-status",
+  ]) {
     assert.ok(!config.pages.includes(`pages/${name}/index`));
     await assert.rejects(readFile(path.join(root, `pages/${name}/index.js`)), {
       code: "ENOENT",
@@ -252,6 +293,16 @@ test("release package excludes website and probe routes and ignores stored demo 
       code: "ENOENT",
     });
   }
+  for (const file of [
+    "services/store.js",
+    "domain/model.js",
+    "domain/questions.js",
+  ])
+    await assert.rejects(readFile(path.join(root, file)), { code: "ENOENT" });
+  assert.doesNotMatch(
+    await readFile(path.join(root, "services/mode.js"), "utf8"),
+    /"demo"/,
+  );
   for (const name of config.pages) {
     const markup = await readFile(path.join(root, name + ".wxml"), "utf8");
     assert.doesNotMatch(
@@ -268,13 +319,15 @@ test("release package excludes website and probe routes and ignores stored demo 
     /同一已验证手机号在网页和小程序对应同一产品账号/,
   );
   const app = await harness("demo");
+  for (const name of config.pages) await app.open(name, false);
   const homeMarkup = await readFile(
     path.join(root, "pages/home/index.wxml"),
     "utf8",
   );
-  assert.match(homeMarkup, /class="landing-hero"/);
-  assert.match(homeMarkup, /class="benefits"/);
-  assert.match(homeMarkup, /含1本实体书/);
+  assert.match(homeMarkup, /class="landing-photo"/);
+  assert.match(homeMarkup, /class="landing-benefits"/);
+  assert.match(homeMarkup, /offerLabel/);
+  assert.match(homeMarkup, /offer.purchasable/);
   assert.match(homeMarkup, /bindtap="account"/);
   assert.doesNotMatch(homeMarkup, /bindtap="(?:orders|participation|logout)"/);
   const home = await app.open("pages/home/index", false);
@@ -295,11 +348,11 @@ test("release package excludes website and probe routes and ignores stored demo 
   assert.equal(invite.copyInvitation, undefined);
   const order = await app.open("pages/order/index", false);
   assert.equal(typeof order.retryPayment, "function");
-  assert.equal(typeof order.closeOrder, "function");
+  assert.equal(typeof order.restoreOrders, "function");
   const markup = await readFile(
     path.join(root, "pages/order/index.wxml"),
     "utf8",
   );
   assert.match(markup, /bindtap="retryPayment"/);
-  assert.match(markup, /bindtap="closeOrder"/);
+  assert.match(markup, /bindtap="restoreOrders"/);
 });

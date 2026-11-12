@@ -1,4 +1,0 @@
-<app-loading wx:if="{{pageLoading}}" variant="form" />
-<block wx:else>
-<view class="s-page"><view class="s-title">{{existing?'修改话题':'添加话题'}}</view><textarea class="s-input" auto-height value="{{text}}" bindinput="input" maxlength="2000" placeholder="想聊一件什么事？" /><view class="s-field">这个话题<picker range="{{labels}}" value="{{stateIndex}}" bindchange="state"><view class="s-row">{{labels[stateIndex]}}<text>›</text></view></picker></view><view class="s-muted">选择“可以聊”即可恢复这个话题。</view><view class="s-error">{{status}}</view><view class="s-dock"><button class="s-button" bindtap="save" disabled="{{busy}}" loading="{{busy}}">保存话题</button></view></view>
-</block>

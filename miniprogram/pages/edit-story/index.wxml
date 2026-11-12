@@ -1,4 +1,9 @@
+<tn-navigation title="编辑故事" />
 <app-loading wx:if="{{pageLoading}}" variant="story" />
-<block wx:else>
-<view class="s-page"><label class="s-field">故事标题<input class="s-input" value="{{title}}" data-field="title" bindinput="input" maxlength="200" /></label><textarea class="story-editor" auto-height value="{{body}}" data-field="body" bindinput="input" maxlength="-1" cursor-spacing="130" /><view class="s-error">{{status}}</view><view class="s-dock"><button class="s-button" bindtap="save" disabled="{{busy}}" loading="{{busy}}">保存修改</button></view></view>
-</block>
+<view wx:else class="tn-page with-dock">
+  <label class="tn-field">故事标题<input class="tn-input" value="{{title}}" data-field="title" bindinput="input" maxlength="200" disabled="{{busy}}" cursor-spacing="130" /></label>
+  <label class="tn-field">故事正文<textarea class="story-editor" auto-height value="{{body}}" data-field="body" bindinput="input" maxlength="-1" disabled="{{busy}}" cursor-spacing="130" /></label>
+  <view class="edit-note tn-muted">不影响原始录音。</view>
+  <view wx:if="{{status}}" class="tn-error">{{status}}</view>
+  <view class="tn-dock"><button class="tn-button" bindtap="save" disabled="{{busy || !title || !body}}" loading="{{busy}}"><image class="tn-icon" src="/assets/icons/check-light.svg" />保存修改</button></view>
+</view>

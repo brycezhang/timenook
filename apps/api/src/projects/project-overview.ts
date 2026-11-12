@@ -82,7 +82,9 @@ export class ProjectOverview {
       ),
     );
     const confirmed = stories.filter((s) => s.revision).length,
-      included = stories.filter((s) => s.revision && s.included).length,
+      included = stories.filter(
+        (s) => s.revision && s.included && s.chapter,
+      ).length,
       pending = stories.filter((s) => !s.revision).length;
     const failed = stories.some(
         (s) =>
@@ -104,7 +106,7 @@ export class ProjectOverview {
       );
     return {
       projectId,
-      bookTitle: p.bookTitle ?? admission.snapshot.bookTitle ?? "人生故事书",
+      bookTitle: p.bookTitle ?? admission.snapshot.bookTitle ?? "时光故事书",
       source: admission.source,
       ...participationNotice(
         admission.snapshot,
@@ -126,7 +128,22 @@ export class ProjectOverview {
         ).map((task) => this.tasks!.view(tx, task, false)),
       ),
       interviews: (await this.interviews.listIn(tx, projectId)).interviews,
-      summary: { pending, confirmed, included },
+      summary: {
+        pending,
+        confirmed,
+        included,
+        photos: await tx.photoIntent.count({
+          where: { projectId, state: "sealed" },
+        }),
+        audioMinutes: Math.floor(
+          ((
+            await tx.recordingIntent.aggregate({
+              where: { projectId },
+              _sum: { consumedMs: true },
+            })
+          )._sum.consumedMs ?? 0) / 60000,
+        ),
+      },
       nextStep: failed
         ? "有故事需要恢复或人工协助，原声仍保留"
         : waiting

@@ -1,0 +1,8 @@
+<view class="navigation-space" style="height:{{statusHeight + 68}}px"/>
+<view class="navigation" style="padding-top:{{statusHeight}}px">
+ <view class="navigation-row" style="padding-right:{{rightInset}}px">
+  <view wx:if="{{brand}}" class="navigation-brand"><image src="/assets/icons/book-white.svg"/></view>
+  <button wx:elif="{{back}}" class="navigation-back" bindtap="goBack" aria-label="返回"><image src="/assets/icons/chevron-left.svg"/></button>
+  <view class="navigation-title {{compact && title.length > 8 ? 'compact-title' : ''}}">{{title}}</view>
+ </view>
+</view>

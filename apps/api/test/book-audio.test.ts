@@ -19,6 +19,7 @@ import {
   db,
   root,
   readyStory,
+  storyPhoto,
   request,
   data,
   login,
@@ -35,8 +36,10 @@ after(stopBookFixture);
 
 async function frozenEntry(
   existing?: Awaited<ReturnType<typeof joinedProject>>,
+  withPhoto = false,
 ) {
   const p = await readyStory(existing);
+  const photos = withPhoto ? await storyPhoto(p, "纸书中保留的照片") : null;
   const story = data(
     await request(
       "POST",
@@ -46,6 +49,7 @@ async function frozenEntry(
         baseRevisionId: p.story.revision.id,
         expectedVersion: p.story.version,
         title: "书中固定的私人故事",
+        photoSnapshotId: photos?.id ?? null,
         theme: p.story.revision.theme,
         paragraphs: p.story.revision.paragraphs,
         reviewResolutions: p.story.revision.reviewItems.map((item: string) => ({
@@ -223,9 +227,10 @@ test("original audio and Range playback remain available beyond 2099 with a curr
   }
 });
 
-test("online story edits and a newer book never retarget the historical entry or replace its original title", async () => {
-  const p = await frozenEntry(),
+test("online story edits and a newer book never retarget the historical entry, photo or original title", async () => {
+  const p = await frozenEntry(undefined, true),
     original = data(await request("GET", p.entry, p.narrator.token), 200);
+  assert.deepEqual(original.photo, p.item.photos[0]);
   const edited = data(
     await request(
       "POST",
@@ -235,6 +240,7 @@ test("online story edits and a newer book never retarget the historical entry or
         baseRevisionId: p.story.revision.id,
         expectedVersion: p.story.version,
         title: "在线改稿的新标题",
+        photoSnapshotId: null,
         theme: p.story.revision.theme,
         paragraphs: p.story.revision.paragraphs,
         reviewResolutions: p.story.revision.reviewResolutions,

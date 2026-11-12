@@ -1,0 +1,11 @@
+@import "../../styles/purchase.wxss";
+.purchase-form { gap:20px; }
+.relation-field { display:flex;flex-direction:column;gap:12px; }
+.relation-field .tn-field { display:block; }
+.required { color:#756859;font-size:12px;font-weight:400; }
+.relations { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px; }
+.relation { width:100%;min-width:0;min-height:46px;padding:10px 4px;border:1px solid #ded4c6;border-radius:14px;background:#fff;color:#382c24;font-size:14px;font-weight:600;line-height:1.7; }
+.relation.selected { border-color:#46563c;background:#edf0e7;color:#46563c;font-weight:600; }
+.gift-preview { display:flex;align-items:center;gap:20px;padding:20px;border:1px solid #ded4c6;border-radius:20px; }
+.gift-preview-copy { min-width:0;display:flex;flex-direction:column;gap:8px; }
+.gift-preview-title { font-size:20px;line-height:1.5;font-weight:600;overflow-wrap:anywhere; }

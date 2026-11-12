@@ -1,29 +1,23 @@
+<tn-navigation title="原声回听" />
 <app-loading wx:if="{{busy && !entry}}" variant="story" />
-<block wx:else>
-<view class="original-audio-page">
-  <view class="eyebrow">岁月成书 · 纸书原声</view>
-  <view class="audio-title">书中原声</view>
-  <view class="audio-intro">每一段，都是本人留下的真实讲述。</view>
-  <view wx:if="{{entry}}" class="audio-card">
-    <view class="story-title">{{entry.story.title}}</view>
-    <view class="version-note">对应纸书故事第 {{entry.story.version}} 版 · {{entry.clips.length}} 段原声</view>
-    <view wx:for="{{entry.clips}}" wx:key="clipId" class="clip-row">
-      <view class="clip-label">第 {{index + 1}} 段原声</view>
-      <button wx:if="{{playingClipId === item.clipId}}" class="audio-button secondary" bindtap="toggle">{{paused?'继续播放':'暂停播放'}}</button>
-      <button wx:else="" class="audio-button" data-id="{{item.clipId}}" bindtap="play" disabled="{{busy}}">播放第 {{index + 1}} 段</button>
-      <view wx:if="{{playingClipId===item.clipId}}"><slider min="0" max="{{duration || 1}}" value="{{position}}" bindchange="seek" activeColor="#46563c" /><view class="s-muted">{{positionLabel}} / {{durationLabel}}</view></view>
+<view wx:else class="tn-page original-audio-page">
+  <block wx:if="{{entry}}">
+    <view class="audio-intro"><view class="audio-title">{{entry.story.title}}</view><view class="audio-version">纸书原声 · 故事第 {{entry.story.version}} 版</view></view>
+    <image wx:if="{{image}}" class="audio-photo" src="{{image}}" mode="aspectFill" aria-label="{{entry.photo.caption || '故事照片'}}" /><view wx:elif="{{photoLoading}}" class="audio-photo"><app-loading variant="photo" /></view>
+    <view wx:if="{{photoError}}" class="tn-muted">{{photoError}}</view>
+    <view wx:for="{{clips}}" wx:key="clipId" class="audio-clip">
+      <view wx:if="{{clips.length > 1}}" class="audio-version">第 {{index + 1}} 段原声</view>
+      <view class="voice-player">
+        <button wx:if="{{playingClipId === item.clipId}}" class="audio-play" bindtap="toggle" disabled="{{busy}}" aria-label="{{paused ? '继续播放' : '暂停播放'}}"><image src="/assets/icons/{{paused ? 'play-light' : 'pause-light'}}.svg" /></button>
+        <button wx:else class="audio-play" bindtap="play" data-id="{{item.clipId}}" disabled="{{busy}}" aria-label="播放原声"><app-loading wx:if="{{loadingClipId === item.clipId}}" variant="spinner" light /><image wx:else src="/assets/icons/play-light.svg" /></button>
+        <view class="audio-timeline"><slider class="audio-slider" min="0" max="{{playingClipId === item.clipId ? duration : item.durationSeconds || 1}}" step="0.1" value="{{playingClipId === item.clipId ? position : 0}}" disabled="{{busy || playingClipId !== item.clipId || !duration}}" bindchanging="dragging" bindchange="seek" activeColor="#46563C" backgroundColor="#ADB49F" block-color="#46563C" block-size="20" aria-label="原声播放进度" /><view class="audio-times"><text>{{playingClipId === item.clipId ? positionLabel : '00:00'}}</text><text>{{playingClipId === item.clipId ? durationLabel : item.durationLabel}}</text></view></view>
+      </view>
     </view>
-    <view wx:if="{{entry.accessExpiresAt}}" class="access-note">在线回听有效至 {{entry.accessExpiresAt}}</view>
-  </view>
-  <view wx:else="" class="audio-card empty-card">
-    <view class="locked-title">原声仅向获授权的账号开放</view>
-    <view>请使用已加入这个项目的微信账号登录。</view>
-    <button wx:if="{{!loggedIn}}" class="audio-button" bindtap="login" disabled="{{busy}}">微信登录后回听</button><view class="s-term">登录即表示同意<text bindtap="terms">《使用条款》</text></view>
-  </view>
-  <view wx:if="{{status}}" class="audio-status" role="status">{{status}}</view>
-  <app-loading wx:if="{{busy}}" variant="spinner" />
-  <button wx:if="{{loggedIn}}" class="audio-button secondary" bindtap="refresh" disabled="{{busy}}">重新查询</button>
-  <button wx:if="{{loggedIn}}" class="audio-button text-button" bindtap="logout" disabled="{{busy}}">退出登录</button>
-  <view class="s-muted">此入口对应纸书中的故事版本，后续改稿不会替换纸书原声。</view>
+    <view class="audio-note">对应所印版本原声，仅项目成员可回听。</view>
+  </block>
+  <view wx:else class="tn-card audio-locked"><view class="tn-heading">登录后回听原声</view><view class="tn-muted">请使用已加入这本书的账号。</view><button wx:if="{{!loggedIn}}" class="tn-button" bindtap="login" disabled="{{busy}}">微信登录后回听</button></view>
+  <view wx:if="{{status}}" class="tn-error" role="status">{{status}}</view>
+  <button wx:if="{{loggedIn && !entry}}" class="tn-button tn-secondary" bindtap="refresh" disabled="{{busy}}" loading="{{busy}}">重新查询</button>
+  <button wx:if="{{loggedIn}}" class="tn-link audio-logout" bindtap="logout" disabled="{{busy}}">退出登录</button>
 </view>
-</block>
+<quick-login id="quick-login" visible="{{loginVisible}}" bindsuccess="loginSucceeded" bindclose="closeLogin"/>

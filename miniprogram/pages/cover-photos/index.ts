@@ -1,7 +1,6 @@
 import type { BookContext } from "../../../packages/contracts/src";
 import { bookClient } from "../../services/books";
 import { sessionClient } from "../../services/session";
-import { paymentKey } from "../../services/payments";
 import { previewBookPhoto } from "../../services/book-editor";
 import { clearPhotoPreviews } from "../../services/story-photos";
 Page({
@@ -17,6 +16,7 @@ Page({
   generation: 0,
   onLoad(q) {
     this.projectId = q.projectId || "";
+    this.setData({ selected: q.selected || "" });
   },
   async onShow() {
     const n = ++this.generation,
@@ -31,11 +31,10 @@ Page({
       if (n !== this.generation || owner !== sessionClient.context()) return;
       this.context = c;
       this.setData({
-        selected: c.cover.photoAssetId || "",
         rows: c.coverPhotoOptions.map((p) => ({
           id: p.assetId,
           image: "",
-          caption: p.caption || "故事照片",
+          caption: p.caption || "项目照片",
         })),
       });
       await Promise.all(
@@ -81,27 +80,11 @@ Page({
     if (!this.data.busy)
       this.setData({ selected: e.currentTarget.dataset.id as string });
   },
-  async save() {
+  save() {
     if (!this.context || this.data.busy) return;
-    const n = this.generation,
-      owner = sessionClient.context();
-    this.setData({ busy: true, status: "" });
-    try {
-      await bookClient.reviseCover(
-        this.projectId,
-        this.context.cover.version,
-        {
-          salutation: this.context.cover.salutation,
-          photoAssetId: this.data.selected || null,
-        },
-        paymentKey(),
-      );
-      if (n === this.generation && owner === sessionClient.context())
-        wx.navigateBack();
-    } catch (e) {
-      this.setData({ status: e instanceof Error ? e.message : "未能保存" });
-    } finally {
-      this.setData({ busy: false });
-    }
+    this.getOpenerEventChannel?.().emit?.("coverPhotoSelected", {
+      photoAssetId: this.data.selected || null,
+    });
+    wx.navigateBack();
   },
 });

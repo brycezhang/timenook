@@ -1,0 +1,2 @@
+@import "../../styles/family.wxss";
+.family-relations > .tn-field { display:block; }

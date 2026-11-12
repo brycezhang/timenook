@@ -1,0 +1,22 @@
+/* Cover and manuscript surfaces share the same physical book proportions. */
+.book-page { min-height: calc(100vh - 88px); }
+.book-page.double-dock { padding-bottom: calc(174px + env(safe-area-inset-bottom)); }
+.book-intro { display: flex; flex-direction: column; gap: 9px; }
+.book-heading { font-size: 28px; font-weight: 700; line-height: 1.3; letter-spacing: -.8px; }
+.book-display { display: flex; justify-content: center; padding: 18px 0; }
+.book-model { width: 178px; min-height: 247px; background: #fff; border-radius: 2px 7px 7px 2px; border-left: 9px solid #46563c; box-shadow: 7px 10px 24px #382c2420; padding: 22px 15px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0; transform: rotate(-5deg); text-align: left; }
+.book-model-title { font-size: 20px; line-height: 1.4; font-weight: 700; overflow-wrap: anywhere; }
+.book-model-message { font-size: 9px; line-height: 1.7; color: #756859; overflow-wrap: anywhere; }
+.book-model-image { width: 100%; height: 117px; border-radius: 1px; flex-shrink: 0; }
+.book-model-brand { font-size: 8px; color: #756859; margin-top: auto; }
+.book-model.small { width: 118px; min-height: 164px; border-left-width: 6px; padding: 14px 10px; gap: 9px; }
+.book-model.small .book-model-title { font-size: 14px; }
+.book-model.small .book-model-message { font-size: 7px; }
+.book-model.small .book-model-image { height: 78px; }
+.book-model.small .book-model-brand { font-size: 6px; }
+.book-state-space { height: 22px; }
+.book-state-tail { height: 8px; }
+.book-state-intro { display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center; }
+.book-state-intro .book-heading { font-size: 26px; }
+.book-state-icon { width: 82px; height: 82px; border-radius: 26px; background: #edf0e7; display: flex; align-items: center; justify-content: center; }
+.book-state-icon image { width: 36px; height: 36px; }

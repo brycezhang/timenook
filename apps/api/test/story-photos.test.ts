@@ -228,6 +228,7 @@ async function project(versionId = packageId) {
   const buyer = await login();
   const order = data(
     await request("POST", "/v1/orders", buyer.token, {
+      purchaseKind: "gift",
       packageVersionId: versionId,
       recipient: { typeCode: "mentor", relationshipLabel: "恩师" },
       bookTitle: "私人标题不能泄露",
@@ -276,7 +277,7 @@ async function joinedProject(versionId = packageId) {
       "POST",
       `/v1/invitations/${invite.token}/accept`,
       narrator.token,
-      { termsVersion: TERMS_VERSION },
+      { relationship: "家人", termsVersion: TERMS_VERSION },
     ),
   );
   return { ...p, narrator };
@@ -310,10 +311,34 @@ async function interview() {
   return {
     ...p,
     interview: i,
-    base: `/v1/projects/${p.projectId}/interviews/${i.id}/photos`,
+    base: `/v1/projects/${p.projectId}/photos`,
+    materials: `/v1/projects/${p.projectId}/interviews/${i.id}/photo-materials`,
   };
 }
-test("a currently authorized narrator reserves one stable photo in its real interview", async () => {
+test("a project with no interviews can reserve photos and list its own assets", async () => {
+  const p = await joinedProject();
+  const base = `/v1/projects/${p.projectId}/photos`;
+  const empty = data(await request("GET", base, p.narrator.token), 200);
+  assert.deepEqual(empty.photos, []);
+  const body = {
+    clientPhotoId: randomUUID(),
+    bytes: 100,
+    sha256: "a".repeat(64),
+  };
+  const photo = data(await request("POST", base, p.narrator.token, body));
+  assert.equal(photo.projectId, p.projectId);
+  assert.equal("interviewId" in photo, false);
+  assert.equal("actualQuestionId" in photo, false);
+  const collection = data(await request("GET", base, p.buyer.token), 200);
+  assert.equal(collection.photos[0].id, photo.id);
+  assert.deepEqual(collection.usage, { reservedCount: 1, consumedCount: 0 });
+  assert.equal(
+    (await request("GET", base, (await login()).token)).statusCode,
+    403,
+  );
+});
+
+test("a currently authorized narrator reserves one stable photo without requiring an interview", async () => {
   const p = await interview();
   const body = {
     clientPhotoId: randomUUID(),
@@ -330,8 +355,7 @@ test("a currently authorized narrator reserves one stable photo in its real inte
   );
   const created = data(await request("POST", p.base, p.narrator.token, body));
   assert.equal(created.projectId, p.projectId);
-  assert.equal(created.interviewId, p.interview.id);
-  assert.equal(created.actualQuestionId, p.interview.actualQuestion.id);
+  assert.equal("interviewId" in created, false);
   assert.equal(created.state, "pending");
   assert.equal(created.clientPhotoId, body.clientPhotoId);
   const replay = data(await request("POST", p.base, p.narrator.token, body));
@@ -430,6 +454,22 @@ test("photo sealing retains the actual original and creates private oriented met
   }
 });
 
+async function selectPhotos(
+  p: Awaited<ReturnType<typeof interview>>,
+  photoIds: string[],
+) {
+  const current = data(
+    await request("GET", p.materials, p.narrator.token),
+    200,
+  );
+  return data(
+    await request("POST", p.materials, p.narrator.token, {
+      expectedRevision: current?.revision ?? 0,
+      entries: photoIds.map((photoId) => ({ photoId, caption: "" })),
+    }),
+  );
+}
+
 test("adding, describing and reordering photos creates immutable material snapshots without replacing recorded audio", async () => {
   const p = await interview();
   const bytes = await sharp({
@@ -446,15 +486,15 @@ test("adding, describing and reordering photos creates immutable material snapsh
     );
     ids.push(sealed.id);
   }
-  const state = data(await request("GET", p.base, p.narrator.token), 200);
-  assert.equal(state.snapshot.revision, 2);
+  const state = { snapshot: await selectPhotos(p, ids) };
+  assert.equal(state.snapshot.revision, 1);
   assert.deepEqual(
     state.snapshot.entries.map((e: any) => e.photoId),
     ids,
   );
   const first = state.snapshot;
   const edited = data(
-    await request("POST", `${p.base}/materials`, p.narrator.token, {
+    await request("POST", `${p.materials}`, p.narrator.token, {
       expectedRevision: first.revision,
       entries: [
         { photoId: ids[1], caption: "旧屋门口" },
@@ -462,17 +502,17 @@ test("adding, describing and reordering photos creates immutable material snapsh
       ],
     }),
   );
-  assert.equal(edited.revision, 3);
+  assert.equal(edited.revision, 2);
   assert.notEqual(edited.hash, first.hash);
   assert.equal(edited.entries[0].caption, "旧屋门口");
   const old = data(
-    await request("GET", `${p.base}/materials/${first.id}`, p.narrator.token),
+    await request("GET", `${p.materials}/${first.id}`, p.narrator.token),
     200,
   );
   assert.deepEqual(old, first);
   assert.equal(
     (
-      await request("POST", `${p.base}/materials`, p.narrator.token, {
+      await request("POST", `${p.materials}`, p.narrator.token, {
         expectedRevision: first.revision,
         entries: [],
       })
@@ -508,10 +548,7 @@ test("photo intents survive ordinary AI and sharing grants while the same app se
   data(
     await request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
   );
-  const firstSnapshot = data(
-    await request("GET", p.base, p.narrator.token),
-    200,
-  ).snapshot;
+  const firstSnapshot = await selectPhotos(p, [photo.id]);
   const audio = readFileSync("test/fixtures/synthetic-1s.mp3"),
     clipsBase = `/v1/projects/${p.projectId}/interviews/${p.interview.id}/clips`,
     clip = data(
@@ -584,6 +621,7 @@ test("photo intents survive ordinary AI and sharing grants while the same app se
     data(
       await request("POST", `${p.base}/${added.id}/seal`, p.narrator.token, {}),
     );
+    await selectPhotos(p, [photo.id, added.id]);
     await runtime.close();
     runtime = await startProductionWorker(app);
     await wake(runtime);
@@ -606,15 +644,14 @@ test("photo intents survive ordinary AI and sharing grants while the same app se
     );
     assert.equal((await taskView()).length, 1);
     assert.equal(
-      data(await request("GET", p.base, p.narrator.token), 200).snapshot
-        .revision,
+      data(await request("GET", p.materials, p.narrator.token), 200).revision,
       2,
     );
     assert.deepEqual(
       data(
         await request(
           "GET",
-          `${p.base}/materials/${firstSnapshot.id}`,
+          `${p.materials}/${firstSnapshot.id}`,
           p.narrator.token,
         ),
         200,
@@ -660,12 +697,9 @@ test("a bounded crop creates new derivative references and preserves the origina
   data(
     await request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
   );
-  const before = data(
-    await request("GET", p.base, p.narrator.token),
-    200,
-  ).snapshot;
+  const before = await selectPhotos(p, [photo.id]);
   const cropped = data(
-    await request("POST", `${p.base}/${photo.id}/crop`, p.narrator.token, {
+    await request("POST", `${p.materials}/${photo.id}/crop`, p.narrator.token, {
       expectedRevision: before.revision,
       left: 10,
       top: 20,
@@ -698,24 +732,25 @@ test("a bounded crop creates new derivative references and preserves the origina
   assert.equal(actual.height, 30);
   assert.deepEqual(
     data(
-      await request(
-        "GET",
-        `${p.base}/materials/${before.id}`,
-        p.narrator.token,
-      ),
+      await request("GET", `${p.materials}/${before.id}`, p.narrator.token),
       200,
     ),
     before,
   );
   assert.equal(
     (
-      await request("POST", `${p.base}/${photo.id}/crop`, p.narrator.token, {
-        expectedRevision: 2,
-        left: 90,
-        top: 0,
-        width: 40,
-        height: 30,
-      })
+      await request(
+        "POST",
+        `${p.materials}/${photo.id}/crop`,
+        p.narrator.token,
+        {
+          expectedRevision: 2,
+          left: 90,
+          top: 0,
+          width: 40,
+          height: 30,
+        },
+      )
     ).statusCode,
     422,
   );
@@ -761,7 +796,7 @@ test("final objects survive a database rollback and app restart without duplicat
     `CREATE FUNCTION fail_photo_snapshot() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic commit failure'; END $$`,
   );
   await db.$executeRawUnsafe(
-    `CREATE TRIGGER fail_photo_snapshot BEFORE INSERT ON photo_snapshots FOR EACH ROW EXECUTE FUNCTION fail_photo_snapshot()`,
+    `CREATE TRIGGER fail_photo_snapshot BEFORE INSERT ON photo_assets FOR EACH ROW EXECUTE FUNCTION fail_photo_snapshot()`,
   );
   try {
     assert.equal(
@@ -777,7 +812,7 @@ test("final objects survive a database rollback and app restart without duplicat
     );
   } finally {
     await db.$executeRawUnsafe(
-      `DROP TRIGGER fail_photo_snapshot ON photo_snapshots`,
+      `DROP TRIGGER fail_photo_snapshot ON photo_assets`,
     );
     await db.$executeRawUnsafe(`DROP FUNCTION fail_photo_snapshot()`);
   }
@@ -798,11 +833,14 @@ test("final objects survive a database rollback and app restart without duplicat
     sealed.assets.find((a: any) => a.kind === "original").id,
   );
   const state = data(await request("GET", p.base, p.narrator.token), 200);
-  assert.equal(state.snapshot.revision, 1);
+  assert.equal(
+    data(await request("GET", p.materials, p.narrator.token), 200),
+    null,
+  );
   assert.deepEqual(state.usage, { reservedCount: 0, consumedCount: 1 });
 });
 
-test("real database ownership constraints reject photos and immutable references from another interview or project", async () => {
+test("real database ownership constraints reject photos and immutable references from another project", async () => {
   const p = await interview(),
     q = await interview(),
     bytes = await sharp({
@@ -815,10 +853,7 @@ test("real database ownership constraints reject photos and immutable references
   data(
     await request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
   );
-  const snapshot = data(
-    await request("GET", p.base, p.narrator.token),
-    200,
-  ).snapshot;
+  const snapshot = await selectPhotos(p, [photo.id]);
   const asset = snapshot.entries[0].assets[0];
   await assert.rejects(
     db.$executeRaw`INSERT INTO photo_references(snapshot_id,project_id,interview_id,photo_id,position,caption,original_id,preview_id,print_id) VALUES(${snapshot.id}::uuid,${q.projectId}::uuid,${q.interview.id}::uuid,${photo.id}::uuid,5,'',${asset.id}::uuid,${asset.id}::uuid,${asset.id}::uuid)`,
@@ -831,13 +866,67 @@ test("real database ownership constraints reject photos and immutable references
   );
   assert.equal(
     (
-      await request("POST", `${q.base}/materials`, q.narrator.token, {
+      await request("POST", `${q.materials}`, q.narrator.token, {
         expectedRevision: 0,
         entries: [{ photoId: photo.id, caption: "" }],
       })
     ).statusCode,
     404,
   );
+});
+
+test("one sealed project photo can be reused across interviews without duplicate quota and detached without changing prior snapshots", async () => {
+  const p = await interview();
+  const bytes = await sharp({
+    create: { width: 40, height: 30, channels: 3, background: "white" },
+  })
+    .png()
+    .toBuffer();
+  const photo = await reserve(p, bytes);
+  await upload(p, photo, bytes);
+  data(
+    await request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
+  );
+  const first = await selectPhotos(p, [photo.id]);
+  const next = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/interviews`,
+      p.buyer.token,
+      {
+        clientInterviewId: randomUUID(),
+        expectedPlanRevision: 1,
+        starterKind: "photo",
+      },
+    ),
+  );
+  const materials = `/v1/projects/${p.projectId}/interviews/${next.id}/photo-materials`;
+  const reused = data(
+    await request("POST", materials, p.buyer.token, {
+      expectedRevision: 0,
+      entries: [{ photoId: photo.id, caption: "另一次讲述" }],
+    }),
+  );
+  assert.equal(reused.entries[0].photoId, photo.id);
+  assert.equal(reused.entries[0].assets[0].id, first.entries[0].assets[0].id);
+  const removed = data(
+    await request("POST", materials, p.buyer.token, {
+      expectedRevision: 1,
+      entries: [],
+    }),
+  );
+  assert.deepEqual(removed.entries, []);
+  assert.deepEqual(
+    data(await request("GET", `${materials}/${reused.id}`, p.buyer.token), 200),
+    reused,
+  );
+  assert.deepEqual(
+    data(await request("GET", p.materials, p.narrator.token), 200),
+    first,
+  );
+  const collection = data(await request("GET", p.base, p.buyer.token), 200);
+  assert.equal(collection.photos.length, 1);
+  assert.deepEqual(collection.usage, { reservedCount: 0, consumedCount: 1 });
 });
 
 test("photo routes remain disabled by default and synthetic configuration is rejected in production", async () => {
@@ -850,14 +939,14 @@ test("photo routes remain disabled by default and synthetic configuration is rej
       (
         await inactive.inject({
           method: "GET",
-          url: `/v1/projects/${randomUUID()}/interviews/${randomUUID()}/photos`,
+          url: `/v1/projects/${randomUUID()}/photos`,
         })
       ).statusCode,
       404,
     );
     assert.ok(
       !JSON.stringify(createOpenApiDocument(inactive)).includes(
-        "photos/materials",
+        "photo-materials",
       ),
     );
   } finally {
@@ -870,7 +959,7 @@ test("photo routes remain disabled by default and synthetic configuration is rej
     ),
   );
   assert.ok(
-    JSON.stringify(createOpenApiDocument(app)).includes("photos/materials"),
+    JSON.stringify(createOpenApiDocument(app)).includes("photo-materials"),
   );
 });
 
@@ -919,7 +1008,8 @@ test("an unsupported photo can release its reservation and recover with a suppor
   const q = {
     ...p,
     interview: i,
-    base: `/v1/projects/${p.projectId}/interviews/${i.id}/photos`,
+    base: `/v1/projects/${p.projectId}/photos`,
+    materials: `/v1/projects/${p.projectId}/interviews/${i.id}/photo-materials`,
   };
   const invalid = Buffer.from("not an image"),
     bad = await reserve(q, invalid);
@@ -1030,7 +1120,10 @@ test("photo decoding gives bounded backpressure while duplicate completions stil
   }
   const state = data(await request("GET", p.base, p.narrator.token), 200);
   assert.deepEqual(state.usage, { reservedCount: 0, consumedCount: 6 });
-  assert.equal(state.snapshot.revision, 6);
+  assert.equal(
+    data(await request("GET", p.materials, p.narrator.token), 200),
+    null,
+  );
 });
 
 test("database lineage rejects a derivative parent from another photo in the same project", async () => {
@@ -1061,34 +1154,23 @@ test("a lost material-edit response replays its exact immutable result even afte
   data(
     await request("POST", `${p.base}/${photo.id}/seal`, p.narrator.token, {}),
   );
+  await selectPhotos(p, [photo.id]);
   const key = randomUUID(),
     command = {
       expectedRevision: 1,
       entries: [{ photoId: photo.id, caption: "第一份说明" }],
     };
   const first = data(
-    await request(
-      "POST",
-      `${p.base}/materials`,
-      p.narrator.token,
-      command,
-      key,
-    ),
+    await request("POST", `${p.materials}`, p.narrator.token, command, key),
   );
   data(
-    await request("POST", `${p.base}/materials`, p.narrator.token, {
+    await request("POST", `${p.materials}`, p.narrator.token, {
       expectedRevision: 2,
       entries: [{ photoId: photo.id, caption: "后来修改的说明" }],
     }),
   );
   const replay = data(
-    await request(
-      "POST",
-      `${p.base}/materials`,
-      p.narrator.token,
-      command,
-      key,
-    ),
+    await request("POST", `${p.materials}`, p.narrator.token, command, key),
   );
   assert.deepEqual(replay, first);
 });

@@ -1,0 +1,12 @@
+<tn-navigation title="指定收礼人"/>
+<view class="tn-page with-dock gift-page">
+ <block wx:if="{{loading && !loaded}}"><view class="gift-skeleton line"/><view class="gift-skeleton"/></block>
+ <block wx:elif="{{loaded}}"><view class="tn-eyebrow">电子礼物卡</view><view class="tn-card">
+  <view class="tn-field"><text>收礼人称呼</text><input class="tn-input" value="{{recipientName}}" bindinput="setName" placeholder="爸爸" maxlength="32" disabled="{{claimed || busy}}"/></view>
+  <view class="tn-field"><text>微信绑定手机号</text><input class="tn-input" type="number" value="{{recipientPhone}}" bindinput="setPhone" placeholder="11 位手机号" maxlength="11" disabled="{{claimed || busy}}"/></view>
+  <view class="gift-caption">{{claimed ? '礼物已领取，不能更改收礼人。' : '仅指定手机号可领取；领取前可更正。'}}</view>
+ </view></block>
+ <view wx:if="{{status}}" class="tn-error" role="alert">{{status}}</view>
+</view>
+<view class="tn-dock"><button wx:if="{{loaded}}" class="tn-button" bindtap="save" loading="{{busy}}" disabled="{{loading || busy}}"><image class="tn-icon" src="/assets/icons/arrow-right-light.svg"/>{{claimed ? '查看礼物卡' : '生成礼物卡'}}</button><button wx:else class="tn-button" bindtap="load" loading="{{loading}}" disabled="{{loading}}">{{status ? '重新读取' : '登录后继续'}}</button></view>
+<quick-login visible="{{loginVisible}}" bind:success="loginSucceeded" bind:close="closeLogin"/>

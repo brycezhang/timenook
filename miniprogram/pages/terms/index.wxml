@@ -1,20 +1,20 @@
-<view class="s-page terms">
- <view class="s-title">时光故事使用条款</view><view class="s-muted">版本：2026-11-08</view>
- <view class="s-subtitle s-space">参与项目</view>
+<tn-navigation title="使用条款与隐私说明" brand="{{false}}"/>
+<view class="tn-page terms">
+ <view class="terms-heading">参与项目</view>
  <view>登录前请阅读本条款与《隐私保护指引》，明确同意后通过短信验证码或小程序手机号授权完成登录；接受邀请时沿用当前账号已接受的条款。项目邀请可以通过网页链接或小程序分享送达；接受邀请的成员可查看、记录、编辑本项目资料、调整书稿、填写地址并提交印刷。分享邀请前请确认希望让对方参与，加入前请确认项目归属。</view>
- <view class="s-subtitle s-space">账号资料</view>
+ <view class="terms-heading">账号资料</view>
  <view>手机号通过短信验证码或小程序授权验证，用于建立和联系产品账号，不公开展示。首次登录时，昵称生成为「用户」加手机号后四位；您可以在「我的」中修改昵称，之后登录保留修改结果。同一已验证手机号在网页和小程序对应同一产品账号及其有权访问的项目。</view>
- <view class="s-subtitle s-space">资料与使用范围</view>
+ <view class="terms-heading">资料与使用范围</view>
  <view>您应确保有权提供录音、文字和照片，并已取得涉及他人的必要许可。资料用于转写、故事整理、书稿生成、原声回听及您提交的印刷寄送；项目内容不公开展示。为提供服务，我们会将必要资料交由相应的语音、整理、存储、印刷和配送服务处理。请勿上传无权使用的内容。</view>
- <view class="s-subtitle s-space">记录与成书</view>
- <view>录音结束自动上传，上传结果在页面显示。故事在后台整理，生成后默认可入书。AI 可能识别或整理错误，成员可以直接修改文字、照片、封面和章节。完整书稿通过 PDF 预览。项目成员提交印刷时会固定当前书稿与收货地址，后续改稿不会覆盖已提交的版本。</view>
- <view class="s-subtitle s-space">购买与配送</view>
+ <view class="terms-heading">记录与成书</view>
+ <view>录音结束自动上传，上传结果在页面显示。故事在后台整理，归入章节后纳入书稿；未归章的故事继续保留。AI 可能识别或整理错误，成员可以直接修改文字、照片、封面和章节。完整书稿通过 PDF 预览。项目成员提交印刷时会固定当前书稿与收货地址，后续改稿不会覆盖已提交的版本。</view>
+ <view class="terms-heading">购买与配送</view>
  <view>价格、服务额度、实体书规格、配送范围和交期以购买时显示并保存的套餐说明为准。购买时无需选择配送地区或填写地址，成书后提交印刷时再填写并核验收货地址。首本制作校验实际付款权益；生成 PDF 或提交印刷不代表已经印好或发货。进度和物流以实际处理记录为准。录音、回听、书稿与必要资料长期保留，不设置按年自动续费。</view>
- <view class="s-subtitle s-space">退款与质量售后</view>
+ <view class="terms-heading">退款与质量售后</view>
  <view>通过本页微信客服申请退款、改址或质量售后。退款按照原购买条款和实际制作阶段核实办理；提交申请不等于退款完成。定制印刷的退换范围按购买条款说明，质量问题及依法享有的权利不受影响。退款不自动删除项目资料。</view>
- <view class="s-subtitle s-space">资料导出、更正与删除</view>
+ <view class="terms-heading">资料导出、更正与删除</view>
  <view>如需完整资料导出、更正或删除，请联系微信客服。我们会核实申请者与资料的关系、申请范围和必要信息后处理。导出与删除以实际办理结果为准；删除申请不等于立即删除，已依法需要留存的交易或履约记录按相应要求处理。</view>
- <view class="s-subtitle s-space">联系我们</view>
+ <view class="terms-heading">联系我们</view>
  <view>售后、资料导出、更正与删除均通过下方微信客服办理。请说明项目名称及需要办理的事项。</view>
- <button class="s-button s-space" open-type="contact" show-message-card session-from="terms">联系微信客服</button><button class="s-link" bindtap="back">返回</button>
+ <button class="tn-button" open-type="contact" show-message-card session-from="terms">联系微信客服</button><button class="tn-link" bindtap="privacy">查看微信隐私保护指引</button><view wx:if="{{status}}" class="tn-error">{{status}}</view>
 </view>

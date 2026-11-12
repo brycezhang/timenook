@@ -44,6 +44,7 @@ for (const engine of [chromium, webkit]) {
             `/v1/invitations/${invitation.token}/accept`,
             first.buyer.token,
             {
+              relationship: "家人",
               termsVersion: (
                 await import("../../packages/contracts/dist/index.js")
               ).USER_TERMS_VERSION,

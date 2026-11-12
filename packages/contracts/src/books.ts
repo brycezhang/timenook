@@ -3,7 +3,6 @@ import type { PlanDirectory } from "./index";
 export interface BookPhoto {
   /** Product photo ID, used with the authenticated Media gateway. */
   id: string;
-  interviewId: string;
   assetId: string;
   sha256: string;
   bytes: number;
@@ -13,6 +12,14 @@ export interface BookPhoto {
 }
 export interface BookCoverSettings {
   version: number;
+  salutation: string;
+  photoAssetId: string | null;
+}
+/** One explicit save of the complete cover draft, including the project title. */
+export interface BookCoverInput {
+  expectedVersion: number;
+  expectedMetadataVersion: number;
+  title: string;
   salutation: string;
   photoAssetId: string | null;
 }
@@ -114,6 +121,8 @@ export interface BookAudioEntryView {
   id: string;
   projectId: string;
   story: { id: string; revisionId: string; version: number; title: string };
+  /** Photograph from the same frozen story revision, if currently readable. */
+  photo: BookPhoto | null;
   clips: {
     clipId: string;
     /** Zero-based position in the frozen book item, independent of recording counters. */

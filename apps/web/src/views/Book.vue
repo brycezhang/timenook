@@ -5,7 +5,8 @@ import type {
   BookContext,
   BookVersionView,
   BookPhoto,
-  PlanDirectory,
+  PlanChapter,
+  PersonalPlan,
 } from "../../../../packages/contracts/src";
 import { bookApi } from "../book-api";
 import { projectApi, projectError, type ProjectOverview } from "../project-api";
@@ -24,6 +25,10 @@ const projectId = computed(() =>
 const fixedId = computed(() =>
   typeof route.query.version === "string" ? route.query.version : "",
 );
+const fixedProduction = computed(
+  () => !!fixedId.value && route.query.production === "1",
+);
+const plan = ref<PersonalPlan | null>(null);
 const context = ref<BookContext | null>(null),
   overview = ref<ProjectOverview | null>(null),
   displayed = ref<BookVersionView | null>(null);
@@ -34,7 +39,7 @@ const loading = ref(true),
 const title = ref(""),
   salutation = ref(""),
   photoAssetId = ref<string | null>(null),
-  chapters = ref<PlanDirectory["chapters"]>([]);
+  chapters = ref<PlanChapter[]>([]);
 const savedCover = ref(""),
   savedDirectory = ref("");
 const coverEditor = ref(false),
@@ -74,6 +79,7 @@ const generating = computed(
 );
 const outdated = computed(
   () =>
+    !fixedProduction.value &&
     !!displayed.value &&
     (displayed.value.state === "obsolete" ||
       (!!context.value?.inputHash &&
@@ -81,8 +87,8 @@ const outdated = computed(
 );
 const ready = computed(
   () =>
-    displayed.value?.state === "ready" &&
-    !!displayed.value.pdf &&
+    (fixedProduction.value || displayed.value?.state === "ready") &&
+    !!displayed.value?.pdf &&
     !outdated.value,
 );
 const includedCount = computed(() =>
@@ -179,7 +185,7 @@ function accept(
   }
   if (resetDirectory) {
     directoryBaseVersion = value.directory.version;
-    chapters.value = structuredClone(value.directory.chapters);
+    chapters.value = JSON.parse(JSON.stringify(plan.value?.chapters ?? []));
     savedDirectory.value = JSON.stringify(chapters.value);
   }
   if (!fixedId.value) displayed.value = value.current;
@@ -197,17 +203,21 @@ async function load(initial = false) {
   if (initial) loading.value = true;
   error.value = "";
   try {
-    const [value, project] = await Promise.all([
+    const [value, project, outline] = await Promise.all([
       bookApi.context(projectId.value),
       projectApi.overview(projectId.value),
+      projectApi.plan(projectId.value),
     ]);
     if (token !== sequence) return;
     const resetCover = initial || !coverDirty.value,
       resetDirectory = initial || !directoryDirty.value;
     overview.value = project;
+    plan.value = outline;
     accept(value, resetCover, resetDirectory);
     if (fixedId.value) {
-      const version = await bookApi.version(projectId.value, fixedId.value);
+      const version = fixedProduction.value
+        ? await bookApi.production(projectId.value)
+        : await bookApi.version(projectId.value, fixedId.value);
       if (token !== sequence) return;
       displayed.value = version;
       deadline();
@@ -236,7 +246,7 @@ async function loadPhoto(photo: BookPhoto) {
   const token = mediaSequence;
   try {
     const blob = await fetchVerifiedBlob(
-      `/projects/${projectId.value}/interviews/${photo.interviewId}/photos/${photo.id}/assets/${photo.assetId}/content`,
+      `/projects/${projectId.value}/photos/${photo.id}/assets/${photo.assetId}/content`,
       photo,
       mediaController.signal,
     );
@@ -265,22 +275,15 @@ async function saveCover() {
   const token = ++sequence;
   clearTimeout(timer);
   try {
-    if (title.value.trim() !== overview.value.bookTitle) {
-      const project = await projectApi.rename(
-        projectId.value,
-        titleBaseVersion,
-        title.value.trim(),
-      );
-      if (token !== sequence) return;
-      overview.value = project;
-      titleBaseVersion = project.metadataVersion;
-    }
-    const value = await bookApi.cover(
-      projectId.value,
-      coverBaseVersion,
-      salutation.value,
-      photoAssetId.value,
-    );
+    const value = await bookApi.cover(projectId.value, {
+      expectedVersion: coverBaseVersion,
+      expectedMetadataVersion: titleBaseVersion,
+      title: title.value.trim(),
+      salutation: salutation.value,
+      photoAssetId: photoAssetId.value,
+    });
+    if (token !== sequence) return;
+    overview.value = await projectApi.overview(projectId.value);
     if (token !== sequence) return;
     accept(value, true);
     notice.value = "封面已保存";
@@ -302,11 +305,16 @@ async function saveDirectory() {
   const token = ++sequence;
   clearTimeout(timer);
   try {
-    const value = await bookApi.directory(
+    if (!plan.value) return;
+    plan.value = await projectApi.revisePlan(
       projectId.value,
       directoryBaseVersion,
-      JSON.parse(JSON.stringify(chapters.value)),
+      {
+        chapters: JSON.parse(JSON.stringify(chapters.value)),
+        starters: plan.value.starters,
+      },
     );
+    const value = await bookApi.context(projectId.value);
     if (token !== sequence) return;
     accept(value, false, true);
     notice.value = "目录已保存";
@@ -337,6 +345,7 @@ function addChapter() {
     key: crypto.randomUUID(),
     title: `第${chapters.value.length + 1}章`,
     storyRefs: [],
+    questions: [],
   });
 }
 let generatedInput = "",
@@ -382,7 +391,9 @@ async function pdf(download = false) {
     version = displayed.value;
   try {
     const blob = await fetchVerifiedBlob(
-      `/projects/${projectId.value}/book/versions/${version.id}/pdf`,
+      fixedProduction.value
+        ? `/projects/${projectId.value}/fulfillment/book/pdf`
+        : `/projects/${projectId.value}/book/versions/${version.id}/pdf`,
       version.pdf!,
       mediaController.signal,
     );
@@ -582,10 +593,10 @@ onBeforeUnmount(() => {
                   :aria-pressed="photoAssetId === photo.assetId"
                   @click="choosePhoto(photo)"
                 >
-                  {{ photo.caption || "故事照片" }}
+                  {{ photo.caption || "项目照片" }}
                 </button>
                 <p v-if="!context.coverPhotoOptions.length">
-                  可从已入书的故事照片中选择。先为故事添加照片，或使用无照片封面。
+                  可从项目照片中选择，或使用无照片封面。
                 </p>
               </div>
               <p v-if="error" class="notice error" role="alert">

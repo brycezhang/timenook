@@ -1,3 +1,5 @@
 {
-  "navigationBarTitleText": "一段值得留下的往事"
+  "navigationStyle": "custom",
+  "navigationBarTitleText": "故事详情",
+  "usingComponents": { "tn-navigation": "/components/tn-navigation/index" }
 }

@@ -8,6 +8,7 @@ import { books, root, storyBrowser } from "./flow-fixture.mjs";
 const require = createRequire(join(root, "apps/api/package.json"));
 const {
   readyFirstCopyBook,
+  readyReservedFirstCopy,
 } = require("./dist-test/test/first-copy-fixture.js");
 const { paymentAdmin } = require("./dist-test/test/payment-admin-fixture.js");
 const {
@@ -35,6 +36,50 @@ async function fillAddress(page, detail = "合成地址一号") {
     .waitFor();
 }
 
+test(
+  "chromium: submitted production keeps its fixed PDF readable after a new cover draft",
+  { timeout: 120000 },
+  async () => {
+    const flow = await storyBrowser(chromium, { previewPort: 4497 });
+    try {
+      const p = await readyReservedFirstCopy();
+      books.data(
+        await books.request(
+          "POST",
+          `/v1/projects/${p.projectId}/book/cover`,
+          p.buyer.token,
+          {
+            ...(await books.coverMetadata(p.projectId, p.buyer.token)),
+            expectedVersion: 0,
+            salutation: "下一版的新寄语",
+            photoAssetId: null,
+          },
+        ),
+      );
+      const page = await flow.context.newPage();
+      await page.goto(`${flow.origin}/app/projects/${p.projectId}/production`);
+      await flow.signIn(page, flow.phoneFor(p.buyer));
+      await page.getByRole("link", { name: "查看本次提交的书稿" }).click();
+      await page.waitForURL(/production=1/);
+      const response = page.waitForResponse((response) =>
+        new URL(response.url()).pathname.endsWith("/fulfillment/book/pdf"),
+      );
+      await page.getByRole("button", { name: "阅读 PDF", exact: true }).click();
+      assert.equal((await response).status(), 200);
+      await page.getByTitle("书稿 PDF", { exact: true }).waitFor();
+      assert.equal(
+        await page
+          .getByRole("button", { name: "生成书稿", exact: true })
+          .count(),
+        0,
+      );
+      assert.deepEqual(flow.errors, []);
+    } finally {
+      await flow.close();
+    }
+  },
+);
+
 for (const engine of [chromium, webkit])
   test(
     `${engine.name()}: losing project membership clears private production content after any denied action`,
@@ -59,6 +104,7 @@ for (const engine of [chromium, webkit])
             `/v1/invitations/${invite.token}/accept`,
             p.narrator.token,
             {
+              relationship: "家人",
               termsVersion: TERMS_VERSION,
             },
           ),
@@ -519,6 +565,7 @@ for (const engine of [chromium, webkit])
             `/v1/projects/${p.projectId}/book/cover`,
             p.narrator.token,
             {
+              ...(await books.coverMetadata(p.projectId, p.buyer.token)),
               expectedVersion: 0,
               salutation: "家人改写的新寄语",
               photoAssetId: null,

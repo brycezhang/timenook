@@ -1,27 +1,27 @@
-export const TEMPLATE_VERSION = "t20-a5-v3";
+export const TEMPLATE_VERSION = "t20-a5-v4";
 export const CSS = `
 @page { size: 148mm 210mm; margin: 0; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
-body { font-family: ProbeSans; font-size: 14px; line-height: 1.8; color: #25332e; -webkit-print-color-adjust: exact; }
+body { font-family: ProbeSans; font-size: 14px; line-height: 1.8; color: #382c24; -webkit-print-color-adjust: exact; }
 .page { position: relative; width: 148mm; height: 210mm; break-after: page; background: white; }
 .page:last-child { break-after: auto; }
 .content { position: absolute; top: 20mm; left: 16mm; width: 116mm; height: 172mm; }
-.header { position: absolute; top: 8mm; left: 16mm; color: #718178; font-size: 9px; }
-.footer { position: absolute; bottom: 7mm; right: 16mm; font-size: 10px; color: #718178; }
+.header { position: absolute; top: 8mm; left: 16mm; color: #756859; font-size: 9px; }
+.footer { position: absolute; bottom: 7mm; right: 16mm; font-size: 10px; color: #756859; }
 h1 { font-size: 26px; line-height: 1.5; margin: 40mm 0 12mm; font-weight: normal; overflow-wrap: anywhere; }
 h2 { font-size: 21px; line-height: 1.6; margin: 0 0 8mm; font-weight: normal; overflow-wrap: anywhere; }
 p { margin: 0 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.toc-row { display: flex; align-items: flex-start; gap: 4mm; padding: 3mm 0; border-bottom: 1px solid #dce4df; }
+.toc-row { display: flex; align-items: flex-start; gap: 4mm; padding: 3mm 0; border-bottom: 1px solid #ded4c6; }
 .toc-row span:first-child { flex: 1; overflow-wrap: anywhere; }
 .toc-row span:last-child { flex: 0 0 10mm; text-align: right; }
 figure { margin: 0 0 6mm; } .photo { display: block; object-fit: contain; }
 .qr { display: block; width: 32mm; height: 32mm; image-rendering: pixelated; }
-figcaption, .photo-caption { font-size: 10px; color: #718178; }
+figcaption, .photo-caption { font-size: 10px; color: #756859; }
 .photo-caption { margin: 0 0 6mm; }
-.cover-title { font-size:22px; line-height:1.3; margin:4mm 0; }
-.cover-salutation { font-size:14px; line-height:1.6; margin:0 0 4mm; overflow-wrap:anywhere; white-space:normal; }
-.cover-photo { display:block; margin:0 auto 3mm; object-fit:contain; }
+.cover-title { font-size:28px; line-height:1.4; margin:4mm 0 6mm; font-weight:700; }
+.cover-salutation { font-size:12px; line-height:1.6; margin:0 0 4mm; overflow-wrap:anywhere; white-space:normal; }
+.cover-photo { display:block; margin:6mm auto 3mm; object-fit:contain; }
 .cover-notice { font-size:10px; line-height:1.6; margin:0; }
 `;
 
@@ -39,7 +39,7 @@ export function paginate({ book, guesses }) {
     sheet.className = "page";
     const header = document.createElement("div");
     header.className = "header";
-    header.textContent = product ? "书稿预览 · 制作规格待核验" : "本地合成样书";
+    header.textContent = product ? "时光故事" : "本地合成样书";
     const content = document.createElement("div");
     content.className = "content";
     const footer = document.createElement("div");
@@ -126,14 +126,8 @@ export function paginate({ book, guesses }) {
       img.style.height = `${book.coverPhoto.heightMm}mm`;
       cover.append(img);
     }
-    const notice = text("p", "技术试验文件 · 规格待印厂确认");
-    notice.className = "cover-notice";
-    cover.append(notice);
     content.append(cover);
     if (!fits(cover)) throw Error("COVER_LAYOUT_OVERFLOW");
-    content = page();
-    block(text("h2", book.title));
-    block(text("p", "岁月成书 · 本人讲述"));
   } else {
     block(text("h1", book.title));
     block(text("p", "技术试验文件 · 规格待印厂确认"));
@@ -162,7 +156,9 @@ export function paginate({ book, guesses }) {
       img,
       text(
         "figcaption",
-        product ? "本人原声入口 · 访问需授权" : "合成原声入口 · 需测试身份",
+        product
+          ? "扫码回听原声 · 访问需登录并获授权"
+          : "合成原声入口 · 需测试身份",
       ),
     );
     block(figure);

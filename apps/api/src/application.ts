@@ -59,6 +59,10 @@ import {
   RecordingObjectsController,
   RECORDING_OBJECTS,
 } from "./media/recordings";
+import {
+  FamilyQuestionService,
+  FamilyQuestionsController,
+} from "./projects/family-questions";
 import { Interviews, InterviewsController } from "./projects/interviews";
 import {
   PersonalPlans,
@@ -146,6 +150,7 @@ import {
 import { ErrorResponseDto, HealthResponseDto } from "./health-contract";
 import { IdentityAccess, WECHAT_FETCH } from "./identity/identity-access";
 import { IdentityController } from "./identity/identity-controller";
+import { Gifts, GiftsController } from "./identity/gifts";
 import { WebController } from "./web/web-controller";
 import { WebAccess } from "./web/web-access";
 import { SmsCodes } from "./sms/sms-codes";
@@ -514,13 +519,18 @@ export async function createApplication(
       ...(productEnabled
         ? [
             ParticipationController,
+            GiftsController,
             AdminCareController,
             DeletionController,
             AdminDeletionController,
           ]
         : []),
       ...(config.participation || config.acceptance
-        ? [PersonalPlanController, InterviewsController]
+        ? [
+            PersonalPlanController,
+            InterviewsController,
+            FamilyQuestionsController,
+          ]
         : []),
       ...(config.recording || config.acceptance
         ? [ProjectOverviewController]
@@ -686,7 +696,9 @@ export async function createApplication(
       IdentityAccess,
       ProjectStreams,
       Participation,
+      Gifts,
       PersonalPlans,
+      FamilyQuestionService,
       Interviews,
       AdminAccess,
       Catalog,

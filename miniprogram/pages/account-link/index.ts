@@ -1,4 +1,4 @@
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 import { sessionClient, ApiFailure } from "../../services/session";
 import { setDataMode } from "../../services/mode";
 import type {

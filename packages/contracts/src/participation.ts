@@ -1,5 +1,24 @@
 export const CONSENT_PURPOSES = ["collection", "ai", "sharing"] as const;
 export type ConsentPurpose = (typeof CONSENT_PURPOSES)[number];
+export type GiftCategory = "sent" | "received" | "participating";
+export interface ProjectMembership {
+  projectId: string;
+  bookTitle: string;
+  state: "active";
+  categories: GiftCategory[];
+  isSelfGift: boolean;
+  giftState: "unissued" | "unclaimed" | "claimed" | null;
+  giverNickname: string;
+  giftRelationship: string | null;
+  storyCount: number;
+}
+export interface ProjectMemberProfile {
+  projectId: string;
+  userId: string;
+  nickname: string;
+  relationship: string | null;
+  isNarrator: boolean;
+}
 export interface InvitationView {
   projectId?: string;
   bookTitle?: string;

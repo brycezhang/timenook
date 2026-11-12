@@ -1,0 +1,140 @@
+{
+  "observedAt": "2026-11-12",
+  "builds": {
+    "releaseNavigationAndFlows": "4e38b3f",
+    "finalStoryPresentation": "f257c62",
+    "registeredReleasePages": 37,
+    "wxmlImportedPrintTemplatePresent": true
+  },
+  "nativeWindows": [
+    {
+      "width": 390,
+      "height": 844
+    },
+    {
+      "width": 320,
+      "height": 568
+    }
+  ],
+  "boundary": "Official WeChat DevTools native runtime and screenshots. Real loopback API, PostgreSQL, Redis, protected photos/audio/PDF. Synthetic external identity/payment/AI/storage/fulfillment and declared RecorderManager/permission boundaries; no business wx.request or page data mocks.",
+  "storyOrder": {
+    "width": 320,
+    "input": "CUA drag second selected story above first, then CUA remove it",
+    "dragNativeAndApiOrder": [
+      "previously-unassigned",
+      "ready"
+    ],
+    "removeNativeAndApiOrder": [
+      "ready"
+    ],
+    "passed": true
+  },
+  "storyAudio": {
+    "width": 320,
+    "actualMp3DurationSeconds": 30.096,
+    "pausedSeconds": 8.368,
+    "nativeSliderSeekSeconds": 19.4,
+    "resumedSeconds": 26.0506666667,
+    "audioError": "",
+    "screenshot": "../MP08/native/StoryAudioSeek-320.png"
+  },
+  "storyRetry": {
+    "width": 390,
+    "from": "retryable failed",
+    "actualButton": "重新整理",
+    "observedStates": [
+      "processing",
+      "ready"
+    ],
+    "emptyStorageIdempotencyFixVerified": true
+  },
+  "recording": {
+    "width": 390,
+    "states": [
+      "ready",
+      "blocked",
+      "ready-photo",
+      "recording",
+      "paused",
+      "saving",
+      "failed"
+    ],
+    "permissionRecovery": "settings boundary -> ready -> select protected photo -> ready-photo",
+    "photoHeaderBack": "Actual CUA header back from photos returned directly to paused; no discard prompt; one photo retained",
+    "uploadRecovery": "real uploaded response held then lost; actual retry sealed one API clip",
+    "record": "recording-boundary-390.json"
+  },
+  "address": {
+    "width": 390,
+    "initialRegionIndex": -1,
+    "input": "Open native picker and confirm first item without scrolling",
+    "confirmedRegionIndex": 0,
+    "savedRegionCode": "CN-110000",
+    "confirmationCanSubmit": true
+  },
+  "book": {
+    "width": 390,
+    "states": [
+      "empty",
+      "ready",
+      "cover",
+      "reader",
+      "changed",
+      "reader-failed",
+      "original-audio"
+    ],
+    "changedRegeneratedToReady": true,
+    "viewerFailureBoundary": "Only external wx.openDocument failure; original function restored. Actual successful opening and PDF content already verified at 320."
+  },
+  "print": {
+    "width": 390,
+    "states": [
+      "address",
+      "confirmation",
+      "in_production",
+      "shipped",
+      "delivered",
+      "cancelled",
+      "unknown"
+    ],
+    "unknown": "Actual first-copy transaction returned 201 upstream; successful responses discarded until disarmed; native retained original intent then actual query recovered order and reservation",
+    "record": "unknown-first-copy-390.json"
+  },
+  "affectedInputRefresh": [
+    "NewGift",
+    "SelfGift",
+    "GiftRecipient",
+    "StoryEdit"
+  ],
+  "invitation": "Expired old fixture token replaced by real invitation page command; new invite opened and family-white icon rendered.",
+  "externalPending": [
+    "real WeChat phone authorization",
+    "physical microphone and ten-minute recording",
+    "real payment funds",
+    "WeChat share and camera scan",
+    "iOS/Android PDF viewer and audio cleanup",
+    "actual OSS/ASR/model providers",
+    "printer handoff, shipping and physical book"
+  ],
+  "storyPresentation": {
+    "commit": "f257c62",
+    "rawTranscriptBlockRemoved": true,
+    "backendTranscriptRetained": true,
+    "recaptured": [
+      "StoryFailed-390",
+      "StoryProcessing-390",
+      "StoryFailed-320",
+      "StoryProcessing-320"
+    ],
+    "fresh320Retry": "actual retry -> processing -> ready"
+  },
+  "coverage": {
+    "applicationStates": 70,
+    "applicationWidths": [
+      390,
+      320
+    ],
+    "pdfSystemCallAndContent": 1,
+    "phonePdfChrome": "external pending"
+  }
+}

@@ -1,13 +1,8 @@
-.chapter-body {
-  width: 100%;
-  font-size: 42rpx;
-  line-height: 1.9;
-  padding: 26rpx 0;
-  min-height: 360rpx;
-}
-.story-add {
-  color: #46563c;
-  min-width: 140rpx;
-  min-height: 100rpx;
-  font-size: 34rpx;
-}
+@import "../../styles/outline.wxss";
+.chapter-subtitle { font-size:16px; font-weight:600; }
+.story-option { border:1px solid #ded4c6; border-radius:18px; padding:14px; display:flex; align-items:center; gap:12px; font-size:15px; font-weight:600; }
+.story-add { min-height:44px; min-width:76px; padding:10px 8px; border-radius:12px; background:#edf0e7; color:#46563c; font-size:13px; white-space:nowrap; }
+.story-source { font-size:12px; color:#756859; line-height:1.6; font-weight:400; margin-top:7px; }
+
+.chapter-summary { display:flex; flex-direction:column; gap:4px; }
+.chapter-summary .tn-muted { font-size:12px; }

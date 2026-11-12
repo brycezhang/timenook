@@ -5,6 +5,8 @@ import { RequestMetaDto } from "../health-contract";
 export class AccountDto implements Account {
   @ApiProperty({ format: "uuid" }) id!: string;
   @ApiProperty({ nullable: true, maxLength: 32 }) nickname!: string | null;
+  @ApiProperty({ nullable: true, example: "138****1234" }) maskedPhone!:
+    string | null;
 }
 class SessionDto {
   @ApiProperty({ format: "uuid" }) id!: string;

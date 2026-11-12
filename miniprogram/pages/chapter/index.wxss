@@ -1,13 +1,7 @@
-.chapter-body {
-  width: 100%;
-  font-size: 42rpx;
-  line-height: 1.9;
-  padding: 26rpx 0;
-  min-height: 360rpx;
-}
-.story-add {
-  color: #46563c;
-  min-width: 140rpx;
-  min-height: 100rpx;
-  font-size: 34rpx;
-}
+@import "../../styles/outline.wxss";
+.chapter-body { box-sizing:border-box; width:100%; height:156px; min-height:156px; border:1px solid #ded4c6; border-radius:16px; padding:14px 16px; font-size:14px; font-weight:400; line-height:1.9; background:#fff; }
+.chapter-story-link { border:1px solid #ded4c6; border-radius:18px; background:#fff; min-height:72px; padding:15px 16px; display:flex; justify-content:space-between; align-items:center; font-size:16px; font-weight:600; text-align:left; }
+
+.chapter-remove { align-self:center; }
+
+.tn-field input.tn-input { padding:0 14px; }

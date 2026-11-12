@@ -1,4 +1,8 @@
 {
-  "navigationBarTitleText": "章节目录",
-  "usingComponents": { "sort-list": "/components/sort-list/index" }
+  "navigationBarTitleText": "大纲目录",
+  "usingComponents": {
+    "sort-list": "/components/sort-list/index",
+    "tn-navigation": "/components/tn-navigation/index"
+  },
+  "navigationStyle": "custom"
 }

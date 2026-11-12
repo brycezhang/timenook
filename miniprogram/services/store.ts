@@ -4,8 +4,7 @@ import {
   type Project,
   type Recipient,
 } from "../domain/model";
-import { dataMode, livePageAllowed } from "./mode";
-import { isProjectTab, switchProjectTab } from "./navigation";
+import { dataMode } from "./mode";
 const KEY = "timenook.frontend.v1";
 interface Library {
   version: 2;
@@ -75,25 +74,7 @@ export function required() {
   if (!p) throw new Error("请先创建项目");
   return p;
 }
-export function go(page: string, query = "") {
-  if (dataMode() === "live" && !livePageAllowed(page)) {
-    home("home");
-    return;
-  }
-  if (isProjectTab(page)) {
-    switchProjectTab(page, /(?:^|&)projectId=([^&]*)/.exec(query)?.[1]);
-    return;
-  }
-  wx.navigateTo({ url: `/pages/${page}/index${query ? "?" + query : ""}` });
-}
-export function home(page = "home") {
-  if (dataMode() === "live") page = "home";
-  if (isProjectTab(page)) {
-    switchProjectTab(page);
-    return;
-  }
-  wx.reLaunch({ url: `/pages/${page}/index` });
-}
+export { go, home } from "./navigation";
 export function toast(title: string) {
   wx.showToast({ title, icon: "none" });
 }

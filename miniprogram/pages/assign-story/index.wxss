@@ -1,0 +1,57 @@
+.assignment-page {
+  gap: 20px;
+}
+.assignment-title {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.assignment-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.assignment-option {
+  min-height: 54px;
+  width: 100%;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  border: 1px solid #ded4c6;
+  border-radius: 14px;
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: #382c24;
+  background: #fff;
+}
+.assignment-option.selected {
+  border-color: #46563c;
+  color: #46563c;
+  background: #edf0e7;
+}
+.assignment-number {
+  font-size: 18px;
+  color: #756859;
+  font-weight: 400;
+}
+.assignment-empty {
+  padding: 36px 16px;
+  border: 1px dashed #ded4c6;
+  border-radius: 18px;
+  text-align: center;
+  color: #756859;
+  font-size: 14px;
+}
+.assignment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media (max-height: 740px) {
+  .assignment-page {
+    gap: 16px;
+  }
+}

@@ -1,262 +1,269 @@
-const { createRun } = require("./native-automation.cjs");
-const fs = require("node:fs/promises");
+// Run against an already opened isolated native package and real local API.
+// Reuses the MP05 official CLI adapter. No page data or HTTP response injection.
 const assert = require("node:assert/strict");
-const { execFile } = require("node:child_process");
-const { promisify } = require("node:util");
-(async () => {
-  const run = await createRun("design");
-  let failure;
-  try {
-    await run.start();
-    await run.step(
-      "unpaid homepage image and benefits fit above purchase dock",
-      async () => {
-        const rects = await run.evaluate(
-          () =>
-            new Promise((resolve) =>
-              wx
-                .createSelectorQuery()
-                .select(".landing-hero")
-                .boundingClientRect()
-                .select(".benefits")
-                .boundingClientRect()
-                .select(".purchase-dock")
-                .boundingClientRect()
-                .exec(resolve),
-            ),
-        );
-        assert.ok(rects[0].height <= 410);
-        assert.ok(rects[1].bottom <= rects[2].top);
-        await promisify(execFile)("wechatide", [
-          "-c",
-          "Codex",
-          "simulator_screenshot",
-          "--project",
-          run.fixture,
-          "--path",
-          run.output + "/home.png",
-          "--wait-for-selector",
-          ".landing",
-        ]);
-      },
-    );
-    const id = "33333333-3333-4333-8333-333333333333",
-      vid = "44444444-4444-4444-8444-444444444444",
-      sid = "55555555-5555-4555-8555-555555555555";
-    const book = {
-      projectId: id,
-      inputHash: "a".repeat(64),
-      cover: { version: 0, salutation: "", photoAssetId: null },
-      coverPhotoOptions: [],
-      directory: {
-        version: 1,
-        chapters: [
-          { key: "childhood", title: "童年的日子", storyRefs: [] },
-          { key: "growing", title: "慢慢长大", storyRefs: [] },
-        ],
-      },
-      eligibleStories: [{ id: sid, title: "老屋门前的那棵树" }],
-      current: null,
-      accessExpiresAt: null,
-      draftAccess: { allowed: true, expiresAt: null },
-    };
-    const overview = {
-      projectId: id,
-      bookTitle: "妈妈的一生",
-      metadataVersion: 1,
-      canInvite: true,
-      canRecord: true,
-      canDecide: true,
-      stories: [],
-      interviews: [],
-      tasks: [],
-      summary: {},
-      nextStep: "record",
-    };
-    await run.evaluate(
-      function (fixtures) {
-        wx.request = function (options) {
-          const path = options.url.split("/v1")[1];
-          let data;
-          let statusCode = 200;
-          if (path === "/users/me")
-            data = { id: "11111111-1111-4111-8111-111111111111" };
-          else if (path === "/participations")
-            data = {
-              projects: [
-                {
-                  projectId: fixtures.id,
-                  bookTitle: fixtures.overview.bookTitle,
-                  origin: "purchased",
-                  state: "active",
-                },
-              ],
-            };
-          else if (path.endsWith("/overview")) data = fixtures.overview;
-          else if (path.endsWith("/participation"))
-            data = { canRead: true, accessEpoch: 0 };
-          else if (path.endsWith("/book")) data = fixtures.book;
-          else if (path.endsWith("/book/directory")) {
-            fixtures.book.directory = {
-              version: fixtures.book.directory.version + 1,
-              chapters: options.data.chapters,
-            };
-            data = fixtures.book;
-          } else if (path.endsWith("/book/cover")) {
-            fixtures.book.cover = {
-              ...options.data,
-              version: fixtures.book.cover.version + 1,
-            };
-            data = fixtures.book;
-          } else if (path === "/orders") data = { orders: [] };
-          else {
-            statusCode = 404;
-            data = {};
-          }
-          setTimeout(
-            () =>
-              options.success({
-                statusCode,
-                data:
-                  statusCode === 200
-                    ? {
-                        data: JSON.parse(JSON.stringify(data)),
-                        meta: { requestId: "ui-fixture" },
-                      }
-                    : {
-                        error: { code: "NOT_FOUND" },
-                        meta: { requestId: "ui-fixture" },
-                      },
-              }),
-            0,
-          );
-          return { abort() {} };
-        };
-      },
-      { id, book, overview },
-    );
-    await run.evaluate(() => {
-      wx.setStorageSync(
-        "timenook.session.v1:https://timenookapi.threeminreading.com/api/v1",
-        {
-          user: { id: "11111111-1111-4111-8111-111111111111" },
-          session: {
-            id: "22222222-2222-4222-8222-222222222222",
-            token: "a".repeat(43),
-            expiresAt: "2099-01-01T00:00:00Z",
-          },
+const fs = require("node:fs");
+const path = require("node:path");
+const h = require("../docs/delivery/2026-11-11/miniprogram-refactor/evidence/MP05/harness/native.cjs");
+const capturesFile = path.join(h.evidence, "native-design-captures.json");
+function state() {
+  return h.evaluate(function () {
+    const p = getCurrentPages().slice(-1)[0];
+    const d = p.data;
+    return {
+      route: p.route,
+      projectId: p.projectId,
+      data: {
+        busy: d.busy,
+        loading: d.loading,
+        pageLoading: d.pageLoading,
+        status: d.status,
+        title: d.title,
+        tab: d.tab,
+        screen: d.screen,
+        ready: d.ready,
+        placement: d.placement,
+        needsRelationship: d.needsRelationship,
+        overview: d.overview && {
+          projectId: d.overview.projectId,
+          summary: d.overview.summary,
         },
-      );
-    });
-    await run.step("paid home shows current project", async () => {
-      await run.call("refresh");
-      const p = await run.page("home", (d) => !!d.overview);
-      assert.equal(p.overview.bookTitle, "妈妈的一生");
-    });
-    await run.step("home project switch responds to a native tap", async () => {
-      const p = await run.mp.currentPage();
-      await (await p.$(".project-heading .s-link")).tap();
-      await run.page("projects", (d) => d.rows.length === 1);
-      const projects = await run.mp.currentPage();
-      await (await projects.$(".s-card")).tap();
-      await run.page("home", (d) => d.overview?.projectId === id);
-    });
-    await run.step(
-      "book directory opens directly editable chapter",
-      async () => {
-        await run.navigate(
-          "navigateTo",
-          "/pages/directory/index?projectId=" + id,
-        );
-        await run.page("directory", (d) => d.rows.length === 2);
-        await promisify(execFile)("wechatide", [
-          "-c",
-          "Codex",
-          "simulator_screenshot",
-          "--project",
-          run.fixture,
-          "--path",
-          run.output + "/directory.png",
-          "--wait-for-selector",
-          ".s-page",
-        ]);
-        const p = await run.mp.currentPage();
-        const list = await p.$("#chapters");
-        assert.ok(list);
-        const handles = await list.$$(".sort-handle");
-        assert.equal(handles.length, 2);
-        const rects = await run.evaluate(
-          () =>
-            new Promise((resolve) =>
-              getCurrentPages()
-                .slice(-1)[0]
-                .selectComponent("#chapters")
-                .createSelectorQuery()
-                .selectAll(".sort-row")
-                .boundingClientRect(resolve)
-                .exec(),
-            ),
-        );
-        await handles[0].touchstart({
-          touches: [
-            {
-              identifier: 0,
-              clientX: 330,
-              clientY: (rects[0].top + rects[0].bottom) / 2,
-            },
-          ],
-        });
-        await handles[0].touchmove({
-          touches: [
-            {
-              identifier: 0,
-              clientX: 330,
-              clientY: (rects[1].top + rects[1].bottom) / 2,
-            },
-          ],
-        });
-        await handles[0].touchend({ touches: [] });
-        await run.page("directory", (d) => d.rows[0].id === "growing");
-        const rows = await list.$$(".sort-content");
-        await rows[1].tap();
-        await run.page("chapter");
-        const chapter = await run.mp.currentPage();
-        assert.ok(await chapter.$("input"));
-        assert.equal((await chapter.data()).title, "童年的日子");
+        context: !!d.context,
+        questions: d.questions?.map((q) => ({ id: q.id, state: q.state })),
+        question: d.question && {
+          id: d.question.id,
+          text: d.question.text,
+          chapterKey: d.question.chapterKey,
+          state: d.question.state,
+          story: !!d.question.story,
+        },
+        rows: d.rows?.map((row) => ({ id: row.id, title: row.title })),
+        story: d.story && {
+          revision: d.story.revision && { title: d.story.revision.title },
+        },
+        chapters: d.chapters?.map((chapter) => ({
+          key: chapter.key,
+          title: chapter.title,
+        })),
+        version: d.version && { state: d.version.state },
       },
-    );
-    await run.step(
-      "story selection separates selected and available",
-      async () => {
-        await run.call("choose");
-        let p = await run.page("chapter-stories");
-        assert.equal(p.available.length, 1);
-        await run.call("add", { currentTarget: { dataset: { id: sid } } });
-        p = await run.page("chapter-stories", (d) => d.selected.length === 1);
-        assert.equal(p.available.length, 0);
-      },
-    );
-    await run.step("cover and independent photo selection", async () => {
-      await run.navigate("navigateTo", "/pages/cover/index?projectId=" + id);
-      await run.page("cover", (d) => d.title === "妈妈的一生");
-      await run.call("choose");
-      await run.page("cover-photos");
-    });
-    await run.step("terms exposes native WeChat customer service", async () => {
-      await run.navigate("navigateTo", "/pages/terms/index");
-      await run.page("terms");
-      const p = await run.mp.currentPage();
-      assert.ok(await p.$('button[open-type="contact"]'));
-    });
-    await run.step("personal page is second native tab", async () => {
-      await run.navigate("switchTab", "/pages/account/index");
-      const p = await run.page("account", (d) => d.loggedIn);
-      assert.equal(p.loggedIn, true);
-    });
-  } catch (e) {
-    failure = e;
-    console.error(e.message);
+    };
+  });
+}
+function ready(name, condition = () => true) {
+  for (let n = 0; n < 20; n++) {
+    const p = state(),
+      d = p.data;
+    if (
+      p.route === `pages/${name}/index` &&
+      !d.busy &&
+      !d.loading &&
+      !d.pageLoading &&
+      condition(d)
+    ) {
+      assert.ok(!d.status, d.status);
+      return d;
+    }
   }
-  await run.finish(failure);
-  process.exitCode = failure ? 1 : 0;
-})();
+  throw Error(`Native page ${name} did not reach its expected state`);
+}
+function capture(board, entry, interaction) {
+  const { windowWidth: width, windowHeight: height } = h.evaluate(function () {
+    return wx.getWindowInfo();
+  });
+  assert.ok([390, 320].includes(width), `Actual native viewport is ${width}px`);
+  const current = state();
+  assert.ok(!current.data.pageLoading, "Initial skeleton has not finished");
+  h.snap(board, width);
+  const rows = fs.existsSync(capturesFile)
+    ? JSON.parse(fs.readFileSync(capturesFile))
+    : [];
+  rows.push({
+    board,
+    width,
+    height,
+    route: current.route,
+    entry,
+    interaction,
+    screenshot: `${board}-${width}.png`,
+    environment:
+      "Official WeChat DevTools; real isolated API/PostgreSQL/Redis; external supplier fixtures",
+    visualComparison: "pending",
+  });
+  fs.writeFileSync(capturesFile, JSON.stringify(rows, null, 2));
+}
+function home() {
+  h.tool("automation_navigate", {
+    action: "switchTab",
+    url: "/pages/home/index",
+  });
+  const d = ready("home", (d) => !!d.overview);
+  assert.equal(
+    d.overview.projectId,
+    h.projectId,
+    "Select the intended isolated project through My Gifts first",
+  );
+  return d;
+}
+function family() {
+  const d = home();
+  capture(
+    d.overview.summary.confirmed ? "HomeActive" : "HomeEmpty",
+    "My Gifts → selected book → Home",
+    "Story, photo and family question counts returned by the real API",
+  );
+  h.tap(".home-family");
+  let list = ready("family-questions");
+  capture(
+    list.questions.length ? "FamilyQuestions" : "FamilyQuestionsEmpty",
+    "Home → family questions",
+    "The native list is filtered from the project API",
+  );
+  h.tap(".tn-dock .tn-button");
+  const draft = ready("family-question-edit");
+  capture(
+    draft.needsRelationship
+      ? "FamilyQuestionNew"
+      : "FamilyQuestionNewExistingRelation",
+    "Family questions → ask a question",
+    "Optional chapter remains unset; author relationship is required when missing",
+  );
+  if (draft.needsRelationship) h.tap('.relation[data-value="女儿"]');
+  const question = "家里最让你难忘的一个瞬间是什么？";
+  h.input(".question-input", question);
+  h.tap(".tn-dock .tn-button");
+  const detail = ready("family-question", (d) => !!d.question);
+  assert.equal(detail.question.text, question);
+  assert.equal(detail.question.chapterKey, null);
+  capture(
+    "FamilyQuestionDetail",
+    "New question → publish",
+    "Real saved question, original author and optional chapter returned from API",
+  );
+  h.tap('[data-state="later"]');
+  ready("family-question", (d) => d.question.state === "later");
+  h.back();
+  ready("family-questions", (d) =>
+    d.questions.some((q) => q.id === detail.question.id && q.state === "later"),
+  );
+  h.tap('[data-tab="answered"]');
+  list = ready("family-questions", (d) => d.tab === "answered");
+  assert.ok(
+    list.questions.length,
+    "Seed an answered family question using the existing MP06 API fixture",
+  );
+  h.tap(".family-card");
+  ready("family-question", (d) => !!d.question?.story);
+  capture(
+    "FamilyQuestionAnswered",
+    "Family questions → answered → question",
+    "Completed answer links to its real saved story",
+  );
+  h.tap(".family-answer");
+  ready("story", (d) => !!d.story?.revision);
+}
+function stories() {
+  home();
+  h.tap(".home-statistics button:nth-child(1)");
+  ready("stories", (d) => d.rows.length > 0);
+  capture(
+    "Stories",
+    "Home → story count",
+    "List and placement come from current project stories",
+  );
+  h.tap(".story-card");
+  let d = ready("story", (d) => !!d.story?.revision);
+  const original = d.story.revision.title;
+  capture(
+    d.placement === "未归章" ? "StoryUnassigned" : "Story",
+    "Stories → story card",
+    "Real body, audio sources, photos and current placement",
+  );
+  h.tap(".story-edit");
+  ready("edit-story");
+  capture(
+    "StoryEdit",
+    "Story → edit text",
+    "Original audio remains unchanged when text is edited",
+  );
+  h.input(".tn-input", original + " · 原生走查");
+  h.tap(".tn-dock .tn-button");
+  d = ready(
+    "story",
+    (d) => d.story?.revision?.title === original + " · 原生走查",
+  );
+  h.tap(".story-placement");
+  ready("assign-story", (d) => d.chapters.length > 0);
+  capture(
+    "AssignStory",
+    "Story → chapter",
+    "Current shared chapters are selectable",
+  );
+  h.back();
+  ready("story");
+}
+function cover() {
+  home();
+  h.tap(".home-book-entry");
+  let d = ready("book", (d) => !!d.context);
+  const original = d.title;
+  capture(
+    d.screen === "empty"
+      ? "BookEmpty"
+      : d.screen === "changed"
+        ? "BookChanged"
+        : d.screen === "failed"
+          ? "BookGenerateFailed"
+          : "BookOverview",
+    "Home → book cover",
+    "State comes from the real book context",
+  );
+  if (d.screen === "changed") {
+    h.tap(".tn-dock .tn-link");
+    d = ready("book", (d) => d.screen !== "changed");
+  }
+  assert.notEqual(
+    d.screen,
+    "failed",
+    "Retry the failed render before editing its cover",
+  );
+  h.tap(d.screen === "empty" ? ".book-display" : ".book-preview");
+  ready("cover");
+  capture(
+    "BookCover",
+    "Book → edit cover",
+    "Title, message and photo form one unsaved draft",
+  );
+  h.input("#cover-title", original + " · 未保存");
+  h.back();
+  d = ready("book", (d) => !!d.context);
+  assert.equal(
+    d.title,
+    original,
+    "Cancel must leave the saved title unchanged",
+  );
+  if (d.ready) {
+    h.tap(".tn-dock .tn-button");
+    ready("manuscript", (d) => d.version?.state === "ready");
+    capture(
+      "BookReader",
+      "Ready book → PDF manuscript",
+      "Frozen version is loaded; system viewer is a separate native action",
+    );
+  }
+}
+const flows = { family, stories, cover };
+const command = process.argv[2];
+if (command === "capture") {
+  const [board, entry, interaction] = process.argv.slice(3);
+  assert.ok(
+    board && entry && interaction,
+    "capture requires board, actual entry and observed interaction",
+  );
+  capture(board, entry, interaction);
+} else {
+  assert.ok(
+    flows[command],
+    "Use family, stories, cover, or capture <board> <entry> <observed interaction>",
+  );
+  h.step(`current API native ${command} journey`, flows[command]);
+}

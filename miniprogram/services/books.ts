@@ -2,7 +2,7 @@ import type {
   BookContext,
   BookVersionView,
   BookConfirmationContext,
-  PlanDirectory,
+  BookCoverInput,
 } from "../../packages/contracts/src";
 import { sessionClient } from "./session";
 import { paymentKey } from "./payments";
@@ -74,6 +74,15 @@ function context(value: BookContext, projectId: string): BookContext {
   return value;
 }
 export const bookClient = {
+  async readProduction(projectId: string) {
+    validProject(projectId);
+    return version(
+      await sessionClient.request<BookVersionView>(
+        `/projects/${projectId}/fulfillment/book`,
+      ),
+      projectId,
+    );
+  },
   async confirmations(projectId: string) {
     validProject(projectId);
     return sessionClient.request<BookConfirmationContext>(
@@ -101,7 +110,7 @@ export const bookClient = {
   async reviseCover(
     projectId: string,
     expectedVersion: number,
-    input: { salutation: string; photoAssetId: string | null },
+    input: Omit<BookCoverInput, "expectedVersion">,
     key: string,
   ) {
     validProject(projectId);
@@ -149,20 +158,6 @@ export const bookClient = {
       await sessionClient.request<BookVersionView>(
         `/projects/${projectId}/book/versions/${id}/retry`,
         { key, data: {} },
-      ),
-      projectId,
-    );
-  },
-  async reviseDirectory(
-    projectId: string,
-    expectedVersion: number,
-    chapters: PlanDirectory["chapters"],
-  ) {
-    validProject(projectId);
-    return context(
-      await sessionClient.request<BookContext>(
-        `/projects/${projectId}/book/directory`,
-        { key: paymentKey(), data: { expectedVersion, chapters } },
       ),
       projectId,
     );

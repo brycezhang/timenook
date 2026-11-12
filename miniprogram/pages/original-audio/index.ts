@@ -1,4 +1,4 @@
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 import type { BookAudioEntryView } from "../../../packages/contracts/src";
 import {
   bookAudioClient,
@@ -7,6 +7,9 @@ import {
 import { clearStoryAudio, privateAudioFile } from "../../services/story-audio";
 import { dataMode, setDataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
+import { audioTime } from "../../services/story-presentation";
+import { previewBookPhoto } from "../../services/book-editor";
+import { clearPhotoPreviews } from "../../services/story-photos";
 function scannedEntry(q: Record<string, string | undefined>): string {
   try {
     const direct = q.entryId ?? (q.scene ? decodeURIComponent(q.scene) : "");
@@ -27,6 +30,7 @@ Page({
     entry: null as BookAudioEntryView | null,
     busy: false,
     loggedIn: false,
+    loginVisible: false,
     status: "",
     paused: false,
     position: 0,
@@ -34,10 +38,19 @@ Page({
     positionLabel: "00:00",
     durationLabel: "00:00",
     playingClipId: "",
+    loadingClipId: "",
+    clips: [] as (BookAudioEntryView["clips"][number] & {
+      durationSeconds: number;
+      durationLabel: string;
+    })[],
+    image: "",
+    photoLoading: false,
+    photoError: "",
   },
   entryId: "",
   generation: 0,
   active: false,
+  seeking: false,
   player: undefined as WechatMiniprogram.InnerAudioContext | undefined,
   audioFile: "",
   expiry: undefined as ReturnType<typeof setTimeout> | undefined,
@@ -52,7 +65,14 @@ Page({
     this.player = undefined;
     this.audioFile = "";
     player?.destroy();
-    this.setData({ playingClipId: "" });
+    this.seeking = false;
+    this.setData({
+      playingClipId: "",
+      position: 0,
+      duration: 0,
+      positionLabel: "00:00",
+      durationLabel: "00:00",
+    });
     if (path) await clearStoryAudio([path]);
   },
   onHide() {
@@ -62,7 +82,8 @@ Page({
     this.expiry = undefined;
     this.stopSessionWatch?.();
     this.stopSessionWatch = undefined;
-    this.setData({ entry: null, busy: false });
+    this.clearPhoto();
+    this.setData({ entry: null, clips: [], busy: false, loadingClipId: "" });
     void this.clearPlayback().catch(() => {});
   },
   onUnload() {
@@ -82,12 +103,15 @@ Page({
       !this.accessExpired()
     );
   },
-  deny(status = "当前账号无权回听，或在线访问已到期。请重新查询。") {
+  deny(status = "当前账号无权回听这本书的原声。") {
+    this.clearPhoto();
     ++this.generation;
     if (this.expiry) clearTimeout(this.expiry);
     this.expiry = undefined;
     this.setData({
       entry: null,
+      clips: [],
+      loadingClipId: "",
       busy: false,
       loggedIn: !!sessionClient.context(),
       status,
@@ -155,7 +179,14 @@ Page({
     const generation = ++this.generation,
       owner = sessionClient.context();
     if (this.expiry) clearTimeout(this.expiry);
-    this.setData({ entry: null, loggedIn: !!owner, busy: true, status: "" });
+    this.clearPhoto();
+    this.setData({
+      entry: null,
+      clips: [],
+      loggedIn: !!owner,
+      busy: true,
+      status: "",
+    });
     try {
       await this.clearPlayback();
       await clearStoryAudio();
@@ -176,18 +207,61 @@ Page({
         this.deny();
         return;
       }
-      this.setData({ entry });
+      this.setData({
+        entry,
+        clips: entry.clips.map((clip) => ({
+          ...clip,
+          durationSeconds: clip.durationMs / 1000,
+          durationLabel: audioTime(clip.durationMs / 1000),
+        })),
+      });
+      void this.loadPhoto(entry, generation, owner);
       this.watch(generation, owner);
     } catch (error) {
       if (generation !== this.generation) return;
       this.denyFor(error);
     } finally {
-      if (generation === this.generation) this.setData({ busy: false });
+      if (generation === this.generation)
+        this.setData({ busy: false, loadingClipId: "" });
+    }
+  },
+  clearPhoto() {
+    void clearPhotoPreviews([this.data.image].filter(Boolean));
+    this.setData({ image: "", photoLoading: false, photoError: "" });
+  },
+  async loadPhoto(
+    entry: BookAudioEntryView,
+    generation: number,
+    owner: string,
+  ) {
+    if (!entry.photo) return;
+    this.setData({ photoLoading: true });
+    try {
+      const image = await previewBookPhoto(entry.projectId, entry.photo, () =>
+        this.current(generation, owner),
+      );
+      if (!this.current(generation, owner)) {
+        await clearPhotoPreviews([image]);
+        return;
+      }
+      this.setData({ image });
+    } catch {
+      if (this.current(generation, owner))
+        this.setData({ photoError: "照片暂未加载" });
+    } finally {
+      if (this.current(generation, owner))
+        this.setData({ photoLoading: false });
     }
   },
   login() {
-    if (!this.data.busy && this.entryId)
-      wx.navigateTo({ url: "/pages/login/index?next=back" });
+    if (!this.data.busy && this.entryId) this.setData({ loginVisible: true });
+  },
+  closeLogin() {
+    this.setData({ loginVisible: false });
+  },
+  loginSucceeded() {
+    this.setData({ loginVisible: false, loggedIn: true });
+    return this.refresh();
   },
   async logout() {
     this.deny("正在退出登录");
@@ -226,8 +300,24 @@ Page({
     else this.player.pause();
     this.setData({ paused: !this.data.paused });
   },
+  dragging(e: WechatMiniprogram.SliderChange) {
+    if (!this.player) return;
+    this.seeking = true;
+    const position = Math.max(
+      0,
+      Math.min(this.data.duration, Number(e.detail.value)),
+    );
+    this.setData({ position, positionLabel: audioTime(position) });
+  },
   seek(e: WechatMiniprogram.SliderChange) {
-    if (this.player) this.player.seek(Number(e.detail.value));
+    if (!this.player) return;
+    const position = Math.max(
+      0,
+      Math.min(this.data.duration, Number(e.detail.value)),
+    );
+    this.player.seek(position);
+    this.seeking = false;
+    this.setData({ position, positionLabel: audioTime(position) });
   },
   async play(e: PlayEvent) {
     if (this.data.busy || !this.data.entry) return;
@@ -239,7 +329,7 @@ Page({
       owner = sessionClient.context(),
       clipId = e.currentTarget.dataset.id;
     this.watch(generation, owner);
-    this.setData({ busy: true, status: "" });
+    this.setData({ busy: true, status: "", loadingClipId: clipId });
     try {
       await this.clearPlayback();
       await clearStoryAudio();
@@ -281,6 +371,7 @@ Page({
       )
         throw new ApiFailure("STALE_AUDIO", 403);
       this.setData({ entry: checked });
+      if (!this.data.image) void this.loadPhoto(checked, generation, owner);
       this.watch(generation, owner);
       if (this.accessExpired()) {
         this.deny();
@@ -303,22 +394,30 @@ Page({
           this.setData({ status: "原声播放失败，请重新下载" });
         }
       });
+      const duration = clip.durationMs / 1000;
       player.onTimeUpdate(() => {
-        if (this.player !== player) return;
-        const format = (s: number) =>
-          `${Math.floor(s / 60)
-            .toString()
-            .padStart(2, "0")}:${Math.floor(s % 60)
-            .toString()
-            .padStart(2, "0")}`;
+        if (this.player !== player || this.seeking) return;
+        const total =
+          Number.isFinite(player.duration) && player.duration > 0
+            ? player.duration
+            : duration;
+        const position = Number.isFinite(player.currentTime)
+          ? player.currentTime
+          : 0;
         this.setData({
-          position: player.currentTime,
-          duration: player.duration,
-          positionLabel: format(player.currentTime),
-          durationLabel: format(player.duration),
+          position,
+          duration: total,
+          positionLabel: audioTime(position),
+          durationLabel: audioTime(total),
         });
       });
-      this.setData({ paused: false });
+      this.setData({
+        paused: false,
+        position: 0,
+        positionLabel: "00:00",
+        duration,
+        durationLabel: audioTime(duration),
+      });
       player.src = path;
       this.setData({ playingClipId: clipId });
       player.play();
@@ -326,7 +425,8 @@ Page({
       if (generation !== this.generation) return;
       this.denyFor(error);
     } finally {
-      if (generation === this.generation) this.setData({ busy: false });
+      if (generation === this.generation)
+        this.setData({ busy: false, loadingClipId: "" });
     }
   },
   async stop() {

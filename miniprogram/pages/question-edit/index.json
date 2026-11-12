@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "编辑问题",
+  "usingComponents": {
+    "sort-list": "/components/sort-list/index",
+    "tn-navigation": "/components/tn-navigation/index"
+  },
+  "navigationStyle": "custom"
+}

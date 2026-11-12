@@ -1,2 +1,2 @@
 <view class="s-page"><image class="login-photo" src="/assets/home-family.jpg" mode="aspectFill"/><view class="s-title s-space">让故事有个家</view><view class="s-muted s-space">登录后，接着记录和制作。</view></view>
-<quick-login visible="{{loginVisible}}" expected-user-id="{{expectedUserId}}" bindsuccess="loginSucceeded" bindclose="cancel"/>
+<quick-login id="quick-login" visible="{{loginVisible}}" expected-user-id="{{expectedUserId}}" bindsuccess="loginSucceeded" bindclose="cancel"/>

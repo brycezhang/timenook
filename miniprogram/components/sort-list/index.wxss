@@ -78,3 +78,27 @@
   background: #eee9df;
   border-radius: 8px;
 }
+
+.sort-copy { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.sort-subtitle { font-size: 12px; color: #756859; font-weight: 400; }
+.modern { border: 1px solid #ded4c6; border-radius: 18px; background: #fff; min-height: 90px; margin-bottom: 12px; padding: 12px 14px; gap: 4px; }
+.modern .sort-content { padding: 5px 0; min-height: 64px; gap: 12px; background: #fff; }
+.modern .sort-title { font-size: 16px; font-weight: 600; line-height: 1.5; }
+.modern .sort-number { font-size: 20px; min-width: 23px; }
+.modern .sort-handle { width: 44px; min-height: 56px; border: 0; color: #756859; }
+.modern .sort-handle > text { font-size: 25px; line-height: 1.2; }
+.modern .sort-handle .sort-hint { font-size: 10px; }
+.modern .sort-action { padding: 8px 4px; font-size: 13px; min-width: 44px; color: #756859; background: #fff; }
+
+.modern .sort-grip { width:20px; height:20px; }
+.modern.compact { min-height:78px; padding:10px 12px; gap:8px; margin-bottom:10px; }
+.modern.compact .sort-content { min-height:56px; padding:0; gap:8px; }
+.modern.compact .sort-title { font-size:15px; }
+.modern.compact .sort-number { font-size:13px; width:23px; }
+.modern.compact .sort-handle { width:48px; }
+
+.modern, .modern .sort-content, .modern .sort-handle, .modern .sort-action { box-sizing:border-box; }
+.modern .sort-content, .modern .sort-action { margin:0; border:0; border-radius:0; line-height:1.6; }
+.modern .sort-content::after, .modern .sort-action::after { border:0; }
+
+.modern.compact:last-child { margin-bottom:0; }

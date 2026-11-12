@@ -190,6 +190,7 @@ for (const [engineName, engine] of [
           [],
           "login alone does not join the project",
         );
+        await memberPage.getByLabel("你是主讲人的谁（必填）").fill("外孙女");
         await memberPage.getByRole("checkbox", { name: /同意/ }).check();
         await memberPage
           .getByRole("button", { name: "接受邀请", exact: true })

@@ -25,6 +25,7 @@ export type WechatLoginProfile = Pick<
 export interface Account {
   id: string;
   nickname?: string | null;
+  maskedPhone?: string | null;
 }
 export interface LoginResult {
   user: Account;
@@ -51,6 +52,7 @@ export interface PlanChapter {
   key: string;
   title: string;
   questions: PlanQuestion[];
+  storyRefs: string[];
 }
 
 export interface PlanContent {
@@ -105,6 +107,11 @@ export interface PersonalPlan extends ProjectPlan {
   subjectDecision: "member" | "self" | "assisted" | null;
   decisionSessionId: string | null;
   actualQuestions: ActualPlanQuestion[];
+  answers: {
+    questionKey: string;
+    storyId: string;
+    chapterKey: string | null;
+  }[];
   questionStates: PlanQuestionState[];
   preferenceHistory: PlanPreferenceDecision[];
   accessExpiresAt: string | null;
@@ -123,7 +130,18 @@ export interface ActualPlanQuestion {
     | PlanContent["starters"][number]
     | { text: string; intent: string };
   source?: {
-    kind: "plan" | "photo" | "free-narration" | "self-written" | "follow-up";
+    kind:
+      | "plan"
+      | "photo"
+      | "free-narration"
+      | "self-written"
+      | "follow-up"
+      | "family";
+    familyQuestionId?: string;
+    authorId?: string;
+    authorNickname?: string;
+    authorRelationship?: string;
+    chapterKey?: string;
     rewritesQuestionKey?: string;
     generationTaskId?: string;
     original?: PlanQuestion | Record<string, unknown>;
@@ -131,7 +149,7 @@ export interface ActualPlanQuestion {
   answerRef: string | null;
 }
 
-// Book freezes this independent token; future-question edits do not change it.
+// Read-only projection of the unified project plan, frozen by each book.
 export interface PlanDirectory {
   version: number;
   contentHash: string;
@@ -153,3 +171,5 @@ export * from "./deletion";
 export * from "./quality-care";
 
 export * from "./account-link";
+export * from "./gifts";
+export * from "./family-questions";

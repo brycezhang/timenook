@@ -33,6 +33,7 @@ function view(): any {
       version: 2,
       title: "纸书上的那条小路",
     },
+    photo: null,
     clips: [
       {
         clipId,
@@ -135,7 +136,12 @@ function harness(authenticated = true) {
           destroy() {
             p.destroyed = true;
           },
-          onTimeUpdate() {},
+          onTimeUpdate(fn: any) {
+            p.timeUpdate = fn;
+          },
+          seek(value: number) {
+            p.lastSeek = value;
+          },
           onEnded(fn: any) {
             p.ended = fn;
           },
@@ -256,11 +262,11 @@ test("scanned audio returns from the shared phone login without losing its entry
   h.page.onLoad({ entryId });
   await h.page.onShow();
   h.page.login();
-  assert.deepEqual(h.routes, ["/pages/login/index?next=back"]);
+  assert.deepEqual(h.routes, []);
+  assert.equal(h.page.data.loginVisible, true);
   assert.equal(h.loginCalls.length, 0);
-  h.page.onHide();
   h.storage.set(`timenook.session.v1:${base}`, structuredClone(login));
-  const returning = h.page.onShow();
+  const returning = h.page.loginSucceeded();
   await tick();
   assert.equal(h.requests[0].url, `${base}/book-audio/${entryId}`);
   h.respond(0, view());
@@ -536,4 +542,24 @@ test("server withdrawal while the printed original is playing clears the local f
   assert.equal(h.players[0].destroyed, true);
   assert.ok(h.removed.includes("wxfile://private-t21.mp3"));
   h.page.onHide();
+});
+
+test("original audio shows duration immediately and keeps dragging stable until seek completes", async () => {
+  const h = harness();
+  await shown(h);
+  await playing(h);
+  assert.equal(h.page.data.duration, 18);
+  assert.equal(h.page.data.durationLabel, "00:18");
+  const player = h.players[0];
+  player.currentTime = 3;
+  player.duration = 18;
+  player.timeUpdate();
+  h.page.dragging({ detail: { value: 10 } });
+  player.timeUpdate();
+  assert.equal(h.page.data.position, 10);
+  h.page.seek({ detail: { value: 12 } });
+  assert.equal(player.lastSeek, 12);
+  assert.equal(h.page.data.positionLabel, "00:12");
+  h.page.onHide();
+  assert.equal(player.destroyed, true);
 });

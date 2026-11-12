@@ -106,3 +106,6 @@ export async function readCatalog() {
   ]);
   return { recipients, offer };
 }
+export function readCurrentPackage() {
+  return request("/packages/current", current);
+}

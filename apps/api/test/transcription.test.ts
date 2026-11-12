@@ -217,6 +217,7 @@ async function project(versionId = packageId) {
   const buyer = await login();
   const order = data(
     await request("POST", "/v1/orders", buyer.token, {
+      purchaseKind: "gift",
       packageVersionId: versionId,
       recipient: { typeCode: "mentor", relationshipLabel: "恩师" },
       bookTitle: "私人标题不能泄露",
@@ -265,7 +266,7 @@ async function joinedProject(versionId = packageId) {
       "POST",
       `/v1/invitations/${invite.token}/accept`,
       narrator.token,
-      { termsVersion: TERMS_VERSION },
+      { relationship: "家人", termsVersion: TERMS_VERSION },
     ),
   );
   return { ...p, narrator };

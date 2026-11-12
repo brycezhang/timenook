@@ -1,4 +1,33 @@
+<tn-navigation title="{{screen === 'changed' ? '更新书稿' : screen === 'failed' ? '书稿生成失败' : '书稿概览'}}" />
 <app-loading wx:if="{{pageLoading}}" variant="book" />
-<block wx:else>
-<view class="s-page"><view class="s-subtitle book-state">{{stateLabel}}</view><view class="s-book"><view class="s-subtitle">{{title}}</view><view class="s-muted">{{context.cover.salutation}}</view><image wx:if="{{coverImage}}" src="{{coverImage}}" mode="aspectFill" /></view><button class="s-row" bindtap="cover"><text>调整书封</text><text class="s-arrow">›</text></button><button class="s-row" bindtap="directory"><view><text>章节目录</text><view class="s-muted">共 {{context.directory.chapters.length || 0}} 个章节</view></view><text class="s-arrow">›</text></button><button wx:if="{{context.current.state==='ready'}}" class="s-row" bindtap="manuscript"><text>完整书稿预览</text><text class="s-arrow">›</text></button><button class="s-row" bindtap="production"><text>制作与物流</text><text class="s-arrow">›</text></button><view class="s-error">{{status}}</view><view wx:if="{{context && !context.eligibleStories.length}}" class="s-empty">先记录一个故事，再来看看你的书。<button class="s-link" bindtap="record">开始记录</button></view><view class="s-dock"><button wx:if="{{context.current.state==='ready' && !dirty}}" class="s-button" bindtap="print" disabled="{{busy}}">印刷我的书</button><button wx:else class="s-button" bindtap="generate" loading="{{busy || context.current.state==='queued' || context.current.state==='rendering'}}" disabled="{{busy || !context.eligibleStories.length || context.current.state==='queued' || context.current.state==='rendering'}}">{{context.current.state==='failed'?'重新生成书稿':context.current.state==='queued'||context.current.state==='rendering'?'正在生成书稿':context.current?'生成新版书稿':'生成我的书'}}</button></view></view>
-</block>
+<view wx:else class="tn-page with-dock book-page {{ready || screen === 'changed' || screen === 'failed' ? 'double-dock' : ''}}">
+  <block wx:if="{{context}}">
+    <block wx:if="{{screen === 'empty'}}">
+      <view class="book-intro"><view class="book-heading">暂无书稿</view><view class="tn-muted">录下故事后即可成书。</view></view>
+      <button class="book-display" bindtap="cover" aria-label="编辑封面"><view class="book-model"><text class="book-model-title">{{title}}</text><text wx:if="{{context.cover.salutation}}" class="book-model-message">{{context.cover.salutation}}</text><image wx:if="{{coverImage}}" class="book-model-image" src="{{coverImage}}" mode="aspectFill" /><text class="book-model-brand">时光故事</text></view></button>
+      <button class="tn-button book-outline" bindtap="directory"><image class="tn-icon" src="/assets/icons/list.svg" />查看大纲目录</button>
+    </block>
+    <block wx:elif="{{screen === 'changed' || screen === 'failed'}}">
+      <view class="book-state-space" />
+      <view class="book-state-intro"><view class="book-state-icon"><image src="/assets/icons/{{screen === 'failed' ? 'rotate-ccw' : 'modern-book'}}.svg" /></view><view class="book-intro"><view class="book-heading">{{screen === 'failed' ? '书稿生成失败' : '书稿待更新'}}</view><view class="tn-muted">{{screen === 'failed' ? '内容已保留，可重试。' : '重新生成 PDF 后即可预览和制作。'}}</view></view></view>
+      <view class="book-state-tail" />
+      <view wx:if="{{screen === 'changed'}}" class="tn-card previous-version"><text>上次生成 V{{context.current.version}}</text><text class="tn-muted">不影响已提交版本。</text></view>
+    </block>
+    <block wx:else>
+      <button wx:if="{{unassignedCount}}" class="unassigned-entry" bindtap="unassigned"><text>{{unassignedCount}} 篇故事未归章</text><image class="tn-icon" src="/assets/icons/chevron-right.svg" /></button>
+      <view><text class="book-badge">{{stateLabel}}</text></view>
+      <button class="book-preview" bindtap="cover" aria-label="编辑封面">
+        <view class="book-model small"><text class="book-model-title">{{title}}</text><text wx:if="{{context.cover.salutation}}" class="book-model-message">{{context.cover.salutation}}</text><image wx:if="{{coverImage}}" class="book-model-image" src="{{coverImage}}" mode="aspectFill" /><text class="book-model-brand">时光故事</text></view>
+        <view class="book-preview-copy"><text class="book-preview-title">{{title}}</text><text wx:if="{{context.cover.salutation}}" class="book-preview-message">{{context.cover.salutation}}</text><view class="book-edit-label">编辑封面<image src="/assets/icons/chevron-right.svg" /></view></view>
+      </button>
+      <view class="book-stats"><view><text class="book-stat-value">{{storyCount}}</text><view>个故事</view></view><view><text class="book-stat-value">{{photoCount}}</text><view>张照片</view></view><view><text class="book-stat-value">{{ready ? context.current.pageCount : '待生成'}}</text><view>页书稿</view></view></view>
+      <button class="tn-row directory-entry" bindtap="directory"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/list.svg" /></view><text class="tn-grow">章节管理</text><image class="tn-icon" src="/assets/icons/chevron-right.svg" /></button>
+    </block>
+    <view class="tn-dock">
+      <button wx:if="{{screen === 'empty'}}" class="tn-button" bindtap="record"><image class="tn-icon" src="/assets/icons/mic-light.svg" />开始讲述</button>
+      <block wx:elif="{{ready}}"><button class="tn-button" bindtap="manuscript"><image class="tn-icon" src="/assets/icons/file-text-light.svg" />查看 PDF 书稿</button><button class="tn-button tn-secondary" bindtap="print"><image class="tn-icon" src="/assets/icons/modern-book.svg" />去制作</button></block>
+      <block wx:else><button class="tn-button" bindtap="generate" loading="{{busy || rendering}}" disabled="{{busy || rendering || !context.draftAccess.allowed}}"><image wx:if="{{!busy && !rendering}}" class="tn-icon" src="/assets/icons/{{screen === 'failed' || screen === 'changed' ? 'rotate-ccw-light' : 'file-text-light'}}.svg"/>{{rendering ? '正在生成 PDF' : screen === 'failed' ? '重新生成书稿' : dirty || context.current ? '重新生成 PDF' : storyCount ? '生成书稿 PDF' : '将故事加入章节'}}</button><button wx:if="{{screen === 'changed'}}" class="tn-link" bindtap="showOverview">返回书稿</button><button wx:if="{{screen === 'failed'}}" class="tn-link" bindtap="projectHome">回到这本书</button></block>
+    </view>
+  </block>
+  <view wx:if="{{status}}" class="tn-error">{{status}}</view><button wx:if="{{!context}}" class="tn-button" bindtap="refresh" loading="{{busy}}" disabled="{{busy}}">重新读取书稿</button>
+</view>

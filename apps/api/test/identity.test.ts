@@ -408,6 +408,7 @@ test("phone authorization generates a nickname, and user edits survive a fresh l
   assert.equal(issued.statusCode, 201);
   const { user, session } = issued.json().data;
   assert.equal(user.nickname, "用户1234");
+  assert.equal(user.maskedPhone, "131****1234");
   assert.equal(Object.hasOwn(user, "phoneNumber"), false);
   const renamed = await app.inject({
     method: "POST",
@@ -416,7 +417,11 @@ test("phone authorization generates a nickname, and user edits survive a fresh l
     payload: { nickname: "  梧桐小树  " },
   });
   assert.equal(renamed.statusCode, 201);
-  assert.deepEqual(renamed.json().data, { id: user.id, nickname: "梧桐小树" });
+  assert.deepEqual(renamed.json().data, {
+    id: user.id,
+    nickname: "梧桐小树",
+    maskedPhone: "131****1234",
+  });
   assert.equal((await me(session.token)).json().data.nickname, "梧桐小树");
   const again = (await login(`profile-${randomUUID()}`)).json().data;
   assert.equal(again.user.id, user.id);

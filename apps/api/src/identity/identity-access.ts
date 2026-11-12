@@ -18,7 +18,7 @@ import type {
 } from "@timenook/contracts";
 import { API_CONFIG, ApiConfig } from "../config";
 import { exchangeCode, exchangePhoneCode, wechatAccessToken } from "./wechat";
-import { phoneAccountIn } from "./phone-account";
+import { accountView, phoneAccountIn } from "./phone-account";
 import { acceptTermsIn } from "./project-members";
 
 export const WECHAT_FETCH = Symbol("WECHAT_FETCH");
@@ -159,7 +159,9 @@ export class IdentityAccess implements OnModuleDestroy {
         throw new ConflictException();
       await acceptTermsIn(transaction, user.id, "wechat_login");
       return transaction.session.create({
-        include: { user: { select: { nickname: true } } },
+        include: {
+          user: { select: { id: true, nickname: true, phoneNumber: true } },
+        },
         data: {
           id: randomUUID(),
           userId: user.id,
@@ -171,7 +173,7 @@ export class IdentityAccess implements OnModuleDestroy {
       });
     });
     return {
-      user: { id: session.userId, nickname: session.user.nickname },
+      user: accountView(session.user),
       session: {
         id: session.id,
         token,
@@ -192,7 +194,9 @@ export class IdentityAccess implements OnModuleDestroy {
       await transaction.$queryRaw`SELECT id FROM sessions WHERE token_hash=${tokenHash} FOR SHARE`;
     const session = await (transaction ?? this.database).session.findUnique({
       where: { tokenHash },
-      include: { user: { select: { nickname: true } } },
+      include: {
+        user: { select: { id: true, nickname: true, phoneNumber: true } },
+      },
     });
     if (
       !session ||
@@ -200,7 +204,7 @@ export class IdentityAccess implements OnModuleDestroy {
       session.expiresAt.getTime() <= Date.now()
     )
       throw new UnauthorizedException();
-    return { id: session.userId, nickname: session.user.nickname };
+    return accountView(session.user);
   }
 
   async updateNickname(
@@ -209,11 +213,12 @@ export class IdentityAccess implements OnModuleDestroy {
   ): Promise<Account> {
     return this.database.$transaction(async (tx) => {
       const account = await this.current(authorization, tx);
-      return tx.user.update({
+      const user = await tx.user.update({
         where: { id: account.id },
         data: { nickname },
-        select: { id: true, nickname: true },
+        select: { id: true, nickname: true, phoneNumber: true },
       });
+      return accountView(user);
     });
   }
 

@@ -1,19 +1,23 @@
-import type { BookContext } from "../../../packages/contracts/src";
-import { bookClient } from "../../services/books";
+import type {
+  PersonalPlan,
+  PlanChapter,
+} from "../../../packages/contracts/src";
+import { personalPlanClient } from "../../services/personal-plan";
 import { projectOverviewClient } from "../../services/project-overview";
 import { sessionClient } from "../../services/session";
-import { go } from "../../services/store";
-import { paymentKey } from "../../services/payments";
+import { startOutlineAnswer } from "../../services/outline";
+import { go } from "../../services/navigation";
 Page({
   data: {
-    title: "",
-    rows: [] as { id: string; title: string }[],
+    rows: [] as { id: string; title: string; subtitle: string }[],
     busy: false,
     pageLoading: true,
     status: "",
+    storyCount: 0,
+    unassigned: 0,
   },
   projectId: "",
-  context: null as BookContext | null,
+  plan: null as PersonalPlan | null,
   generation: 0,
   onLoad(q) {
     this.projectId = q.projectId || "";
@@ -21,17 +25,21 @@ Page({
   async onShow() {
     const n = ++this.generation,
       owner = sessionClient.context();
-    this.setData({ busy: true, pageLoading: !this.context, status: "" });
+    this.setData({ busy: true, pageLoading: !this.plan, status: "" });
     try {
-      const [c, p] = await Promise.all([
-        bookClient.read(this.projectId),
+      const [plan, overview] = await Promise.all([
+        personalPlanClient.read(this.projectId),
         projectOverviewClient.read(this.projectId),
       ]);
       if (n !== this.generation || owner !== sessionClient.context()) return;
-      this.context = c;
+      this.apply(plan);
       this.setData({
-        title: p.bookTitle,
-        rows: c.directory.chapters.map((x) => ({ id: x.key, title: x.title })),
+        storyCount: overview.stories.filter(
+          (s) => s.revision && s.included !== false,
+        ).length,
+        unassigned: overview.stories.filter(
+          (s) => s.revision && s.included !== false && !s.chapter,
+        ).length,
       });
     } catch (e) {
       if (n === this.generation)
@@ -41,75 +49,72 @@ Page({
         this.setData({ busy: false, pageLoading: false });
     }
   },
+  apply(plan: PersonalPlan) {
+    this.plan = plan;
+    this.setData({
+      rows: plan.chapters.map((c) => ({
+        id: c.key,
+        title: c.title,
+        subtitle: `${c.questions.length} 个大纲问题 · ${c.storyRefs.length} 篇故事`,
+      })),
+    });
+  },
   onHide() {
     ++this.generation;
-    this.context = null;
-    this.setData({ rows: [], busy: false, pageLoading: false });
+    this.plan = null;
+    this.setData({ rows: [], storyCount: 0, unassigned: 0, busy: false });
   },
   open(e: WechatMiniprogram.CustomEvent<{ id: string }>) {
     go(
-      "chapter",
+      "chapter-outline",
       `projectId=${this.projectId}&chapter=${encodeURIComponent(e.detail.id)}`,
     );
   },
-  async persist(chapters: BookContext["directory"]["chapters"]) {
-    if (this.data.busy || !this.context) return false;
-    const n = this.generation,
-      owner = sessionClient.context();
+  async persist(chapters: PlanChapter[]) {
+    if (!this.plan || this.data.busy) return false;
     this.setData({ busy: true, status: "" });
     try {
-      const c = await bookClient.reviseDirectory(
-        this.projectId,
-        this.context.directory.version,
-        chapters,
+      this.apply(
+        await personalPlanClient.revise(this.projectId, this.plan.revision, {
+          chapters,
+          starters: this.plan.starters,
+        }),
       );
-      if (n !== this.generation || owner !== sessionClient.context())
-        return false;
-      this.context = c;
-      this.setData({
-        rows: c.directory.chapters.map((x) => ({ id: x.key, title: x.title })),
-      });
       return true;
     } catch (e) {
-      if (n === this.generation)
-        this.setData({
-          status: e instanceof Error ? e.message : "顺序未保存，请重试",
-          rows:
-            this.context?.directory.chapters.map((x) => ({
-              id: x.key,
-              title: x.title,
-            })) || [],
-        });
+      this.setData({ status: e instanceof Error ? e.message : "未保存" });
       return false;
     } finally {
-      if (n === this.generation) this.setData({ busy: false });
+      this.setData({ busy: false });
     }
   },
   reorder(e: WechatMiniprogram.CustomEvent<{ ids: string[] }>) {
-    const c = this.context;
-    if (c)
+    if (this.plan)
       void this.persist(
         e.detail.ids.map((id) =>
-          c.directory.chapters.find((x) => x.key === id)!,
+          this.plan!.chapters.find((c) => c.key === id)!,
         ),
       );
   },
-  async add() {
-    if (!this.context) return;
-    const key = `chapter-${paymentKey()}`;
-    if (
-      await this.persist([
-        ...this.context.directory.chapters,
-        { key, title: "新的章节", storyRefs: [] },
-      ])
-    )
-      go(
-        "chapter",
-        `projectId=${this.projectId}&chapter=${encodeURIComponent(key)}`,
-      );
+  add() {
+    go("chapter", `projectId=${this.projectId}`);
   },
-  done() {
-    wx.navigateBack();
+  book() {
+    go("book", `projectId=${this.projectId}`);
+  },
+  unassigned() {
+    go("stories", `projectId=${this.projectId}&filter=unassigned`);
+  },
+  async free() {
+    if (!this.plan || this.data.busy) return;
+    this.setData({ busy: true });
+    try {
+      await startOutlineAnswer(this.projectId, this.plan.revision);
+    } catch (e) {
+      this.setData({ status: e instanceof Error ? e.message : "暂时无法开始" });
+    } finally {
+      this.setData({ busy: false });
+    }
   },
   refresh() {
     void this.onShow();

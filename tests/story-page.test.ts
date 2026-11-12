@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { build } from "esbuild";
 import { runInNewContext } from "node:vm";
+import { readFile } from "node:fs/promises";
 const base = "https://example.test/timenook/v1",
   projectId = "33333333-3333-4333-8333-333333333333",
   interviewId = "44444444-4444-4444-8444-444444444444",
@@ -71,7 +72,7 @@ function harness(
           "timenook.projects.v1",
           "live story cannot consume demo state",
         );
-        return structuredClone(storage.get(key));
+        return structuredClone(storage.get(key) ?? "");
       },
       setStorageSync: (key: string, value: any) => {
         if (
@@ -87,12 +88,12 @@ function harness(
       },
       removeStorageSync: (key: string) => storage.delete(key),
       request: (o: any) => {
-        if (o.url.endsWith(`/interviews/${interviewId}/photos`)) {
+        if (o.url.endsWith(`/interviews/${interviewId}/photo-materials`)) {
           photoRequests.push(o);
           o.success({
             statusCode: 200,
             data: {
-              data: { snapshot: options.photoSnapshot ?? null, photos: [] },
+              data: options.photoSnapshot ?? null,
               meta: { requestId: "synthetic-photo-context" },
             },
           });
@@ -164,6 +165,7 @@ function harness(
       },
       getAccountInfoSync: () => ({ miniProgram: { appId: "synthetic-app" } }),
       navigateTo: (o: any) => navigation.push(o),
+      switchTab: (o: any) => navigation.push(o),
       reLaunch: (o: any) => navigation.push(o),
       showToast: () => {},
     },
@@ -200,6 +202,55 @@ function harness(
     },
   };
 }
+
+test("story placement and supplement entries preserve the selected project and story interview", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await showAudioStory(h);
+  h.page.assignStory();
+  assert.equal(
+    h.navigation.pop().url,
+    `/pages/assign-story/index?projectId=${projectId}&storyId=${storyId}`,
+  );
+  h.page.recoverInterview();
+  assert.equal(
+    h.navigation.pop().url,
+    `/pages/interview/index?projectId=${projectId}&interviewId=${interviewId}&prepare=1`,
+  );
+  h.page.returnToProject();
+  assert.equal(h.navigation.pop().url, "/pages/home/index");
+  assert.ok([...h.storage.values()].includes(projectId));
+});
+
+test("ready story photo entry opens photo editing for the current project, interview and story", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await showAudioStory(h);
+  assert.equal(h.page.data.displayState, "ready");
+  const markup = await readFile("miniprogram/pages/story/index.wxml", "utf8");
+  assert.match(markup, /bindtap="editLivePhotos"/);
+  h.page.editLivePhotos();
+  assert.equal(
+    h.navigation.pop().url,
+    `/pages/photos/index?projectId=${projectId}&interviewId=${interviewId}&storyId=${storyId}`,
+  );
+});
+
+test("failed transcription dependencies expose recovery while retaining the saved original audio", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  h.page.onLoad({ projectId, storyId });
+  const showing = h.page.onShow();
+  await turn();
+  const value = story();
+  value.task.errorCode = "DEPENDENCY_FAILED" as any;
+  value.task.sources = [source] as any;
+  h.respond(0, value);
+  await showing;
+  assert.equal(h.page.data.displayState, "failed");
+  assert.equal(h.page.data.failureTitle, "录音识别未完成");
+  assert.equal(h.page.data.liveAudioSources[0].clipId, source.clipId);
+});
 const turn = () => new Promise<void>((r) => setImmediate(r));
 function story(state = "waiting_inputs", version = 0) {
   return {
@@ -636,6 +687,43 @@ async function showAudioStory(
   await showing;
 }
 const audioEvent = { currentTarget: { dataset: { id: source.clipId } } };
+test("native empty-string storage misses create a retry key that survives an uncertain response and page return", async (t) => {
+  const h = harness();
+  t.after(() => h.page.onUnload());
+  await showAudioStory(h, 0, "待重新整理的故事", "failed");
+  const firstIndex = h.requests.length;
+  const first = h.page.retryLive();
+  await turn();
+  const key = h.requests[firstIndex].header["Idempotency-Key"];
+  assert.equal(typeof key, "string");
+  assert.match(key, /^[-A-Za-z0-9_:]{8,128}$/);
+  h.requests[firstIndex].fail({ errMsg: "request:fail timeout" });
+  await first;
+  assert.equal(h.page.data.busy, false);
+  h.page.onHide();
+  await showAudioStory(h, h.requests.length, "待重新整理的故事", "failed");
+  const retryIndex = h.requests.length;
+  const retry = h.page.retryLive();
+  await turn();
+  assert.equal(h.requests[retryIndex].header["Idempotency-Key"], key);
+  h.respond(
+    retryIndex,
+    { id: taskId, projectId, kind: "compose_story", state: "queued" },
+    202,
+  );
+  await turn();
+  h.respond(retryIndex + 1, {
+    interviewId,
+    clipCount: 1,
+    pendingCount: 0,
+    cloudSaved: true,
+    story: story("queued", 1),
+  });
+  await turn();
+  h.respond(retryIndex + 2, story("queued", 1));
+  await retry;
+  assert.equal(h.page.data.story.task.state, "queued");
+});
 test("background story polling keeps the current text visible while requests are pending", async () => {
   const h = harness();
   await showAudioStory(h);

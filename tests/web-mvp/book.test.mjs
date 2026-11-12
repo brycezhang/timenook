@@ -43,9 +43,7 @@ for (const engine of [chromium, webkit])
       await page
         .getByRole("button", { name: "选择封面照片", exact: true })
         .click();
-      await page
-        .getByRole("button", { name: "那年院子里的合照", exact: true })
-        .click();
+      await page.getByRole("button", { name: "项目照片", exact: true }).click();
       await page.getByAltText("选定的封面照片").waitFor();
       await page.getByRole("button", { name: "保存封面", exact: true }).click();
       await page.getByText("封面已保存", { exact: true }).waitFor();
@@ -69,8 +67,12 @@ for (const engine of [chromium, webkit])
       await page
         .getByRole("button", { name: "管理入书故事", exact: true })
         .click();
+      assert.equal(
+        await page.getByRole("textbox", { name: /^章节名称 / }).count(),
+        6,
+      );
       await page.getByRole("button", { name: "添加章节", exact: true }).click();
-      await page.getByLabel("章节名称 2", { exact: true }).fill("后来的日子");
+      await page.getByLabel("章节名称 7", { exact: true }).fill("后来的日子");
       await page
         .getByLabel(`移动故事 ${second.story.id}`)
         .selectOption({ label: "后来的日子" });
@@ -90,7 +92,7 @@ for (const engine of [chromium, webkit])
         "把一路走来的日子，留给家人。",
       );
       assert.equal(current.snapshot.chapters[1].stories[0].id, second.story.id);
-      assert.equal(current.snapshot.cover.photo.caption, "那年院子里的合照");
+      assert.equal(current.snapshot.cover.photo.caption, "");
       await page.setViewportSize({ width: 320, height: 700 });
       assert.ok(
         await page.evaluate(
@@ -126,6 +128,7 @@ for (const engine of [chromium, webkit])
       );
       books.data(
         await books.request("POST", `${base}/book/cover`, p.narrator.token, {
+          ...(await books.coverMetadata(p.projectId, p.buyer.token)),
           expectedVersion: bookContext.cover.version,
           salutation: "另一位成员保存的寄语",
           photoAssetId: bookContext.cover.photoAssetId,

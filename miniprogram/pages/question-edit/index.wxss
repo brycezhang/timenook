@@ -1,0 +1,3 @@
+@import "../../styles/outline.wxss";
+
+.outline-required { font-size:12px;font-weight:400;color:#756859; }

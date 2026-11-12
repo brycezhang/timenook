@@ -56,6 +56,7 @@ import { Participation } from "../identity/participation";
 import { AdminAccess } from "../admin/admin-access";
 import { idempotencyKey } from "../payments/orders";
 import { FirstCopies } from "./first-copy";
+import { Books } from "./books";
 import { API_CONFIG, ApiConfig } from "../config";
 import { participationNotice } from "../catalog/e2e-package";
 import { ProjectServiceTerms } from "../projects/service-terms";
@@ -143,6 +144,7 @@ export class Fulfillment implements OnModuleDestroy {
   constructor(
     private readonly participation: Participation,
     private readonly copies: FirstCopies,
+    private readonly books: Books,
     @Inject(API_CONFIG) private readonly config: ApiConfig,
   ) {
     this.terms = new ProjectServiceTerms(config.databaseUrl);
@@ -303,6 +305,20 @@ export class Fulfillment implements OnModuleDestroy {
       (payment?.packageSnapshot ?? {}) as Prisma.JsonObject,
       this.config.books?.mode === "internal-acceptance",
     );
+    const currentIndex = rows.findIndex(
+      (row) => row.reservationRevision === order?.reservationRevision,
+    );
+    const current = attempts[currentIndex] ?? null;
+    const fixedAddress =
+      actor && !erased && order
+        ? ((rows[currentIndex]?.address ??
+            order.address) as unknown as FirstCopyAddress)
+        : null;
+    const regionLabels = (
+      payment?.packageSnapshot as {
+        shippingRegionLabels?: Record<string, string>;
+      } | null
+    )?.shippingRegionLabels;
     return {
       noticeVersion: notice.noticeVersion,
       evidencePrefix: notice.evidencePrefix,
@@ -314,12 +330,20 @@ export class Fulfillment implements OnModuleDestroy {
         (await tx.firstCopyEntitlement.findUnique({ where: { projectId } }))
           ?.state ?? null,
       reservation: order ? this.binding(order) : null,
+      deliveryAddress: fixedAddress
+        ? {
+            ...fixedAddress,
+            regionLabel:
+              regionLabels?.[fixedAddress.regionCode] ??
+              fixedAddress.regionCode,
+          }
+        : null,
       accessExpiresAt: actor?.accessExpiresAt ?? null,
       grantMaxMinutes: 30,
       canGrantNarrator:
         !erased && !!actor && subject.boundUserId === actor.userId,
       attempts,
-      current: attempts[0] ?? null,
+      current,
       creation: {
         state: terms.creation?.state ?? "pending",
         expiresAt: terms.creation?.expiresAt ?? null,
@@ -328,8 +352,9 @@ export class Fulfillment implements OnModuleDestroy {
       canGrant:
         !erased &&
         !!actor &&
-        attempts[0]?.state === "approved" &&
-        (!!rows[0]?.qualityRequestId || terms.creation?.state === "active"),
+        current?.state === "approved" &&
+        (!!rows[currentIndex]?.qualityRequestId ||
+          terms.creation?.state === "active"),
     };
   }
   progress(projectId: string, authorization?: string) {
@@ -338,6 +363,34 @@ export class Fulfillment implements OnModuleDestroy {
       authorization,
       undefined,
       (tx, actor) => this.view(tx, projectId, actor),
+    );
+  }
+  bookScope(projectId: string, authorization?: string, expectedId?: string) {
+    return this.participation.withPlanAccess(
+      projectId,
+      authorization,
+      undefined,
+      async (tx, actor) => {
+        const progress = await this.view(tx, projectId, actor);
+        const binding = progress.current ?? progress.reservation;
+        if (!binding) throw new NotFoundException();
+        if (expectedId && expectedId !== binding.bookVersionId)
+          throw new ConflictException("Production reservation changed");
+        const output = await this.books.frozenOutputIn(
+          tx,
+          projectId,
+          binding.bookVersionId,
+          binding.pdfHash,
+        );
+        const version = await this.books.frozenViewIn(
+          tx,
+          projectId,
+          binding.bookVersionId,
+          binding.snapshotHash,
+          actor.accessExpiresAt,
+        );
+        return { ...output, version };
+      },
     );
   }
   async listIn(
@@ -1355,7 +1408,10 @@ export class Fulfillment implements OnModuleDestroy {
 @ApiTags("Fulfillment")
 @ApiBearerAuth()
 export class FulfillmentController {
-  constructor(private readonly fulfillment: Fulfillment) {}
+  constructor(
+    private readonly fulfillment: Fulfillment,
+    private readonly streams: ProjectStreams,
+  ) {}
 
   @Get() @Header("Cache-Control", "no-store") async progress(
     @Param("id", ParseUUIDPipe) id: string,
@@ -1365,6 +1421,45 @@ export class FulfillmentController {
       data: await this.fulfillment.progress(id, req.headers.authorization),
       meta: { requestId: req.id },
     };
+  }
+  @Get("book") @Header("Cache-Control", "no-store") async book(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    return {
+      data: (await this.fulfillment.bookScope(id, req.headers.authorization))
+        .version,
+      meta: { requestId: req.id },
+    };
+  }
+  @Get("book/pdf") async pdf(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply,
+  ) {
+    const authorization = req.headers.authorization;
+    const fence = await this.streams.userFence(id, authorization);
+    const scope = await this.fulfillment.bookScope(id, authorization);
+    const bytes = await this.fulfillment.readPdf(scope.path, scope.pdf);
+    reply
+      .header("Cache-Control", "private, no-store")
+      .header("X-Content-Type-Options", "nosniff")
+      .header(
+        "Content-Disposition",
+        `attachment; filename="production-${scope.version.id}.pdf"`,
+      )
+      .type("application/pdf")
+      .header("Content-Length", bytes.length)
+      .send(
+        await this.streams.guard(
+          id,
+          fence.epoch,
+          bytes,
+          () => this.fulfillment.bookScope(id, authorization, scope.version.id),
+          authorization,
+          fence.sequence,
+        ),
+      );
   }
 }
 @Controller("v1/admin/fulfillment")

@@ -1,0 +1,31 @@
+{
+  "width": 390,
+  "clipCount": 1,
+  "sealed": 1,
+  "headerBack": "CUA header returned from photos to paused without dialog; photo retained",
+  "hardware": {
+    "stage": "idle",
+    "captures": 1,
+    "permission": true,
+    "pendingUpload": false,
+    "source": {
+      "bytes": 120429,
+      "sha256": "7fd0865ad53140996965ffd205a2750232e5f6a15fc874634526630540d93928",
+      "durationMs": 30096
+    },
+    "events": [
+      "error",
+      "start",
+      "pause",
+      "resume",
+      "stopping",
+      "stop",
+      "upload-request-real",
+      "upload-response-real:204",
+      "upload-response-lost",
+      "upload-request-real",
+      "upload-response-real:204"
+    ]
+  },
+  "boundary": "synthetic hardware permission/recorder and upload callback loss; real downloaded MP3, upload, seal, API and PG/Redis"
+}

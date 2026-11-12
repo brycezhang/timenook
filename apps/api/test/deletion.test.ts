@@ -69,11 +69,24 @@ async function eraseProject(p: Awaited<ReturnType<typeof joinedProject>>) {
 }
 test("all historical payloads and owned files disappear while minimum version and financial shells reject restoration", async (t) => {
   const p = await readyReservedFirstCopy();
+  const familyQuestion = data(
+    await request(
+      "POST",
+      `/v1/projects/${p.projectId}/family-questions`,
+      p.narrator.token,
+      {
+        clientQuestionId: randomUUID(),
+        text: "家人的私人问题",
+        chapterKey: "childhood",
+      },
+    ),
+  );
+  await interview(p, true, { familyQuestionId: familyQuestion.id });
   const photos = await storyPhoto(p, "合成删除照片私人说明");
   data(
     await request(
       "POST",
-      `/v1/projects/${p.projectId}/interviews/${p.interviewId}/photos/${photos.entries[0].photoId}/crop`,
+      `/v1/projects/${p.projectId}/interviews/${p.interviewId}/photo-materials/${photos.entries[0].photoId}/crop`,
       p.narrator.token,
       {
         expectedRevision: photos.revision,
@@ -141,6 +154,22 @@ test("all historical payloads and owned files disappear while minimum version an
     );
     assert.equal(Number(count.n), 0, `${e.table}/${e.category} payload`);
   }
+  assert.equal(
+    (
+      await request(
+        "GET",
+        `/v1/projects/${p.projectId}/family-questions`,
+        p.narrator.token,
+      )
+    ).statusCode,
+    403,
+  );
+  await assert.rejects(
+    db.familyQuestion.update({
+      where: { id: familyQuestion.id },
+      data: { text: "不能恢复的私人问题" },
+    }),
+  );
   await assert.rejects(access(pdf));
   await assert.rejects(
     db.$executeRaw`UPDATE plan_revisions SET content=${JSON.stringify(original.content)}::jsonb WHERE project_id=${p.projectId}::uuid`,

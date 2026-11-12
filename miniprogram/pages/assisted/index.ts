@@ -1,5 +1,5 @@
 import type { WithdrawalStatus } from "../../../packages/contracts/src";
-import { go } from "../../services/store";
+import { go } from "../../services/navigation";
 import { dataMode, setDataMode } from "../../services/mode";
 import { sessionClient, ApiFailure } from "../../services/session";
 import {
@@ -454,7 +454,7 @@ Page({
     if (this.projectId) go("deletion-status", `projectId=${this.projectId}`);
   },
   plan() {
-    go("plan", `projectId=${this.projectId}`);
+    go("directory", `projectId=${this.projectId}`);
   },
   back() {
     go("welcome", `projectId=${this.projectId}`);

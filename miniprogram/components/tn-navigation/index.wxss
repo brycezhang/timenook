@@ -1,0 +1,10 @@
+.navigation { position: fixed; top: 0; left: 0; right: 0; z-index: 20; box-sizing: border-box; background: #fff; color: #382c24; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+.navigation-row { height: 68px; padding: 12px 20px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f1e9de; }
+.navigation-brand { width: 36px; height: 36px; border-radius: 12px; background: #46563c; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.navigation-brand image { width: 21px; height: 21px; }
+.navigation-back { width: 44px; height: 44px; min-width: 44px; padding: 0; margin: 0; border: 0; border-radius: 14px; background: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.navigation-back::after { border: 0; }
+.navigation-back image { width: 22px; height: 22px; }
+.navigation-title { flex: 1; min-width: 0; font-size: 17px; font-weight: 600; line-height: 1.4; letter-spacing: -.3px; overflow-wrap: anywhere; }
+
+.navigation-title.compact-title { font-size: 15px; }

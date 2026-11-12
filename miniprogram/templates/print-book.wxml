@@ -1,0 +1,6 @@
+<template name="print-book">
+  <view class="tn-card print-book-card">
+    <view class="book-model print-book-model"><text class="book-model-title">{{book.snapshot.cover.title}}</text><text wx:if="{{book.snapshot.cover.salutation}}" class="book-model-message">{{book.snapshot.cover.salutation}}</text><image wx:if="{{coverImage}}" class="book-model-image" src="{{coverImage}}" mode="aspectFill" /><text class="book-model-brand">时光故事</text></view>
+    <view class="print-book-copy"><text class="print-book-title">{{book.snapshot.cover.title}}</text><view wx:if="{{badge}}"><text class="print-badge">V{{book.version}} · {{book.pageCount}} 页</text></view><view class="print-book-caption"><view>{{caption}}</view><view wx:if="{{subcaption}}">{{subcaption}}</view></view></view>
+  </view>
+</template>
