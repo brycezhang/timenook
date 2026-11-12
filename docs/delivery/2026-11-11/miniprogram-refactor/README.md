@@ -1,6 +1,6 @@
 # 小程序全量重构 · 模块实施
 
-状态：[父规格 #166](https://github.com/brycezhang/timenook/issues/166) 与 12 张子票按已确认依赖实施，汇入[草稿 PR #179](https://github.com/brycezhang/timenook/pull/179)。MP01 工程与两种手机尺寸对照完成；MP02、MP03、MP05、MP07、MP08 功能已合入，MP05/MP07 已补 390px 原生局部证据；MP04 分类与关系 API 已合入、页面正在收尾，MP06 家人问题和 MP10 成书页正在实施。剩余原生尺寸与交互分别记账。
+状态：[父规格 #166](https://github.com/brycezhang/timenook/issues/166) 与 12 张子票按已确认依赖实施，汇入[草稿 PR #179](https://github.com/brycezhang/timenook/pull/179)。MP01–MP11 功能均已合入；MP01 六张画板完成两种尺寸，MP04、MP05、MP07 已补 390px 原生局部证据。MP12 正在清理旧实现、修复原生走查问题并补齐 71 张画板两种尺寸与交互证据；尚未完成全量验收。
 
 基线：`149b1b6`，原画布 71 张页面／状态、11 组，基线正式构建为 29 条原生路由。71 张画板分别对应实际页面、同页状态、弹窗或系统 PDF 内容，不要求创建 71 条路由。
 
