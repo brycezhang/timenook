@@ -13,7 +13,11 @@ const categories = [
   { value: "received", label: "我收到的" },
   { value: "participating", label: "我参与的" },
 ];
-type Row = ProjectMembership & { description: string; detail: string };
+type Row = ProjectMembership & {
+  description: string;
+  detail: string;
+  orderId: string;
+};
 type PendingRow = {
   id: string;
   bookTitle: string;
@@ -72,7 +76,7 @@ Page({
       if (n !== this.generation || owner !== sessionClient.context()) return;
       this.owner = owner;
       this.projects = projects;
-      this.orders = orders.filter((order) => order.state === "pending");
+      this.orders = orders;
       this.showCategory();
     } catch (e) {
       if (n === this.generation) {
@@ -94,11 +98,23 @@ Page({
   },
   showCategory() {
     const category = this.data.category;
+    const paidGiftOrders = new Map<string, string>();
+    if (category === "sent" && !this.data.switching) {
+      for (const order of this.orders) {
+        if (
+          order.state === "paid" &&
+          order.purchaseKind === "gift" &&
+          order.project
+        )
+          paidGiftOrders.set(order.project.id, order.id);
+      }
+    }
     this.setData({
       rows: this.projects
         .filter((p) => p.categories.includes(category))
         .map((p) => ({
           ...p,
+          orderId: paidGiftOrders.get(p.projectId) ?? "",
           description: p.giftRelationship
             ? `${p.giverNickname}送给${p.giftRelationship}的时光故事书`
             : `${p.giverNickname}发起的时光故事书`,
@@ -106,12 +122,14 @@ Page({
         })),
       pending:
         category === "sent"
-          ? this.orders.map((o) => ({
-              id: o.id,
-              bookTitle: o.bookTitle,
-              description: `${sessionClient.nickname() || "我"}送给${o.recipient.relationshipLabel}的时光故事书`,
-              detail: `${o.paymentStatus === "unknown" ? "付款结果待确认" : "待付款"} · ¥${(o.amount / 100).toFixed(o.amount % 100 ? 2 : 0)}`,
-            }))
+          ? this.orders
+              .filter((o) => o.state === "pending")
+              .map((o) => ({
+                id: o.id,
+                bookTitle: o.bookTitle,
+                description: `${sessionClient.nickname() || "我"}送给${o.recipient.relationshipLabel}的时光故事书`,
+                detail: `${o.paymentStatus === "unknown" ? "付款结果待确认" : "待付款"} · ¥${(o.amount / 100).toFixed(o.amount % 100 ? 2 : 0)}`,
+              }))
           : [],
       selected: projectOverviewClient.selected(),
     });
@@ -142,7 +160,8 @@ Page({
     const id = e.currentTarget.dataset.id as string;
     if (
       this.owner === sessionClient.context() &&
-      this.data.pending.some((order) => order.id === id)
+      (this.data.pending.some((order) => order.id === id) ||
+        this.data.rows.some((project) => project.orderId === id))
     )
       go("order", `id=${id}`);
   },

@@ -44,6 +44,23 @@ page {
   background: #fff;
   color: #382c24;
 }
+.gift-project-card {
+  border: 1px solid #ded4c6;
+  border-radius: 20px;
+  overflow: hidden;
+}
+.gift-project-card .gift-project {
+  border: 0;
+  border-radius: 0;
+}
+.gift-order-link {
+  display: flex;
+  margin: 0 16px;
+  padding: 10px 0;
+  border-top: 1px solid #ded4c6;
+  border-radius: 0;
+  justify-content: flex-end;
+}
 .gift-book {
   width: 45px;
   height: 64px;

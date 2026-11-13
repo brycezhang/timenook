@@ -17,6 +17,7 @@ import { readCurrentPackage } from "../../services/catalog";
 import { bookClient } from "../../services/books";
 import { previewBookPhoto } from "../../services/book-editor";
 import { clearPhotoPreviews } from "../../services/story-photos";
+import { giftContinuation } from "../../services/gifts";
 import { go } from "../../services/navigation";
 import type {
   CurrentPackage,
@@ -35,6 +36,7 @@ Page({
     count: 0,
     familyPending: 0,
     giftCaption: "",
+    giftPage: "" as ReturnType<typeof giftContinuation>,
     coverImage: "",
     loggedIn: false,
     loginVisible: false,
@@ -72,6 +74,7 @@ Page({
       count: 0,
       familyPending: 0,
       giftCaption: "",
+      giftPage: "",
       coverImage: "",
     });
   },
@@ -91,6 +94,7 @@ Page({
     this.ownerContext = owner;
     this.setData({
       busy: !!owner && !this.data.overview,
+      giftPage: "",
       status: "",
       loggedIn: !!owner,
     });
@@ -137,6 +141,7 @@ Page({
           (q) => !q.story && q.state !== "skipped",
         ).length,
         giftCaption: `${selected.giverNickname}送给${selected.isSelfGift ? "自己" : selected.giftRelationship || "家人"}的时光故事书`,
+        giftPage: giftContinuation(selected),
       });
       void this.loadCover(selected.projectId, generation, owner);
     } catch (e) {
@@ -280,6 +285,11 @@ Page({
   book() {
     if (this.data.overview)
       go("book", `projectId=${this.data.overview.projectId}`);
+  },
+  continueGift() {
+    const { overview, giftPage } = this.data;
+    if (overview && giftPage && this.ownerContext === sessionClient.context())
+      go(giftPage, `projectId=${overview.projectId}`);
   },
   family() {
     if (this.data.overview)

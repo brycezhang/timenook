@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { build } from "esbuild";
 import { runInNewContext } from "node:vm";
+import { paidOrder } from "./purchase-fixture";
 
 const base = "https://example.test/api/v1";
 const owner = "11111111-1111-4111-8111-111111111111";
@@ -50,6 +51,7 @@ async function harness(name: string, loggedIn = true) {
       switchTab: ({ url }: any) => routes.push(url),
       navigateTo: ({ url }: any) => routes.push(url),
       setNavigationBarTitle() {},
+      pageScrollTo() {},
     },
   });
   function respond(suffix: string, data: unknown, statusCode = 200) {
@@ -154,6 +156,79 @@ test("gift filters use facts, self opens one project in both categories and pend
   await h.page.onShow();
   assert.equal(h.page.data.rows.length, 0);
   assert.equal(h.page.data.pending.length, 0);
+});
+
+test("sent gifts can reopen the paid order for the matching book", async () => {
+  const h = await harness("projects");
+  h.page.onLoad({});
+  const showing = h.page.onShow();
+  h.respond("/users/me", account.user);
+  await tick();
+  h.respond("/participations", { projects: memberships });
+  h.respond("/orders", {
+    orders: [pending, { ...paidOrder, project: { ...paidOrder.project, id: project } }],
+  });
+  await showing;
+  assert.equal(h.page.data.rows[0].orderId, paidOrder.id);
+  h.page.payment(event("id", paidOrder.id));
+  assert.deepEqual(h.routes, [`/pages/order/index?id=${paidOrder.id}`]);
+  h.page.changeCategory(event("category", "received"));
+  h.page.payment(event("id", paidOrder.id));
+  assert.equal(h.routes.length, 1);
+});
+
+test("project home continues the selected gift until claimed and hides the action for other members", async () => {
+  const h = await harness("home");
+  async function showGift(giftState: string, categories = ["sent"]) {
+    const showing = h.page.onShow();
+    h.respond("/users/me", account.user);
+    await tick();
+    h.respond("/participations", {
+      projects: [{ ...memberships[0], giftState, categories }, memberships[1]],
+    });
+    await tick();
+    h.respond(`/projects/${project}/overview`, {
+      projectId: project,
+      bookTitle: "爸爸的故事",
+      metadataVersion: 1,
+      stories: [],
+      interviews: [],
+      tasks: [],
+      summary: { confirmed: 0, photos: 0, audioMinutes: 0 },
+      nextStep: "",
+      canDecide: true,
+    });
+    h.respond(`/projects/${project}/plan`, {
+      projectId: project,
+      revision: 1,
+      chapters: [],
+      starters: [],
+      preferences: { version: 1, blockedTopics: [] },
+      questionStates: [],
+      actualQuestions: [],
+      answers: [],
+      subjectDecision: "member",
+      accessExpiresAt: null,
+    });
+    h.respond(`/projects/${project}/family-questions`, { questions: [] });
+    await showing;
+    h.respond(`/projects/${project}/book`, null, 404);
+  }
+  h.page.onLoad();
+  await showGift("unissued");
+  h.page.continueGift();
+  assert.equal(h.routes.pop(), `/pages/gift-recipient/index?projectId=${project}`);
+  h.page.onHide();
+  await showGift("unclaimed");
+  h.page.continueGift();
+  assert.equal(h.routes.pop(), `/pages/gift-share/index?projectId=${project}`);
+  h.page.onHide();
+  await showGift("claimed");
+  assert.equal(h.page.data.giftPage, "");
+  await showGift("unclaimed", ["participating"]);
+  assert.equal(h.page.data.giftPage, "");
+  h.page.continueGift();
+  assert.equal(h.routes.length, 0);
 });
 
 test("an invitation preserves custom relation across login and terms; only explicit acceptance sends the current form", async () => {

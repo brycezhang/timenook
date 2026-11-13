@@ -9,10 +9,11 @@
   <view wx:elif="{{bookTitle}}" class="tn-card"><view class="payment-book-title">{{bookTitle}}</view><view class="payment-detail"><text>{{activeOrder.state === 'closed' ? '未完成付款' : unknown ? '付款结果确认中' : '待付款'}}</text><text wx:if="{{!unknown && packagePrice}}" class="payment-amount">¥{{packagePrice}}</text></view></view>
  </block>
  <view wx:if="{{paymentError}}" class="tn-error" role="alert">{{paymentError}}</view>
+ <view wx:if="{{giftError}}" class="tn-error" role="alert">{{giftError}}<button class="tn-link" bindtap="restoreOrders" disabled="{{loading || busy}}">重新读取</button></view>
 </view>
 <view class="tn-dock">
- <button wx:if="{{activeOrder.state === 'paid' && activeOrder.purchaseKind === 'gift'}}" class="tn-button" bindtap="giftRecipient"><image class="tn-icon" src="/assets/icons/gift-light.svg"/>填写收礼人</button>
- <button wx:elif="{{activeOrder.state === 'paid'}}" class="tn-button" bindtap="project">进入故事书</button>
+ <button wx:if="{{giftPage}}" class="tn-button" bindtap="continueGift"><image class="tn-icon" src="/assets/icons/gift-light.svg"/>继续送出</button>
+ <button wx:elif="{{activeOrder.state === 'paid'}}" class="tn-button" bindtap="project" disabled="{{loading || busy}}">进入故事书</button>
  <button wx:elif="{{activeOrder.state === 'closed'}}" class="tn-button" bindtap="catalog">重新购买</button>
  <block wx:elif="{{unknown}}"><button class="tn-button" bindtap="restoreOrders" loading="{{loading}}" disabled="{{loading || busy}}"><image class="tn-icon" src="/assets/icons/rotate-ccw-light.svg"/>查询付款结果</button><button class="tn-link" bindtap="gifts">返回我的礼物</button></block>
  <block wx:else><button class="tn-button" bindtap="retryPayment" loading="{{busy}}" disabled="{{loading || busy || !activeOrder}}">继续付款</button><button class="tn-button tn-secondary" bindtap="gifts">返回我的礼物</button></block>

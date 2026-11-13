@@ -3,6 +3,7 @@ import type {
   GiftSetup,
   GiftVerification,
   OwnedGift,
+  ProjectMembership,
 } from "../../packages/contracts/src";
 import { USER_TERMS_VERSION } from "../../packages/contracts/src";
 import { ApiFailure, sessionClient } from "./session";
@@ -13,6 +14,14 @@ function cardToken(token: string) {
     throw new ApiFailure("INVALID_GIFT", 404);
   return token;
 }
+
+export function giftContinuation(project?: ProjectMembership) {
+  if (!project?.categories.includes("sent") || project.isSelfGift) return "";
+  if (project.giftState === "unissued") return "gift-recipient";
+  if (project.giftState === "unclaimed") return "gift-share";
+  return "";
+}
+
 export const giftClient = {
   current(projectId: string) {
     return sessionClient.request<GiftSetup>(`/projects/${projectId}/gift`);

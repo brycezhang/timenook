@@ -32,8 +32,8 @@ page { background: #fff; }
 .home-statistics > button, .home-statistics > view { min-width: 0; min-height: 44px; padding: 0; display: flex; align-items: center; gap: 4px; font-size: 12px; color: #46563c; }
 .home-statistics > view { font-size: 11px; color: #756859; }
 .home-statistics .home-number { color: #382c24; font-size: 24px; font-weight: 700; }
-.home-family { display: flex; align-items: center; gap: 12px; padding: 17px 16px; border: 1px solid #ded4c6; border-radius: 18px; color: #382c24; text-align: left; }
-.home-family .tn-icon-tile { width: 42px; height: 42px; }
+.home-family, .home-gift { display: flex; align-items: center; gap: 12px; padding: 17px 16px; border: 1px solid #ded4c6; border-radius: 18px; color: #382c24; text-align: left; }
+.home-family .tn-icon-tile, .home-gift .tn-icon-tile { width: 42px; height: 42px; }
 .home-family-title { font-size: 17px; font-weight: 700; }
 .home-family-meta { margin-top: 5px; font-size: 12px; color: #756859; }
 .home-question { border: 1px solid #ded4c6; border-radius: 20px; background: #edf0e7; padding: 18px; display: flex; flex-direction: column; gap: 12px; }

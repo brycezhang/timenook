@@ -1,8 +1,9 @@
-import { switchProjectTab } from "../../services/navigation";
+import { go, switchProjectTab } from "../../services/navigation";
+import { giftContinuation } from "../../services/gifts";
+import { projectOverviewClient } from "../../services/project-overview";
 import { sessionClient } from "../../services/session";
 import { paymentClient } from "../../services/payments";
 import type { PaymentOrderView } from "../../../packages/contracts/src";
-import { go } from "../../services/navigation";
 Page({
   data: {
     activeOrder: null as PaymentOrderView | null,
@@ -11,6 +12,8 @@ Page({
     title: "确认付款结果",
     unknown: false,
     paymentError: "",
+    giftPage: "" as ReturnType<typeof giftContinuation>,
+    giftError: "",
     loading: false,
     busy: false,
     loginVisible: false,
@@ -38,6 +41,7 @@ Page({
   async restoreOrders() {
     const generation = ++this.orderGeneration,
       context = sessionClient.context();
+    this.setData({ giftPage: "", giftError: "" });
     if (!context) {
       this.setData({ activeOrder: null, loginVisible: true, loading: false });
       return;
@@ -59,7 +63,7 @@ Page({
       }
       this.selectedOrderId = id;
       const order = await paymentClient.get(id);
-      if (current()) this.showOrder(order);
+      if (current()) await this.showOrder(order, current);
     } catch (e) {
       if (current())
         this.setData({
@@ -72,7 +76,7 @@ Page({
       if (current()) this.setData({ loading: false });
     }
   },
-  showOrder(order: PaymentOrderView) {
+  async showOrder(order: PaymentOrderView, current: () => boolean) {
     this.setData({
       activeOrder: order,
       bookTitle: order.bookTitle,
@@ -87,12 +91,23 @@ Page({
               ? "确认付款结果"
               : "待付款",
     });
-    if (
-      order.state === "paid" &&
-      order.purchaseKind === "self" &&
-      order.project
-    )
-      switchProjectTab("home", order.project.id);
+    if (order.state !== "paid" || !order.project) return;
+    const projectId = order.project.id;
+    if (order.purchaseKind === "self") {
+      switchProjectTab("home", projectId);
+      return;
+    }
+    try {
+      const { projects } = await projectOverviewClient.memberships();
+      if (current())
+        this.setData({
+          giftPage: giftContinuation(
+            projects.find((project) => project.projectId === projectId),
+          ),
+        });
+    } catch {
+      if (current()) this.setData({ giftError: "礼物状态读取失败，请重试" });
+    }
   },
   async retryPayment() {
     const order = this.data.activeOrder;
@@ -115,7 +130,7 @@ Page({
         localOnly: false,
         isCurrent: current,
       });
-      if (current()) this.showOrder(result);
+      if (current()) await this.showOrder(result, current);
     } catch (e) {
       if (current())
         this.setData({
@@ -141,14 +156,14 @@ Page({
   catalog() {
     go("new-book");
   },
-  giftRecipient() {
-    const order = this.data.activeOrder;
+  continueGift() {
+    const { activeOrder, giftPage } = this.data;
     if (
-      order?.state === "paid" &&
-      order.project &&
-      order.purchaseKind === "gift"
+      activeOrder?.project &&
+      giftPage &&
+      this.ownerContext === sessionClient.context()
     )
-      go("gift-recipient", `projectId=${order.project.id}`);
+      go(giftPage, `projectId=${activeOrder.project.id}`);
   },
   project() {
     const project = this.data.activeOrder?.project;

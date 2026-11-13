@@ -2,10 +2,13 @@
 <app-loading wx:if="{{pageLoading}}" variant="list" />
 <view wx:else class="tn-page gifts-page {{switching ? '' : 'with-gifts-dock'}}">
  <view class="gift-categories"><button wx:for="{{categories}}" wx:key="value" class="gift-category {{category === item.value ? 'selected' : ''}}" data-category="{{item.value}}" bindtap="changeCategory" aria-pressed="{{category === item.value}}">{{item.label}}</button></view>
- <button wx:for="{{rows}}" wx:key="projectId" class="gift-project" data-id="{{item.projectId}}" bindtap="choose" aria-label="{{item.bookTitle}}">
-  <view class="gift-book"><image src="/assets/icons/modern-book.svg"/></view>
-  <view class="tn-grow gift-copy"><view class="gift-title">{{item.bookTitle}}</view><view class="gift-description">{{item.description}}</view><view class="gift-detail">{{item.detail}}</view></view><image class="gift-arrow" src="/assets/icons/modern-chevron-right.svg"/>
- </button>
+ <view wx:for="{{rows}}" wx:key="projectId" class="gift-project-card">
+  <button class="gift-project" data-id="{{item.projectId}}" bindtap="choose" aria-label="{{item.bookTitle}}">
+   <view class="gift-book"><image src="/assets/icons/modern-book.svg"/></view>
+   <view class="tn-grow gift-copy"><view class="gift-title">{{item.bookTitle}}</view><view class="gift-description">{{item.description}}</view><view class="gift-detail">{{item.detail}}</view></view><image class="gift-arrow" src="/assets/icons/modern-chevron-right.svg"/>
+  </button>
+  <button wx:if="{{item.orderId}}" class="tn-link gift-order-link" data-id="{{item.orderId}}" bindtap="payment" aria-label="查看{{item.bookTitle}}的订单">查看订单</button>
+ </view>
  <button wx:for="{{pending}}" wx:key="id" class="gift-project" data-id="{{item.id}}" bindtap="payment">
   <view class="gift-book"><image src="/assets/icons/modern-book.svg"/></view>
   <view class="tn-grow gift-copy"><view class="gift-title">{{item.bookTitle}}</view><view class="gift-description">{{item.description}}</view><view class="gift-detail">{{item.detail}}</view></view><image class="gift-arrow" src="/assets/icons/modern-chevron-right.svg"/>
