@@ -9,6 +9,19 @@ const phoneEvent = {
 };
 const base = "https://example.test/api/v1";
 const projectId = "33333333-3333-4333-8333-333333333333";
+const coverPhoto = {
+  id: "55555555-5555-4555-8555-555555555555",
+  assetId: "66666666-6666-4666-8666-666666666666",
+  sha256: "f".repeat(64),
+  bytes: 42,
+};
+const questions = ["one", "two"].map((id) => ({
+  id,
+  text: id,
+  state: "ready",
+  chapterKey: null,
+  author: { relationship: "女儿", nickname: "小树" },
+}));
 const session = {
   user: { id: "11111111-1111-4111-8111-111111111111" },
   session: {
@@ -24,7 +37,13 @@ async function harness(
   deferLogin = false,
 ) {
   const bundle = await build({
-    entryPoints: [`miniprogram/pages/${name}/index.ts`],
+    stdin: {
+      contents:
+        name === "home"
+          ? 'import "./miniprogram/pages/home/index"; import "./miniprogram/pages/account/index";'
+          : `import "./miniprogram/pages/${name}/index";`,
+      resolveDir: process.cwd(),
+    },
     bundle: true,
     write: false,
     format: "cjs",
@@ -35,15 +54,26 @@ async function harness(
   if (signedIn) storage.set(`timenook.session.v1:${base}`, session);
   const routes: string[] = [],
     requests: string[] = [];
-  let page: any;
+  const pages: any[] = [];
   let completeLogin: (() => void) | undefined;
   let rejectMembership = false;
+  let membershipOffline = false;
+  let rejectOffer = false;
+  let showCover = false;
+  let coverExpiresAt: string | null = null;
+  const files = new Set<string>();
+  const downloads: string[] = [];
+  let random = 0;
   runInNewContext(bundle.outputFiles[0].text, {
+    Date,
+    Math: Object.assign(Object.create(Math), {
+      random: () => ((++random % 100) + 1) / 1000,
+    }),
     setTimeout,
     clearTimeout,
     Page(value: any) {
-      page = value;
-      page.setData = (patch: object) => Object.assign(page.data, patch);
+      pages.push(value);
+      value.setData = (patch: object) => Object.assign(value.data, patch);
     },
     wx: {
       env: { USER_DATA_PATH: "/user-data" },
@@ -62,9 +92,31 @@ async function harness(
       openPrivacyContract: () => {},
       login: (options: any) =>
         options.success({ code: "synthetic-device-code" }),
+      downloadFile(options: any) {
+        downloads.push(options.url);
+        files.add(options.filePath);
+        options.success({ statusCode: 200, filePath: options.filePath });
+      },
+      getFileSystemManager: () => ({
+        access: (o: any) => (files.has(o.path) ? o.success() : o.fail()),
+        getFileInfo: (o: any) =>
+          o.success({ size: 42, digest: coverPhoto.sha256 }),
+        unlink: (o: any) =>
+          files.delete(o.filePath)
+            ? o.success()
+            : o.fail({ errMsg: "no such file" }),
+      }),
       request(options: any) {
         const route = options.url.slice(base.length);
         requests.push(route);
+        if (options.method === "DELETE") {
+          options.success({ statusCode: 204 });
+          return;
+        }
+        if (route === "/packages/current" && rejectOffer) {
+          options.fail({ errMsg: "request:fail timeout" });
+          return;
+        }
         if (route === "/participations" && rejectMembership) {
           rejectMembership = false;
           options.success({
@@ -74,6 +126,11 @@ async function harness(
               meta: { requestId: projectId },
             },
           });
+          return;
+        }
+        if (route === "/participations" && membershipOffline) {
+          membershipOffline = false;
+          options.fail({ errMsg: "request:fail timeout" });
           return;
         }
         const extra =
@@ -93,9 +150,23 @@ async function harness(
                   accessExpiresAt: null,
                 }
               : route.endsWith("/family-questions")
-                ? { projectId: route.split("/")[2], questions: [] }
+                ? { projectId: route.split("/")[2], questions }
                 : route.endsWith("/book")
-                  ? {}
+                  ? {
+                      projectId: route.split("/")[2],
+                      draftAccess: { allowed: true, expiresAt: coverExpiresAt },
+                      inputHash: "f".repeat(64),
+                      directory: { version: 1, chapters: [] },
+                      eligibleStories: [],
+                      cover: {
+                        version: 1,
+                        salutation: "",
+                        photoAssetId: coverPhoto.assetId,
+                      },
+                      coverPhotoOptions: showCover ? [coverPhoto] : [],
+                      current: null,
+                      accessExpiresAt: null,
+                    }
                   : undefined;
         const data =
           extra ??
@@ -104,7 +175,7 @@ async function harness(
             : route === "/sessions/wechat"
               ? session
               : route === "/participations"
-                ? { projects }
+                ? { projects: projects.map((p) => ({ categories: [], ...p })) }
                 : route.startsWith("/invitations/")
                   ? route.endsWith("/accept")
                     ? { projectId }
@@ -141,11 +212,25 @@ async function harness(
       },
     },
   });
+  if (name === "home") pages[0].onLoad();
   return {
-    page,
+    page: pages[0],
+    account: pages[1],
     routes,
     requests,
     storage,
+    files,
+    downloads,
+    showCover(allowed: boolean, expiresAt: string | null = null) {
+      showCover = allowed;
+      coverExpiresAt = expiresAt;
+    },
+    failNextMembership() {
+      membershipOffline = true;
+    },
+    failOfferRefresh() {
+      rejectOffer = true;
+    },
     expireNextMembership() {
       rejectMembership = true;
     },
@@ -216,6 +301,120 @@ test("home keeps the current book visible while returning from another page", as
   assert.equal(h.page.data.busy, false);
   await returning;
 });
+test("switching through My keeps the chosen recommendation and reuses the authorized cover file", async () => {
+  const h = await harness("home", [{ projectId }]);
+  h.showCover(true);
+  await h.page.onShow();
+  const firstQuestion = h.page.data.question.id;
+  h.page.nextQuestion();
+  const question = h.page.data.question.id;
+  assert.notEqual(question, firstQuestion);
+  const image = h.page.data.coverImage;
+  assert.ok(image && h.files.has(image));
+
+  h.page.onHide();
+  await h.account.onShow();
+  h.account.onHide();
+  const returning = h.page.onShow();
+  assert.equal(h.page.data.coverImage, image);
+  await returning;
+  assert.equal(h.page.data.question.id, question);
+  assert.equal(h.page.data.coverImage, image);
+  assert.equal(h.downloads.length, 1);
+
+  h.files.delete(image);
+  await h.page.onShow();
+  const recoveredImage = h.page.data.coverImage;
+  assert.notEqual(recoveredImage, image);
+  assert.ok(h.files.has(recoveredImage));
+  assert.equal(h.downloads.length, 2);
+
+  h.showCover(false);
+  await h.page.onShow();
+  assert.equal(h.page.data.coverImage, "");
+  assert.equal(h.files.has(recoveredImage), false);
+  assert.equal(h.downloads.length, 2);
+});
+test("logging out in My clears the hidden home cover before visiting home again", async () => {
+  const h = await harness("home", [{ projectId }]);
+  h.showCover(true);
+  await h.page.onShow();
+  const image = h.page.data.coverImage;
+  assert.ok(h.files.has(image));
+  h.page.onHide();
+  await h.account.onShow();
+  await h.account.logout();
+  assert.equal(h.page.data.coverImage, "");
+  assert.equal(h.page.data.overview, null);
+  assert.equal(h.files.has(image), false);
+});
+test("an open home page clears the cover at its renewed authorization deadline", async (t) => {
+  const start = Date.now();
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: start });
+  const h = await harness("home", [{ projectId }]);
+  h.showCover(true, new Date(start + 2000).toISOString());
+  await h.page.onShow();
+  const image = h.page.data.coverImage;
+  assert.ok(h.files.has(image));
+
+  t.mock.timers.tick(1000);
+  h.showCover(true, new Date(start + 3000).toISOString());
+  await h.page.onShow();
+  t.mock.timers.tick(1000);
+  assert.equal(h.page.data.coverImage, image);
+  assert.equal(h.downloads.length, 1);
+
+  t.mock.timers.tick(1000);
+  assert.equal(h.page.data.coverImage, "");
+  assert.equal(h.page.data.overview.projectId, projectId);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(h.files.has(image), false);
+});
+test("the public purchase button stays ready when revisiting a loaded home tab", async () => {
+  const h = await harness("home", [], false);
+  await h.page.onShow();
+  assert.equal(h.page.data.offer.purchasable, true);
+  h.page.onHide();
+  const returning = h.page.onShow();
+  await Promise.resolve();
+  assert.equal(h.page.data.offerLoading, false);
+  await returning;
+});
+test("a failed background catalog refresh keeps the last price and purchase entry", async () => {
+  const h = await harness("home", [], false);
+  await h.page.onShow();
+  const { price, offerLabel } = h.page.data;
+  h.page.onHide();
+  h.failOfferRefresh();
+  await h.page.onShow();
+  assert.equal(h.page.data.price, price);
+  assert.equal(h.page.data.offerLabel, offerLabel);
+  assert.match(h.page.data.offerError, /套餐加载失败/);
+  h.page.purchase();
+  assert.equal(h.page.data.loginVisible, true);
+});
+test("retrying a membership timeout reloads the project with an offer already cached", async () => {
+  const projects: object[] = [];
+  const h = await harness("home", projects);
+  await h.page.onShow();
+  const price = h.page.data.price;
+  projects.push({ projectId });
+  h.failNextMembership();
+  await h.page.onShow();
+  assert.equal(h.page.data.overview, null);
+  assert.equal(h.page.data.price, price);
+  assert.match(h.page.data.status, /稍后重试/);
+  assert.equal(h.page.data.offerError, "");
+
+  const beforeRetry = h.requests.length;
+  await h.page.refresh();
+  const retried = h.requests.slice(beforeRetry);
+  assert.ok(retried.includes("/participations"));
+  assert.ok(retried.includes(`/projects/${projectId}/overview`));
+  assert.equal(retried.includes("/packages/current"), false);
+  assert.equal(h.page.data.overview.projectId, projectId);
+  assert.equal(h.page.data.status, "");
+});
 test("home clears a retained book after rejected membership", async () => {
   const h = await harness("home", [{ projectId }]);
   await h.page.onShow();
@@ -279,30 +478,6 @@ test("My shows an existing local session while validating it", async () => {
   const pending = h.page.onShow();
   assert.equal(h.page.data.loggedIn, true);
   await pending;
-});
-test("native tab taps navigate even when the custom bar selection lags behind the page", async () => {
-  const bundle = await build({
-    entryPoints: ["miniprogram/custom-tab-bar/index.ts"],
-    bundle: true,
-    write: false,
-    format: "cjs",
-    platform: "neutral",
-  });
-  const routes: string[] = [];
-  let bar: any;
-  runInNewContext(bundle.outputFiles[0].text, {
-    Component(value: any) {
-      bar = value;
-    },
-    wx: {
-      getStorageSync: () => undefined,
-      switchTab: ({ url }: { url: string }) => routes.push(url),
-    },
-  });
-  bar.methods.switchTab.call(bar, {
-    currentTarget: { dataset: { page: "home" } },
-  });
-  assert.deepEqual(routes, ["/pages/home/index"]);
 });
 test("My provides project, new purchase and terms entries without loading private projects", async () => {
   const h = await harness("account", [], false);

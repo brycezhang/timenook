@@ -23,4 +23,5 @@
 input.tn-input { padding-top: 0; padding-bottom: 0; }
 .tn-dock { position: fixed; bottom: 0; left: 0; right: 0; z-index: 4; background: #fff; border-top: 1px solid #ded4c6; padding: 14px 22px calc(20px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; }
 .tn-dock.above-tabs { bottom: calc(70px + env(safe-area-inset-bottom)); padding-bottom: 20px; }
+.tn-bottom-sheet { width: 100%; max-width: 600px; margin: 0 auto; padding: 22px 22px calc(22px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; }
 .tn-error { color: #984b39; font-size: 14px; line-height: 1.7; }

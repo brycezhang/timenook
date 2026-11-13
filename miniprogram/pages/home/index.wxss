@@ -1,5 +1,7 @@
 page { background: #fff; }
-.landing { gap: 16px; padding-bottom: calc(240px + env(safe-area-inset-bottom)); }
+.landing { gap: 16px; padding-bottom: 140px; }
+.landing-preview { padding-bottom: calc(240px + env(safe-area-inset-bottom)); }
+.landing-dock { padding-bottom: 20px; }
 .landing-intro { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .landing-headline { font-size: 32px; line-height: 1.3; letter-spacing: -.8px; font-weight: 700; }
 @media (max-width: 350px) { .landing-headline { font-size: 30px; } }

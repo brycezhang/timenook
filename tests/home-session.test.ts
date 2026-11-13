@@ -123,6 +123,31 @@ test("My displays the saved nickname immediately and refreshes it from the serve
   assert.equal(page.data.nickname, "小树");
 });
 
+test("My retains the cached profile through a timeout and clears it after the server denies the session", async () => {
+  const { page, storage, nextRequest } = pageHarness();
+  signIn(storage);
+  const checking = page.onShow();
+  (await nextRequest()).fail?.({
+    errMsg: "request:fail timeout",
+  } as WechatMiniprogram.RequestFailCallbackErr);
+  await checking;
+  assert.equal(page.data.loggedIn, true);
+  assert.equal(page.data.nickname, user.nickname);
+  assert.equal(page.data.maskedPhone, user.maskedPhone);
+  assert.match(page.data.status, /稍后重试/);
+
+  const recheck = page.onShow();
+  respond(await nextRequest(), 403);
+  await recheck;
+  assert.equal(page.data.loggedIn, false);
+  assert.equal(page.data.nickname, "");
+  assert.equal(page.data.maskedPhone, "");
+  assert.equal(
+    storage.has("timenook.session.v1:https://example.test/timenook/v1"),
+    false,
+  );
+});
+
 test("My saves the submitted nickname and retains it when returning", async () => {
   const { page, storage, nextRequest } = pageHarness();
   signIn(storage);

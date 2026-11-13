@@ -6,7 +6,7 @@ page {
   gap: 20px;
 }
 .gifts-page.with-gifts-dock {
-  padding-bottom: calc(184px + env(safe-area-inset-bottom));
+  padding-bottom: calc(114px + env(safe-area-inset-bottom));
 }
 .gift-categories {
   display: flex;
@@ -103,37 +103,4 @@ page {
 }
 .gift-empty {
   padding: 20px 0;
-}
-.gifts-dock {
-  bottom: calc(70px + env(safe-area-inset-bottom));
-  padding-bottom: 20px;
-}
-.gift-tabs {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 5;
-  height: calc(70px + env(safe-area-inset-bottom));
-  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-  border-top: 1px solid #ded4c6;
-  display: flex;
-  background: #fff;
-}
-.gift-tabs button {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #756859;
-}
-.gift-tabs button.active {
-  color: #46563c;
-}
-.gift-tabs image {
-  width: 22px;
-  height: 22px;
 }

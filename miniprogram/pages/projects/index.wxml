@@ -17,8 +17,5 @@
  <view wx:elif="{{!rows.length && !pending.length}}" class="tn-muted gift-empty">{{!loggedIn ? '登录后查看你的礼物' : category === 'sent' ? '还没有送出的礼物' : category === 'received' ? '还没有收到的礼物' : '还没有参与的故事书'}}</view>
  <button wx:if="{{!loggedIn && !busy}}" class="tn-button" bindtap="login">微信手机号登录</button>
 </view>
-<block wx:if="{{!switching}}">
- <view class="tn-dock gifts-dock"><button class="tn-button" bindtap="purchase"><image class="tn-icon" src="/assets/icons/gift-white.svg"/>送出一份礼物</button></view>
- <view class="gift-tabs"><button bindtap="home"><image src="/assets/icons/modern-book-muted.svg"/>时光故事</button><button class="active" bindtap="account"><image src="/assets/icons/modern-user.svg"/>我的</button></view>
-</block>
+<view wx:if="{{!switching}}" class="tn-dock"><button class="tn-button" bindtap="purchase"><image class="tn-icon" src="/assets/icons/gift-white.svg"/>送出一份礼物</button></view>
 <quick-login id="quick-login" visible="{{loginVisible}}" bindsuccess="loginSucceeded" bindclose="closeLogin"/>

@@ -1,9 +1,5 @@
 import { NATIVE_TABS } from "../../config";
-import {
-  showProjectTab,
-  switchProjectTab,
-  tabProjectId,
-} from "../../services/navigation";
+import { switchProjectTab, tabProjectId } from "../../services/navigation";
 import { recordingPartition } from "../../services/interview-recording";
 import { recordingId } from "../../services/local-audio-recorder";
 import { watchProjectAccess } from "../../services/project-access";
@@ -169,7 +165,6 @@ Page({
           context === sessionClient.context()
         ) {
           projectOverviewClient.select(this.projectId);
-          showProjectTab(this, "home", overview.bookTitle);
           this.setData({
             overview,
             interviews: overview.interviews.map((interview) => ({
@@ -318,11 +313,6 @@ Page({
     go("assisted", `projectId=${this.projectId}`);
   },
   async onShow() {
-    showProjectTab(
-      this,
-      "home",
-      this.data.overview?.bookTitle || this.data.p?.title,
-    );
     if (dataMode() === "live") {
       const selectedProjectId = tabProjectId();
       if (selectedProjectId && selectedProjectId !== this.projectId) {
@@ -364,7 +354,6 @@ Page({
         .length,
       pending: p.stories.filter((s) => s.confirmedVersion !== s.version).length,
     });
-    showProjectTab(this, "home", p.title);
     this.filterStories();
   },
   filterStories() {

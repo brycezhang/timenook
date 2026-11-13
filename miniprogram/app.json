@@ -42,18 +42,22 @@
     "pages/family-question-edit/index"
   ],
   "tabBar": {
-    "custom": true,
     "color": "#756859",
     "selectedColor": "#46563C",
     "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
     "list": [
       {
         "pagePath": "pages/home/index",
-        "text": "时光故事"
+        "text": "时光故事",
+        "iconPath": "assets/icons/tab-book-muted.png",
+        "selectedIconPath": "assets/icons/tab-book.png"
       },
       {
         "pagePath": "pages/account/index",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "assets/icons/tab-user-muted.png",
+        "selectedIconPath": "assets/icons/tab-user.png"
       }
     ]
   },

@@ -1,4 +1,7 @@
-import { USER_TERMS_VERSION } from "../../../packages/contracts/src";
+import {
+  USER_TERMS_VERSION,
+  type Account,
+} from "../../../packages/contracts/src";
 import { sessionClient } from "../../services/session";
 import { go } from "../../services/navigation";
 
@@ -15,12 +18,25 @@ Component({
     consentConfirm: false,
     status: "",
     generation: 0,
+    sheetMounted: false,
+    sheetOpen: false,
+    sheetAction: "" as "" | "cancel-consent" | "close" | "success",
+    signedInUser: null as Account | null,
   },
   observers: {
     visible(visible: boolean) {
-      if (visible)
-        this.setData({ agreed: false, consentConfirm: false, status: "" });
-      else this.cancelPending();
+      if (visible) {
+        this.setData({
+          agreed: false,
+          consentConfirm: false,
+          status: "",
+          sheetMounted: !this.data.embedded,
+          sheetOpen: !this.data.embedded,
+        });
+      } else {
+        this.cancelPending();
+        this.setData({ sheetOpen: false, sheetAction: "", signedInUser: null });
+      }
     },
   },
   lifetimes: {
@@ -39,19 +55,38 @@ Component({
         this.setData({ agreed: !this.data.agreed, status: "" });
     },
     requestConsent() {
-      if (!this.data.busy) this.setData({ consentConfirm: true, status: "" });
+      if (this.data.busy || this.data.sheetAction) return;
+      this.setData({
+        consentConfirm: true,
+        status: "",
+        ...(this.data.embedded ? { sheetMounted: true, sheetOpen: true } : {}),
+      });
     },
     cancelConsent() {
-      this.setData({ consentConfirm: false });
+      if (this.data.busy || this.data.sheetAction) return;
+      if (this.data.embedded)
+        this.setData({ sheetOpen: false, sheetAction: "cancel-consent" });
+      else this.setData({ consentConfirm: false });
     },
     async continueLogin(e: { detail: { code?: string; errMsg?: string } }) {
-      if (!this.data.consentConfirm || this.data.busy || !this.data.visible)
+      if (
+        !this.data.consentConfirm ||
+        this.data.busy ||
+        this.data.sheetAction ||
+        !this.data.visible
+      )
         return;
-      this.setData({ agreed: true, consentConfirm: false });
+      this.setData({ agreed: true });
       await this.login(e);
     },
     async login(e: { detail: { code?: string; errMsg?: string } }) {
-      if (this.data.busy || !this.data.agreed || !this.data.visible) return;
+      if (
+        this.data.busy ||
+        this.data.sheetAction ||
+        !this.data.agreed ||
+        !this.data.visible
+      )
+        return;
       if (!e.detail.code || e.detail.errMsg !== "getPhoneNumber:ok") {
         this.setData({ status: "需要授权手机号才能登录，您也可以暂不登录。" });
         return;
@@ -65,7 +100,13 @@ Component({
         );
         if (generation !== this.data.generation || !this.data.visible) return;
         this.setData({ busy: false });
-        this.triggerEvent("success", { user: result.user });
+        if (this.data.sheetOpen)
+          this.setData({
+            sheetOpen: false,
+            sheetAction: "success",
+            signedInUser: result.user,
+          });
+        else this.triggerEvent("success", { user: result.user });
       } catch (error) {
         if (generation === this.data.generation)
           this.setData({
@@ -77,10 +118,32 @@ Component({
       }
     },
     close() {
-      if (!this.data.busy) this.triggerEvent("close");
+      if (!this.data.busy && !this.data.sheetAction)
+        this.setData({ sheetOpen: false, sheetAction: "close" });
+    },
+    beforeLeave() {
+      // WeChat can dismiss the container itself when the user goes back.
+      if (!this.data.sheetOpen || this.data.sheetAction) return;
+      this.cancelPending();
+      this.setData({
+        sheetAction: this.data.embedded ? "cancel-consent" : "close",
+      });
+    },
+    afterLeave() {
+      const { sheetAction, signedInUser } = this.data;
+      this.setData({
+        sheetMounted: false,
+        sheetOpen: false,
+        sheetAction: "",
+        signedInUser: null,
+        consentConfirm: false,
+      });
+      if (sheetAction === "success")
+        this.triggerEvent("success", { user: signedInUser });
+      else if (sheetAction === "close") this.triggerEvent("close");
     },
     terms() {
-      go("terms");
+      if (!this.data.busy && !this.data.sheetAction) go("terms");
     },
     privacy() {
       wx.openPrivacyContract({
@@ -88,6 +151,5 @@ Component({
           this.setData({ status: "隐私保护指引暂时无法打开，请稍后重试" }),
       });
     },
-    preventMove() {},
   },
 });

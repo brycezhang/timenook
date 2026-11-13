@@ -76,9 +76,9 @@ test("home displays real totals, starts the displayed family question and keeps 
   });
   h.respond(3, plan());
   h.respond(4, { projectId, questions: [question()] });
-  await show;
-  h.respond(5, context(null));
   await tick();
+  h.respond(5, context(null));
+  await show;
   assert.equal(h.page.data.overview.summary.confirmed, 0);
   assert.equal(h.page.data.overview.summary.photos, 0);
   assert.equal(h.page.data.overview.summary.audioMinutes, 12);
@@ -121,9 +121,9 @@ test("switching projects replaces the recommendation and author source", async (
   h.respond(2, overview());
   h.respond(3, plan());
   h.respond(4, { projectId, questions: [question()] });
-  await show;
-  h.respond(5, context(null));
   await tick();
+  h.respond(5, context(null));
+  await show;
   h.storage.set(
     `timenook.live-project.v1:${login.user.id}:${login.session.id}`,
     second,
@@ -148,6 +148,8 @@ test("switching projects replaces the recommendation and author source", async (
       },
     ],
   });
+  await tick();
+  h.respond(11, { ...context(null), projectId: second });
   await again;
   assert.equal(h.page.data.question.key, "another");
   assert.equal(h.page.data.question.source, "孙子 · 小李的提问");

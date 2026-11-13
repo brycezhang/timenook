@@ -3,8 +3,8 @@
  <view wx:if="{{status}}" class="tn-error">{{status}}</view>
  <view class="tn-dock"><button wx:if="{{agreed}}" class="tn-button quick-login-submit" open-type="getPhoneNumber|agreePrivacyAuthorization" bindgetphonenumber="login" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/phone-white.svg"/>授权微信手机号</button><button wx:else class="tn-button quick-login-submit" bindtap="requestConsent"><image class="tn-icon" src="/assets/icons/phone-white.svg"/>授权微信手机号</button></view>
 </view>
-<view wx:if="{{visible && (!embedded || consentConfirm)}}" class="quick-login-mask" catchtouchmove="preventMove">
- <view class="quick-login-sheet tn-surface" role="dialog" aria-modal="true" aria-label="{{consentConfirm ? '继续登录表示同意协议' : '微信手机号登录'}}">
+<page-container wx:if="{{sheetMounted}}" show="{{sheetOpen}}" position="bottom" duration="{{240}}" round="{{true}}" z-index="{{20000}}" overlay-style="background-color: rgba(56, 44, 36, .35)" bindbeforeleave="beforeLeave" bindafterleave="afterLeave">
+ <view class="tn-bottom-sheet quick-login-sheet tn-surface" role="dialog" aria-modal="true" aria-label="{{consentConfirm ? '继续登录表示同意协议' : '微信手机号登录'}}">
   <view class="quick-login-heading"><view class="tn-heading">{{consentConfirm ? '继续登录表示同意协议' : '微信手机号登录'}}</view><button class="tn-icon-button quick-login-close" bindtap="close" disabled="{{busy}}" aria-label="关闭登录"><image class="tn-icon" src="/assets/icons/modern-close.svg"/></button></view>
   <block wx:if="{{!consentConfirm}}">
    <view class="tn-muted">授权微信绑定的手机号，登录后继续。</view>
@@ -17,9 +17,9 @@
   </block>
   <block wx:else>
    <button class="quick-consent-terms tn-link" bindtap="terms">《使用条款与隐私说明》</button>
-   <button class="tn-button quick-consent-continue" open-type="getPhoneNumber|agreePrivacyAuthorization" bindgetphonenumber="continueLogin">继续</button>
-   <button class="tn-link quick-consent-cancel" bindtap="cancelConsent">取消</button>
+   <button class="tn-button quick-consent-continue" open-type="getPhoneNumber|agreePrivacyAuthorization" bindgetphonenumber="continueLogin" loading="{{busy}}" disabled="{{busy}}">继续</button>
+   <button class="tn-link quick-consent-cancel" bindtap="cancelConsent" disabled="{{busy}}">取消</button>
   </block>
   <view wx:if="{{status}}" class="tn-error">{{status}}</view>
  </view>
-</view>
+</page-container>

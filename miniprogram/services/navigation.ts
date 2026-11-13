@@ -1,3 +1,4 @@
+import { NATIVE_TABS } from "../config";
 import { resetQuestionSession } from "./question-recommendations";
 import { dataMode, livePageAllowed } from "./mode";
 import { projectOverviewClient } from "./project-overview";
@@ -9,12 +10,19 @@ export function isProjectTab(page: string): page is ProjectTab {
 }
 
 export function switchProjectTab(page: ProjectTab, projectId = "") {
-  if (page === "account" || projectId) resetQuestionSession();
   // switchTab cannot carry a query. The existing selection is scoped to the
   // current authenticated session and is read again by cached tab pages.
-  if (dataMode() === "live" && projectId)
+  if (dataMode() === "live" && projectId) {
+    if (projectId !== projectOverviewClient.selected()) resetQuestionSession();
     projectOverviewClient.select(projectId);
+  }
   wx.switchTab({ url: `/pages/${page}/index` });
+}
+
+export function setTabBarVisible(visible: boolean) {
+  if (!NATIVE_TABS) return;
+  if (visible) wx.showTabBar({ animation: false });
+  else wx.hideTabBar({ animation: false });
 }
 
 export function tabProjectId(explicit = "") {
@@ -24,14 +32,6 @@ export function tabProjectId(explicit = "") {
     return explicit;
   }
   return projectOverviewClient.selected();
-}
-
-export function showProjectTab(
-  page: { getTabBar?: () => { setData(data: object): void } },
-  selected: ProjectTab,
-  projectTitle = "故事书",
-) {
-  page.getTabBar?.()?.setData({ selected, projectTitle });
 }
 
 export function go(page: string, query = "") {

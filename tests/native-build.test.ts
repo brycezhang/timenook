@@ -153,29 +153,22 @@ test("uploaded native package registers every route without modules outside mini
   }
 });
 
-test("native tab handlers use cached tab navigation and the package supplies its custom bar", async () => {
+test("the package uses WeChat's built-in tab bar and routes programmatic switches to it", async () => {
   const config = JSON.parse(
     await readFile(path.join(root, "app.json"), "utf8"),
   );
-  assert.equal(config.tabBar.custom, true);
+  assert.ok(!config.tabBar.custom);
   assert.deepEqual(
     config.tabBar.list.map((item: { pagePath: string }) => item.pagePath),
     ["pages/home/index", "pages/account/index"],
   );
-  for (const { pagePath } of config.tabBar.list) {
-    const pageConfig = JSON.parse(
-      await readFile(path.join(root, `${pagePath}.json`), "utf8"),
-    );
-    const registry = pageConfig.usingComponents ?? config.usingComponents;
-    assert.ok(
-      registry && typeof registry === "object" && !Array.isArray(registry),
-      `${pagePath} must enable custom components locally or globally for the native custom tab bar`,
-    );
+  for (const { iconPath, selectedIconPath } of config.tabBar.list) {
+    for (const icon of [iconPath, selectedIconPath])
+      assert.ok((await stat(path.join(root, icon))).size > 0);
   }
-  for (const ext of ["js", "json", "wxml", "wxss"])
-    assert.ok(
-      (await readFile(path.join(root, `custom-tab-bar/index.${ext}`))).length,
-    );
+  await assert.rejects(stat(path.join(root, "custom-tab-bar")), {
+    code: "ENOENT",
+  });
   const app = await harness();
   for (const source of ["home", "account"]) {
     const page = await app.open(`pages/${source}/index`);

@@ -33,7 +33,11 @@ const bundles = await Promise.all(
   ),
 );
 
-function harness(name: "home" | "account" = "home", signedIn = false) {
+function harness(
+  name: "home" | "account" = "home",
+  signedIn = false,
+  embedded = false,
+) {
   const storage = new Map<string, unknown>([["timenook.mode.v1", "live"]]);
   if (signedIn) storage.set(`timenook.session.v1:${base}`, identity);
   const routes: string[] = [],
@@ -54,7 +58,7 @@ function harness(name: "home" | "account" = "home", signedIn = false) {
       definition = value;
       quick = {
         ...value.methods,
-        data: { ...value.data, visible: false, expectedUserId: "" },
+        data: { ...value.data, visible: false, expectedUserId: "", embedded },
         setData(patch: object) {
           Object.assign(this.data, patch);
         },
@@ -89,6 +93,10 @@ function harness(name: "home" | "account" = "home", signedIn = false) {
     storage,
     routes,
     requests,
+    finishLeave() {
+      quick.beforeLeave();
+      quick.afterLeave();
+    },
     respond() {
       assert.equal(requests.length, 1);
       const request = requests[0];
@@ -123,6 +131,9 @@ for (const surface of ["home", "account"] as const) {
     });
     h.respond();
     await pending;
+    assert.deepEqual(h.routes, []);
+    assert.equal(h.quick.data.sheetOpen, false);
+    h.finishLeave();
     assert.equal(h.quick.data.visible, false);
     assert.deepEqual(h.routes, ["/pages/new-book/index"]);
     assert.equal(h.storage.has(`timenook.session.v1:${base}`), true);
@@ -148,6 +159,7 @@ test("unchecked login offers consent and Continue authorizes without a second lo
   await tick();
   h.respond();
   await pending;
+  h.finishLeave();
   assert.deepEqual(h.routes, ["/pages/new-book/index"]);
   assert.equal(h.quick.data.visible, false);
 });
@@ -175,6 +187,7 @@ test("declining phone access and closing the popup never advances the purchase",
   assert.match(h.quick.data.status, /需要授权手机号/);
   h.quick.close();
   assert.deepEqual(h.routes, []);
+  h.finishLeave();
   assert.equal(h.quick.data.visible, false);
   h.page.login();
   assert.equal(h.page.loginDestination, "home");
@@ -189,6 +202,7 @@ test("the same popup logs in on My and displays the returned nickname", async ()
   await tick();
   h.respond();
   await pending;
+  h.finishLeave();
   assert.equal(h.page.data.loggedIn, true);
   assert.equal(h.page.data.nickname, "用户1234");
   assert.deepEqual(h.routes, []);
@@ -209,4 +223,18 @@ test("a failed phone login keeps the popup and purchase destination available fo
   assert.equal(h.quick.data.visible, true);
   assert.equal(h.page.loginDestination, "new-book");
   assert.deepEqual(h.routes, []);
+});
+
+test("WeChat Back dismisses an embedded consent sheet without closing the gift verification form", () => {
+  const h = harness("home", false, true);
+  h.page.purchase();
+  h.quick.requestConsent();
+  assert.equal(h.quick.data.sheetOpen, true);
+  h.finishLeave();
+  assert.equal(h.quick.data.visible, true);
+  assert.equal(h.quick.data.consentConfirm, false);
+  assert.equal(h.quick.data.sheetMounted, false);
+  assert.deepEqual(h.requests, []);
+  h.quick.requestConsent();
+  assert.equal(h.quick.data.sheetOpen, true);
 });

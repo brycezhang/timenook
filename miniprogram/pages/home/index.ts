@@ -1,7 +1,11 @@
 import { NATIVE_TABS } from "../../config";
 import { ApiFailure, sessionClient } from "../../services/session";
 import { projectOverviewClient } from "../../services/project-overview";
-import { showProjectTab, switchProjectTab } from "../../services/navigation";
+import {
+  go,
+  setTabBarVisible,
+  switchProjectTab,
+} from "../../services/navigation";
 import { personalPlanClient } from "../../services/personal-plan";
 import {
   familyQuestionClient,
@@ -18,12 +22,18 @@ import { bookClient } from "../../services/books";
 import { previewBookPhoto } from "../../services/book-editor";
 import { clearPhotoPreviews } from "../../services/story-photos";
 import { giftContinuation } from "../../services/gifts";
-import { go } from "../../services/navigation";
 import type {
   CurrentPackage,
   PersonalPlan,
   ProjectOverview,
 } from "../../../packages/contracts/src";
+
+const emptyOffer = {
+  offer: null as CurrentPackage | null,
+  price: "",
+  offerLabel: "套餐准备中",
+};
+
 Page({
   data: {
     nativeTabs: NATIVE_TABS,
@@ -40,20 +50,29 @@ Page({
     coverImage: "",
     loggedIn: false,
     loginVisible: false,
-    offer: null as CurrentPackage | null,
-    price: "",
-    offerLabel: "套餐准备中",
+    ...emptyOffer,
     offerLoading: false,
     offerError: "",
   },
   plan: null as PersonalPlan | null,
+  coverAssetId: "",
+  coverExpiresAt: null as string | null,
+  coverExpiryTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   generation: 0,
   ownerContext: "",
   loginDestination: "home",
   stopSession: undefined as (() => void) | undefined,
+  clearCoverOnAppHide: undefined as (() => void) | undefined,
   onLoad() {
-    this.stopSession = sessionClient.onInvalidated(() => {
+    this.clearCoverOnAppHide = () => {
       ++this.generation;
+      this.clearCover();
+    };
+    wx.onAppHide?.(this.clearCoverOnAppHide);
+    this.stopSession = sessionClient.onSessionEnded((owner, reason) => {
+      if (owner !== this.ownerContext) return;
+      ++this.generation;
+      this.ownerContext = "";
       this.clearProject();
       resetQuestionSession();
       this.setData({
@@ -61,13 +80,43 @@ Page({
         pageLoading: false,
         busy: false,
         status: "",
+        ...emptyOffer,
+        offerError: "",
+        offerLoading: false,
       });
-      void this.loadOffer();
+      if (reason !== "replaced") void this.loadOffer();
     });
+  },
+  clearCover() {
+    if (this.coverExpiryTimer !== undefined) clearTimeout(this.coverExpiryTimer);
+    this.coverExpiryTimer = undefined;
+    this.coverAssetId = "";
+    this.coverExpiresAt = null;
+    const { coverImage } = this.data;
+    if (coverImage) {
+      this.setData({ coverImage: "" });
+      void clearPhotoPreviews([coverImage]).catch(() => {});
+    }
+  },
+  scheduleCoverExpiry(expiresAt: string | null) {
+    if (this.coverExpiryTimer !== undefined) clearTimeout(this.coverExpiryTimer);
+    this.coverExpiryTimer = undefined;
+    this.coverExpiresAt = expiresAt;
+    if (!expiresAt) return;
+    const remaining = Date.parse(expiresAt) - Date.now();
+    if (remaining <= 0) {
+      this.clearCover();
+      return;
+    }
+    const timer = setTimeout(() => {
+      // This deadline belongs to the displayed cover, even while a refresh is pending.
+      if (this.coverExpiryTimer === timer) this.scheduleCoverExpiry(expiresAt);
+    }, Math.min(remaining, 2 ** 31 - 1));
+    this.coverExpiryTimer = timer;
   },
   clearProject() {
     this.plan = null;
-    void clearPhotoPreviews([this.data.coverImage].filter(Boolean));
+    this.clearCover();
     this.setData({
       overview: null,
       question: null,
@@ -75,33 +124,34 @@ Page({
       familyPending: 0,
       giftCaption: "",
       giftPage: "",
-      coverImage: "",
     });
   },
   async onShow() {
-    showProjectTab(this, "home");
     const generation = ++this.generation,
       owner = sessionClient.context(),
       selectedId = projectOverviewClient.selected();
     if (
-      !owner ||
       owner !== this.ownerContext ||
-      (selectedId && selectedId !== this.data.overview?.projectId)
+      (selectedId && selectedId !== this.data.overview?.projectId) ||
+      (this.data.overview?.accessExpiresAt &&
+        Date.parse(this.data.overview.accessExpiresAt) <= Date.now())
     ) {
       this.clearProject();
       wx.pageScrollTo({ scrollTop: 0, duration: 0 });
     }
+    if (this.coverExpiresAt && Date.parse(this.coverExpiresAt) <= Date.now())
+      this.clearCover();
+    if (owner !== this.ownerContext)
+      this.setData({ ...emptyOffer, offerError: "", offerLoading: false });
     this.ownerContext = owner;
     this.setData({
-      busy: !!owner && !this.data.overview,
-      giftPage: "",
+      busy: !!owner && !this.data.overview && !this.data.offer,
       status: "",
       loggedIn: !!owner,
     });
     try {
       if (!(await sessionClient.restore())) {
         if (generation === this.generation) {
-          this.clearProject();
           this.setData({ loggedIn: false });
           await this.loadOffer();
         }
@@ -116,8 +166,12 @@ Page({
         ) ?? projects[0];
       if (generation !== this.generation || owner !== sessionClient.context())
         return;
-      if (!selected) {
+      if (
+        this.data.overview &&
+        selected?.projectId !== this.data.overview.projectId
+      )
         this.clearProject();
+      if (!selected) {
         await this.loadOffer();
         return;
       }
@@ -142,13 +196,15 @@ Page({
         ).length,
         giftCaption: `${selected.giverNickname}送给${selected.isSelfGift ? "自己" : selected.giftRelationship || "家人"}的时光故事书`,
         giftPage: giftContinuation(selected),
+        busy: false,
+        pageLoading: false,
       });
-      void this.loadCover(selected.projectId, generation, owner);
+      await this.loadCover(selected.projectId, generation, owner);
     } catch (e) {
       if (generation === this.generation) {
         if (
           owner !== sessionClient.context() ||
-          (e instanceof ApiFailure && [401, 403].includes(e.status))
+          (e instanceof ApiFailure && [401, 403, 404].includes(e.status))
         ) {
           this.clearProject();
           this.setData({ loggedIn: !!sessionClient.context() });
@@ -164,30 +220,62 @@ Page({
   },
   async loadCover(projectId: string, generation: number, owner: string) {
     const current = () =>
-      generation === this.generation && owner === sessionClient.context();
+      generation === this.generation &&
+      owner === sessionClient.context() &&
+      this.data.overview?.projectId === projectId;
     try {
       const context = await bookClient.read(projectId);
       if (!current()) return;
-      const photo = context.coverPhotoOptions.find(
-        (p) => p.assetId === context.cover.photoAssetId,
-      );
-      const coverImage = photo
-        ? await previewBookPhoto(projectId, photo, current)
-        : "";
-      if (!current()) {
-        if (coverImage) await clearPhotoPreviews([coverImage]);
+      const expiresAt = context.draftAccess.expiresAt;
+      const authorized = () =>
+        current() && (!expiresAt || Date.parse(expiresAt) > Date.now());
+      const photo =
+        context.draftAccess.allowed && authorized()
+          ? context.coverPhotoOptions.find(
+              (p) => p.assetId === context.cover.photoAssetId,
+            )
+          : undefined;
+      if (!photo) {
+        this.clearCover();
         return;
       }
-      if (this.data.coverImage !== coverImage)
-        void clearPhotoPreviews([this.data.coverImage].filter(Boolean));
+      const { coverImage: cachedImage } = this.data;
+      if (this.coverAssetId === photo.assetId && cachedImage) {
+        const exists = await new Promise<boolean>((resolve) =>
+          wx.getFileSystemManager().access({
+            path: cachedImage,
+            success: () => resolve(true),
+            fail: () => resolve(false),
+          }),
+        );
+        if (!current()) return;
+        if (exists && this.data.coverImage === cachedImage && authorized()) {
+          this.scheduleCoverExpiry(expiresAt);
+          return;
+        }
+      }
+      this.clearCover();
+      if (!authorized()) return;
+      const coverImage = await previewBookPhoto(projectId, photo, authorized);
+      if (!authorized()) {
+        await clearPhotoPreviews([coverImage]).catch(() => {});
+        return;
+      }
+      this.coverAssetId = photo.assetId;
       this.setData({ coverImage });
-    } catch {
-      /* The saved title remains the book entry when its cover is unavailable. */
+      this.scheduleCoverExpiry(expiresAt);
+    } catch (error) {
+      if (
+        current() &&
+        error instanceof ApiFailure &&
+        [401, 403, 404].includes(error.status)
+      )
+        this.clearCover();
     }
   },
   async loadOffer() {
     const n = this.generation;
-    this.setData({ offerLoading: true, offerError: "" });
+    this.setData({ offerLoading: !this.data.offer, offerError: "" });
     try {
       const offer = await readCurrentPackage();
       if (n !== this.generation) return;
@@ -207,8 +295,6 @@ Page({
     } catch (e) {
       if (n === this.generation)
         this.setData({
-          offer: null,
-          price: "",
           offerError: e instanceof Error ? e.message : "套餐加载失败",
         });
     } finally {
@@ -217,36 +303,40 @@ Page({
   },
   onHide() {
     ++this.generation;
-    void clearPhotoPreviews([this.data.coverImage].filter(Boolean));
-    this.setData({ coverImage: "", starting: false });
+    this.setData({ starting: false });
   },
   onUnload() {
     this.stopSession?.();
+    if (this.clearCoverOnAppHide) wx.offAppHide?.(this.clearCoverOnAppHide);
     this.onHide();
+    this.clearCover();
   },
   refresh() {
-    void this.onShow();
+    return this.onShow();
   },
   purchase() {
     if (!this.data.offer?.purchasable) return;
     if (sessionClient.context()) go("new-book");
     else {
-      this.loginDestination = "new-book";
-      this.setData({ loginVisible: true });
+      this.login("new-book");
     }
   },
-  login() {
-    this.loginDestination = "home";
+  login(destination = "home") {
+    this.loginDestination = destination;
+    setTabBarVisible(false);
     this.setData({ loginVisible: true });
   },
   loginSucceeded() {
-    this.setData({ loginVisible: false, loggedIn: true, status: "" });
-    if (this.loginDestination === "new-book") go("new-book");
+    const destination = this.loginDestination;
+    this.closeLogin();
+    this.setData({ loggedIn: true, status: "" });
+    if (destination === "new-book") go("new-book");
     else void this.onShow();
   },
   closeLogin() {
     this.loginDestination = "home";
     this.setData({ loginVisible: false });
+    setTabBarVisible(true);
   },
   switchProject() {
     go("projects", "switch=1");

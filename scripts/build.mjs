@@ -159,7 +159,6 @@ if (release) {
   for (const file of ["app.js", "app.json", "app.wxss", "sitemap.json"])
     await include(file);
   for (const page of config.pages) await includePage(page);
-  if (config.tabBar?.custom) await includePage("custom-tab-bar/index");
   for (const file of await walk(out)) {
     if (
       /\.(?:js|json|wxml|wxss)$/.test(file) &&

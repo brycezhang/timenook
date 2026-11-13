@@ -57,6 +57,7 @@ export function mountMiniProgram(
     scheduled = false,
     composing = false;
   const definitions: Record<string, any> = {};
+  const pageContainerStates = new WeakMap<Element, boolean>();
   let registering = "";
   let pageLoad = Promise.resolve();
   let cssTag = document.createElement("style");
@@ -584,6 +585,9 @@ export function mountMiniProgram(
     };
     const out = document.createElement(mapped[el.tagName] || el.tagName);
     out.dataset.renderKey = key;
+    if (out instanceof HTMLButtonElement)
+      out.type =
+        el.getAttribute("form-type") === "submit" ? "submit" : "button";
     if (el.tagName === "checkbox") (out as HTMLInputElement).type = "checkbox";
     if (el.tagName === "slider") (out as HTMLInputElement).type = "range";
     for (const attr of Array.from(el.attributes)) {
@@ -622,17 +626,20 @@ export function mountMiniProgram(
               : attr.name.slice(4);
         out.addEventListener(event, (ev) => {
           ev.stopPropagation();
+          if (event === "submit") ev.preventDefault();
           const detail = {
             value:
-              el.tagName === "checkbox-group"
-                ? Array.from(
-                    out.querySelectorAll<HTMLInputElement>(
-                      'input[type="checkbox"]:checked',
-                    ),
-                  ).map((input) => input.value)
-                : el.tagName === "slider"
-                  ? Number((ev.target as HTMLInputElement).value)
-                  : (ev.target as HTMLInputElement).value,
+              event === "submit" && out instanceof HTMLFormElement
+                ? Object.fromEntries(new FormData(out))
+                : el.tagName === "checkbox-group"
+                  ? Array.from(
+                      out.querySelectorAll<HTMLInputElement>(
+                        'input[type="checkbox"]:checked',
+                      ),
+                    ).map((input) => input.value)
+                  : el.tagName === "slider"
+                    ? Number((ev.target as HTMLInputElement).value)
+                    : (ev.target as HTMLInputElement).value,
           };
           try {
             current?.[attr.value]?.({
@@ -753,6 +760,26 @@ export function mountMiniProgram(
     try {
       renderChildren(template, current.data, fragment);
       updateChildren(root, fragment);
+      for (const container of root.querySelectorAll("page-container")) {
+        const open = container.getAttribute("show") === "true";
+        if (pageContainerStates.get(container) === open) continue;
+        pageContainerStates.set(container, open);
+        const page = current;
+        const animations = container.getAnimations({ subtree: true });
+        void Promise.allSettled(
+          animations.map((animation) => animation.finished),
+        ).then(() => {
+          if (
+            page !== current ||
+            !container.isConnected ||
+            pageContainerStates.get(container) !== open
+          )
+            return;
+          container.dispatchEvent(
+            new Event(open ? "afterenter" : "afterleave"),
+          );
+        });
+      }
       root.dataset.page = route;
       if (options.product) {
         const projectId =

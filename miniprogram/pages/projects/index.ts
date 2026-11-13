@@ -178,12 +178,6 @@ Page({
   purchase() {
     go("new-book");
   },
-  home() {
-    switchProjectTab("home");
-  },
-  account() {
-    switchProjectTab("account");
-  },
   refresh() {
     void this.onShow();
   },

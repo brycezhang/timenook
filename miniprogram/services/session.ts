@@ -54,6 +54,7 @@ export type DownloadedFile = Pick<
   WechatMiniprogram.DownloadFileSuccessCallbackResult,
   "statusCode" | "tempFilePath" | "errMsg"
 >;
+type SessionEnd = "invalidated" | "logout" | "replaced";
 export interface CookieSessionTransport {
   context(): string;
   restore(): Promise<Account | null>;
@@ -78,7 +79,9 @@ export class SessionClient {
   private generation = 0;
   private invalidatedToken: string | null = null;
   private cleanupPending = false;
-  private readonly invalidationListeners = new Set<(context: string) => void>();
+  private readonly sessionEndListeners = new Set<
+    (context: string, reason: SessionEnd) => void
+  >();
   constructor(private readonly apiBaseUrl: string) {}
   useCookieSession(transport: CookieSessionTransport) {
     this.generation++;
@@ -90,10 +93,20 @@ export class SessionClient {
     this.cookie?.close();
   }
   onInvalidated(listener: (context: string) => void): () => void {
-    if (this.cookie) return this.cookie.onInvalidated(listener);
-    this.invalidationListeners.add(listener);
+    return this.onSessionEnded((context, reason) => {
+      if (reason === "invalidated") listener(context);
+    });
+  }
+  onSessionEnded(
+    listener: (context: string, reason: SessionEnd) => void,
+  ): () => void {
+    if (this.cookie)
+      return this.cookie.onInvalidated((context) =>
+        listener(context, "invalidated"),
+      );
+    this.sessionEndListeners.add(listener);
     return () => {
-      this.invalidationListeners.delete(listener);
+      this.sessionEndListeners.delete(listener);
     };
   }
   sessionCleanupPending(): boolean {
@@ -123,10 +136,12 @@ export class SessionClient {
   async logout(): Promise<void> {
     if (this.cookie) return this.cookie.logout();
     this.generation++;
-    const stored = this.stored();
-    wx.removeStorageSync(this.storageKey);
-    this.cleanupPending = false;
-    if (stored) {
+    const stored = this.removeSession("logout");
+    if (
+      stored &&
+      stored.session.token !== this.invalidatedToken &&
+      Date.parse(stored.session.expiresAt) > Date.now()
+    ) {
       try {
         await this.send<void>(
           `/sessions/${stored.session.id}`,
@@ -171,7 +186,8 @@ export class SessionClient {
     } catch (error) {
       if (
         error instanceof ApiFailure &&
-        error.status === 401 &&
+        (error.status === 401 ||
+          (path === "/users/me" && error.status === 403)) &&
         generation === this.generation &&
         this.persisted()?.session.token === stored.session.token
       )
@@ -401,9 +417,20 @@ export class SessionClient {
     } catch {
       this.cleanupPending = true;
     }
-    for (const listener of [...this.invalidationListeners]) {
+    this.notifySessionEnd(stored, "invalidated");
+  }
+  private removeSession(reason: "logout" | "replaced") {
+    const stored = this.persisted();
+    wx.removeStorageSync(this.storageKey);
+    this.cleanupPending = false;
+    if (stored && stored.session.token !== this.invalidatedToken)
+      this.notifySessionEnd(stored, reason);
+    return stored;
+  }
+  private notifySessionEnd(stored: LoginResult, reason: SessionEnd) {
+    for (const listener of [...this.sessionEndListeners]) {
       try {
-        listener(`${stored.user.id}:${stored.session.id}`);
+        listener(`${stored.user.id}:${stored.session.id}`, reason);
       } catch {
         /* One device view must not block invalidation or media cleanup. */
       }
@@ -421,8 +448,7 @@ export class SessionClient {
     if (this.cookie) throw new ApiFailure("WEB_LOGIN_REQUIRED", 401);
     const generation = ++this.generation;
     setDataMode("live");
-    wx.removeStorageSync(this.storageKey);
-    this.cleanupPending = false;
+    this.removeSession("replaced");
     this.checkBaseUrl();
     const code = await new Promise<string>((resolve, reject) =>
       wx.login({

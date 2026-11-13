@@ -1,7 +1,10 @@
 import { NATIVE_TABS } from "../../config";
-import { sessionClient } from "../../services/session";
-import { showProjectTab, switchProjectTab } from "../../services/navigation";
-import { go } from "../../services/navigation";
+import { ApiFailure, sessionClient } from "../../services/session";
+import {
+  go,
+  setTabBarVisible,
+  switchProjectTab,
+} from "../../services/navigation";
 Page({
   data: {
     nativeTabs: NATIVE_TABS,
@@ -11,16 +14,18 @@ Page({
     nickname: "",
     maskedPhone: "",
     editing: false,
+    nicknameSheetMounted: false,
+    nicknameFocused: false,
     loginVisible: false,
   },
   generation: 0,
   loginDestination: "account",
   async onShow() {
-    showProjectTab(this, "account");
     if (this.data.busy) return;
     const n = ++this.generation;
+    const owner = sessionClient.context();
     this.setData({
-      loggedIn: !!sessionClient.context(),
+      loggedIn: !!owner,
       nickname: sessionClient.nickname(),
       maskedPhone: sessionClient.maskedPhone(),
     });
@@ -34,31 +39,48 @@ Page({
           status: "",
         });
     } catch (e) {
-      if (n === this.generation)
-        this.setData({
-          loggedIn: false,
-          nickname: "",
-          maskedPhone: "",
-          status: e instanceof Error ? e.message : "请重新登录",
-        });
+      if (n !== this.generation) return;
+      if (owner !== sessionClient.context()) {
+        this.setData({ loggedIn: false, nickname: "", maskedPhone: "" });
+        this.closeEdit();
+      }
+      this.setData({
+        status: e instanceof Error ? e.message : "暂时无法刷新账号信息",
+      });
     }
   },
   onHide() {
     if (!this.data.busy) ++this.generation;
   },
   login() {
-    if (!this.data.busy) {
-      this.loginDestination = "account";
-      this.setData({ loginVisible: true });
-    }
+    if (!this.data.busy) this.openLogin("account");
+  },
+  openLogin(destination: string) {
+    this.loginDestination = destination;
+    setTabBarVisible(false);
+    this.setData({ loginVisible: true });
   },
   editNickname() {
-    if (!this.data.busy) this.setData({ editing: true, status: "" });
+    if (this.data.busy || this.data.nicknameSheetMounted) return;
+    setTabBarVisible(false);
+    this.setData({ nicknameSheetMounted: true, editing: true, status: "" });
   },
   cancelEdit() {
-    if (!this.data.busy) this.setData({ editing: false, status: "" });
+    if (!this.data.busy) this.closeEdit();
   },
-  preventMove() {},
+  closeEdit() {
+    this.setData({ editing: false, nicknameFocused: false });
+  },
+  focusNickname() {
+    if (this.data.editing) this.setData({ nicknameFocused: true });
+  },
+  nicknameSheetClosed() {
+    this.setData({
+      nicknameSheetMounted: false,
+      ...(this.data.loggedIn ? { status: "" } : {}),
+    });
+    if (!this.data.loginVisible) setTabBarVisible(true);
+  },
   async saveNickname(e: { detail: { value: { nickname: string } } }) {
     if (this.data.busy) return;
     const nickname = e.detail.value.nickname.trim();
@@ -70,13 +92,20 @@ Page({
     this.setData({ busy: true, status: "" });
     try {
       const user = await sessionClient.updateNickname(nickname);
-      if (n === this.generation)
-        this.setData({ nickname: user.nickname ?? "", editing: false });
+      if (n === this.generation) {
+        this.setData({ nickname: user.nickname ?? "" });
+        this.closeEdit();
+      }
     } catch (e) {
-      if (n === this.generation)
+      if (n === this.generation) {
+        if (e instanceof ApiFailure && e.status === 401) {
+          this.setData({ loggedIn: false, nickname: "", maskedPhone: "" });
+          this.closeEdit();
+        }
         this.setData({
           status: e instanceof Error ? e.message : "昵称未能保存，请重试",
         });
+      }
     } finally {
       this.setData({ busy: false });
     }
@@ -105,26 +134,26 @@ Page({
   },
   purchase() {
     if (sessionClient.context()) go("new-book");
-    else {
-      this.loginDestination = "new-book";
-      this.setData({ loginVisible: true });
-    }
+    else this.openLogin("new-book");
   },
   loginSucceeded(e: {
     detail: { user: { nickname?: string | null; maskedPhone?: string | null } };
   }) {
+    ++this.generation;
+    const destination = this.loginDestination;
+    this.closeLogin();
     this.setData({
-      loginVisible: false,
       loggedIn: true,
       nickname: e.detail.user.nickname ?? "",
       maskedPhone: e.detail.user.maskedPhone ?? "",
       status: "",
     });
-    if (this.loginDestination === "new-book") go("new-book");
+    if (destination === "new-book") go("new-book");
   },
   closeLogin() {
     this.loginDestination = "account";
     this.setData({ loginVisible: false });
+    setTabBarVisible(true);
   },
   terms() {
     go("terms");

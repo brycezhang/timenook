@@ -1,8 +1,8 @@
 <tn-navigation title="我的" brand="{{true}}"/>
-<view class="tn-page with-tabs">
+<view class="tn-page {{nativeTabs ? '' : 'with-tabs'}}">
  <view class="tn-card profile-card">
   <view class="profile"><view class="avatar {{loggedIn ? 'account-avatar' : ''}}"><image src="/assets/icons/modern-user.svg"/></view>
-   <view class="tn-grow"><button wx:if="{{loggedIn}}" class="nickname-trigger" bindtap="editNickname" disabled="{{busy}}" aria-label="修改昵称"><view class="tn-grow nickname-info"><text class="nickname-text">{{nickname}}</text><view class="profile-phone">{{maskedPhone ? "微信手机号 " + maskedPhone : "已登录"}}</view></view><image class="nickname-edit-icon" src="/assets/icons/modern-pencil.svg"/></button><view wx:else class="profile-title">还未登录</view></view>
+   <view class="tn-grow"><button wx:if="{{loggedIn}}" class="nickname-trigger" bindtap="editNickname" disabled="{{busy}}" aria-label="修改昵称"><view class="tn-grow nickname-info"><text class="nickname-text">{{nickname}}</text><view class="profile-phone">{{maskedPhone ? "微信手机号 " + maskedPhone : "已登录"}}</view></view><image class="nickname-edit-icon" src="/assets/icons/modern-pencil.svg"/></button><view wx:else="" class="profile-title">还未登录</view></view>
   </view>
   <button wx:if="{{!loggedIn}}" class="tn-button account-login" bindtap="login" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/phone-white.svg"/>微信手机号登录</button>
  </view>
@@ -12,12 +12,12 @@
  <view wx:if="{{status && !editing}}" class="tn-error">{{status}}</view><button wx:if="{{loggedIn}}" class="tn-link logout-trigger" bindtap="logout" loading="{{busy}}" disabled="{{busy}}">退出登录</button>
 </view>
 <view wx:if="{{!nativeTabs}}" class="tabs"><button class="tab" bindtap="home"><image class="icon" src="/assets/icons/modern-book.svg"/>时光故事</button><button class="tab active"><image class="icon" src="/assets/icons/modern-user.svg"/>我的</button></view>
-<view wx:if="{{loggedIn && editing}}" class="nickname-mask" catchtouchmove="preventMove">
- <form class="nickname-dialog tn-surface" bindsubmit="saveNickname" role="dialog" aria-modal="true" aria-label="修改昵称">
+<page-container wx:if="{{nicknameSheetMounted}}" show="{{editing}}" position="bottom" duration="{{240}}" round="{{true}}" z-index="{{20000}}" overlay-style="background-color: rgba(56, 44, 36, .35)" bindafterenter="focusNickname" bindbeforeleave="closeEdit" bindafterleave="nicknameSheetClosed">
+ <form class="tn-bottom-sheet nickname-dialog tn-surface" bindsubmit="saveNickname" role="dialog" aria-modal="true" aria-label="修改昵称">
   <view class="nickname-heading"><view class="tn-heading">修改昵称</view><button class="tn-icon-button" bindtap="cancelEdit" disabled="{{busy}}" aria-label="关闭昵称修改">×</button></view>
-  <input class="nickname-input tn-input" type="nickname" name="nickname" value="{{nickname}}" maxlength="32" placeholder="选择或填写昵称" focus="{{editing}}" disabled="{{busy}}"/>
+  <input class="nickname-input tn-input" type="nickname" name="nickname" value="{{nickname}}" maxlength="32" placeholder="选择或填写昵称" focus="{{nicknameFocused}}" disabled="{{busy}}"/>
   <view wx:if="{{status}}" class="tn-error">{{status}}</view>
   <button class="tn-button" form-type="submit" loading="{{busy}}" disabled="{{busy}}">保存昵称</button>
  </form>
-</view>
+</page-container>
 <quick-login id="quick-login" visible="{{loginVisible}}" bindsuccess="loginSucceeded" bindclose="closeLogin"/>
