@@ -81,7 +81,7 @@ F06 依赖真实送出／领取／参与身份，F11 依赖问题来源及状态
 
 | 标识 | 本次实际核对的位置 |
 | --- | --- |
-| E01 | [app.json](../../../miniprogram/app.json)、[custom-tab-bar](../../../miniprogram/custom-tab-bar/index.wxml)、[tokens.wxss](../../../miniprogram/styles/tokens.wxss)、[senior.wxss](../../../miniprogram/styles/senior.wxss)。后加载样式已有橄榄绿 `#46563C`，主色本身无需重选。 |
+| E01 | [app.json](../../../miniprogram/app.json)、[当时的 custom-tab-bar](https://github.com/brycezhang/timenook/blob/3f54a93d7e774d77d53f2baa2b27809bc77fa22a/miniprogram/custom-tab-bar/index.wxml)、[tokens.wxss](../../../miniprogram/styles/tokens.wxss)、[senior.wxss](../../../miniprogram/styles/senior.wxss)。后加载样式已有橄榄绿 `#46563C`，主色本身无需重选。 |
 | E02 | [new-book](../../../miniprogram/pages/new-book/index.ts)、[购买表单](../../../miniprogram/pages/new-book/index.wxml)、[purchase](../../../miniprogram/pages/purchase/index.ts) 的 onLoad／checkout、[orders](../../../apps/api/src/payments/orders.ts) 的 create 与付款入账建项目。 |
 | E03 | [quick-login](../../../miniprogram/components/quick-login/index.wxml)、[home](../../../miniprogram/pages/home/index.ts)、[account](../../../miniprogram/pages/account/index.ts)、[login](../../../miniprogram/pages/login/index.ts)、[welcome](../../../miniprogram/pages/welcome/index.ts)、[original-audio](../../../miniprogram/pages/original-audio/index.ts)。 |
 | E04 | [participation](../../../apps/api/src/identity/participation.ts) 的 invite／preview／apply／memberships／status；[schema.prisma](../../../apps/api/prisma/schema.prisma) 的 ProjectMember、ProjectSubject、PaymentOrder；没有专属礼物领取实体或接口。 |
