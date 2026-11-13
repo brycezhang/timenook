@@ -8,7 +8,10 @@ import {
   projectPhoto,
   request,
   data,
+  app,
+  db,
 } from "./book-fixture";
+import { Books } from "../src/books/books";
 
 before(startBookFixture);
 after(stopBookFixture);
@@ -90,5 +93,34 @@ test("one cover save commits title, salutation and project photo together while 
       })
     ).statusCode,
     409,
+  );
+});
+
+test("book context stops offering a cached cover when derived-photo access is erased", async () => {
+  const p = await joinedProject();
+  const photo = await projectPhoto(p);
+  const path = `/v1/projects/${p.projectId}/book`;
+  const book = data(await request("GET", path, p.buyer.token), 200);
+  assert.ok(
+    book.coverPhotoOptions.some((item: { id: string }) => item.id === photo.id),
+  );
+  const rollback = new Error("Rollback the isolated privacy projection");
+  await assert.rejects(
+    db.$transaction(async (tx) => {
+      const event = randomUUID();
+      await tx.$executeRaw`
+      INSERT INTO privacy_events(id,project_id,kind,source_id,generation,hash,payload,occurred_at)
+      VALUES(${event}::uuid,${p.projectId}::uuid,'deletion',${randomUUID()}::uuid,1,${"0".repeat(64)},'{"operation":"erase"}'::jsonb,now())
+    `;
+      await tx.$executeRaw`
+      INSERT INTO privacy_deletions(id,project_id,trigger,categories,effective_at)
+      VALUES(${event}::uuid,${p.projectId}::uuid,'verified_request','["derivedPhotos"]'::jsonb,now())
+    `;
+      const context = await app.get(Books).contextIn(tx, p.projectId, null);
+      assert.equal(context.draftAccess.allowed, true);
+      assert.deepEqual(context.coverPhotoOptions, []);
+      throw rollback;
+    }),
+    (error) => error === rollback,
   );
 });

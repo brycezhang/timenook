@@ -695,7 +695,11 @@ export class Books implements OnModuleDestroy {
               photoAssetId: frozen?.cover.photo?.assetId ?? null,
             },
       coverPhotoOptions:
-        draft && draftAccess.allowed ? draft.coverPhotoOptions : [],
+        draft &&
+        draftAccess.allowed &&
+        readable.terms.retention?.derivedPhotos?.state === "active"
+          ? draft.coverPhotoOptions
+          : [],
       eligibleStories:
         draft && draftAccess.allowed
           ? draft.eligible.map(
