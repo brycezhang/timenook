@@ -7,6 +7,7 @@ import { switchProjectTab } from "../../services/navigation";
 Page({
   data: {
     gift: null as OwnedGift | null,
+    giftShareImage: "/assets/gift-share.jpg",
     loading: true,
     status: "",
     loginVisible: false,
@@ -65,7 +66,7 @@ Page({
       ? {
           title: `送给${gift.recipientName}的时光书：${gift.bookTitle}`,
           path: `/pages/gift-claim/index?token=${gift.token}`,
-          imageUrl: "/assets/storybook-example.jpg",
+          imageUrl: this.data.giftShareImage,
         }
       : { title: "时光故事", path: "/pages/home/index" };
   },

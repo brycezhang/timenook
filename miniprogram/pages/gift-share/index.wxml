@@ -1,7 +1,7 @@
 <tn-navigation title="发送礼物卡"/>
 <view class="tn-page with-dock gift-page gift-share-page">
  <block wx:if="{{loading && !gift}}"><view class="gift-skeleton tall"/><view class="gift-skeleton line"/></block>
- <block wx:elif="{{gift}}"><view class="gift-card"><view class="gift-card-copy"><view class="gift-card-brand">时光故事 / A GIFT FOR YOU</view><view class="gift-card-title"><view>想听听</view><view>你的故事。</view></view><view class="gift-card-to">送给 {{gift.recipientName}} 的时光书</view></view><image class="gift-card-image" src="/assets/storybook-example.jpg" mode="aspectFill" aria-label="礼物卡示例书籍"/></view>
+ <block wx:elif="{{gift}}"><view class="gift-card"><view class="gift-card-copy"><view class="gift-card-brand">时光故事 / A GIFT FOR YOU</view><view class="gift-card-title"><view>想听听</view><view>你的故事。</view></view><view class="gift-card-to">送给 {{gift.recipientName}} 的时光书</view></view><image class="gift-card-image" src="{{giftShareImage}}" mode="widthFix" aria-label="时光故事，岁月成书。两人交接一本故事书"/></view>
   <view class="gift-share-status"><view class="purchase-tag">{{gift.state === 'claimed' ? '已领取' : '待领取'}}</view><text>指定手机号 {{gift.maskedPhone}}</text></view>
   <button wx:if="{{gift.state === 'unclaimed'}}" class="tn-link" bindtap="edit">更正手机号并重新生成</button>
  </block>

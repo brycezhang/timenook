@@ -5,5 +5,5 @@
 .gift-card-brand { font-size:11px;letter-spacing:2px;opacity:.7; }
 .gift-card-title { font-size:29px;line-height:1.35;font-weight:700; }
 .gift-card-to { font-size:13px;opacity:.8; }
-.gift-card-image { width:100%;height:185px;display:block; }
+.gift-card-image { width:100%;display:block; }
 .gift-share-status { display:flex;gap:8px;align-items:center;justify-content:space-between;font-size:13px;color:#756859; }
