@@ -1613,3 +1613,31 @@ model FamilyQuestion {
   @@index([projectId])
   @@map("family_questions")
 }
+
+model ChannelGift {
+  id String @id @db.Uuid
+  internalNumber String @unique @map("internal_number")
+  operatorId String @map("operator_id") @db.Uuid
+  idempotencyKey String @map("idempotency_key")
+  requestHash String @map("request_hash") @db.Char(64)
+  buyerPhone String @map("buyer_phone") @db.VarChar(32)
+  buyerId String? @map("buyer_id") @db.Uuid
+  packageVersionId String @map("package_version_id") @db.Uuid
+  packageSnapshot Json @map("package_snapshot")
+  packageTitle String @map("package_title")
+  listAmount Int @map("list_amount")
+  paidAmount Int? @map("paid_amount")
+  paidAt DateTime? @map("paid_at") @db.Timestamptz(3)
+  externalOrderNo String? @map("external_order_no")
+  state String @default("active")
+  projectId String? @unique @map("project_id") @db.Uuid
+  orderId String? @unique @map("order_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  associatedAt DateTime? @map("associated_at") @db.Timestamptz(3)
+  reminderHandledBy String? @map("reminder_handled_by") @db.Uuid
+  reminderHandledAt DateTime? @map("reminder_handled_at") @db.Timestamptz(3)
+  @@unique([operatorId, idempotencyKey])
+  @@index([buyerPhone, state])
+  @@index([buyerId, createdAt])
+  @@map("channel_gifts")
+}

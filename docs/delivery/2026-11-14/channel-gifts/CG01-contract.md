@@ -1,0 +1,9 @@
+# CG01 shared record contract
+
+`ChannelGift` / `channel_gifts` is the external purchase authority. Its immutable package snapshot and nullable paidAmount/paidAt describe the external fact. No login/read creates a project. `operatorId` references AdminAccount; revocation must retain the account and its rows. Creation is unique by operatorId + idempotencyKey with requestHash conflict detection. Phone is normalized using mainlandPhone; creation and phoneAccountIn share `phone:${normalized}` advisory transaction lock.
+
+CG02 consumes `/v1/admin/channel-gifts` POST/GET, using CreateChannelGiftCommand and AdminChannelGiftView; it adds role enforcement and owner filtering/redaction. CG01 initially uses orders read/write permissions. AdminAccess/AdminOperator role implementation belongs to CG02. Shared admin form component is `apps/admin/src/components/channel-gifts.vue` (CG01 adds it).
+
+CG03 consumes `/v1/channel-gifts` GET and ChannelGiftView (buyer only), with native client `miniprogram/services/channel-gifts.ts`. Activate/correct/void uses exported `lockChannelGiftIn(tx,id)` and holds the transaction through state validation/project creation/ownership mutation. projectId and orderId are unique nullable links; activation fills them exactly once. `state` is active or void; linked project determines activation. Original paidAmount null must remain unknown across consumers. `reminderHandledBy`/`reminderHandledAt` persist acknowledgement; reset both on buyer correction. `associatedAt` records the latest ownership association. No expiry.
+
+CG01 handles schema, record/create/list services, phoneAccountIn association, admin form and initial native list; CG03 owns activation/reminder endpoints and native continuation. CG02 owns partner accounts, AdminAccess roles and shared admin scope. Integration may extend the response for activation status while preserving one row per channel gift.
