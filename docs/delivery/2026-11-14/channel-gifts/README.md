@@ -1,6 +1,6 @@
 # 渠道礼物与第三方后台实施
 
-2026-11-14。已确认需求，待实施。[父规格 #180](https://github.com/brycezhang/timenook/issues/180) 与四张实施票已发布，均为 ready-for-agent，并已建立 GitHub 原生父子及 blocked-by 关系。范围以[规格](spec.md)及 [ADR 0021](../../../adr/0021-channel-gifts-and-partner-admin.md)为准。
+2026-11-14。四票功能已在集成分支实现，[PR #185](https://github.com/brycezhang/timenook/pull/185) 已完成审查及两项修复，最终 CI 结果以 PR 为准。[父规格 #180](https://github.com/brycezhang/timenook/issues/180) 与四张实施票已发布，均为 ready-for-agent，并已建立 GitHub 原生父子及 blocked-by 关系。范围以[规格](spec.md)及 [ADR 0021](../../../adr/0021-channel-gifts-and-partner-admin.md)为准。
 
 ## 拆分
 
@@ -15,4 +15,15 @@
 
 ## 交付记录
 
-本轮更新需求文档并拆分 GitHub 票据。原画布页面增量、业务代码、部署及真实验收均由后续实施形成记录。
+后台录单、第三方账号、买方提醒和送礼开通、更正及作废均已实现。真实本地 PostgreSQL／Redis、HTTPS 后台浏览器及微信开发者工具已验证适用路径。
+
+- [CG01 录单与关联](CG01-delivery.md)
+- [CG02 第三方账号及权限](CG02-delivery.md)
+- [CG03 提醒、原生送礼与自购](CG03-delivery.md)
+- [CG04 更正、作废与并发](CG04-delivery.md)
+
+目标环境部署、真机手机号授权、实际微信好友分享和领取、实体制作另行验收。
+
+## 最终审查修复
+
+`2d45b60` 修复两项 P2。后台明确输入校验失败后释放录入表单，未知网络结果继续保留原提交键；小程序冲突后发现已建书时恢复原故事书／当前礼物卡，清除过期提交意图。真实 PostgreSQL／Redis HTTPS 浏览器两项定向回归、小程序控制器六项回归、受影响类型与构建通过，两项审查均已定向复核。最终正式小程序 37 页构建通过。

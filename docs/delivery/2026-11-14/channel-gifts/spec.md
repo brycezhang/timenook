@@ -1,6 +1,6 @@
 # 渠道礼物与第三方后台录单规格
 
-2026-11-14。用户已确认业务方案及第三方后台增量。[父规格 #180](https://github.com/brycezhang/timenook/issues/180) 已发布。状态为待实施，实际交付与设备、供应商验收随实施票记录。
+2026-11-14。用户已确认业务方案及第三方后台增量。[父规格 #180](https://github.com/brycezhang/timenook/issues/180) 已发布。功能已在集成分支实现，工程证据见[实施索引](README.md)，设备、供应商与部署验收分别记录。
 
 ## Problem Statement
 
