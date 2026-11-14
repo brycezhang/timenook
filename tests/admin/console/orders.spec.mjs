@@ -507,6 +507,7 @@ test("super admin issues credentials; partner records a gift with one business m
   await expect(page.getByTestId("issued-password")).toHaveCount(0);
   const partnerContext = await browser.newContext({ ignoreHTTPSErrors: true });
   const partner = await partnerContext.newPage();
+  partner.setDefaultTimeout(10000);
   try {
     await partner.goto("https://localhost:3443/admin/");
     await partner.getByLabel("用户名", { exact: true }).fill(username);
@@ -520,6 +521,25 @@ test("super admin issues credentials; partner records a gift with one business m
     expect((await state.json()).data.operator.role).toBe("partner");
     for (const text of ["订单管理", "用户管理", "生产单管理", "第三方账号"])
       await expect(partner.getByText(text, { exact: true })).toHaveCount(0);
+    // Synthetic buyer session fixture; browser still calls the real buyer HTTP boundary.
+    const db = new PrismaClient({ datasourceUrl: databaseUrl });
+    const buyerToken = randomBytes(32).toString("base64url");
+    try {
+      await db.user.update({
+        where: { id: buyerId },
+        data: { phoneNumber: "+8613900001234" },
+      });
+      await db.session.create({
+        data: {
+          id: randomUUID(),
+          userId: buyerId,
+          tokenHash: createHash("sha256").update(buyerToken).digest("hex"),
+          expiresAt: new Date(Date.now() + 3600000),
+        },
+      });
+    } finally {
+      await db.$disconnect();
+    }
     await partner
       .getByRole("textbox", { name: "购买者手机号", exact: true })
       .fill("13900001234");
@@ -547,29 +567,9 @@ test("super admin issues credentials; partner records a gift with one business m
     await partner.goto("https://localhost:3443/admin/users");
     await expect(partner).toHaveURL(/\/403$/);
     await partner.goto("https://localhost:3443/admin/channel-gifts");
-    // Synthetic buyer session fixture; browser still calls the real buyer HTTP boundary.
-    const db = new PrismaClient({ datasourceUrl: databaseUrl });
-    const buyerToken = randomBytes(32).toString("base64url");
-    try {
-      await db.user.update({
-        where: { id: buyerId },
-        data: { phoneNumber: "+8613900001234" },
-      });
-      await db.channelGift.update({
-        where: { id: gift.id },
-        data: { buyerId },
-      });
-      await db.session.create({
-        data: {
-          id: randomUUID(),
-          userId: buyerId,
-          tokenHash: createHash("sha256").update(buyerToken).digest("hex"),
-          expiresAt: new Date(Date.now() + 3600000),
-        },
-      });
-    } finally {
-      await db.$disconnect();
-    }
+    await expect(
+      partner.getByText(gift.internalNumber, { exact: true }),
+    ).toBeVisible();
     const buyerRead = () =>
       page.request.get("/api/v1/channel-gifts", {
         headers: { authorization: `Bearer ${buyerToken}` },

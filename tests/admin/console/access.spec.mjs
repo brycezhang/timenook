@@ -166,7 +166,7 @@ test("operator login offers Feishu and partner password login without MFA", asyn
   await expect(
     page.getByRole("button", { name: "飞书登录", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("textbox")).toHaveCount(1);
+  await expect(page.getByRole("textbox")).toHaveCount(2);
   await expect(page.getByTestId("enrollment-secret")).toHaveCount(0);
 });
 
@@ -277,7 +277,7 @@ test("desktop and mobile operator completes one Feishu login, survives API resta
   expect(errors).toEqual([]);
 });
 
-test("an expired Feishu authorization returns to the single login action", async ({
+test("an expired Feishu authorization returns to the login choices", async ({
   page,
 }) => {
   await stop(api);
@@ -303,7 +303,7 @@ test("an expired Feishu authorization returns to the single login action", async
     await expect(
       page.getByText("飞书登录未完成，请重试或联系管理员。", { exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("textbox")).toHaveCount(1);
+    await expect(page.getByRole("textbox")).toHaveCount(2);
     await expect(page).toHaveURL(/\/admin\/auth\/login\?redirect=/);
     await page.screenshot({
       path: "/tmp/timenook-feishu-expired-login.png",
