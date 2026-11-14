@@ -416,6 +416,71 @@ test("super admin can write notes and open user routes; disabled authority clear
   ).toHaveCount(0);
 });
 
+test("channel entry unlocks rejected input for correction and a new successful submission", async ({
+  page,
+}) => {
+  await page.goto("./orders");
+  await feishuLogin(page, account);
+  const phone = page.getByRole("textbox", {
+    name: "购买者手机号",
+    exact: true,
+  });
+  const external = page.getByRole("textbox", { name: "原订单号", exact: true });
+  await phone.fill("13800001235");
+  await page.locator("summary").click();
+  await external.fill("小店\t订单-003");
+  const rejectedResponse = page.waitForResponse(
+    (r) =>
+      r.url().endsWith("/api/v1/admin/channel-gifts") &&
+      r.request().method() === "POST",
+  );
+  await page
+    .getByRole("button", { name: "确认购买并录入", exact: true })
+    .click();
+  const rejected = await rejectedResponse;
+  expect(rejected.status()).toBe(400);
+  expect((await rejected.json()).error.code).toBe("INVALID_REQUEST");
+  const rejectedKey = rejected.request().headers()["idempotency-key"];
+  await expect(page.getByRole("alert")).toContainText("请修改后重新录入");
+  await expect(phone).toBeEnabled();
+  await expect(phone).toHaveValue("13800001235");
+  await expect(external).toBeEnabled();
+  await expect(external).toHaveValue("小店\t订单-003");
+  expect(
+    await page.evaluate(() =>
+      Object.keys(sessionStorage).filter((key) =>
+        key.startsWith("timenook.channel-gift.submit:"),
+      ),
+    ),
+  ).toEqual([]);
+  await external.fill("小店订单-003");
+  const savedResponse = page.waitForResponse(
+    (r) =>
+      r.url().endsWith("/api/v1/admin/channel-gifts") &&
+      r.request().method() === "POST",
+  );
+  await page
+    .getByRole("button", { name: "确认购买并录入", exact: true })
+    .click();
+  const saved = await savedResponse;
+  expect(saved.status()).toBe(201);
+  expect(saved.request().headers()["idempotency-key"]).not.toBe(rejectedKey);
+  await expect(page.getByRole("status")).toContainText("录入成功");
+  const db = new PrismaClient({ datasourceUrl: databaseUrl });
+  try {
+    const rows = await db.channelGift.findMany({
+      where: { buyerPhone: "+8613800001235" },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].externalOrderNo).toBe("小店订单-003");
+  } finally {
+    await db.channelGift.deleteMany({
+      where: { buyerPhone: "+8613800001235" },
+    });
+    await db.$disconnect();
+  }
+});
+
 test("channel phone-only entry preserves a lost-response submission across reload and explicitly starts the next purchase", async ({
   page,
 }) => {

@@ -145,6 +145,52 @@ test("account merges reminders, persists later and keeps the real pending count"
   assert.equal(h.page.data.pendingGifts, 2);
   assert.equal(h.routes.length, 0);
 });
+test("a conflicting activation on another device restores the actual project or gift card", async () => {
+  const projectId = "44444444-4444-4444-8444-444444444444";
+  for (const [isSelfGift, giftState, route] of [
+    [true, null, "/pages/home/index"],
+    [false, "unissued", `/pages/gift-recipient/index?projectId=${projectId}`],
+    [false, "unclaimed", `/pages/gift-share/index?projectId=${projectId}`],
+  ] as const) {
+    const h = await harness("new-book");
+    h.page.onLoad({ channelGiftId: id });
+    const showing = h.page.onShow();
+    h.respond("/channel-gifts", [{ id, state: "active", projectId: null }]);
+    await showing;
+    h.page.chooseRelationship({
+      currentTarget: { dataset: { relationship: "妈妈" } },
+    });
+    const saving = h.page.next();
+    const activation = h.requests.shift();
+    assert.equal(activation.data.bookTitle, "妈妈的故事");
+    activation.success({
+      statusCode: 409,
+      data: { error: { code: "CONFLICT" } },
+    });
+    await tick();
+    h.respond("/channel-gifts", [{ id, state: "active", projectId }]);
+    await tick();
+    h.respond("/participations", {
+      projects: [
+        {
+          projectId,
+          isSelfGift,
+          giftState,
+          categories: ["sent"],
+          bookTitle: "另一台设备确认的书名",
+        },
+      ],
+    });
+    await saving;
+    assert.deepEqual(h.routes, [route]);
+    if (isSelfGift) assert.ok([...h.storage.values()].includes(projectId));
+    assert.equal(h.storage.has(h.page.intentKey()), false);
+    assert.equal(h.page.data.available, false);
+    assert.equal(h.page.data.error, "");
+    await h.page.next();
+    assert.equal(h.requests.length, 0);
+  }
+});
 test("a stale channel form rereads current ownership and disables void or reassigned gifts", async () => {
   for (const rows of [[], [{ id, state: "void", projectId: null }]]) {
     const h = await harness("new-book");

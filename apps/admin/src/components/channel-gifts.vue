@@ -198,8 +198,16 @@ async function submit() {
     sessionStorage.removeItem(storageKey());
     await load();
   } catch (e) {
-    if (epoch === sessionEpoch)
+    if (epoch !== sessionEpoch) return;
+    if (
+      (e as { error?: { code?: string } })?.error?.code === "INVALID_REQUEST"
+    ) {
+      submission.value = null;
+      sessionStorage.removeItem(storageKey());
+      error.value = `${errorText(e)} 请修改后重新录入。`;
+    } else {
       error.value = `${errorText(e)} 使用“重试本次录入”查询或完成原提交。`;
+    }
   } finally {
     saving.value = false;
   }

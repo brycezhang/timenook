@@ -30,6 +30,18 @@ Page({
   intentKey() {
     return `timenook.channel-activation.v1:${API_BASE_URL}:${sessionClient.context().split(":")[0]}:${this.data.channelGiftId}`;
   },
+  async continueProject(projectId: string, current: () => boolean) {
+    this.setData({ available: false });
+    wx.removeStorageSync(this.intentKey());
+    const { projects } = await projectOverviewClient.memberships();
+    if (!current()) return;
+    const project = projects.find((p) => p.projectId === projectId);
+    if (!project) throw new Error("故事书暂不可用，请返回我的礼物刷新");
+    const page = giftContinuation(project);
+    if (page)
+      wx.redirectTo({ url: `/pages/${page}/index?projectId=${projectId}` });
+    else switchProjectTab("home", projectId);
+  },
   async onShow() {
     if (!this.data.channelGiftId || this.data.busy) return;
     const generation = ++this.generation,
@@ -57,17 +69,7 @@ Page({
       if (!gift || gift.state !== "active")
         throw new Error("这份礼物已不可开通，请返回我的礼物刷新");
       if (gift.projectId) {
-        const { projects } = await projectOverviewClient.memberships();
-        if (!current()) return;
-        const project = projects.find((p) => p.projectId === gift.projectId);
-        if (!project) throw new Error("故事书暂不可用，请返回我的礼物刷新");
-        const page = giftContinuation(project);
-        wx.removeStorageSync(this.intentKey());
-        if (page)
-          wx.redirectTo({
-            url: `/pages/${page}/index?projectId=${gift.projectId}`,
-          });
-        else switchProjectTab("home", gift.projectId);
+        await this.continueProject(gift.projectId, current);
         return;
       }
       const intent = wx.getStorageSync(this.intentKey()) as
@@ -191,6 +193,20 @@ Page({
           const gift = fresh?.find((g) => g.id === this.data.channelGiftId);
           if (fresh && (!gift || gift.state !== "active"))
             this.setData({ available: false });
+          if (gift?.state === "active" && gift.projectId) {
+            try {
+              await this.continueProject(gift.projectId, current);
+            } catch (recoveryError) {
+              if (current())
+                this.setData({
+                  error:
+                    recoveryError instanceof Error
+                      ? recoveryError.message
+                      : "故事书暂不可用，请返回我的礼物刷新",
+                });
+            }
+            return;
+          }
         }
         if (current())
           this.setData({
