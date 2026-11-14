@@ -162,7 +162,10 @@ test("operator login offers Feishu and partner password login without MFA", asyn
   await page.goto("./");
   await expect(page).toHaveTitle("时光里 · 运营管理");
   await expect(page.locator("vite-error-overlay")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
+  // The first navigation also compiles the Vite route on a cold CI runner.
+  await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible({
+    timeout: 15000,
+  });
   await expect(
     page.getByRole("button", { name: "飞书登录", exact: true }),
   ).toBeVisible();
