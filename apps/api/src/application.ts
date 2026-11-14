@@ -1,4 +1,12 @@
-import { ChannelGifts, ChannelGiftsController, AdminChannelGiftsController } from "./channel-gifts/channel-gifts";
+import {
+  ChannelGifts,
+  ChannelGiftsController,
+  AdminChannelGiftsController,
+} from "./channel-gifts/channel-gifts";
+import {
+  ChannelGiftActivation,
+  ChannelGiftActivationController,
+} from "./channel-gifts/activation";
 import { MAX_RECORDING_BYTES } from "@timenook/contracts";
 import { WebOrders, WebOrdersController } from "./payments/web-orders";
 import { validateInternalMediaConfig } from "./media/product-runtime";
@@ -523,6 +531,7 @@ export async function createApplication(
         ? [
             ParticipationController,
             GiftsController,
+            ChannelGiftActivationController,
             AdminCareController,
             DeletionController,
             AdminDeletionController,
@@ -700,6 +709,7 @@ export async function createApplication(
       ProjectStreams,
       Participation,
       Gifts,
+      ChannelGiftActivation,
       PersonalPlans,
       FamilyQuestionService,
       Interviews,

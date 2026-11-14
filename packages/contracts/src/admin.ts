@@ -95,8 +95,8 @@ export interface AdminOrderSummary {
   mode: string;
   isE2e: boolean;
   listAmount: number;
-  payableAmount: number;
-  paidAmount: number;
+  payableAmount: number | null;
+  paidAmount: number | null;
   refundedAmount: number;
   currency: string;
   createdAt: string;

@@ -180,7 +180,7 @@ export interface FirstCopyContext {
   confirmations: { narrator: boolean; initiator: boolean };
   canConfirmNarrator: boolean;
   payment: {
-    paidAmountFen: number;
+    paidAmountFen: number | null;
     currency: "CNY";
     copies: 1;
     amountDueFen: 0;

@@ -325,6 +325,8 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
     const rule = admission?.[reason] as RefundRule | undefined;
     const review = admission?.review as { state?: string } | undefined;
     if (
+      order.amount === null ||
+      order.provider === "channel" ||
       review?.state !== "frozen" ||
       admission?.refundDeletesData !== false ||
       !rule ||
@@ -773,8 +775,8 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
       if (state === "succeeded" && refund.state !== "succeeded") {
         const balances = await this.listIn(tx, order);
         if (
-          balances.refundedAmountFen + balances.reservedAmountFen >
-          order.amount
+          order.amount === null ||
+          balances.refundedAmountFen + balances.reservedAmountFen > order.amount
         )
           throw new ConflictException();
         const rule = refund.rule as unknown as RefundRule;
@@ -870,6 +872,7 @@ export class Refunds implements OnModuleDestroy, OnModuleInit {
         });
       return { refund, order, first, terminal: false };
     });
+    this.orders.assertScope(claim.order);
     if (!claim.terminal)
       try {
         let result: Record<string, unknown> | null = null;
