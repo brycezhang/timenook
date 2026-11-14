@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount } from "vue";
+import ChannelGifts from "../components/channel-gifts.vue";
 import { useRoute, useRouter } from "vue-router";
 import { Page } from "@vben/common-ui";
 import { Alert, Button, Card, Input, Select, Table, Tag } from "antdv-next";
@@ -95,8 +96,7 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <Page title="订单管理" description="查询购买记录、付款事实与关联服务。"
-    ><template #title><h1>订单管理</h1></template
-    ><Card
+    ><template #title><h1>订单管理</h1></template><ChannelGifts /><Card
       ><form class="query-form" @submit.prevent="submit">
         <Input
           v-model:value="search"
