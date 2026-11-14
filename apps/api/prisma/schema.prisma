@@ -276,6 +276,8 @@ model WechatCodeRedemption {
 
 // Separate identity realm: no relation to product users or their sessions.
 model AdminAccount {
+  role String @default("super_admin")
+  passwordHash String? @map("password_hash")
   id String @id @db.Uuid
   username String
   realm String

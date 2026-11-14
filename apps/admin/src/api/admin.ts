@@ -82,6 +82,15 @@ export const deletionApi = {
 };
 client.addResponseInterceptor({ fulfilled: (response) => response.data });
 export const adminApi = {
+  async partnerLogin(username: string, password: string, csrf: string) {
+    return (
+      await client.post<ApiResponse<AdminState>>(
+        "/partner/login",
+        { username, password },
+        { headers: { "X-CSRF-Token": csrf } },
+      )
+    ).data;
+  },
   async session() {
     return (await client.get<ApiResponse<AdminState>>("/session")).data;
   },

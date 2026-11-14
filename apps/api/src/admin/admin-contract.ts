@@ -1,3 +1,4 @@
+import { IsString, Length } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
 import { ADMIN_PERMISSIONS } from "@timenook/contracts";
 import type {
@@ -10,6 +11,8 @@ import type {
 } from "@timenook/contracts";
 import { RequestMetaDto } from "../health-contract";
 export class AdminOperatorDto implements AdminOperator {
+  @ApiProperty({ enum: ["super_admin", "partner"] })
+  role!: AdminOperator["role"];
   @ApiProperty({ format: "uuid" }) id!: string;
   @ApiProperty() username!: string;
   @ApiProperty({ type: [String], enum: Object.values(ADMIN_PERMISSIONS) })
@@ -61,4 +64,9 @@ export class AdminAuditDto implements AdminAuditEntry {
 export class AdminAuditResponseDto implements ApiResponse<AdminAuditEntry[]> {
   @ApiProperty({ type: [AdminAuditDto] }) data!: AdminAuditDto[];
   @ApiProperty({ type: RequestMetaDto }) meta!: RequestMetaDto;
+}
+
+export class AdminPartnerLoginDto {
+  @ApiProperty() @IsString() @Length(1, 80) username!: string;
+  @ApiProperty() @IsString() @Length(1, 256) password!: string;
 }
