@@ -156,17 +156,20 @@ test.afterAll(async () => {
   }
   if (privateDir) rmSync(privateDir, { recursive: true, force: true });
 });
-test("operator login offers one Feishu action without password or MFA fields", async ({
+test("operator login offers Feishu and partner password login without MFA", async ({
   page,
 }) => {
   await page.goto("./");
   await expect(page).toHaveTitle("时光里 · 运营管理");
   await expect(page.locator("vite-error-overlay")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
+  // The first navigation also compiles the Vite route on a cold CI runner.
+  await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible({
+    timeout: 15000,
+  });
   await expect(
     page.getByRole("button", { name: "飞书登录", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("textbox")).toHaveCount(0);
+  await expect(page.getByRole("textbox")).toHaveCount(2);
   await expect(page.getByTestId("enrollment-secret")).toHaveCount(0);
 });
 
@@ -277,7 +280,7 @@ test("desktop and mobile operator completes one Feishu login, survives API resta
   expect(errors).toEqual([]);
 });
 
-test("an expired Feishu authorization returns to the single login action", async ({
+test("an expired Feishu authorization returns to the login choices", async ({
   page,
 }) => {
   await stop(api);
@@ -303,7 +306,7 @@ test("an expired Feishu authorization returns to the single login action", async
     await expect(
       page.getByText("飞书登录未完成，请重试或联系管理员。", { exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("textbox")).toHaveCount(0);
+    await expect(page.getByRole("textbox")).toHaveCount(2);
     await expect(page).toHaveURL(/\/admin\/auth\/login\?redirect=/);
     await page.screenshot({
       path: "/tmp/timenook-feishu-expired-login.png",
@@ -370,7 +373,7 @@ test("a revoked operator session clears the console and returns to Feishu login"
     await page.getByRole("button", { name: "查询", exact: true }).click();
     await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
     await expect(
-      page.getByText("登录已到期，请重新使用飞书登录。", { exact: true }),
+      page.getByText("登录已到期，请重新登录。", { exact: true }),
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "退出登录" })).toHaveCount(0);
   } finally {
@@ -382,7 +385,7 @@ test("a revoked operator session clears the console and returns to Feishu login"
   }
 });
 
-test("an approved operator with no business permissions sees no restricted controls", async ({
+test("valid Feishu identities are super admins despite legacy permission values", async ({
   page,
 }) => {
   const db = new PrismaClient({ datasourceUrl: databaseUrl });
@@ -393,24 +396,13 @@ test("an approved operator with no business permissions sees no restricted contr
     });
     await page.goto("./");
     await feishuLogin(page, account);
-    await expect(page.getByRole("button", { name: "退出登录" })).toBeVisible();
     await expect(
-      page.getByText("当前管理员没有此页面权限。", {
-        exact: true,
-      }),
+      page.getByRole("heading", { name: "订单管理", exact: true }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "客服工单", exact: true }),
-    ).toHaveCount(0);
-    await expect(
-      page.getByRole("button", { name: "生产与物流", exact: true }),
-    ).toHaveCount(0);
+    const current = await page.request.get("/api/v1/admin/session");
+    expect((await current.json()).data.operator.role).toBe("super_admin");
     await page.getByRole("button", { name: "退出登录" }).click();
   } finally {
-    await db.adminAccount.updateMany({
-      where: { username: account.username },
-      data: { permissions: account.permissions },
-    });
     await db.$disconnect();
   }
 });

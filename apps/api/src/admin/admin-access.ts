@@ -3,10 +3,12 @@ import {
   createHmac,
   randomBytes,
   randomUUID,
+  scrypt,
   timingSafeEqual,
 } from "node:crypto";
 import {
   ForbiddenException,
+  NotFoundException,
   HttpException,
   Inject,
   Injectable,
@@ -17,7 +19,7 @@ import {
 import { Prisma, PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { ADMIN_PERMISSIONS, isAdminPermission } from "@timenook/contracts";
+import { ADMIN_PERMISSIONS } from "@timenook/contracts";
 import type {
   AdminAuditEntry,
   AdminFeishuLogin,
@@ -31,6 +33,22 @@ import {
   feishuIdentity,
 } from "./feishu";
 
+const passwordKey = (password: string, salt: string) =>
+  new Promise<Buffer>((resolve, reject) => {
+    scrypt(password, salt, 64, { N: 16384, r: 8, p: 1 }, (error, key) =>
+      error ? reject(error) : resolve(key),
+    );
+  });
+const partnerPermissions = [
+  ADMIN_PERMISSIONS.channelGiftsRead,
+  ADMIN_PERMISSIONS.channelGiftsWrite,
+];
+const permissionsFor = (role: string) =>
+  role === "super_admin"
+    ? Object.values(ADMIN_PERMISSIONS)
+    : role === "partner"
+      ? partnerPermissions
+      : [];
 const COOKIE = "__Secure-timenook_admin";
 const PATH = "/api/v1/admin";
 const FLOW_COOKIE = "__Secure-timenook_oauth";
@@ -88,6 +106,10 @@ const ROUTE_ACTIONS: Record<string, string> = {
   "POST /v1/admin/projects/:id/rebind": "care.rebind",
   "POST /v1/admin/projects/:id/care-requests": "care.open",
   "POST /v1/admin/care-requests/:id/verify": "care.verify",
+  "POST /v1/admin/partner/login": "admin.partner.login",
+  "GET /v1/admin/partners": "admin.partners.list",
+  "POST /v1/admin/partners": "admin.partners.create",
+  "POST /v1/admin/partners/:id/revoke": "admin.partners.revoke",
   "GET /v1/admin/session": "admin.session",
   "POST /v1/admin/feishu/login": "admin.feishu.login",
   "GET /v1/admin/feishu/callback": "admin.feishu.callback",
@@ -109,6 +131,7 @@ const digest = (value: string) =>
 type Session = Prisma.AdminSessionGetPayload<{ include: { account: true } }>;
 type AdminRequest = FastifyRequest & {
   adminOperator?: string;
+  adminRole?: "super_admin" | "partner";
   adminAction?: string;
   adminResourceType?: string;
   adminResourceId?: string;
@@ -213,7 +236,10 @@ export class AdminAccess implements OnModuleDestroy {
       (phase && session.phase !== phase)
     )
       throw new UnauthorizedException();
-    if (session.account) request.adminOperator = session.account.id;
+    if (session.account) {
+      request.adminOperator = session.account.id;
+      request.adminRole = session.account.role as "super_admin" | "partner";
+    }
     return session;
   }
   private assertCsrf(request: FastifyRequest) {
@@ -234,10 +260,10 @@ export class AdminAccess implements OnModuleDestroy {
       operator:
         session.phase === "authenticated"
           ? {
+              role: session.account!.role as "super_admin" | "partner",
               id: session.account!.id,
               username: session.account!.username,
-              permissions:
-                session.account!.permissions.filter(isAdminPermission),
+              permissions: permissionsFor(session.account!.role),
             }
           : null,
       csrfToken: this.csrf(token),
@@ -371,6 +397,7 @@ export class AdminAccess implements OnModuleDestroy {
   }
   private identityHash(account: {
     realm: string;
+    role: string;
     feishuAppId: string | null;
     tenantKey: string | null;
     feishuOpenId: string | null;
@@ -378,6 +405,7 @@ export class AdminAccess implements OnModuleDestroy {
     return digest(
       JSON.stringify([
         account.realm,
+        account.role,
         account.feishuAppId,
         account.tenantKey,
         account.feishuOpenId,
@@ -387,8 +415,15 @@ export class AdminAccess implements OnModuleDestroy {
   private currentIdentity(session: Session) {
     const account = session.account,
       feishu = this.settings().feishu;
+    if (account?.role === "partner")
+      return (
+        account.realm === this.realm &&
+        !!account.passwordHash &&
+        session.identityHash === this.identityHash(account)
+      );
     return (
       !!account &&
+      account.role === "super_admin" &&
       !!feishu &&
       account.realm === this.realm &&
       account.feishuAppId === feishu.appId &&
@@ -512,7 +547,8 @@ export class AdminAccess implements OnModuleDestroy {
           },
         },
       });
-      if (!account || account.disabled) throw new ForbiddenException();
+      if (!account || account.disabled || account.role !== "super_admin")
+        throw new ForbiddenException();
       request.adminOperator = account.id;
       // Lock the anonymous session before the account, matching command/logout lock order.
       const previous = await tx.$queryRaw<
@@ -525,6 +561,7 @@ export class AdminAccess implements OnModuleDestroy {
       });
       if (
         current.disabled ||
+        current.role !== "super_admin" ||
         current.feishuAppId !== feishu.appId ||
         current.tenantKey !== user.tenantKey ||
         current.feishuOpenId !== user.openId
@@ -550,7 +587,7 @@ export class AdminAccess implements OnModuleDestroy {
   }
   async authorized(request: AdminRequest, permission: AdminPermission) {
     const session = await this.session(request, "authenticated");
-    if (!session.account?.permissions.includes(permission))
+    if (!permissionsFor(session.account?.role ?? "").includes(permission))
       throw new ForbiddenException();
     return session;
   }
@@ -582,7 +619,7 @@ export class AdminAccess implements OnModuleDestroy {
         current.realm !== this.realm
       )
         throw new UnauthorizedException();
-      if (!current.account?.permissions.includes(permission))
+      if (!permissionsFor(current.account?.role ?? "").includes(permission))
         throw new ForbiddenException();
       const value = await work(tx);
       await this.audit(request.adminAction!, request, "success", tx);
@@ -590,6 +627,105 @@ export class AdminAccess implements OnModuleDestroy {
     });
     request.auditRecorded = true;
     return result;
+  }
+  async partnerLogin(
+    request: AdminRequest,
+    reply: FastifyReply,
+    input: { username: string; password: string },
+  ) {
+    const anonymous = await this.session(request, "anonymous");
+    this.assertCsrf(request);
+    await this.limit("password-ip", request.ip, 30);
+    await this.limit("password-account", input.username, 10);
+    const account = await this.database.adminAccount.findUnique({
+      where: {
+        realm_username: { realm: this.realm, username: input.username },
+      },
+    });
+    const [salt, expected] = account?.passwordHash?.split(":") ?? [
+      "unavailable",
+      "00".repeat(64),
+    ];
+    const actual = await passwordKey(input.password, salt);
+    if (
+      !account ||
+      account.role !== "partner" ||
+      account.disabled ||
+      !timingSafeEqual(actual, Buffer.from(expected, "hex"))
+    )
+      throw new UnauthorizedException();
+    const issued = await this.database.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM admin_sessions WHERE id = ${anonymous.id}::uuid FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM admin_accounts WHERE id = ${account.id}::uuid FOR NO KEY UPDATE`;
+      const current = await tx.adminAccount.findUniqueOrThrow({
+        where: { id: account.id },
+      });
+      if (
+        current.disabled ||
+        current.role !== "partner" ||
+        current.passwordHash !== account.passwordHash
+      )
+        throw new UnauthorizedException();
+      request.adminOperator = current.id;
+      return this.issue(request, "authenticated", current.id, anonymous.id, tx);
+    });
+    return this.finish(request, reply, issued);
+  }
+  async partners(request: AdminRequest) {
+    return this.command(
+      request,
+      ADMIN_PERMISSIONS.managePartners,
+      (tx) =>
+        tx.adminAccount.findMany({
+          where: { realm: this.realm, role: "partner" },
+          select: { id: true, username: true, disabled: true },
+          orderBy: { username: "asc" },
+        }),
+      true,
+    );
+  }
+  async createPartner(request: AdminRequest) {
+    await this.authorized(request, ADMIN_PERMISSIONS.managePartners);
+    const password = randomBytes(24).toString("base64url"),
+      salt = randomBytes(16).toString("hex");
+    const passwordHash = `${salt}:${(await passwordKey(password, salt)).toString("hex")}`;
+    return this.command(
+      request,
+      ADMIN_PERMISSIONS.managePartners,
+      async (tx) => {
+        const account = await tx.adminAccount.create({
+          data: {
+            id: randomUUID(),
+            username: `sales_${randomBytes(8).toString("hex")}`,
+            realm: this.realm,
+            role: "partner",
+            passwordHash,
+            permissions: [],
+          },
+          select: { id: true, username: true, disabled: true },
+        });
+        request.adminResourceType = "admin-account";
+        request.adminResourceId = account.id;
+        return { ...account, password };
+      },
+    );
+  }
+  async revokePartner(request: AdminRequest, id: string) {
+    return this.command(
+      request,
+      ADMIN_PERMISSIONS.managePartners,
+      async (tx) => {
+        // Account disable is checked by every session access. No account->session lock inversion with commands/login.
+        const changed = await tx.adminAccount.updateMany({
+          where: { id, realm: this.realm, role: "partner" },
+          data: { disabled: true },
+        });
+        if (!changed.count) throw new NotFoundException();
+        request.adminResourceType = "admin-account";
+        request.adminResourceId = id;
+        return { id, disabled: true };
+      },
+    );
   }
   async audits(request: AdminRequest): Promise<AdminAuditEntry[]> {
     await this.authorized(request, ADMIN_PERMISSIONS.readAudit);

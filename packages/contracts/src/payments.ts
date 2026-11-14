@@ -1,13 +1,20 @@
 import type { ProjectPlan } from "./index";
 export interface PaymentOrderView {
+  channelPurchase?: {
+    internalNumber: string;
+    externalOrderNo: string | null;
+    paidAt: string | null;
+    paidAmount: number | null;
+    createdAt: string;
+  } | null;
   purchaseKind: "self" | "gift";
   id: string;
   outTradeNo: string;
   listAmount: 99900;
-  amount: 1 | 99900;
+  amount: number | null;
   isE2e: boolean;
   currency: "CNY";
-  mode: "local-verification" | "wechat";
+  mode: "local-verification" | "wechat" | "channel";
   state: "pending" | "paid" | "closed";
   paymentStatus: "pending" | "unknown" | "paid" | "closed";
   packageVersionId: string;

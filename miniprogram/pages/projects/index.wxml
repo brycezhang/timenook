@@ -2,6 +2,10 @@
 <app-loading wx:if="{{pageLoading}}" variant="list" />
 <view wx:else class="tn-page gifts-page {{switching ? '' : 'with-gifts-dock'}}">
  <view class="gift-categories"><button wx:for="{{categories}}" wx:key="value" class="gift-category {{category === item.value ? 'selected' : ''}}" data-category="{{item.value}}" bindtap="changeCategory" aria-pressed="{{category === item.value}}">{{item.label}}</button></view>
+ <button wx:for="{{channelRows}}" wx:key="id" class="gift-project" data-id="{{item.id}}" bindtap="channelGift" disabled="{{item.state === 'void'}}">
+  <view class="gift-book"><image src="/assets/icons/modern-gift.svg"/></view>
+  <view class="tn-grow gift-copy"><view class="gift-title">{{item.packageTitle}}</view><view class="gift-description">{{item.detail}}</view><view class="gift-detail">{{item.dateLabel}}</view></view><text wx:if="{{item.state === 'active'}}" class="tn-link">去送礼</text>
+ </button>
  <view wx:for="{{rows}}" wx:key="projectId" class="gift-project-card">
   <button class="gift-project" data-id="{{item.projectId}}" bindtap="choose" aria-label="{{item.bookTitle}}">
    <view class="gift-book"><image src="/assets/icons/modern-book.svg"/></view>
@@ -14,7 +18,7 @@
   <view class="tn-grow gift-copy"><view class="gift-title">{{item.bookTitle}}</view><view class="gift-description">{{item.description}}</view><view class="gift-detail">{{item.detail}}</view></view><image class="gift-arrow" src="/assets/icons/modern-chevron-right.svg"/>
  </button>
  <view wx:if="{{status}}" class="tn-error">{{status}}<button class="tn-link" bindtap="refresh">重新读取</button></view>
- <view wx:elif="{{!rows.length && !pending.length}}" class="tn-muted gift-empty">{{!loggedIn ? '登录后查看你的礼物' : category === 'sent' ? '还没有送出的礼物' : category === 'received' ? '还没有收到的礼物' : '还没有参与的故事书'}}</view>
+ <view wx:elif="{{!rows.length && !pending.length && !channelRows.length}}" class="tn-muted gift-empty">{{!loggedIn ? '登录后查看你的礼物' : category === 'sent' ? '还没有送出的礼物' : category === 'received' ? '还没有收到的礼物' : '还没有参与的故事书'}}</view>
  <button wx:if="{{!loggedIn && !busy}}" class="tn-button" bindtap="login">微信手机号登录</button>
 </view>
 <view wx:if="{{!switching}}" class="tn-dock"><button class="tn-button" bindtap="purchase"><image class="tn-icon" src="/assets/icons/gift-white.svg"/>送出一份礼物</button></view>

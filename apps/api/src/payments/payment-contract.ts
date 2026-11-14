@@ -29,9 +29,10 @@ export class PaymentOrderDto {
   @ApiProperty() outTradeNo!: string;
   @ApiProperty({ enum: [99900] }) listAmount!: number;
   @ApiProperty() isE2e!: boolean;
-  @ApiProperty({ enum: [1, 99900] }) amount!: number;
+  @ApiProperty({ nullable: true, type: Number }) amount!: number | null;
   @ApiProperty({ enum: ["CNY"] }) currency!: string;
-  @ApiProperty({ enum: ["local-verification", "wechat"] }) mode!: string;
+  @ApiProperty({ enum: ["local-verification", "wechat", "channel"] })
+  mode!: string;
   @ApiProperty({ enum: ["pending", "paid", "closed"] }) state!: string;
   @ApiProperty({ enum: ["pending", "unknown", "paid", "closed"] })
   paymentStatus!: string;

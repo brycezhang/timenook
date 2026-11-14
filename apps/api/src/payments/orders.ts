@@ -1,3 +1,4 @@
+import { initializePurchasedProjectIn } from "../projects/purchased-project";
 import { PrivacyRights } from "../care/privacy-rights";
 import {
   PaymentOrderResponseDto,
@@ -198,9 +199,12 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       ? "wechat"
       : "local-verification";
   }
-  assertScope(order: PaymentOrder) {
+  assertScope(
+    order: PaymentOrder,
+  ): asserts order is PaymentOrder & { amount: number } {
     const cfg = this.enabled();
     if (
+      order.amount === null ||
       order.provider !== "wechat" ||
       order.appId !== cfg.appId ||
       order.merchantId !== cfg.merchantId ||
@@ -456,9 +460,15 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       },
     });
     if (!order) throw new NotFoundException();
+    this.assertScope(order);
     return order;
   }
   async get(authorization: string | undefined, id: string) {
+    const buyer = await this.identity.current(authorization);
+    const channel = await this.database.paymentOrder.findFirst({
+      where: { id, buyerId: buyer.id, provider: "channel" },
+    });
+    if (channel) return this.view(channel);
     const order = await this.owned(authorization, id);
     let paymentStatus = order.state;
     if (order.state !== "paid") paymentStatus = await this.refresh(order);
@@ -511,6 +521,19 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
         (await this.terms.read(project.id)).retention?.activeData?.state ===
           "expired"
       : false;
+    const channelPurchase =
+      order.provider === "channel"
+        ? await this.database.channelGift.findUnique({
+            where: { orderId: order.id },
+            select: {
+              internalNumber: true,
+              externalOrderNo: true,
+              paidAt: true,
+              paidAmount: true,
+              createdAt: true,
+            },
+          })
+        : null;
     const template = order.template as {
       id: string;
       version: number;
@@ -526,6 +549,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       mode: order.mode,
       provider: order.provider,
       channel: order.channel,
+      channelPurchase,
       state: order.state,
       paymentStatus: order.state,
       purchaseKind: order.purchaseKind,
@@ -622,6 +646,9 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
     payment: { transactionId: string; paidAt: string },
     eventId?: string,
   ) {
+    if (order.amount === null || order.provider === "channel")
+      throw new ConflictException();
+    const amount = order.amount;
     const plans = new ProjectPlans(
       this.config.databaseUrl,
       order.template as unknown as BuiltinTemplate,
@@ -644,36 +671,15 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
               orderId: order.id,
               providerTransactionId: payment.transactionId,
               paidAt: new Date(payment.paidAt),
-              amount: order.amount,
+              amount,
               currency: order.currency,
             },
           });
-          const projectId = randomUUID();
-          await plans.createProject(
-            { projectId, createdBy: order.buyerId },
+          await initializePurchasedProjectIn(
             tx,
-          );
-          await tx.project.update({
-            where: { id: projectId },
-            data: { orderId: order.id, bookTitle: order.bookTitle },
-          });
-          await tx.projectSubject.create({
-            data: {
-              id: randomUUID(),
-              projectId,
-              name: order.subjectName,
-              boundUserId: order.purchaseKind === "self" ? order.buyerId : null,
-              bindingVersion: order.purchaseKind === "self" ? 1 : 0,
-            },
-          });
-          await tx.firstCopyEntitlement.create({
-            data: { id: randomUUID(), orderId: order.id, projectId },
-          });
-          await this.terms.activate(
-            tx,
-            projectId,
-            order.packageVersionId,
-            order.packageSnapshot,
+            plans,
+            this.terms,
+            order,
             new Date(payment.paidAt),
           );
           await tx.paymentOrder.update({

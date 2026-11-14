@@ -276,6 +276,8 @@ model WechatCodeRedemption {
 
 // Separate identity realm: no relation to product users or their sessions.
 model AdminAccount {
+  role String @default("super_admin")
+  passwordHash String? @map("password_hash")
   id String @id @db.Uuid
   username String
   realm String
@@ -440,7 +442,7 @@ model PaymentOrder {
   requestHash String @map("request_hash") @db.Char(64)
   listAmount Int @default(99900) @map("list_amount")
   isE2e Boolean @default(false) @map("is_e2e")
-  amount Int
+  amount Int?
   currency String
   mode String
   packageVersionId String @map("package_version_id") @db.Uuid
@@ -1612,4 +1614,45 @@ model FamilyQuestion {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   @@index([projectId])
   @@map("family_questions")
+}
+
+model ChannelGift {
+  id String @id @db.Uuid
+  internalNumber String @unique @map("internal_number")
+  operatorId String @map("operator_id") @db.Uuid
+  idempotencyKey String @map("idempotency_key")
+  requestHash String @map("request_hash") @db.Char(64)
+  buyerPhone String @map("buyer_phone") @db.VarChar(32)
+  buyerId String? @map("buyer_id") @db.Uuid
+  packageVersionId String @map("package_version_id") @db.Uuid
+  packageSnapshot Json @map("package_snapshot")
+  packageTitle String @map("package_title")
+  listAmount Int @map("list_amount")
+  paidAmount Int? @map("paid_amount")
+  paidAt DateTime? @map("paid_at") @db.Timestamptz(3)
+  externalOrderNo String? @map("external_order_no")
+  state String @default("active")
+  projectId String? @unique @map("project_id") @db.Uuid
+  orderId String? @unique @map("order_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  associatedAt DateTime? @map("associated_at") @db.Timestamptz(3)
+  reminderHandledBy String? @map("reminder_handled_by") @db.Uuid
+  reminderHandledAt DateTime? @map("reminder_handled_at") @db.Timestamptz(3)
+  @@unique([operatorId, idempotencyKey])
+  @@index([buyerPhone, state])
+  @@index([buyerId, createdAt])
+  @@map("channel_gifts")
+}
+
+model ChannelGiftOperation {
+  id String @id @db.Uuid
+  giftId String @map("gift_id") @db.Uuid
+  operatorId String @map("operator_id") @db.Uuid
+  action String
+  reason String
+  beforePhone String @map("before_phone") @db.VarChar(32)
+  afterPhone String @map("after_phone") @db.VarChar(32)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  @@index([giftId, createdAt])
+  @@map("channel_gift_operations")
 }

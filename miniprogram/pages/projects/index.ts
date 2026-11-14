@@ -1,4 +1,7 @@
+import { giftContinuation } from "../../services/gifts";
+import { channelGiftClient } from "../../services/channel-gifts";
 import type {
+  ChannelGiftView,
   GiftCategory,
   ProjectMembership,
   PaymentOrderView,
@@ -29,6 +32,10 @@ Page({
     categories,
     category: "sent" as GiftCategory,
     pending: [] as PendingRow[],
+    channelRows: [] as (ChannelGiftView & {
+      detail: string;
+      dateLabel: string;
+    })[],
     rows: [] as Row[],
     selected: "",
     busy: false,
@@ -42,6 +49,7 @@ Page({
   owner: "",
   projects: [] as ProjectMembership[],
   orders: [] as PaymentOrderView[],
+  channelGifts: [] as ChannelGiftView[],
   onLoad(q) {
     this.setData({
       switching: q.switch === "1",
@@ -56,7 +64,10 @@ Page({
     if (previous !== this.owner) this.clearProjects();
     this.setData({
       busy: true,
-      pageLoading: !this.projects.length && !this.orders.length,
+      pageLoading:
+        !this.projects.length &&
+        !this.orders.length &&
+        !this.channelGifts.length,
       status: "",
     });
     try {
@@ -69,14 +80,16 @@ Page({
       }
       const owner = sessionClient.context();
       if (owner !== this.owner) this.clearProjects();
-      const [{ projects }, orders] = await Promise.all([
+      const [{ projects }, orders, channelGifts] = await Promise.all([
         projectOverviewClient.memberships(),
         paymentClient.list(),
+        channelGiftClient.list(),
       ]);
       if (n !== this.generation || owner !== sessionClient.context()) return;
       this.owner = owner;
       this.projects = projects;
       this.orders = orders;
+      this.channelGifts = channelGifts;
       this.showCategory();
     } catch (e) {
       if (n === this.generation) {
@@ -93,8 +106,9 @@ Page({
   clearProjects() {
     this.projects = [];
     this.orders = [];
+    this.channelGifts = [];
     this.owner = "";
-    this.setData({ rows: [], pending: [], selected: "" });
+    this.setData({ rows: [], pending: [], channelRows: [], selected: "" });
   },
   showCategory() {
     const category = this.data.category;
@@ -109,7 +123,28 @@ Page({
           paidGiftOrders.set(order.project.id, order.id);
       }
     }
+    const channelByProject = new Map(
+      this.channelGifts.filter((g) => g.projectId).map((g) => [g.projectId, g]),
+    );
+    for (const gift of this.channelGifts)
+      if (
+        gift.projectId &&
+        gift.orderId &&
+        category === "sent" &&
+        !this.data.switching
+      )
+        paidGiftOrders.set(gift.projectId, gift.orderId);
     this.setData({
+      channelRows:
+        category === "sent" && !this.data.switching
+          ? this.channelGifts
+              .filter((g) => !g.projectId)
+              .map((g) => ({
+                ...g,
+                detail: `${g.state === "void" ? "已作废" : "待送出"} · 实付${g.paidAmount === null ? "未提供" : ` ¥${(g.paidAmount / 100).toFixed(2)}`}`,
+                dateLabel: `${g.paidAt ? "购买时间" : "录入时间"} ${(g.paidAt ?? g.createdAt).slice(0, 10)} · 长期有效`,
+              }))
+          : [],
       rows: this.projects
         .filter((p) => p.categories.includes(category))
         .map((p) => ({
@@ -118,7 +153,7 @@ Page({
           description: p.giftRelationship
             ? `${p.giverNickname}送给${p.giftRelationship}的时光故事书`
             : `${p.giverNickname}发起的时光故事书`,
-          detail: `${p.isSelfGift ? "送给自己" : category === "received" ? "我是主讲人" : category === "participating" ? "参与记录" : p.giftState === "unissued" ? "待送出" : p.giftState === "unclaimed" ? "待领取" : "已送出"} · ${p.storyCount} 个故事`,
+          detail: `${channelByProject.has(p.projectId) ? "渠道购买 · " : ""}${p.isSelfGift ? "送给自己" : category === "received" ? "我是主讲人" : category === "participating" ? "参与记录" : p.giftState === "unissued" ? "待送出" : p.giftState === "unclaimed" ? "待领取" : "已送出"} · ${p.storyCount} 个故事`,
         })),
       pending:
         category === "sent"
@@ -128,7 +163,7 @@ Page({
                 id: o.id,
                 bookTitle: o.bookTitle,
                 description: `${sessionClient.nickname() || "我"}送给${o.recipient.relationshipLabel}的时光故事书`,
-                detail: `${o.paymentStatus === "unknown" ? "付款结果待确认" : "待付款"} · ¥${(o.amount / 100).toFixed(o.amount % 100 ? 2 : 0)}`,
+                detail: `${o.paymentStatus === "unknown" ? "付款结果待确认" : "待付款"} · ¥${o.amount === null ? "未提供" : (o.amount / 100).toFixed(o.amount % 100 ? 2 : 0)}`,
               }))
           : [],
       selected: projectOverviewClient.selected(),
@@ -153,8 +188,25 @@ Page({
     if (
       this.owner === sessionClient.context() &&
       this.data.rows.some((p) => p.projectId === id)
+    ) {
+      const project = this.projects.find((p) => p.projectId === id);
+      const continuation =
+        !this.data.switching &&
+        this.data.category === "sent" &&
+        this.channelGifts.some((g) => g.projectId === id)
+          ? giftContinuation(project)
+          : "";
+      if (continuation) go(continuation, `projectId=${id}`);
+      else switchProjectTab("home", id);
+    }
+  },
+  channelGift(e: WechatMiniprogram.TouchEvent) {
+    const id = e.currentTarget.dataset.id as string;
+    if (
+      this.owner === sessionClient.context() &&
+      this.data.channelRows.some((g) => g.id === id && g.state === "active")
     )
-      switchProjectTab("home", id);
+      go("new-book", `channelGiftId=${id}`);
   },
   payment(e: WechatMiniprogram.TouchEvent) {
     const id = e.currentTarget.dataset.id as string;

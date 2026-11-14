@@ -1,4 +1,7 @@
 export const ADMIN_PERMISSIONS = {
+  channelGiftsRead: "channel-gifts:read",
+  channelGiftsWrite: "channel-gifts:write",
+  managePartners: "partners:manage",
   readOrders: "orders:read",
   writeOrders: "orders:write",
   writeFulfillment: "fulfillment:write",
@@ -40,7 +43,18 @@ export interface AdminProvisionResult {
   realm: AdminRealm;
 }
 
+export type AdminRole = "super_admin" | "partner";
+export interface AdminPartner {
+  id: string;
+  username: string;
+  disabled: boolean;
+}
+export interface AdminPartnerCredentials extends AdminPartner {
+  password: string;
+}
+
 export interface AdminOperator {
+  role: AdminRole;
   id: string;
   username: string;
   permissions: AdminPermission[];
@@ -81,8 +95,8 @@ export interface AdminOrderSummary {
   mode: string;
   isE2e: boolean;
   listAmount: number;
-  payableAmount: number;
-  paidAmount: number;
+  payableAmount: number | null;
+  paidAmount: number | null;
   refundedAmount: number;
   currency: string;
   createdAt: string;

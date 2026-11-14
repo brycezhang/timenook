@@ -17,13 +17,22 @@ function order(value: unknown): value is PaymentOrderView {
     !uuid(value.id) ||
     value.listAmount !== 99900 ||
     typeof value.isE2e !== "boolean" ||
-    value.amount !== (value.isE2e ? 1 : 99900) ||
+    (value.mode === "channel"
+      ? value.isE2e ||
+        value.state !== "paid" ||
+        (value.amount !== null &&
+          (typeof value.amount !== "number" ||
+            !Number.isSafeInteger(value.amount) ||
+            value.amount < 0))
+      : value.amount !== (value.isE2e ? 1 : 99900)) ||
     (value.isE2e && value.mode !== "wechat") ||
     value.currency !== "CNY" ||
-    !["local-verification", "wechat"].includes(String(value.mode)) ||
+    !["local-verification", "wechat", "channel"].includes(String(value.mode)) ||
     !["pending", "paid", "closed"].includes(String(value.state)) ||
     !["self", "gift"].includes(String(value.purchaseKind)) ||
-    !["pending", "unknown", "paid", "closed"].includes(String(value.paymentStatus)) ||
+    !["pending", "unknown", "paid", "closed"].includes(
+      String(value.paymentStatus),
+    ) ||
     !record(value.recipient) ||
     typeof value.recipient.relationshipLabel !== "string" ||
     typeof value.bookTitle !== "string"

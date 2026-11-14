@@ -1,0 +1,9 @@
+# CG03 activation and reminders contract
+
+`POST /v1/channel-gifts/:id/activate` accepts `{purchaseKind: "gift"|"self", recipient: {typeCode?, relationshipLabel?}, bookTitle}`. Response: `{id,projectId,orderId,entitlementId,purchaseKind,paidAmount}`. `paidAmount` remains nullable. The ChannelGift row is the durable operation identity; identical repeated confirmation returns the same result, changed details return 409. Opening/reading does not activate. Transaction acquires `lockChannelGiftIn`, checks current buyer and active state, creates the order/project/entitlement via shared purchase initialization, and fills unique `projectId/orderId`. CG04 must use the same row lock and refuse correction/void once projectId exists.
+
+`GET /v1/channel-gifts/reminders` returns `{newGiftIds,newCount,pendingCount}`. Pending includes active unactivated channel gifts and all owned gift projects without an issued card. Self books and issued/claimed cards do not count. `POST /v1/channel-gifts/reminders/handle` with `{ids}` marks only currently owned active records; results persist by buyer. Correction resets reminderHandledBy/At as CG01 specifies. No expiry.
+
+Activation creates PaymentOrder provider/mode `channel`, channel `manual`, state `paid` for the externally confirmed purchase, nullable amount copied exactly from ChannelGift, and no PaymentTransaction. Existing payment/refund provider commands remain scoped to their providers. First-copy eligibility recognizes the active linked ChannelGift as purchase authority. Admin monetary summaries and production contexts preserve unknown amounts. Project terms start at activation time, which is not represented as payment time.
+
+Native route: `new-book?channelGiftId=ID`; normal new-book continues its existing purchase path. Activated channel rows use existing project memberships so one gift appears once per category.

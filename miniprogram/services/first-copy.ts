@@ -19,8 +19,9 @@ function context(value: FirstCopyContext, projectId: string): FirstCopyContext {
     typeof value.confirmations.narrator !== "boolean" ||
     typeof value.confirmations.initiator !== "boolean" ||
     !value.payment ||
-    !Number.isSafeInteger(value.payment.paidAmountFen) ||
-    value.payment.paidAmountFen < 0 ||
+    (value.payment.paidAmountFen !== null &&
+      (!Number.isSafeInteger(value.payment.paidAmountFen) ||
+        value.payment.paidAmountFen < 0)) ||
     value.payment.currency !== "CNY" ||
     value.payment.copies !== 1 ||
     value.payment.amountDueFen !== 0 ||

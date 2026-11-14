@@ -43,7 +43,7 @@ const route = useRoute(),
 let serial = 0,
   abort: AbortController | undefined,
   noteKey = crypto.randomUUID();
-const money = (n: number) => `¥${(n / 100).toFixed(2)}`;
+const money = (n: number | null) => n === null ? "未提供" : `¥${(n / 100).toFixed(2)}`;
 const back = computed(() =>
   typeof route.query.from === "string"
     ? safeReturn(route.query.from)

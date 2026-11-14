@@ -173,3 +173,4 @@ export * from "./quality-care";
 export * from "./account-link";
 export * from "./gifts";
 export * from "./family-questions";
+export * from "./channel-gifts";

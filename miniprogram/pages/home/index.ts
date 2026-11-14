@@ -1,3 +1,4 @@
+import { checkChannelReminders } from "../../services/channel-activation";
 import { NATIVE_TABS } from "../../config";
 import { ApiFailure, sessionClient } from "../../services/session";
 import { projectOverviewClient } from "../../services/project-overview";
@@ -216,6 +217,13 @@ Page({
     } finally {
       if (generation === this.generation)
         this.setData({ busy: false, pageLoading: false });
+      if (generation === this.generation && owner === sessionClient.context())
+        void checkChannelReminders(
+          () =>
+            generation === this.generation &&
+            !this.data.busy &&
+            !this.data.loginVisible,
+        ).catch(() => {});
     }
   },
   async loadCover(projectId: string, generation: number, owner: string) {

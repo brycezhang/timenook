@@ -136,6 +136,7 @@ test("gift filters use facts, self opens one project in both categories and pend
   h.respond("/users/me", account.user);
   await tick();
   h.respond("/participations", { projects: memberships });
+  h.respond("/channel-gifts", []);
   h.respond("/orders", { orders: [pending] });
   await showing;
   assert.equal(h.page.data.rows.length, 2);
@@ -165,8 +166,12 @@ test("sent gifts can reopen the paid order for the matching book", async () => {
   h.respond("/users/me", account.user);
   await tick();
   h.respond("/participations", { projects: memberships });
+  h.respond("/channel-gifts", []);
   h.respond("/orders", {
-    orders: [pending, { ...paidOrder, project: { ...paidOrder.project, id: project } }],
+    orders: [
+      pending,
+      { ...paidOrder, project: { ...paidOrder.project, id: project } },
+    ],
   });
   await showing;
   assert.equal(h.page.data.rows[0].orderId, paidOrder.id);
@@ -218,7 +223,10 @@ test("project home continues the selected gift until claimed and hides the actio
   h.page.onLoad();
   await showGift("unissued");
   h.page.continueGift();
-  assert.equal(h.routes.pop(), `/pages/gift-recipient/index?projectId=${project}`);
+  assert.equal(
+    h.routes.pop(),
+    `/pages/gift-recipient/index?projectId=${project}`,
+  );
   h.page.onHide();
   await showGift("unclaimed");
   h.page.continueGift();
@@ -320,4 +328,41 @@ test("only the purchaser issues a family invitation and a different account cann
     0,
     "ordinary members cannot issue invitations",
   );
+});
+
+test("channel gifts load for an existing session only in sent and clear when the account changes", async () => {
+  const h = await harness("projects");
+  h.page.onLoad({});
+  const showing = h.page.onShow();
+  h.respond("/users/me", account.user);
+  await tick();
+  h.respond("/participations", { projects: memberships });
+  h.respond("/orders", { orders: [] });
+  h.respond("/channel-gifts", [
+    {
+      id: order,
+      internalNumber: "CG-demo",
+      packageTitle: "时光故事书",
+      listAmount: 99900,
+      paidAmount: null,
+      paidAt: null,
+      createdAt: "2026-11-14T01:00:00Z",
+      state: "active",
+      projectId: null,
+      orderId: null,
+    },
+  ]);
+  await showing;
+  assert.equal(h.page.data.channelRows.length, 1);
+  assert.match(h.page.data.channelRows[0].detail, /待送出.*实付未提供/);
+  assert.match(h.page.data.channelRows[0].dateLabel, /录入时间.*长期有效/);
+  h.page.channelGift(event("id", order));
+  assert.equal(h.routes[h.routes.length - 1], `/pages/new-book/index?channelGiftId=${order}`);
+  h.page.changeCategory(event("category", "received"));
+  assert.equal(h.page.data.channelRows.length, 0);
+  h.page.changeCategory(event("category", "sent"));
+  assert.equal(h.page.data.channelRows.length, 1);
+  h.storage.delete(`timenook.session.v1:${base}`);
+  await h.page.onShow();
+  assert.equal(h.page.data.channelRows.length, 0);
 });
