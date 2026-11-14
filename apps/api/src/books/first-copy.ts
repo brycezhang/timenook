@@ -218,6 +218,17 @@ export class FirstCopies implements OnModuleDestroy {
         where: { orderId: order.id },
       }),
       production = await tx.firstCopyOrder.findUnique({ where: { projectId } });
+    const channelGift =
+      order.provider === "channel"
+        ? await tx.channelGift.findFirst({
+            where: {
+              orderId: order.id,
+              projectId,
+              buyerId: order.buyerId,
+              state: "active",
+            },
+          })
+        : null;
     const latestAttempt = production
       ? await tx.fulfillmentAttempt.findFirst({
           where: { orderId: production.id },
@@ -287,9 +298,8 @@ export class FirstCopies implements OnModuleDestroy {
     )
       blockers.push("ADDRESS_REQUIRED");
     if (
-      !payment ||
-      payment.amount !== 99900 ||
-      payment.currency !== "CNY" ||
+      (!channelGift &&
+        (!payment || payment.amount !== 99900 || payment.currency !== "CNY")) ||
       order.state !== "paid" ||
       !entitlement ||
       entitlement.orderId !== order.id ||
@@ -353,7 +363,9 @@ export class FirstCopies implements OnModuleDestroy {
       confirmations,
       canConfirmNarrator: activeData && subject.boundUserId === actor.userId,
       payment: {
-        paidAmountFen: payment?.amount ?? 0,
+        paidAmountFen: channelGift
+          ? channelGift.paidAmount
+          : (payment?.amount ?? 0),
         currency: "CNY",
         copies: 1,
         amountDueFen: 0,

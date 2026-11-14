@@ -17,7 +17,7 @@ const search = ref(String(route.query.q ?? "")),
   pending = ref(String(route.query.pending ?? ""));
 let serial = 0,
   abort: AbortController | undefined;
-const money = (n: number) => `¥${(n / 100).toFixed(2)}`;
+const money = (n: number | null) => n === null ? "未提供" : `¥${(n / 100).toFixed(2)}`;
 const showTotal = (total: number) => `共 ${total} 条订单`;
 const columns = [
   { title: "订单号", key: "order", width: 250 },

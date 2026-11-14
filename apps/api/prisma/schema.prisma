@@ -440,7 +440,7 @@ model PaymentOrder {
   requestHash String @map("request_hash") @db.Char(64)
   listAmount Int @default(99900) @map("list_amount")
   isE2e Boolean @default(false) @map("is_e2e")
-  amount Int
+  amount Int?
   currency String
   mode String
   packageVersionId String @map("package_version_id") @db.Uuid
