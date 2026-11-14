@@ -32,7 +32,7 @@ import {
   readyFirstCopyBook,
   readyReservedFirstCopy,
 } from "./first-copy-fixture";
-import { paymentAdmin } from "./payment-admin-fixture";
+import { paymentAdmin, partnerAdmin } from "./payment-admin-fixture";
 import { app, config, state } from "./book-fixture";
 async function operator() {
   return paymentAdmin(config, app, ["fulfillment:write", "audit:read"]);
@@ -547,7 +547,7 @@ test("handoff approval cannot choose a printing provider outside the purchased D
 
 test("operational commands retain authenticated permission CSRF and payload idempotency checks", async () => {
   const p = await attemptFixture(),
-    wrong = await paymentAdmin(config, app, ["care:write"]);
+    wrong = await partnerAdmin(config, app);
   assert.equal((await admin("GET", p.base, wrong)).statusCode, 403);
   assert.equal(
     (

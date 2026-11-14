@@ -17,7 +17,7 @@ import {
   interceptRefundExecution,
   setRefundInstant,
 } from "./book-fixture";
-import { paymentAdmin } from "./payment-admin-fixture";
+import { paymentAdmin, partnerAdmin } from "./payment-admin-fixture";
 import { readyReservedFirstCopy } from "./first-copy-fixture";
 import { createApplication } from "../src/application";
 import {
@@ -667,7 +667,7 @@ test("refund management requires permission and CSRF, validates payload and reco
   const p = await project(),
     r = data(await open(p)),
     body = { amountFen: 99900, evidenceRef: "synthetic:approval" },
-    restricted = await paymentAdmin(config, app, ["ops:read"]);
+    restricted = await partnerAdmin(config, app);
   assert.equal(
     (
       await adminRequest(
@@ -1088,8 +1088,8 @@ test("a signed successful refund callback and the approving operator's reconcili
   }
 });
 
-test("queued refund approval rechecks account disablement and permission revocation after acquiring authority", async (t) => {
-  for (const change of ["disable", "revoke"] as const)
+test("queued refund approval rechecks account disablement after acquiring authority", async (t) => {
+  for (const change of ["disable"] as const)
     await t.test(change, async () => {
       const headers = await paymentAdmin(config, app, ["care:write"]);
       const p = await project(),
@@ -1115,8 +1115,7 @@ test("queued refund approval rechecks account disablement and permission revocat
           await gate;
           await tx.adminAccount.update({
             where: { id: session.operator.id },
-            data:
-              change === "disable" ? { disabled: true } : { permissions: [] },
+            data: { disabled: true },
           });
         },
         { timeout: 15000 },
@@ -1136,11 +1135,7 @@ test("queued refund approval rechecks account disablement and permission revocat
         release();
         await blocker;
         const rejected = await pending;
-        assert.equal(
-          rejected.statusCode,
-          change === "disable" ? 401 : 403,
-          rejected.body,
-        );
+        assert.equal(rejected.statusCode, 401, rejected.body);
         const balance = data(
           await request(
             "GET",

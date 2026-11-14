@@ -188,3 +188,40 @@ export async function authenticateFeishu(
     challenge,
   };
 }
+
+/** Real partner credential/session HTTP path for testing the current restricted role. */
+export async function authenticatePartner(
+  config: ApiConfig,
+  app: Awaited<ReturnType<typeof createApplication>>,
+) {
+  const owner = await authenticateFeishu(config, app);
+  const issued = await app.inject({
+    method: "POST",
+    url: "/v1/admin/partners",
+    headers: {
+      cookie: owner.cookie,
+      origin: config.admin!.origin,
+      "x-csrf-token": owner.csrf,
+    },
+    payload: {},
+  });
+  assert.equal(issued.statusCode, 201);
+  const account = issued.json().data;
+  const initial = await app.inject({ method: "GET", url: "/v1/admin/session" });
+  const result = await app.inject({
+    method: "POST",
+    url: "/v1/admin/partner/login",
+    headers: {
+      cookie: adminCookie(initial),
+      origin: config.admin!.origin,
+      "x-csrf-token": initial.json().data.csrfToken,
+    },
+    payload: { username: account.username, password: account.password },
+  });
+  assert.equal(result.statusCode, 200);
+  return {
+    cookie: adminCookie(result),
+    csrf: result.json().data.csrfToken as string,
+    account: { id: account.id as string, username: account.username as string },
+  };
+}
