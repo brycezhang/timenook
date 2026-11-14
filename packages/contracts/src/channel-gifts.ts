@@ -27,3 +27,21 @@ export interface AdminChannelGiftView extends ChannelGiftView {
   externalOrderNo: string | null;
   associatedAt: string | null;
 }
+export interface ActivateChannelGiftCommand {
+  purchaseKind: "self" | "gift";
+  recipient: { typeCode?: string; relationshipLabel?: string };
+  bookTitle: string;
+}
+export interface ActivatedChannelGift {
+  id: string;
+  projectId: string;
+  orderId: string;
+  entitlementId: string;
+  purchaseKind: "self" | "gift";
+  paidAmount: number | null;
+}
+export interface ChannelGiftReminders {
+  newGiftIds: string[];
+  newCount: number;
+  pendingCount: number;
+}

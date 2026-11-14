@@ -127,8 +127,8 @@ export class WebOrders {
     const order = await this.db.paymentOrder.findFirst({
       where: { id, buyerId: user.id, provider: "alipay", mode: "alipay" },
     });
-    if (!order) throw new NotFoundException();
-    return order;
+    if (!order || order.amount === null) throw new NotFoundException();
+    return { ...order, amount: order.amount };
   }
   private validate(order: PaymentOrder, remote: AlipayOrder, orderNo: string) {
     if (
