@@ -7,7 +7,13 @@ import {
 import { test, expect } from "@playwright/test";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import {
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+  existsSync,
+  readFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { createRequire } from "node:module";
@@ -75,6 +81,7 @@ test.beforeAll(async () => {
     ADMIN_SESSION_KEY: randomBytes(32).toString("base64"),
     ...syntheticFeishuEnv,
     REDIS_KEY_PREFIX: schema,
+    CHANNEL_GIFT_BROWSER_FIXTURE_ROOT: join(privateDir, "privacy"),
   };
   const cert = join(privateDir, "cert.pem"),
     key = join(privateDir, "key.pem");
@@ -151,7 +158,12 @@ test.beforeAll(async () => {
         purpose: "local_preview",
         draftId,
         draftRevision: 1,
-        snapshot: { title: "合成渠道套餐" },
+        snapshot: JSON.parse(
+          readFileSync(
+            resolve("apps/api/test/fixtures/catalog-synthetic.json"),
+            "utf8",
+          ),
+        ),
         publicOffer: { title: "合成渠道套餐", price: { value: 99900 } },
       },
     });
@@ -598,5 +610,166 @@ test("super admin issues credentials; partner records a gift with one business m
     await expect(partner.getByRole("alert")).toContainText("账号已撤销");
   } finally {
     await partnerContext.close();
+  }
+});
+
+test("super admin and original partner correct or void unopened gifts in detail; confirmed books remain locked", async ({
+  page,
+  browser,
+}) => {
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("./partners");
+  await feishuLogin(page, account);
+  await page.getByRole("button", { name: "生成第三方账号" }).click();
+  const username = await page.getByTestId("issued-username").innerText();
+  const password = await page.getByTestId("issued-password").innerText();
+  await page.getByRole("button", { name: "已保存，关闭" }).click();
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const sales = await context.newPage();
+  sales.on("pageerror", (error) => errors.push(error.message));
+  const token = randomBytes(32).toString("base64url");
+  const db = new PrismaClient({ datasourceUrl: databaseUrl });
+  try {
+    await db.user.update({
+      where: { id: buyerId },
+      data: { phoneNumber: "+8613600009876" },
+    });
+    await db.session.create({
+      data: {
+        id: randomUUID(),
+        userId: buyerId,
+        tokenHash: createHash("sha256").update(token).digest("hex"),
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+  } finally {
+    await db.$disconnect();
+  }
+  try {
+    await sales.goto("https://localhost:3443/admin/");
+    await sales.getByLabel("用户名", { exact: true }).fill(username);
+    await sales.getByLabel("密码", { exact: true }).fill(password);
+    await sales.getByRole("button", { name: "账号密码登录" }).click();
+    await expect(sales).toHaveURL(/\/channel-gifts$/);
+    const createGift = async () => {
+      await sales
+        .getByRole("textbox", { name: "购买者手机号", exact: true })
+        .fill("13800009876");
+      const recorded = sales.waitForResponse(
+        (r) =>
+          r.url().endsWith("/api/v1/admin/channel-gifts") &&
+          r.request().method() === "POST",
+      );
+      await sales.getByRole("button", { name: "确认购买并录入" }).click();
+      return (await (await recorded).json()).data;
+    };
+    const gift = await createGift();
+    const row = sales.getByRole("row").filter({ hasText: gift.internalNumber });
+    await row.getByRole("button", { name: "详情", exact: true }).click();
+    const dialog = sales.getByRole("dialog");
+    await dialog
+      .getByRole("button", { name: "更正手机号", exact: true })
+      .click();
+    await dialog.getByRole("button", { name: "确认更正" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("请填写操作原因");
+    await dialog.getByLabel("新购买者手机号").fill("13600009876");
+    await dialog.getByLabel("操作原因").fill("购买者手机号误填");
+    await dialog.getByRole("button", { name: "确认更正" }).click();
+    await expect(dialog.getByText("原因：购买者手机号误填")).toBeVisible();
+    await expect(dialog.getByText("138****9876 → 136****9876")).toBeVisible();
+    const buyerGet = (path) =>
+      page.request.get(`/api/v1${path}`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+    expect(
+      (await (await buyerGet("/channel-gifts")).json()).data.some(
+        (r) => r.id === gift.id,
+      ),
+    ).toBe(true);
+    expect(
+      (await (await buyerGet("/channel-gifts/reminders")).json()).data
+        .newGiftIds,
+    ).toContain(gift.id);
+    await dialog
+      .getByRole("button", { name: "录入错误作废", exact: true })
+      .click();
+    await dialog.getByLabel("操作原因").fill("重复录入同一笔购买");
+    await dialog.getByRole("button", { name: "确认作废" }).click();
+    await expect(dialog.getByText("该记录已作废。")).toBeVisible();
+    await expect(dialog.getByText("原因：重复录入同一笔购买")).toBeVisible();
+    expect(
+      (await (await buyerGet("/channel-gifts")).json()).data.find(
+        (r) => r.id === gift.id,
+      ).state,
+    ).toBe("void");
+    expect(
+      (await (await buyerGet("/channel-gifts/reminders")).json()).data
+        .newGiftIds,
+    ).not.toContain(gift.id);
+    await sales.keyboard.press("Escape");
+    await sales.getByRole("button", { name: "录入新的一笔" }).click();
+    const activatedGift = await createGift();
+    await page.goto("./orders");
+    await page
+      .getByRole("row")
+      .filter({ hasText: activatedGift.internalNumber })
+      .getByRole("button", { name: "详情", exact: true })
+      .click();
+    const ownerDialog = page.getByRole("dialog");
+    await ownerDialog
+      .getByRole("button", { name: "更正手机号", exact: true })
+      .click();
+    await ownerDialog.getByLabel("新购买者手机号").fill("13600009876");
+    await ownerDialog.getByLabel("操作原因").fill("运营核实后更正");
+    await ownerDialog.getByRole("button", { name: "确认更正" }).click();
+    await expect(ownerDialog.getByText("原因：运营核实后更正")).toBeVisible();
+    // Leave the stale correction form open while the buyer confirms, then verify failure reads current detail.
+    await ownerDialog
+      .getByRole("button", { name: "更正手机号", exact: true })
+      .click();
+    await ownerDialog.getByLabel("新购买者手机号").fill("13700009876");
+    await ownerDialog.getByLabel("操作原因").fill("过期页面更正");
+    const activated = await page.request.post(
+      `/api/v1/channel-gifts/${activatedGift.id}/activate`,
+      {
+        headers: { authorization: `Bearer ${token}` },
+        data: {
+          purchaseKind: "self",
+          recipient: { typeCode: "self", relationshipLabel: "自己" },
+          bookTitle: "我的故事",
+        },
+      },
+    );
+    expect(activated.status(), await activated.text()).toBe(201);
+    await ownerDialog.getByRole("button", { name: "确认更正" }).click();
+    await expect(
+      ownerDialog.getByText("已创建故事书，购买者归属已锁定。"),
+    ).toBeVisible();
+    await expect(
+      ownerDialog.getByRole("button", { name: "确认更正" }),
+    ).toHaveCount(0);
+    await expect(
+      ownerDialog.getByRole("button", { name: "录入错误作废" }),
+    ).toHaveCount(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({ path: "/tmp/timenook-cg04-locked-detail.png" });
+    await sales.reload();
+    await sales
+      .getByRole("row")
+      .filter({ hasText: activatedGift.internalNumber })
+      .getByRole("button", { name: "详情", exact: true })
+      .click();
+    await expect(
+      sales.getByRole("dialog").getByText("已创建故事书，购买者归属已锁定。"),
+    ).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
   }
 });

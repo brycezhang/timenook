@@ -8,6 +8,9 @@ import {
   Inject,
   Injectable,
   OnModuleDestroy,
+  NotFoundException,
+  Param,
+  ParseUUIDPipe,
   Post,
   Req,
   ServiceUnavailableException,
@@ -18,6 +21,7 @@ import type { FastifyRequest } from "fastify";
 import {
   ADMIN_PERMISSIONS,
   type AdminChannelGiftView,
+  type AdminChannelGiftDetail,
   type ChannelGiftView,
   type CreateChannelGiftCommand,
 } from "@timenook/contracts";
@@ -25,6 +29,11 @@ import { API_CONFIG, ApiConfig } from "../config";
 import { AdminAccess } from "../admin/admin-access";
 import { readSessionContextIn } from "../identity/identity-access";
 import { mainlandPhone } from "../identity/phone-account";
+
+import { lockChannelGiftIn } from "./record";
+
+const maskedPhone = (phone: string) =>
+  phone.slice(3, 6) + "****" + phone.slice(-4);
 
 function command(value: unknown): CreateChannelGiftCommand {
   if (
@@ -189,6 +198,116 @@ export class ChannelGifts implements OnModuleDestroy {
     });
     return Promise.all(rows.map((row) => this.adminView(tx, row)));
   }
+  async detailIn(
+    tx: Prisma.TransactionClient,
+    id: string,
+    actor: ChannelAdminRequest,
+  ): Promise<AdminChannelGiftDetail> {
+    const row = await tx.channelGift.findUnique({ where: { id } });
+    if (
+      !row ||
+      (actor.adminRole === "partner" && row.operatorId !== actor.adminOperator)
+    )
+      throw new NotFoundException();
+    const operations = await tx.channelGiftOperation.findMany({
+      where: { giftId: id },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    return {
+      ...scopedAdminGift(
+        await this.adminView(tx, row),
+        actor.adminRole === "partner",
+      ),
+      operations: await Promise.all(
+        operations.map(async (operation) => ({
+          ...operation,
+          action: operation.action as "correct" | "void",
+          operatorName: (
+            await tx.adminAccount.findUniqueOrThrow({
+              where: { id: operation.operatorId },
+            })
+          ).username,
+          beforePhone:
+            actor.adminRole === "partner"
+              ? maskedPhone(operation.beforePhone)
+              : operation.beforePhone,
+          afterPhone:
+            actor.adminRole === "partner"
+              ? maskedPhone(operation.afterPhone)
+              : operation.afterPhone,
+          createdAt: operation.createdAt.toISOString(),
+        })),
+      ),
+    };
+  }
+  async changeIn(
+    tx: Prisma.TransactionClient,
+    id: string,
+    actor: ChannelAdminRequest,
+    action: "correct" | "void",
+    input: unknown,
+  ) {
+    if (!input || typeof input !== "object" || Array.isArray(input))
+      throw new BadRequestException();
+    const body = input as Record<string, unknown>;
+    if (
+      Object.keys(body).some(
+        (k) =>
+          !["reason", ...(action === "correct" ? ["buyerPhone"] : [])].includes(
+            k,
+          ),
+      ) ||
+      typeof body.reason !== "string" ||
+      !body.reason.trim() ||
+      body.reason.trim().length > 500 ||
+      /[\u0000-\u001f\u007f]/u.test(body.reason)
+    )
+      throw new BadRequestException();
+    const phone =
+      action === "correct"
+        ? typeof body.buyerPhone === "string"
+          ? mainlandPhone(body.buyerPhone)
+          : null
+        : null;
+    if (action === "correct" && !phone) throw new BadRequestException();
+    // Registration takes phone then gift locks: preserve that order to avoid inversion.
+    if (phone)
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`phone:${phone}`},0))`;
+    const row = await lockChannelGiftIn(tx, id);
+    if (actor.adminRole === "partner" && row.operatorId !== actor.adminOperator)
+      throw new NotFoundException();
+    if (row.projectId || row.state !== "active")
+      throw new ConflictException("This gift can no longer be changed");
+    if (phone === row.buyerPhone)
+      throw new BadRequestException("Use a different buyer phone");
+    const buyer = phone
+      ? await tx.user.findUnique({ where: { phoneNumber: phone } })
+      : null;
+    await tx.channelGift.update({
+      where: { id },
+      data: phone
+        ? {
+            buyerPhone: phone,
+            buyerId: buyer?.id ?? null,
+            associatedAt: buyer ? new Date() : null,
+            reminderHandledBy: null,
+            reminderHandledAt: null,
+          }
+        : { state: "void" },
+    });
+    await tx.channelGiftOperation.create({
+      data: {
+        id: randomUUID(),
+        giftId: id,
+        operatorId: actor.adminOperator,
+        action,
+        reason: body.reason.trim(),
+        beforePhone: row.buyerPhone,
+        afterPhone: phone ?? row.buyerPhone,
+      },
+    });
+    return this.detailIn(tx, id, actor);
+  }
   async mine(authorization?: string) {
     return this.database.$transaction(async (tx) => {
       const user = await readSessionContextIn(tx, authorization);
@@ -258,6 +377,57 @@ export class AdminChannelGiftsController {
           ).map((row) => scopedAdminGift(row, actor.adminRole === "partner"));
         },
         true,
+      ),
+      meta: { requestId: req.id },
+    }));
+  }
+  @Get(":id")
+  @Header("Cache-Control", "no-store")
+  detail(@Req() req: FastifyRequest, @Param("id", ParseUUIDPipe) id: string) {
+    return this.access.run("channel-gifts.detail", req, async () => ({
+      data: await this.access.command(
+        req,
+        ADMIN_PERMISSIONS.channelGiftsRead,
+        (tx) => this.gifts.detailIn(tx, id, req as ChannelAdminRequest),
+        true,
+      ),
+      meta: { requestId: req.id },
+    }));
+  }
+  @Post(":id/correct")
+  @Header("Cache-Control", "no-store")
+  correct(
+    @Req() req: FastifyRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+  ) {
+    return this.change(req, id, "correct", body);
+  }
+  @Post(":id/void")
+  @Header("Cache-Control", "no-store")
+  void(
+    @Req() req: FastifyRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+  ) {
+    return this.change(req, id, "void", body);
+  }
+  private change(
+    req: FastifyRequest,
+    id: string,
+    action: "correct" | "void",
+    body: unknown,
+  ) {
+    Object.assign(req, {
+      adminResourceType: "channel-gift",
+      adminResourceId: id,
+    });
+    return this.access.run(`channel-gifts.${action}`, req, async () => ({
+      data: await this.access.command(
+        req,
+        ADMIN_PERMISSIONS.channelGiftsWrite,
+        (tx) =>
+          this.gifts.changeIn(tx, id, req as ChannelAdminRequest, action, body),
       ),
       meta: { requestId: req.id },
     }));

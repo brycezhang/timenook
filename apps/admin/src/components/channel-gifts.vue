@@ -1,8 +1,18 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount } from "vue";
-import { Alert, Button, Card, Input, Table, Tag } from "antdv-next";
+import {
+  Alert,
+  Button,
+  Card,
+  Input,
+  Table,
+  Tag,
+  Modal,
+  TextArea,
+} from "antdv-next";
 import type {
   AdminChannelGiftView,
+  AdminChannelGiftDetail,
   CreateChannelGiftCommand,
 } from "@timenook/contracts";
 import { adminRequest, errorText, session, sessionEpoch } from "../session";
@@ -19,12 +29,95 @@ const phone = ref(""),
 const submission = ref<{ key: string; body: CreateChannelGiftCommand } | null>(
   null,
 );
+const detail = ref<AdminChannelGiftDetail | null>(null);
+const detailOpen = ref(false),
+  changing = ref(false),
+  changeError = ref("");
+const changeMode = ref<"correct" | "void" | null>(null),
+  nextPhone = ref(""),
+  reason = ref("");
+const canChange = (row: AdminChannelGiftView) =>
+  row.state === "active" && row.usageStatus !== "activated" && !row.projectId;
+async function openDetail(id: string) {
+  const epoch = sessionEpoch;
+  changeError.value = "";
+  changeMode.value = null;
+  try {
+    const next = await adminRequest<AdminChannelGiftDetail>(
+      `/channel-gifts/${id}`,
+    );
+    if (epoch !== sessionEpoch) return;
+    detail.value = next;
+    detailOpen.value = true;
+  } catch (e) {
+    if (epoch === sessionEpoch) error.value = errorText(e);
+  }
+}
+function beginChange(mode: "correct" | "void") {
+  changeMode.value = mode;
+  nextPhone.value = "";
+  reason.value = "";
+  changeError.value = "";
+}
+async function change() {
+  if (changing.value || !detail.value || !changeMode.value) return;
+  if (!reason.value.trim()) {
+    changeError.value = "请填写操作原因。";
+    return;
+  }
+  if (
+    changeMode.value === "correct" &&
+    !/^(?:\+?86)?1[3-9]\d{9}$/.test(nextPhone.value.trim())
+  ) {
+    changeError.value = "请填写有效的新购买者手机号。";
+    return;
+  }
+  changing.value = true;
+  changeError.value = "";
+  const epoch = sessionEpoch,
+    id = detail.value.id;
+  try {
+    const next = await adminRequest<AdminChannelGiftDetail>(
+      `/channel-gifts/${id}/${changeMode.value}`,
+      {
+        method: "POST",
+        headers: { "x-csrf-token": session.value!.csrfToken },
+        body: JSON.stringify({
+          reason: reason.value.trim(),
+          ...(changeMode.value === "correct"
+            ? { buyerPhone: nextPhone.value.trim() }
+            : {}),
+        }),
+      },
+    );
+    if (epoch !== sessionEpoch) return;
+    detail.value = next;
+    changeMode.value = null;
+  } catch (e) {
+    if (epoch !== sessionEpoch) return;
+    changeError.value = `${errorText(e)} 已重新读取当前记录。`;
+    try {
+      const current = await adminRequest<AdminChannelGiftDetail>(
+        `/channel-gifts/${id}`,
+      );
+      if (epoch !== sessionEpoch) return;
+      detail.value = current;
+    } catch {
+      detailOpen.value = false;
+    }
+    if (detail.value && !canChange(detail.value)) changeMode.value = null;
+  } finally {
+    changing.value = false;
+    if (epoch === sessionEpoch) await load();
+  }
+}
 let serial = 0;
 const money = (n: number | null) =>
   n === null ? "未提供" : `¥${(n / 100).toFixed(2)}`;
 const storageKey = () =>
   `timenook.channel-gift.submit:${session.value?.operator?.id ?? ""}`;
 const columns = [
+  { title: "操作", key: "actions", width: 100 },
   { title: "内部编号 / 购买者", key: "purchase", width: 280 },
   { title: "套餐与实付", key: "amount", width: 200 },
   { title: "来源", key: "source", width: 240 },
@@ -116,6 +209,8 @@ watch(
   () => {
     serial++;
     rows.value = [];
+    detailOpen.value = false;
+    detail.value = null;
     const saved = sessionStorage.getItem(storageKey());
     newPurchase();
     if (saved) {
@@ -212,7 +307,10 @@ onBeforeUnmount(() => {
       :locale="{ emptyText: '暂无渠道购买记录' }"
     >
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'purchase'"
+        <template v-if="column.key === 'actions'"
+          ><Button @click="openDetail(record.id)">详情</Button></template
+        >
+        <template v-else-if="column.key === 'purchase'"
           ><div>{{ record.internalNumber }}</div>
           <div>
             {{ record.buyerPhone || record.maskedBuyerPhone }}
@@ -252,8 +350,104 @@ onBeforeUnmount(() => {
       </template>
     </Table>
   </Card>
+  <Modal
+    v-model:open="detailOpen"
+    title="渠道订单详情"
+    :footer="null"
+    :mask-closable="!changing"
+    :closable="!changing"
+  >
+    <div v-if="detail" class="channel-detail">
+      <div>内部编号 {{ detail.internalNumber }}</div>
+      <div>购买者 {{ detail.buyerPhone || detail.maskedBuyerPhone }}</div>
+      <div>录入账号 {{ detail.operatorName }}</div>
+      <Tag>{{
+        detail.state === "void"
+          ? "已作废"
+          : canChange(detail)
+            ? "待送出"
+            : "已开通"
+      }}</Tag>
+      <div v-if="!canChange(detail)">
+        {{
+          detail.state === "void"
+            ? "该记录已作废。"
+            : "已创建故事书，购买者归属已锁定。"
+        }}
+      </div>
+      <div v-if="canChange(detail) && !changeMode" class="channel-actions">
+        <Button @click="beginChange('correct')">更正手机号</Button>
+        <Button danger @click="beginChange('void')">录入错误作废</Button>
+      </div>
+      <form
+        v-if="changeMode && canChange(detail)"
+        class="channel-form"
+        @submit.prevent="change"
+      >
+        <label v-if="changeMode === 'correct'"
+          >新购买者手机号<Input
+            v-model:value="nextPhone"
+            aria-label="新购买者手机号"
+            :maxlength="14"
+            :disabled="changing"
+        /></label>
+        <label
+          >操作原因<TextArea
+            v-model:value="reason"
+            aria-label="操作原因"
+            :maxlength="500"
+            :disabled="changing"
+        /></label>
+        <div class="channel-actions">
+          <Button
+            html-type="submit"
+            type="primary"
+            :danger="changeMode === 'void'"
+            :loading="changing"
+            >{{ changeMode === "correct" ? "确认更正" : "确认作废" }}</Button
+          ><Button :disabled="changing" @click="changeMode = null">取消</Button>
+        </div>
+      </form>
+      <Alert
+        v-if="changeError"
+        type="error"
+        :message="changeError"
+        role="alert"
+      />
+      <h3>操作记录</h3>
+      <div v-if="!detail.operations.length">暂无更正或作废记录</div>
+      <div
+        v-for="operation in detail.operations"
+        :key="operation.id"
+        class="channel-operation"
+      >
+        <div>
+          {{ operation.action === "correct" ? "更正手机号" : "录入错误作废" }} ·
+          {{ operation.operatorName }} ·
+          {{ formatAdminTime(operation.createdAt) }}
+        </div>
+        <div v-if="operation.action === 'correct'">
+          {{ operation.beforePhone }} → {{ operation.afterPhone }}
+        </div>
+        <div>原因：{{ operation.reason }}</div>
+      </div>
+    </div>
+  </Modal>
 </template>
 <style scoped>
+.channel-detail {
+  display: grid;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+.channel-actions {
+  display: flex;
+  gap: 8px;
+}
+.channel-operation {
+  border-top: 1px solid #eee;
+  padding-top: 12px;
+}
 .channel-card {
   margin-bottom: 16px;
 }
