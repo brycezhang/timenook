@@ -3,6 +3,7 @@ import {
   createFeishuAccount,
   beginFeishu,
   authenticateFeishu,
+  authenticatePartner,
 } from "./admin-feishu-fixture";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -86,7 +87,7 @@ const begin = (_account: ReturnType<typeof createAccount>, target = app) =>
 const authenticate = (account = createAccount(), target = app) =>
   authenticateFeishu(config, target, account);
 
-const writeHeaders = (auth: Awaited<ReturnType<typeof authenticate>>) => ({
+const writeHeaders = (auth: { cookie: string; csrf: string }) => ({
   cookie: auth.cookie,
   origin,
   "x-csrf-token": auth.csrf,
@@ -477,11 +478,11 @@ test("invalid catalog inputs are bounded, reject blank labels and malformed IDs,
   }
 });
 
-test("catalog read, write and preview permissions stay separate and every write requires full session, Origin and session CSRF", async () => {
+test("partner role cannot use catalog; super-admin writes require session, Origin and CSRF", async () => {
   const full = await authenticate();
-  const readonly = await authenticate(createAccount(["catalog:read"]));
-  const ops = await authenticate(createAccount(["ops:read"]));
-  const writer = await authenticate(createAccount(["catalog:write"]));
+  const readonly = await authenticatePartner(config, app);
+  const ops = await authenticatePartner(config, app);
+  const writer = await authenticatePartner(config, app);
   const pending = await begin(createAccount());
   const draft = (
     await app.inject({
@@ -574,7 +575,7 @@ test("catalog read, write and preview permissions stay separate and every write 
           headers: writeHeaders(readonly),
         })
       ).statusCode,
-      200,
+      403,
     );
   }
 });

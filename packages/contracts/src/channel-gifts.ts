@@ -45,3 +45,24 @@ export interface ChannelGiftReminders {
   newCount: number;
   pendingCount: number;
 }
+
+export interface CorrectChannelGiftCommand {
+  buyerPhone: string;
+  reason: string;
+}
+export interface VoidChannelGiftCommand {
+  reason: string;
+}
+export interface ChannelGiftOperationView {
+  id: string;
+  action: "correct" | "void";
+  reason: string;
+  operatorId: string;
+  operatorName: string;
+  beforePhone: string;
+  afterPhone: string;
+  createdAt: string;
+}
+export interface AdminChannelGiftDetail extends AdminChannelGiftView {
+  operations: ChannelGiftOperationView[];
+}

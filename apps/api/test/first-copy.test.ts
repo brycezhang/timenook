@@ -13,7 +13,7 @@ import {
   config,
 } from "./book-fixture";
 import { readyFirstCopyBook } from "./first-copy-fixture";
-import { paymentAdmin } from "./payment-admin-fixture";
+import { paymentAdmin, partnerAdmin } from "./payment-admin-fixture";
 before(startBookFixture);
 after(stopBookFixture);
 test("first-copy context uses the paid project and requires current private-content access", async () => {
@@ -219,7 +219,7 @@ test("admin approval rechecks the reserved PDF and permissions even when a story
   const reserved = data(
     await request("POST", p.base + "/submit", p.buyer.token, p.body),
   ).production;
-  const headers = await paymentAdmin(config, app, ["care:write"]);
+  const headers = await partnerAdmin(config, app);
   const url = `/v1/admin/first-copy/${reserved.id}/approve`;
   assert.equal(
     (

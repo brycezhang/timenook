@@ -122,7 +122,7 @@ function cliInput(input: unknown, command = "create", mode = 0o600) {
     ),
   };
 }
-test("anonymous/product identities cannot access administration; password and MFA endpoints are removed", async () => {
+test("anonymous/product identities cannot access administration; legacy login and MFA endpoints are removed", async () => {
   assert.equal((await runtime()).statusCode, 401);
   assert.equal(
     (

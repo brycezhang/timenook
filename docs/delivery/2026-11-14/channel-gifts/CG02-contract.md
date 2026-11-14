@@ -6,4 +6,4 @@ POST /v1/admin/partners returns id, username, disabled and a generated password 
 
 ChannelGift controller uses channelGiftsRead/Write. Partner GET filters by its authenticated operatorId. `scopedAdminGift(row, partner)` redacts buyerPhone, buyerId, associatedAt, projectId and orderId, adding usageStatus (`pending`, `activated`, `void`). CG04 should apply the same function to correction/void results and use current request role/operator to check ownership while holding the record lock. The shared admin component reads usageStatus for activated rows; partner entry is /admin/channel-gifts. Super-admin account management is /admin/partners.
 
-Local real PostgreSQL/Redis HTTP role, session, CSRF, owner-list, buyer visibility and revocation checks pass. Browser acceptance is in progress; final evidence belongs to CG02-delivery.md.
+Local real PostgreSQL/Redis HTTP role, session, CSRF, owner-list, buyer visibility and revocation checks pass. HTTPS browser acceptance passed; final evidence and external acceptance boundaries are in CG02-delivery.md.
