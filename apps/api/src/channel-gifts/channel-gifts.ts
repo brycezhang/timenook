@@ -204,6 +204,37 @@ export class ChannelGifts implements OnModuleDestroy {
     await this.database.$disconnect();
   }
 }
+type ChannelAdminRequest = FastifyRequest & {
+  adminOperator: string;
+  adminRole: "super_admin" | "partner";
+};
+export function scopedAdminGift(
+  row: AdminChannelGiftView,
+  partner: boolean,
+): AdminChannelGiftView {
+  return partner
+    ? {
+        ...row,
+        buyerPhone: null,
+        buyerId: null,
+        associatedAt: null,
+        projectId: null,
+        orderId: null,
+        usageStatus: row.projectId
+          ? "activated"
+          : row.state === "void"
+            ? "void"
+            : "pending",
+      }
+    : {
+        ...row,
+        usageStatus: row.projectId
+          ? "activated"
+          : row.state === "void"
+            ? "void"
+            : "pending",
+      };
+}
 @Controller("v1/admin/channel-gifts")
 export class AdminChannelGiftsController {
   constructor(
@@ -216,8 +247,16 @@ export class AdminChannelGiftsController {
     return this.access.run("channel-gifts.list", req, async () => ({
       data: await this.access.command(
         req,
-        ADMIN_PERMISSIONS.readOrders,
-        (tx) => this.gifts.listIn(tx),
+        ADMIN_PERMISSIONS.channelGiftsRead,
+        async (tx) => {
+          const actor = req as ChannelAdminRequest;
+          return (
+            await this.gifts.listIn(
+              tx,
+              actor.adminRole === "partner" ? actor.adminOperator : undefined,
+            )
+          ).map((row) => scopedAdminGift(row, actor.adminRole === "partner"));
+        },
         true,
       ),
       meta: { requestId: req.id },
@@ -229,7 +268,7 @@ export class AdminChannelGiftsController {
     return this.access.run("channel-gifts.create", req, async () => ({
       data: await this.access.command(
         req,
-        ADMIN_PERMISSIONS.writeOrders,
+        ADMIN_PERMISSIONS.channelGiftsWrite,
         async (tx) => {
           const row = await this.gifts.createIn(
             tx,
@@ -241,7 +280,10 @@ export class AdminChannelGiftsController {
             adminResourceType: "channel-gift",
             adminResourceId: row.id,
           });
-          return row;
+          return scopedAdminGift(
+            row,
+            (req as ChannelAdminRequest).adminRole === "partner",
+          );
         },
       ),
       meta: { requestId: req.id },

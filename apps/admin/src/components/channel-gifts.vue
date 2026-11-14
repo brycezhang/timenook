@@ -231,7 +231,7 @@ onBeforeUnmount(() => {
           ><Tag>{{
             record.state === "void"
               ? "已作废"
-              : record.projectId
+              : record.usageStatus === "activated" || record.projectId
                 ? "已开通"
                 : record.buyerId
                   ? "待送出"

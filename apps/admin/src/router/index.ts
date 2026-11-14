@@ -9,12 +9,24 @@ export function safeReturn(value: unknown): string {
     return "/orders";
   const path = value.split("?")[0];
   return new RegExp(
-    `^/(orders|users|production)(/${uuid})?$|^/users/projects/${uuid}$`,
+    `^/(orders|users|production|channel-gifts|partners)(/${uuid})?$|^/users/projects/${uuid}$`,
   ).test(path)
     ? value
     : "/orders";
 }
 export const businessMenus = [
+  {
+    name: "录入订单",
+    path: "/channel-gifts",
+    permission: ADMIN_PERMISSIONS.channelGiftsRead,
+    icon: "lucide:clipboard-plus",
+  },
+  {
+    name: "第三方账号",
+    path: "/partners",
+    permission: ADMIN_PERMISSIONS.managePartners,
+    icon: "lucide:user-cog",
+  },
   {
     name: "订单管理",
     path: "/orders",
@@ -56,6 +68,24 @@ export const router = createRouter({
       component: () => import("../layouts/basic.vue"),
       children: [
         { path: "", name: "Home", redirect: "/orders" },
+        {
+          path: "channel-gifts",
+          name: "ChannelGifts",
+          component: () => import("../views/channel-gifts.vue"),
+          meta: {
+            title: "录入订单",
+            permission: ADMIN_PERMISSIONS.channelGiftsRead,
+          },
+        },
+        {
+          path: "partners",
+          name: "Partners",
+          component: () => import("../views/partners.vue"),
+          meta: {
+            title: "第三方账号",
+            permission: ADMIN_PERMISSIONS.managePartners,
+          },
+        },
         {
           path: "orders",
           component: RouterView,

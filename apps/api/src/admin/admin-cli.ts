@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { isAdminPermission } from "@timenook/contracts";
+import { ADMIN_PERMISSIONS, isAdminPermission } from "@timenook/contracts";
 import type {
   AdminProvisionCommand,
   AdminProvisionResult,
@@ -103,7 +103,7 @@ async function main() {
             feishuAppId: commandInput.feishuAppId,
             feishuOpenId: commandInput.feishuOpenId,
             tenantKey: commandInput.tenantKey,
-            permissions: [...new Set(commandInput.permissions)],
+            permissions: Object.values(ADMIN_PERMISSIONS),
           },
         });
       await tx.adminAudit.create({

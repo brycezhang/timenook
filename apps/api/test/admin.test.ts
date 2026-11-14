@@ -366,7 +366,7 @@ test("authorization/logout require matching Origin and CSRF; all other routes re
       403,
     );
 });
-test("permission removal, disable, binding and current-config changes revoke existing authority", async () => {
+test("fixed super-admin role survives legacy permission edits; disable and identity changes revoke authority", async () => {
   for (const kind of [
     "permission",
     "disable",
@@ -397,7 +397,7 @@ test("permission removal, disable, binding and current-config changes revoke exi
     try {
       assert.equal(
         (await runtime(auth.cookie)).statusCode,
-        kind === "permission" ? 403 : 401,
+        kind === "permission" ? 200 : 401,
         kind,
       );
     } finally {

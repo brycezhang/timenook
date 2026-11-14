@@ -393,14 +393,14 @@ test("account permission revocation clears detail and denies user queries", asyn
   const db = new PrismaClient({ datasourceUrl: databaseUrl });
   await db.adminAccount.updateMany({
     where: { username: account.username },
-    data: { permissions: ["orders:read"] },
+    data: { disabled: true },
   });
   await db.$disconnect();
   await page.getByRole("button", { name: "刷新", exact: true }).click();
-  await expect(page).toHaveURL(/\/403$/);
+  await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
   await expect(page.getByText("本次失权测试备注", { exact: true })).toHaveCount(
     0,
   );
   const result = await page.request.get("/api/v1/admin/users");
-  expect(result.status()).toBe(403);
+  expect(result.status()).toBe(401);
 });
