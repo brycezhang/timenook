@@ -151,8 +151,8 @@ test.beforeAll(async () => {
         purpose: "local_preview",
         draftId,
         draftRevision: 1,
-        snapshot: {},
-        publicOffer: {},
+        snapshot: { title: "合成渠道套餐" },
+        publicOffer: { title: "合成渠道套餐", price: { value: 99900 } },
       },
     });
     await db.paymentOrder.createMany({
@@ -400,4 +400,88 @@ test("read-only admin cannot write notes or open protected user routes and revok
   await expect(
     page.getByText("合成浏览器沟通备注", { exact: true }),
   ).toHaveCount(0);
+});
+
+test("channel phone-only entry preserves a lost-response submission across reload and explicitly starts the next purchase", async ({
+  page,
+}) => {
+  await page.goto("./orders");
+  await feishuLogin(page, account);
+  await expect(
+    page.getByRole("heading", { name: "订单管理", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "购买者手机号", exact: true })
+    .fill("13800001234");
+  let submitted;
+  await page.route("**/api/v1/admin/channel-gifts", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    expect(response.status()).toBe(201);
+    submitted = (await response.json()).data;
+    await route.abort("failed");
+  });
+  await page
+    .getByRole("button", { name: "确认购买并录入", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("重试本次录入");
+  expect(submitted.paidAmount).toBeNull();
+  expect(submitted.paidAt).toBeNull();
+  await page.unroute("**/api/v1/admin/channel-gifts");
+  await page.reload();
+  await expect(
+    page.getByRole("textbox", { name: "购买者手机号", exact: true }),
+  ).toHaveValue("13800001234");
+  await page.getByRole("button", { name: "重试本次录入", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(
+    submitted.internalNumber,
+  );
+  await expect(
+    page.getByText(submitted.internalNumber, { exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByText("实付金额 未提供", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("付款时间 未提供", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("套餐标价 ¥999.00", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "录入新的一笔", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "购买者手机号", exact: true })
+    .fill("13800001234");
+  await page.locator("summary").click();
+  await page
+    .getByRole("textbox", { name: "原订单号", exact: true })
+    .fill("小店订单-002");
+  await page
+    .getByRole("textbox", { name: "实付金额（元）", exact: true })
+    .fill("888.88");
+  await page.getByLabel("付款时间", { exact: true }).fill("2026-11-14T09:30");
+  await page
+    .getByRole("button", { name: "确认购买并录入", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("录入成功");
+  await expect(
+    page.getByText("实付金额 ¥888.88", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("原订单号 小店订单-002", { exact: true }),
+  ).toBeVisible();
+  const data = await page.evaluate(
+    async () =>
+      (await (await fetch("/api/v1/admin/channel-gifts")).json()).data,
+  );
+  expect(
+    data.filter((row) => row.buyerPhone === "+8613800001234"),
+  ).toHaveLength(2);
+  expect(data.every((row) => row.projectId === null)).toBe(true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
 });
