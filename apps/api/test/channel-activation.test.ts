@@ -1,3 +1,4 @@
+import { paymentAdmin } from "./payment-admin-fixture";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -8,6 +9,8 @@ import {
   request,
   data,
   db,
+  config,
+  app,
 } from "./book-fixture";
 import { verifiedPhone } from "./wechat-profile-fixture";
 before(startBookFixture);
@@ -113,6 +116,14 @@ test("new gifts merge, handled reminders persist, gift issuance stops pending co
     }),
   );
   assert.equal((await reminders()).newCount, 0);
+  const restored = await login(buyer.who);
+  assert.equal(
+    data(
+      await request("GET", "/v1/channel-gifts/reminders", restored.token),
+      200,
+    ).newCount,
+    0,
+  );
   assert.equal((await reminders()).pendingCount, 2);
   const command = {
     purchaseKind: "gift",
@@ -142,6 +153,29 @@ test("new gifts merge, handled reminders persist, gift issuance stops pending co
   const order = data(
     await request("GET", `/v1/orders/${result.orderId}`, buyer.token),
     200,
+  );
+  const admin = await paymentAdmin(config, app, ["orders:read"]);
+  const detail = data(
+    await app.inject({
+      method: "GET",
+      url: `/v1/admin/orders/${result.orderId}`,
+      headers: admin,
+    }),
+    200,
+  );
+  assert.equal(detail.paidAmount, null);
+  assert.equal(detail.payableAmount, null);
+  assert.equal(detail.payment, null);
+  assert.equal(
+    (
+      await request(
+        "POST",
+        `/v1/orders/${result.orderId}/payment`,
+        buyer.token,
+        {},
+      )
+    ).statusCode,
+    404,
   );
   assert.equal(order.provider, "channel");
   assert.equal(order.amount, null);

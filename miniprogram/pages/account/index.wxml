@@ -6,7 +6,7 @@
   </view>
   <button wx:if="{{!loggedIn}}" class="tn-button account-login" bindtap="login" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/phone-white.svg"/>微信手机号登录</button>
  </view>
- <button wx:if="{{loggedIn}}" class="tn-row" bindtap="projects"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/modern-book.svg"/></view><text class="tn-grow">我的礼物</text><image class="account-arrow" src="/assets/icons/modern-chevron-right.svg"/></button>
+ <button wx:if="{{loggedIn}}" class="tn-row" bindtap="projects"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/modern-book.svg"/></view><text class="tn-grow">我的礼物</text><text wx:if="{{pendingGifts > 0}}" class="tn-muted">{{pendingGifts}} 份待送出</text><image class="account-arrow" src="/assets/icons/modern-chevron-right.svg"/></button>
  <button class="tn-row" bindtap="purchase"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/modern-gift.svg"/></view><text class="tn-grow">送出一份礼物</text><image class="account-arrow" src="/assets/icons/modern-chevron-right.svg"/></button>
  <button class="tn-row terms-trigger" bindtap="terms"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/list.svg"/></view><text class="tn-grow">使用条款与隐私说明</text><image class="account-arrow" src="/assets/icons/modern-chevron-right.svg"/></button>
  <view wx:if="{{status && !editing}}" class="tn-error">{{status}}</view><button wx:if="{{loggedIn}}" class="tn-link logout-trigger" bindtap="logout" loading="{{busy}}" disabled="{{busy}}">退出登录</button>

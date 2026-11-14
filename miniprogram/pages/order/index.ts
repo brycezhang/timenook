@@ -9,6 +9,8 @@ Page({
     activeOrder: null as PaymentOrderView | null,
     bookTitle: "",
     packagePrice: "",
+    paidAmountLabel: "",
+    channelDate: "",
     title: "确认付款结果",
     unknown: false,
     paymentError: "",
@@ -81,6 +83,13 @@ Page({
       activeOrder: order,
       bookTitle: order.bookTitle,
       packagePrice: (order.listAmount / 100).toFixed(2),
+      channelDate: order.channelPurchase
+        ? `${order.channelPurchase.paidAt ? "购买时间" : "录入时间"} ${(order.channelPurchase.paidAt ?? order.channelPurchase.createdAt).slice(0, 10)}`
+        : "",
+      paidAmountLabel:
+        order.amount === null
+          ? "未提供"
+          : `¥${(order.amount / 100).toFixed(2)}`,
       unknown: order.paymentStatus === "unknown",
       title:
         order.state === "paid"

@@ -521,6 +521,19 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
         (await this.terms.read(project.id)).retention?.activeData?.state ===
           "expired"
       : false;
+    const channelPurchase =
+      order.provider === "channel"
+        ? await this.database.channelGift.findUnique({
+            where: { orderId: order.id },
+            select: {
+              internalNumber: true,
+              externalOrderNo: true,
+              paidAt: true,
+              paidAmount: true,
+              createdAt: true,
+            },
+          })
+        : null;
     const template = order.template as {
       id: string;
       version: number;
@@ -536,6 +549,7 @@ export class Orders implements OnModuleDestroy, OnModuleInit {
       mode: order.mode,
       provider: order.provider,
       channel: order.channel,
+      channelPurchase,
       state: order.state,
       paymentStatus: order.state,
       purchaseKind: order.purchaseKind,

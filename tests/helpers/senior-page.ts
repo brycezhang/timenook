@@ -104,7 +104,21 @@ function harness(name = "book") {
       setStorageSync: (key: string, value: any) =>
         storage.set(key, structuredClone(value)),
       removeStorageSync: (key: string) => storage.delete(key),
-      request: (r: any) => requests.push(r),
+      request: (r: any) => {
+        // These page fixtures have no channel purchases; channel reminder behavior
+        // is exercised at the same HTTP/page boundary in channel-gifts-page.test.
+        if (r.url.endsWith("/channel-gifts/reminders")) {
+          r.success({
+            statusCode: 200,
+            data: {
+              data: { newGiftIds: [], newCount: 0, pendingCount: 0 },
+              meta: { requestId: "synthetic" },
+            },
+          });
+          return;
+        }
+        requests.push(r);
+      },
       downloadFile: (d: any) => downloads.push(d),
       openDocument: (o: any) => {
         opened.push(o);

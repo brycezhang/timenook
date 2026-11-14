@@ -1,3 +1,4 @@
+import { checkChannelReminders } from "../../services/channel-activation";
 import { NATIVE_TABS } from "../../config";
 import { ApiFailure, sessionClient } from "../../services/session";
 import {
@@ -7,6 +8,7 @@ import {
 } from "../../services/navigation";
 Page({
   data: {
+    pendingGifts: 0,
     nativeTabs: NATIVE_TABS,
     loggedIn: false,
     busy: false,
@@ -19,11 +21,14 @@ Page({
     loginVisible: false,
   },
   generation: 0,
+  reminderOwner: "",
   loginDestination: "account",
   async onShow() {
     if (this.data.busy) return;
     const n = ++this.generation;
     const owner = sessionClient.context();
+    if (owner !== this.reminderOwner) this.setData({ pendingGifts: 0 });
+    this.reminderOwner = owner;
     this.setData({
       loggedIn: !!owner,
       nickname: sessionClient.nickname(),
@@ -38,6 +43,7 @@ Page({
           maskedPhone: user?.maskedPhone ?? "",
           status: "",
         });
+      if (user && n === this.generation) this.refreshGiftReminders(n);
     } catch (e) {
       if (n !== this.generation) return;
       if (owner !== sessionClient.context()) {
@@ -48,6 +54,17 @@ Page({
         status: e instanceof Error ? e.message : "暂时无法刷新账号信息",
       });
     }
+  },
+  refreshGiftReminders(n?: number) {
+    const generation = n ?? this.generation;
+    void checkChannelReminders(
+      () =>
+        generation === this.generation &&
+        !this.data.busy &&
+        !this.data.loginVisible &&
+        !this.data.nicknameSheetMounted,
+      (count) => this.setData({ pendingGifts: count }),
+    ).catch(() => {});
   },
   onHide() {
     if (!this.data.busy) ++this.generation;
@@ -116,6 +133,7 @@ Page({
     this.setData({
       busy: true,
       loggedIn: false,
+      pendingGifts: 0,
       nickname: "",
       maskedPhone: "",
       editing: false,
@@ -149,6 +167,7 @@ Page({
       status: "",
     });
     if (destination === "new-book") go("new-book");
+    else this.refreshGiftReminders();
   },
   closeLogin() {
     this.loginDestination = "account";
