@@ -141,6 +141,9 @@ test.beforeAll(async () => {
       data: userIds.map((id, i) => ({
         id,
         createdAt: new Date(1700000000000 + i * 1000),
+        ...(i === 0
+          ? { nickname: "合成用户昵称", phoneNumber: "+8613800001234" }
+          : {}),
       })),
     });
     const { ProjectPlans } = apiRequire("./dist/projects/project-plans.js");
@@ -302,6 +305,9 @@ test("HTTPS operator discovers pending orderless narrators, opens linked account
   await expect(
     page.getByText("共 123 条用户或讲述者", { exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByText("未绑定手机号", { exact: true }).first(),
+  ).toBeVisible();
   await page
     .getByRole("textbox", { name: "搜索用户" })
     .fill("无账号浏览器讲述者");
@@ -309,7 +315,14 @@ test("HTTPS operator discovers pending orderless narrators, opens linked account
   await expect(
     page.getByText("共 2 条用户或讲述者", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: userIds[0], exact: true }).click();
+  const accountRow = page.getByRole("row").filter({ hasText: userIds[0] });
+  await expect(
+    accountRow.getByText("+8613800001234", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".ant-table-tbody")).not.toContainText(">");
+  await accountRow
+    .getByRole("button", { name: "合成用户昵称", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "用户详情", exact: true }),
   ).toBeVisible();

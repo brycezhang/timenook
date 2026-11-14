@@ -2,6 +2,7 @@ import { Body, Param, ParseUUIDPipe } from "@nestjs/common";
 import { AdminPartnerLoginDto } from "./admin-contract";
 import {
   Controller,
+  Delete,
   Get,
   Header,
   HttpException,
@@ -122,6 +123,38 @@ export class AdminController {
   ) {
     return this.response("admin.partners.revoke", req, () =>
       this.access.revokePartner(req, id),
+    );
+  }
+  @Post("partners/:id/password")
+  @HttpCode(200)
+  @Header("Cache-Control", "no-store")
+  partnerPassword(
+    @Req() req: FastifyRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.response("admin.partners.password", req, () =>
+      this.access.partnerPassword(req, id),
+    );
+  }
+  @Post("partners/:id/reset-password")
+  @HttpCode(200)
+  @Header("Cache-Control", "no-store")
+  resetPartnerPassword(
+    @Req() req: FastifyRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.response("admin.partners.reset-password", req, () =>
+      this.access.resetPartnerPassword(req, id),
+    );
+  }
+  @Delete("partners/:id")
+  @Header("Cache-Control", "no-store")
+  deletePartner(
+    @Req() req: FastifyRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.response("admin.partners.delete", req, () =>
+      this.access.deletePartner(req, id),
     );
   }
   @Get("feishu/callback")

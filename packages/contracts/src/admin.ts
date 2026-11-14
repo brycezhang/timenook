@@ -48,6 +48,7 @@ export interface AdminPartner {
   id: string;
   username: string;
   disabled: boolean;
+  passwordAvailable: boolean;
 }
 export interface AdminPartnerCredentials extends AdminPartner {
   password: string;
@@ -146,6 +147,7 @@ export interface AdminUserSummary {
   id: string;
   kind: "account" | "narrator";
   name: string | null;
+  phoneNumber: string | null;
   projectId: string | null;
   createdAt: string;
   pending: boolean;

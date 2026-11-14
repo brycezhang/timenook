@@ -67,6 +67,9 @@ before(async () => {
     data: userIds.map((id, i) => ({
       id,
       createdAt: new Date(1700000000000 + i * 1000),
+      ...(i === 0
+        ? { nickname: "合成用户昵称", phoneNumber: "+8613800001234" }
+        : {}),
     })),
   });
   const plans = new ProjectPlans(config.databaseUrl);
@@ -126,18 +129,14 @@ test("operator finds historical accounts and no-account narrators with pending o
     await get("/v1/admin/users?q=无账号合成讲述者&pending=true")
   ).json().data;
   assert.equal(found.total, 2);
-  assert.ok(
-    found.items.some(
-      (r: { kind: string; id: string }) =>
-        r.kind === "account" && r.id === userIds[0],
-    ),
-  );
-  assert.ok(
-    found.items.some(
-      (r: { kind: string; id: string }) =>
-        r.kind === "narrator" && r.id === subjectId,
-    ),
-  );
+  const account = found.items.find((r: { id: string }) => r.id === userIds[0]);
+  assert.equal(account.kind, "account");
+  assert.equal(account.name, "合成用户昵称");
+  assert.equal(account.phoneNumber, "+8613800001234");
+  const narrator = found.items.find((r: { id: string }) => r.id === subjectId);
+  assert.equal(narrator.kind, "narrator");
+  assert.equal(narrator.name, "无账号合成讲述者");
+  assert.equal(narrator.phoneNumber, null);
   const user = await get(`/v1/admin/users/${userIds[0]}`);
   assert.equal(user.statusCode, 200, user.body);
   assert.equal(user.json().data.projects[0].id, projectId);

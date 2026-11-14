@@ -100,7 +100,7 @@ async function partnerLogin(username: string, password: string) {
     csrf: response.json().data?.csrfToken,
   };
 }
-test("super admin generates one-time partner credentials; password session is restricted and revocation is immediate", async () => {
+test("super admin can reveal partner credentials; password session is restricted and revocation is immediate", async () => {
   const owner = await authenticateFeishu(config, app);
   const created = await app.inject({
     method: "POST",
@@ -145,6 +145,25 @@ test("super admin generates one-time partner credentials; password session is re
   assert.equal(listed.statusCode, 200);
   assert.ok(!listed.body.includes(account.password));
   assert.ok(!listed.body.includes("passwordHash"));
+  assert.ok(!listed.body.includes("passwordCiphertext"));
+  assert.equal(
+    listed.json().data.find((row: { id: string }) => row.id === account.id)
+      .passwordAvailable,
+    true,
+  );
+  const reveal = (actor: typeof partner) =>
+    app.inject({
+      method: "POST",
+      url: `/v1/admin/partners/${account.id}/password`,
+      headers: headers(actor),
+      payload: {},
+    });
+  const revealed = await reveal(owner);
+  assert.equal(revealed.statusCode, 200);
+  assert.equal(revealed.headers["cache-control"], "no-store");
+  assert.equal(revealed.json().data.password, account.password);
+  assert.equal((await reveal({ ...owner, csrf: "wrong" })).statusCode, 403);
+  assert.equal((await reveal(partner)).statusCode, 403);
   const revoked = await app.inject({
     method: "POST",
     url: `/v1/admin/partners/${account.id}/revoke`,
@@ -152,6 +171,7 @@ test("super admin generates one-time partner credentials; password session is re
     payload: {},
   });
   assert.equal(revoked.statusCode, 200);
+  assert.equal((await reveal(owner)).statusCode, 404);
   assert.equal(
     (
       await app.inject({
@@ -169,7 +189,7 @@ test("super admin generates one-time partner credentials; password session is re
   );
 });
 
-test("partner records are owner-scoped and redacted, remain visible to buyer after revocation, and writes require CSRF", async () => {
+test("partner records are owner-scoped and redacted, remain visible after account deletion, and writes require CSRF", async () => {
   const db = new PrismaClient({ datasourceUrl: config.databaseUrl });
   try {
     const draftId = randomUUID();
@@ -291,12 +311,24 @@ test("partner records are owner-scoped and redacted, remain visible to buyer aft
   const before = await readBuyer();
   assert.equal(before.statusCode, 200, before.body);
   assert.ok(before.json().data.some((r: { id: string }) => r.id === gift.id));
-  await app.inject({
-    method: "POST",
-    url: `/v1/admin/partners/${credentials.id}/revoke`,
+  const deleteAccount = (
+    actor: { cookie: string; csrf: string },
+    id = credentials.id,
+  ) =>
+    app.inject({
+      method: "DELETE",
+      url: `/v1/admin/partners/${id}`,
+      headers: headers(actor),
+    });
+  assert.equal((await deleteAccount(partner)).statusCode, 403);
+  assert.equal((await deleteAccount(owner, owner.account.id)).statusCode, 404);
+  assert.equal((await deleteAccount(owner)).statusCode, 200);
+  const accounts = await app.inject({
+    method: "GET",
+    url: "/v1/admin/partners",
     headers: headers(owner),
-    payload: {},
   });
+  assert.ok(!accounts.body.includes(credentials.username));
   assert.equal(
     (
       await app.inject({
@@ -331,6 +363,59 @@ test("partner records are owner-scoped and redacted, remain visible to buyer aft
     headers: headers(owner),
   });
   assert.ok(!audit.body.includes(credentials.password));
+});
+test("hash-only accounts can reset to a viewable password and old sessions expire", async () => {
+  const owner = await authenticateFeishu(config, app);
+  const created = await app.inject({
+    method: "POST",
+    url: "/v1/admin/partners",
+    headers: headers(owner),
+    payload: {},
+  });
+  assert.equal(created.statusCode, 201);
+  const account = created.json().data;
+  const db = new PrismaClient({ datasourceUrl: config.databaseUrl });
+  try {
+    await db.adminAccount.update({
+      where: { id: account.id },
+      data: { passwordCiphertext: null },
+    });
+  } finally {
+    await db.$disconnect();
+  }
+  const partner = await partnerLogin(account.username, account.password);
+  assert.equal(partner.response.statusCode, 200);
+  const passwordAction = (action: string) =>
+    app.inject({
+      method: "POST",
+      url: `/v1/admin/partners/${account.id}/${action}`,
+      headers: headers(owner),
+      payload: {},
+    });
+  assert.equal((await passwordAction("password")).statusCode, 409);
+  const reset = await passwordAction("reset-password");
+  assert.equal(reset.statusCode, 200);
+  const newPassword = reset.json().data.password;
+  assert.ok(newPassword && newPassword !== account.password);
+  assert.equal(
+    (await passwordAction("password")).json().data.password,
+    newPassword,
+  );
+  assert.equal(
+    (await partnerLogin(account.username, account.password)).response
+      .statusCode,
+    401,
+  );
+  assert.equal(
+    (await partnerLogin(account.username, newPassword)).response.statusCode,
+    200,
+  );
+  const stale = await app.inject({
+    method: "GET",
+    url: "/v1/admin/channel-gifts",
+    headers: headers(partner),
+  });
+  assert.equal(stale.statusCode, 401);
 });
 test("password login rejects cross-site requests, logout invalidates authority, and repeated failures are rate limited", async () => {
   const owner = await authenticateFeishu(config, app);

@@ -99,7 +99,22 @@ export class AdminUsersController {
         ? Prisma.sql`(u.id::text ILIKE ${search} OR EXISTS(SELECT 1 ${joins} WHERE ${related(Prisma.sql`u.id`)} AND ${projectMatch}) OR EXISTS(SELECT 1 FROM payment_orders o WHERE o.buyer_id=u.id AND (o.id::text ILIKE ${search} OR o.out_trade_no ILIKE ${search} OR o.subject_name ILIKE ${search} OR o.book_title ILIKE ${search})))`
         : Prisma.sql`TRUE`;
       const narratorSearch = q ? projectMatch : Prisma.sql`TRUE`;
-      const base = Prisma.sql`WITH results AS (SELECT u.id,'account' AS kind,NULL::text AS name,NULL::uuid AS "projectId",u.created_at AS "createdAt",${accountPending} AS pending FROM users u WHERE ${accountSearch} UNION ALL SELECT s.id,'narrator' AS kind,s.name,j.id AS "projectId",COALESCE(i.created_at,p.created_at,'1970-01-01'::timestamptz) AS "createdAt",${pending} AS pending FROM project_subjects s JOIN projects j ON j.id=s.project_id LEFT JOIN payment_orders p ON p.id=j.order_id LEFT JOIN internal_project_admissions i ON i.project_id=j.id WHERE s.bound_user_id IS NULL AND ${narratorSearch})`;
+      const base = Prisma.sql`
+        WITH results AS (
+          SELECT u.id, 'account' AS kind, u.nickname AS name,
+            u.phone_number AS "phoneNumber", NULL::uuid AS "projectId",
+            u.created_at AS "createdAt", ${accountPending} AS pending
+          FROM users u WHERE ${accountSearch}
+          UNION ALL
+          SELECT s.id, 'narrator' AS kind, s.name, NULL::text AS "phoneNumber",
+            j.id AS "projectId",
+            COALESCE(i.created_at,p.created_at,'1970-01-01'::timestamptz) AS "createdAt",
+            ${pending} AS pending
+          FROM project_subjects s JOIN projects j ON j.id=s.project_id
+          LEFT JOIN payment_orders p ON p.id=j.order_id
+          LEFT JOIN internal_project_admissions i ON i.project_id=j.id
+          WHERE s.bound_user_id IS NULL AND ${narratorSearch}
+        )`;
       const filter =
         query.pending === undefined
           ? Prisma.sql`TRUE`

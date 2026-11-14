@@ -139,8 +139,9 @@ onBeforeUnmount(() => {
           onChange: paginate,
         }"
         :locale="{ emptyText: '没有符合条件的用户或讲述者' }"
-        ><template #bodyCell="{ column, record }"
-          ><template v-if="column.key === 'identity'">
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'identity'">
             <Button
               type="link"
               @click="
@@ -150,24 +151,26 @@ onBeforeUnmount(() => {
                   projectId: String(record.projectId),
                 })
               "
-              >{{ record.name ?? record.id }}</Button
             >
-            <div v-if="record.name" class="identifier">
-              {{ record.id }}
-            </div> </template
-          ><template v-else-if="column.key === 'kind'">{{
-            record.kind === "account" ? "产品账号" : "无账号讲述者"
-          }}</template>
-          <template v-else-if="column.key === 'createdAt'">{{
-            formatAdminTime(record.createdAt)
-          }}</template>
-          <template v-else-if="column.key === 'pending'"
-            ><Tag v-if="record.pending" color="orange">待处理服务</Tag
-            ><span v-else>暂无待处理服务</span></template
-          >
-          ></template
-        ></Table
-      ></Card
+              {{ record.name || record.id }}
+            </Button>
+            <div v-if="record.kind === 'account'" class="identifier">
+              {{ record.phoneNumber || "未绑定手机号" }}
+            </div>
+            <div v-if="record.name" class="identifier">{{ record.id }}</div>
+          </template>
+          <template v-else-if="column.key === 'kind'">
+            {{ record.kind === "account" ? "产品账号" : "无账号讲述者" }}
+          </template>
+          <template v-else-if="column.key === 'createdAt'">
+            {{ formatAdminTime(record.createdAt) }}
+          </template>
+          <template v-else-if="column.key === 'pending'">
+            <Tag v-if="record.pending" color="orange">待处理服务</Tag>
+            <span v-else>暂无待处理服务</span>
+          </template>
+        </template>
+      </Table></Card
     ></Page
   >
 </template>

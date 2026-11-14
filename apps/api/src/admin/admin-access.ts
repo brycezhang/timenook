@@ -1,4 +1,6 @@
 import {
+  createCipheriv,
+  createDecipheriv,
   createHash,
   createHmac,
   randomBytes,
@@ -110,6 +112,9 @@ const ROUTE_ACTIONS: Record<string, string> = {
   "GET /v1/admin/partners": "admin.partners.list",
   "POST /v1/admin/partners": "admin.partners.create",
   "POST /v1/admin/partners/:id/revoke": "admin.partners.revoke",
+  "POST /v1/admin/partners/:id/password": "admin.partners.password",
+  "POST /v1/admin/partners/:id/reset-password": "admin.partners.reset-password",
+  "DELETE /v1/admin/partners/:id": "admin.partners.delete",
   "GET /v1/admin/session": "admin.session",
   "POST /v1/admin/feishu/login": "admin.feishu.login",
   "GET /v1/admin/feishu/callback": "admin.feishu.callback",
@@ -401,6 +406,8 @@ export class AdminAccess implements OnModuleDestroy {
     feishuAppId: string | null;
     tenantKey: string | null;
     feishuOpenId: string | null;
+    passwordHash: string | null;
+    passwordCiphertext: string | null;
   }) {
     return digest(
       JSON.stringify([
@@ -409,6 +416,8 @@ export class AdminAccess implements OnModuleDestroy {
         account.feishuAppId,
         account.tenantKey,
         account.feishuOpenId,
+        // Hash-only accounts retain their sessions until the password is reset.
+        ...(account.passwordCiphertext ? [account.passwordHash] : []),
       ]),
     );
   }
@@ -675,55 +684,190 @@ export class AdminAccess implements OnModuleDestroy {
     return this.command(
       request,
       ADMIN_PERMISSIONS.managePartners,
-      (tx) =>
-        tx.adminAccount.findMany({
-          where: { realm: this.realm, role: "partner" },
-          select: { id: true, username: true, disabled: true },
+      async (tx) => {
+        const accounts = await tx.adminAccount.findMany({
+          where: { realm: this.realm, role: "partner", deletedAt: null },
+          select: {
+            id: true,
+            username: true,
+            disabled: true,
+            passwordCiphertext: true,
+          },
           orderBy: { username: "asc" },
-        }),
+        });
+        return accounts.map(({ passwordCiphertext, ...account }) => ({
+          ...account,
+          passwordAvailable: !account.disabled && !!passwordCiphertext,
+        }));
+      },
       true,
     );
   }
   async createPartner(request: AdminRequest) {
     await this.authorized(request, ADMIN_PERMISSIONS.managePartners);
-    const password = randomBytes(24).toString("base64url"),
-      salt = randomBytes(16).toString("hex");
-    const passwordHash = `${salt}:${(await passwordKey(password, salt)).toString("hex")}`;
+    this.assertCsrf(request);
+    const id = randomUUID();
+    const { password, ...credentials } = await this.generatePartnerPassword(id);
     return this.command(
       request,
       ADMIN_PERMISSIONS.managePartners,
       async (tx) => {
         const account = await tx.adminAccount.create({
           data: {
-            id: randomUUID(),
+            id,
             username: `sales_${randomBytes(8).toString("hex")}`,
             realm: this.realm,
             role: "partner",
-            passwordHash,
+            ...credentials,
             permissions: [],
           },
           select: { id: true, username: true, disabled: true },
         });
         request.adminResourceType = "admin-account";
         request.adminResourceId = account.id;
-        return { ...account, password };
+        return { ...account, passwordAvailable: true, password };
       },
     );
   }
   async revokePartner(request: AdminRequest, id: string) {
+    return this.disablePartner(request, id, { disabled: true });
+  }
+  async deletePartner(request: AdminRequest, id: string) {
+    return this.disablePartner(request, id, {
+      disabled: true,
+      deletedAt: new Date(),
+      passwordHash: null,
+      passwordCiphertext: null,
+    });
+  }
+  private async disablePartner(
+    request: AdminRequest,
+    id: string,
+    data: Prisma.AdminAccountUpdateManyMutationInput,
+  ) {
     return this.command(
       request,
       ADMIN_PERMISSIONS.managePartners,
       async (tx) => {
         // Account disable is checked by every session access. No account->session lock inversion with commands/login.
         const changed = await tx.adminAccount.updateMany({
-          where: { id, realm: this.realm, role: "partner" },
-          data: { disabled: true },
+          where: { id, realm: this.realm, role: "partner", deletedAt: null },
+          data,
         });
         if (!changed.count) throw new NotFoundException();
         request.adminResourceType = "admin-account";
         request.adminResourceId = id;
         return { id, disabled: true };
+      },
+    );
+  }
+  private partnerPasswordKey() {
+    return createHmac(
+      "sha256",
+      Buffer.from(this.settings().sessionKey, "base64"),
+    )
+      .update("timenook:partner-password:v1")
+      .digest();
+  }
+  private async generatePartnerPassword(id: string) {
+    const password = randomBytes(24).toString("base64url");
+    const salt = randomBytes(16).toString("hex");
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", this.partnerPasswordKey(), iv);
+    cipher.setAAD(Buffer.from(id));
+    const encrypted = Buffer.concat([
+      cipher.update(password, "utf8"),
+      cipher.final(),
+    ]);
+    return {
+      password,
+      passwordHash: `${salt}:${(await passwordKey(password, salt)).toString("hex")}`,
+      passwordCiphertext: Buffer.concat([
+        iv,
+        cipher.getAuthTag(),
+        encrypted,
+      ]).toString("base64"),
+    };
+  }
+  async partnerPassword(request: AdminRequest, id: string) {
+    return this.command(
+      request,
+      ADMIN_PERMISSIONS.managePartners,
+      async (tx) => {
+        request.adminResourceType = "admin-account";
+        request.adminResourceId = id;
+        const account = await tx.adminAccount.findFirst({
+          where: {
+            id,
+            realm: this.realm,
+            role: "partner",
+            disabled: false,
+            deletedAt: null,
+          },
+          select: { username: true, passwordCiphertext: true },
+        });
+        if (!account) throw new NotFoundException();
+        if (!account.passwordCiphertext)
+          throw new HttpException("Partner password unavailable", 409);
+        try {
+          const stored = Buffer.from(account.passwordCiphertext, "base64");
+          const decipher = createDecipheriv(
+            "aes-256-gcm",
+            this.partnerPasswordKey(),
+            stored.subarray(0, 12),
+          );
+          decipher.setAAD(Buffer.from(id));
+          decipher.setAuthTag(stored.subarray(12, 28));
+          const password = Buffer.concat([
+            decipher.update(stored.subarray(28)),
+            decipher.final(),
+          ]).toString("utf8");
+          return {
+            id,
+            username: account.username,
+            disabled: false,
+            passwordAvailable: true,
+            password,
+          };
+        } catch {
+          throw new HttpException("Partner password unavailable", 409);
+        }
+      },
+    );
+  }
+  async resetPartnerPassword(request: AdminRequest, id: string) {
+    return this.command(
+      request,
+      ADMIN_PERMISSIONS.managePartners,
+      async (tx) => {
+        request.adminResourceType = "admin-account";
+        request.adminResourceId = id;
+        const where = {
+          id,
+          realm: this.realm,
+          role: "partner",
+          disabled: false,
+          deletedAt: null,
+        };
+        const account = await tx.adminAccount.findFirst({
+          where,
+          select: { username: true },
+        });
+        if (!account) throw new NotFoundException();
+        const { password, ...credentials } =
+          await this.generatePartnerPassword(id);
+        const changed = await tx.adminAccount.updateMany({
+          where,
+          data: credentials,
+        });
+        if (!changed.count) throw new NotFoundException();
+        return {
+          id,
+          username: account.username,
+          disabled: false,
+          passwordAvailable: true,
+          password,
+        };
       },
     );
   }

@@ -578,10 +578,45 @@ test("super admin issues credentials; partner records a gift with one business m
   await page.getByRole("button", { name: "生成第三方账号" }).click();
   await expect(page.getByTestId("issued-password")).toBeVisible();
   const username = await page.getByTestId("issued-username").innerText();
-  const password = await page.getByTestId("issued-password").innerText();
+  const initialPassword = await page.getByTestId("issued-password").innerText();
   await page.getByRole("button", { name: "已保存，关闭" }).click();
   await expect(page.getByTestId("issued-password")).toHaveCount(0);
   await page.reload();
+  await expect(page.getByTestId("issued-password")).toHaveCount(0);
+  const accountRow = page.getByRole("row").filter({ hasText: username });
+  await accountRow.getByRole("button", { name: "查看密码" }).click();
+  const passwordDialog = page.getByRole("dialog", { name: "查看密码" });
+  expect(
+    (await passwordDialog.getByTestId("issued-password").innerText()) ===
+      initialPassword,
+  ).toBe(true);
+  await passwordDialog
+    .getByRole("button", { name: "关闭", exact: true })
+    .last()
+    .click();
+  await expect(page.getByTestId("issued-password")).toHaveCount(0);
+  const dbForLegacyAccount = new PrismaClient({ datasourceUrl: databaseUrl });
+  try {
+    await dbForLegacyAccount.adminAccount.updateMany({
+      where: { username },
+      data: { passwordCiphertext: null },
+    });
+  } finally {
+    await dbForLegacyAccount.$disconnect();
+  }
+  await page.reload();
+  await accountRow.getByRole("button", { name: "查看密码" }).click();
+  await expect(passwordDialog.getByText(/原密码无法查看/)).toBeVisible();
+  await passwordDialog.getByRole("button", { name: "重置密码" }).click();
+  await page.getByRole("button", { name: "确认重置" }).click();
+  const password = await passwordDialog
+    .getByTestId("issued-password")
+    .innerText();
+  expect(password !== initialPassword).toBe(true);
+  await passwordDialog
+    .getByRole("button", { name: "关闭", exact: true })
+    .last()
+    .click();
   await expect(page.getByTestId("issued-password")).toHaveCount(0);
   const partnerContext = await browser.newContext({ ignoreHTTPSErrors: true });
   const partner = await partnerContext.newPage();
@@ -675,6 +710,9 @@ test("super admin issues credentials; partner records a gift with one business m
     await partner.getByLabel("密码", { exact: true }).fill(password);
     await partner.getByRole("button", { name: "账号密码登录" }).click();
     await expect(partner.getByRole("alert")).toContainText("账号已撤销");
+    await accountRow.getByRole("button", { name: "删除账号" }).click();
+    await page.getByRole("button", { name: "确认删除" }).click();
+    await expect(accountRow).toHaveCount(0);
   } finally {
     await partnerContext.close();
   }

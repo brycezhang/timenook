@@ -278,6 +278,8 @@ model WechatCodeRedemption {
 model AdminAccount {
   role String @default("super_admin")
   passwordHash String? @map("password_hash")
+  passwordCiphertext String? @map("password_ciphertext")
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   id String @id @db.Uuid
   username String
   realm String
