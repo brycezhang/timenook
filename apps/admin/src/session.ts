@@ -23,7 +23,7 @@ export async function refreshSession() {
 }
 export async function expireSession() {
   clearPrivateState();
-  sessionError.value = "登录已到期，请重新使用飞书登录。";
+  sessionError.value = "登录已到期，请重新登录。";
   await refreshSession().catch(() => null);
   window.dispatchEvent(new Event("admin-session-expired"));
 }

@@ -18,7 +18,8 @@ export interface ChannelGiftView {
   orderId: string | null;
 }
 export interface AdminChannelGiftView extends ChannelGiftView {
-  buyerPhone: string;
+  usageStatus?: "activated" | "pending" | "void";
+  buyerPhone: string | null;
   maskedBuyerPhone: string;
   buyerId: string | null;
   operatorId: string;

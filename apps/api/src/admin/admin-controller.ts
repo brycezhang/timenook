@@ -1,3 +1,5 @@
+import { Body, Param, ParseUUIDPipe } from "@nestjs/common";
+import { AdminPartnerLoginDto } from "./admin-contract";
 import {
   Controller,
   Get,
@@ -83,6 +85,43 @@ export class AdminController {
   ): Promise<ApiEnvelope<AdminFeishuLogin>> {
     return this.response("admin.feishu.login", req, () =>
       this.access.feishuLogin(req, reply),
+    );
+  }
+  @Post("partner/login")
+  @HttpCode(200)
+  @Header("Cache-Control", "no-store")
+  partnerLogin(
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Body() body: AdminPartnerLoginDto,
+  ) {
+    return this.response("admin.partner.login", req, () =>
+      this.access.partnerLogin(req, reply, body),
+    );
+  }
+  @Get("partners")
+  @Header("Cache-Control", "no-store")
+  partners(@Req() req: FastifyRequest) {
+    return this.response("admin.partners.list", req, () =>
+      this.access.partners(req),
+    );
+  }
+  @Post("partners")
+  @Header("Cache-Control", "no-store")
+  createPartner(@Req() req: FastifyRequest) {
+    return this.response("admin.partners.create", req, () =>
+      this.access.createPartner(req),
+    );
+  }
+  @Post("partners/:id/revoke")
+  @HttpCode(200)
+  @Header("Cache-Control", "no-store")
+  revokePartner(
+    @Req() req: FastifyRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.response("admin.partners.revoke", req, () =>
+      this.access.revokePartner(req, id),
     );
   }
   @Get("feishu/callback")

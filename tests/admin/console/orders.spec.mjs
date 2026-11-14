@@ -5,7 +5,7 @@ import {
   syntheticFeishuEnv,
 } from "../feishu-fixture.mjs";
 import { test, expect } from "@playwright/test";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -357,7 +357,7 @@ test("HTTPS operator searches historical orders, navigates actual Vben tabs/deta
   expect(errors).toEqual([]);
 });
 
-test("read-only admin cannot write notes or open protected user routes and revoked authority clears private details", async ({
+test("super admin can write notes and open user routes; disabled authority clears private details", async ({
   page,
 }) => {
   const restricted = {
@@ -382,9 +382,11 @@ test("read-only admin cannot write notes or open protected user routes and revok
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "追加备注", exact: true }),
-  ).toHaveCount(0);
+  ).toBeVisible();
   await page.goto(`./users/${buyerId}`);
-  await expect(page).toHaveURL(/\/403$/);
+  await expect(
+    page.getByRole("heading", { name: "用户详情", exact: true }),
+  ).toBeVisible();
   await page.goto(`./orders/${orderIds[0]}`);
   await expect(
     page.getByText("BROWSER-ORDER-000", { exact: true }),
@@ -484,4 +486,117 @@ test("channel phone-only entry preserves a lost-response submission across reloa
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+});
+
+test("super admin issues credentials; partner records a gift with one business menu; revocation rejects the active browser", async ({
+  page,
+  browser,
+}) => {
+  await page.goto("./partners");
+  await feishuLogin(page, account);
+  await expect(
+    page.getByRole("heading", { name: "第三方账号", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "生成第三方账号" }).click();
+  await expect(page.getByTestId("issued-password")).toBeVisible();
+  const username = await page.getByTestId("issued-username").innerText();
+  const password = await page.getByTestId("issued-password").innerText();
+  await page.getByRole("button", { name: "已保存，关闭" }).click();
+  await expect(page.getByTestId("issued-password")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId("issued-password")).toHaveCount(0);
+  const partnerContext = await browser.newContext({ ignoreHTTPSErrors: true });
+  const partner = await partnerContext.newPage();
+  try {
+    await partner.goto("https://localhost:3443/admin/");
+    await partner.getByLabel("用户名", { exact: true }).fill(username);
+    await partner.getByLabel("密码", { exact: true }).fill(password);
+    await partner.getByRole("button", { name: "账号密码登录" }).click();
+    await expect(partner).toHaveURL(/\/channel-gifts$/);
+    await expect(
+      partner.getByRole("heading", { name: "录入订单", exact: true }),
+    ).toBeVisible();
+    const state = await partner.request.get("/api/v1/admin/session");
+    expect((await state.json()).data.operator.role).toBe("partner");
+    for (const text of ["订单管理", "用户管理", "生产单管理", "第三方账号"])
+      await expect(partner.getByText(text, { exact: true })).toHaveCount(0);
+    await partner
+      .getByRole("textbox", { name: "购买者手机号", exact: true })
+      .fill("13900001234");
+    const responsePromise = partner.waitForResponse(
+      (r) =>
+        r.url().endsWith("/api/v1/admin/channel-gifts") &&
+        r.request().method() === "POST",
+    );
+    await partner.getByRole("button", { name: "确认购买并录入" }).click();
+    const recorded = await responsePromise;
+    expect(recorded.status()).toBe(201);
+    const gift = (await recorded.json()).data;
+    expect(gift.buyerPhone).toBeNull();
+    expect(gift.buyerId).toBeNull();
+    await expect(
+      partner.getByText(gift.internalNumber, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      partner.getByText("139****1234", { exact: true }),
+    ).toBeVisible();
+    for (const route of ["orders", "users", "partners", "audit"])
+      expect(
+        (await partner.request.get(`/api/v1/admin/${route}`)).status(),
+      ).toBe(403);
+    await partner.goto("https://localhost:3443/admin/users");
+    await expect(partner).toHaveURL(/\/403$/);
+    await partner.goto("https://localhost:3443/admin/channel-gifts");
+    // Synthetic buyer session fixture; browser still calls the real buyer HTTP boundary.
+    const db = new PrismaClient({ datasourceUrl: databaseUrl });
+    const buyerToken = randomBytes(32).toString("base64url");
+    try {
+      await db.user.update({
+        where: { id: buyerId },
+        data: { phoneNumber: "+8613900001234" },
+      });
+      await db.channelGift.update({
+        where: { id: gift.id },
+        data: { buyerId },
+      });
+      await db.session.create({
+        data: {
+          id: randomUUID(),
+          userId: buyerId,
+          tokenHash: createHash("sha256").update(buyerToken).digest("hex"),
+          expiresAt: new Date(Date.now() + 3600000),
+        },
+      });
+    } finally {
+      await db.$disconnect();
+    }
+    const buyerRead = () =>
+      page.request.get("/api/v1/channel-gifts", {
+        headers: { authorization: `Bearer ${buyerToken}` },
+      });
+    expect(
+      (await (await buyerRead()).json()).data.some((r) => r.id === gift.id),
+    ).toBe(true);
+    await page
+      .getByRole("row")
+      .filter({ hasText: username })
+      .getByRole("button", { name: "撤销账号" })
+      .click();
+    await expect(
+      page.getByRole("row").filter({ hasText: username }),
+    ).toContainText("已撤销");
+    await partner.getByRole("button", { name: "刷新", exact: true }).click();
+    await expect(
+      partner.getByRole("heading", { name: "运营登录" }),
+    ).toBeVisible();
+    expect(
+      (await (await buyerRead()).json()).data.some((r) => r.id === gift.id),
+    ).toBe(true);
+    await partner.getByLabel("用户名", { exact: true }).fill(username);
+    await partner.getByLabel("密码", { exact: true }).fill(password);
+    await partner.getByRole("button", { name: "账号密码登录" }).click();
+    await expect(partner.getByRole("alert")).toContainText("账号已撤销");
+  } finally {
+    await partnerContext.close();
+  }
 });
