@@ -35,6 +35,7 @@ const hasChildren = computed(() => {
     v-if="!hasChildren"
     :key="menu.path"
     :active-icon="menu.activeIcon"
+    :aria-label="menu.name"
     :badge="menu.badge"
     :badge-type="menu.badgeType"
     :badge-variants="menu.badgeVariants"

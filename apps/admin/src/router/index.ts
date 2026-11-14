@@ -1,7 +1,9 @@
 import { createRouter, createWebHistory, RouterView } from "vue-router";
 import { ADMIN_PERMISSIONS } from "@timenook/contracts";
 import type { AdminPermission } from "@timenook/contracts";
+import { preferences, updatePreferences } from "@vben/preferences";
 import { useAccessStore, useTabbarStore } from "@vben/stores";
+import { adminName } from "../preferences";
 import { can, refreshSession, session, sessionError } from "../session";
 const uuid = "[0-9a-fA-F-]{36}";
 export function safeReturn(value: unknown): string {
@@ -49,6 +51,9 @@ export const businessMenus = [
 const pending = () => import("../views/pending.vue");
 export const router = createRouter({
   history: createWebHistory("/admin/"),
+  scrollBehavior(to, from, savedPosition) {
+    return savedPosition ?? (to.path === from.path ? undefined : { top: 0 });
+  },
   routes: [
     {
       path: "/auth",
@@ -248,10 +253,16 @@ router.beforeEach(async (to) => {
       ? (businessMenus.find((m) => can(m.permission))?.path ?? "/403")
       : "/403";
 });
-router.afterEach((to) => {
+router.afterEach((to, _from, failure) => {
+  if (preferences.app.isMobile && !preferences.sidebar.collapsed) {
+    updatePreferences({ sidebar: { collapsed: true } });
+  }
+  if (failure) return;
   if (session.value?.authenticated && to.name !== "Login") {
     useTabbarStore().addTab(to);
-    document.title = `${String(to.meta.title ?? "运营管理")} · 时光里`;
+    document.title = `${String(to.meta.title ?? "运营管理")} · ${adminName}`;
+  } else {
+    document.title = adminName;
   }
 });
 window.addEventListener("admin-session-expired", () => {

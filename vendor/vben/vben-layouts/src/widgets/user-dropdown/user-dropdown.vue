@@ -196,14 +196,14 @@ if (enableShortcutKey.value) {
   </LogoutModal>
 
   <DropdownMenu v-model:open="openPopover">
-    <DropdownMenuTrigger ref="refTrigger" :disabled="props.trigger === 'hover'">
+    <DropdownMenuTrigger ref="refTrigger" :disabled="props.trigger === 'hover'" aria-label="账号菜单">
       <div class="mr-2 ml-1 cursor-pointer rounded-full p-1.5 hover:bg-accent">
         <div class="flex-center hover:text-accent-foreground">
           <VbenAvatar :alt="text" :src="avatar" class="size-8" dot />
         </div>
       </div>
     </DropdownMenuTrigger>
-    <DropdownMenuContent class="mr-2 min-w-60 p-0 pb-1">
+    <DropdownMenuContent align="end" class="mr-2 w-60 p-0 pb-1">
       <div ref="refContent">
         <DropdownMenuLabel class="flex items-center p-3">
           <VbenAvatar
@@ -213,10 +213,10 @@ if (enableShortcutKey.value) {
             dot
             dot-class="bottom-0 right-1 border-2 size-4 bg-green-500"
           />
-          <div class="ml-2 w-full">
+          <div class="ml-2 min-w-0 flex-1 wrap-anywhere">
             <div
               v-if="tagText || text || $slots.tagText"
-              class="mb-1 flex items-center text-sm font-medium text-foreground"
+              class="mb-1 text-sm font-medium text-foreground"
             >
               {{ text }}
               <slot name="tagText">

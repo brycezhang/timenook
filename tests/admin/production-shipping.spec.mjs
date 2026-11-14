@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { waitForAdminStartup } from "./admin-startup.mjs";
+import { logoutAdmin, waitForAdminStartup } from "./admin-startup.mjs";
 import { createRequire } from "node:module";
 import { createHash, randomUUID } from "node:crypto";
 import { resolve, join } from "node:path";
@@ -379,9 +379,7 @@ test("logout unmounts private production details while session refresh and late 
               .click();
             await materialsPending;
           }
-          await admin
-            .getByRole("button", { name: "退出登录", exact: true })
-            .click();
+          await logoutAdmin(admin);
           await sessionPending;
           await expect(admin.locator(".fulfillment-page")).toHaveCount(0);
           await expect(

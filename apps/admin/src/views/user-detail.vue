@@ -4,7 +4,7 @@ import { orderStateLabel } from "../utils/order-status";
 import { ref, watch, onBeforeUnmount, computed } from "vue";
 import { useRoute, useRouter, RouterLink } from "vue-router";
 import { Page } from "@vben/common-ui";
-import { Alert, Button, Card, TextArea, Spin, Tag } from "antdv-next";
+import { Alert, Button, Card, Space, TextArea, Spin, Tag } from "antdv-next";
 import {
   ADMIN_PERMISSIONS,
   type AdminUserDetail,
@@ -114,12 +114,14 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <Page title="用户详情" class="user-details"
+  <Page title="用户详情" header-class="flex-wrap gap-2" class="user-details"
     ><template #title><h1>用户详情</h1></template
-    ><template #extra
-      ><Button @click="router.push(back)">返回用户列表</Button
-      ><Button :loading="busy" @click="load">刷新</Button></template
-    >
+    ><template #extra>
+      <Space wrap>
+        <Button @click="router.push(back)">返回用户列表</Button>
+        <Button :loading="busy" @click="load">刷新</Button>
+      </Space>
+    </template>
     <Alert v-if="error" type="error" :message="error" role="alert" /><Alert
       v-if="notice"
       type="success"

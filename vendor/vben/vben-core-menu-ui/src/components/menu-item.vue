@@ -12,7 +12,7 @@ import { useMenu, useMenuContext, useSubMenuContext } from '../hooks';
 
 interface Props extends MenuItemProps {}
 
-defineOptions({ name: 'MenuItem' });
+defineOptions({ name: 'MenuItem', inheritAttrs: false });
 
 const props = withDefaults(
   defineProps<{
@@ -92,7 +92,7 @@ const itemHref = computed(() =>
   item.path + (item?.query ? `?${stringifyQuery(item?.query)}` : ''),
 );
 const anchorHref = computed(() =>
-  isHttp.value ? item.parentPaths.at(-1) || itemHref.value : itemHref.value,
+  isHttp.value ? item.parentPaths.at(-1) || itemHref.value : undefined,
 );
 
 const item: MenuItemRegistered = reactive({
@@ -105,10 +105,13 @@ const item: MenuItemRegistered = reactive({
 /**
  * 菜单项点击事件
  */
-function handleClick() {
+function handleClick(event: MouseEvent) {
   if (props.disabled) {
+    event.preventDefault();
     return;
   }
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
   rootMenu?.handleMenuItemClick?.({
     parentPaths: parentPaths.value,
     path: props.path,
@@ -133,6 +136,7 @@ onBeforeUnmount(() => {
     :to="itemHref"
   >
     <a
+      v-bind="$attrs"
       :href="anchorHref || href"
       :class="[
         rootMenu.theme,
@@ -142,7 +146,8 @@ onBeforeUnmount(() => {
         is('collapse-show-title', collapseShowTitle),
       ]"
       role="menuitem"
-      @click.prevent.stop="handleClick"
+      :aria-current="active ? 'page' : undefined"
+      @click.stop="handleClick"
     >
       <VbenTooltip
         v-if="showTooltip"

@@ -306,6 +306,7 @@ onUnmounted(() => {
   ></div>
   <aside
     ref="asideRef"
+    :inert="width === 0 || !show"
     :style="style"
     class="fixed left-0 top-0 h-full transition-all duration-150"
     :class="theme"

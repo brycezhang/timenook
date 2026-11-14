@@ -1,7 +1,9 @@
 # TimeNook 管理入口（Vben web-antd）
 
-后台使用 Vben 5.7.0 的 `BasicLayout`、`AuthPageLayout`、权限菜单、面包屑、多标签页和 `Page`，配合 Vue Router、Pinia 和 antdv-next。来源和必要修改见 [UPSTREAM.md](../../vendor/vben/UPSTREAM.md)。飞书白名单、独立 Cookie/CSRF 和服务端审计见 [ADR 0016](../../docs/adr/0016-feishu-admin-login.md)。后台提供订单、用户、生产单三个一级菜单。登录默认进入订单页，缺少订单权限时进入首个有权限的业务入口。
+后台使用 Vben 5.7.0 的 `BasicLayout`、`AuthPageLayout`、权限菜单、面包屑、多标签页和 `Page`，配合 Vue Router、Pinia 和 antdv-next。来源和必要修改见 [UPSTREAM.md](../../vendor/vben/UPSTREAM.md)。飞书白名单、独立 Cookie/CSRF 和服务端审计见 [ADR 0016](../../docs/adr/0016-feishu-admin-login.md)。超级管理员默认进入订单管理，另有录入订单、第三方账号、用户管理和生产单管理。第三方登录进入唯一业务入口「录入订单」。
 
+- **录入订单** `/admin/channel-gifts`。录入第三方渠道购买，查看、核对及更正或作废权限范围内的记录。
+- **第三方账号** `/admin/partners`。生成账号时一次展示初始凭据，撤销时二次确认。
 - **订单管理** `/admin/orders`。支持查询、筛选、分页和内部备注。订单详情可进入关联用户、项目和生产单，也可处理已有退款与质量售后申请。
 - **用户管理** `/admin/users`。支持查询产品账号和讲述者，进入用户详情查看关联订单与项目。无支付订单的项目也可通过用户管理查找，资料服务申请在项目详情处理。
 - **生产单管理** `/admin/production`。支持查询、筛选、分页和独立详情。在详情中处理确定书稿的人工交接、完成印制、发货和交付。实际印厂、物流与实物验收单独记录。
@@ -16,7 +18,11 @@
 
 ## 构建与开发
 
-构建：`pnpm --filter @timenook/admin build`；产物 `apps/admin/dist/`。目标部署为 `https://timenookapi.threeminreading.com/admin/`，请求同源 `/api/v1/admin/`，Cookie Path 为 `/api/v1/admin`，见 [ADR 0015](../../docs/adr/0015-dedicated-domain-ingress.md)。构建、请求与服务端 Cookie 已统一使用该路径，本地 HTTPS 流程与正式环境结果分别记录。不读取服务端密钥，不保存 token/password/seed、权限、私人页面或详情数据到浏览器存储；Pinia 不启用持久化插件，多标签只在当前页面保留路由元数据。命名空间 `timenook-admin-v2` 仅用于框架外观偏好。
+构建：`pnpm --filter @timenook/admin build`；产物 `apps/admin/dist/`。目标部署为 `https://timenookapi.threeminreading.com/admin/`，请求同源 `/api/v1/admin/`，Cookie Path 为 `/api/v1/admin`，见 [ADR 0015](../../docs/adr/0015-dedicated-domain-ingress.md)。构建、请求与服务端 Cookie 已统一使用该路径，本地 HTTPS 流程与正式环境结果分别记录。不读取服务端密钥，不保存 token/password/seed、权限、私人页面或详情数据到浏览器存储；Pinia 不启用持久化插件，多标签只在当前页面保留路由元数据。命名空间 `timenook-admin-v3` 仅用于框架外观偏好。本次更换命名空间使旧浏览器重新使用固定侧栏默认值。
+
+框架偏好见 [preferences.ts](src/preferences.ts)。按 wutong-admin 使用 Vben 的 `sidebar-nav`、248px 展开与 64px 折叠宽度、56px 顶栏和 `UserDropdown`。桌面侧栏固定并随折叠重新分配正文宽度，窄屏菜单带遮罩并在导航后收起。列表使用 Vben `Page` 和 antdv-next 表格，订单、用户、生产单均可重置筛选。
+
+2026-11-14 本地 HTTPS 验证覆盖 1280px 桌面侧栏展开与折叠、390px 菜单打开与选页收起、账号菜单退出、订单及用户查询和详情返回、渠道录单恢复与更正作废、第三方账号生成与撤销。使用隔离书稿夹具验证生产单查询、详情、返回原筛选及重置。类型检查及构建通过。本轮界面调整待部署。
 
 本地开发需要 HTTPS：证书/私钥放 Git 外，文件权限 600；将绝对路径填入 Git 忽略的 `.env.admin-local` 的 `ADMIN_TLS_CERT` / `ADMIN_TLS_KEY`。`ADMIN_ORIGIN=https://localhost:3443` 与 API 一致。先启动 API，再运行 `pnpm dev:admin`。本地证书需由本机信任；自动化浏览器只对临时自签证书使用 ignoreHTTPSErrors。HTTP 开发服务器拒绝启动，以免误以为 Secure Cookie 已完成联调。
 

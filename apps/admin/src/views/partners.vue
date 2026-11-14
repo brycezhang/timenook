@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { Alert, Button } from "antdv-next";
+import { Page } from "@vben/common-ui";
+import { Alert, Button, Card, Modal, Popconfirm, Table, Tag } from "antdv-next";
 import type {
   AdminPartner,
   AdminPartnerCredentials,
@@ -8,14 +9,29 @@ import type {
 import { adminRequest, errorText, session } from "../session";
 const items = ref<AdminPartner[]>([]),
   credentials = ref<AdminPartnerCredentials | null>(null),
-  busy = ref(false),
+  loading = ref(false),
+  creating = ref(false),
+  revoking = ref<string | null>(null),
   error = ref("");
+const columns = [
+  { title: "用户名", dataIndex: "username" },
+  { title: "状态", key: "state", width: 90 },
+  { title: "操作", key: "actions", width: 110 },
+];
 async function load() {
-  items.value = await adminRequest<AdminPartner[]>("/partners");
+  loading.value = true;
+  error.value = "";
+  try {
+    items.value = await adminRequest<AdminPartner[]>("/partners");
+  } catch (e) {
+    error.value = errorText(e);
+  } finally {
+    loading.value = false;
+  }
 }
 async function create() {
-  if (busy.value) return;
-  busy.value = true;
+  if (creating.value || revoking.value) return;
+  creating.value = true;
   error.value = "";
   credentials.value = null;
   try {
@@ -31,12 +47,12 @@ async function create() {
   } catch (e) {
     error.value = errorText(e);
   } finally {
-    busy.value = false;
+    creating.value = false;
   }
 }
 async function revoke(id: string) {
-  if (busy.value) return;
-  busy.value = true;
+  if (creating.value || revoking.value) return;
+  revoking.value = id;
   error.value = "";
   try {
     await adminRequest(`/partners/${id}/revoke`, {
@@ -49,82 +65,106 @@ async function revoke(id: string) {
   } catch (e) {
     error.value = errorText(e);
   } finally {
-    busy.value = false;
+    revoking.value = null;
   }
 }
-onMounted(() =>
-  load().catch((e) => {
-    error.value = errorText(e);
-  }),
-);
+onMounted(load);
 </script>
 <template>
-  <main class="page">
-    <h1>第三方账号</h1>
-    <Alert v-if="error" type="error" :message="error" />
-    <Button type="primary" :loading="busy" @click="create"
-      >生成第三方账号</Button
+  <Page description="生成和撤销用于渠道录单的后台账号。">
+    <template #title><h1>第三方账号</h1></template>
+    <Card title="账号列表">
+      <template #extra>
+        <Button
+          type="primary"
+          :loading="creating"
+          :disabled="!!revoking"
+          @click="create"
+        >
+          生成第三方账号
+        </Button>
+      </template>
+      <Alert
+        v-if="error"
+        type="error"
+        :message="error"
+        role="alert"
+        class="mb-4"
+      >
+        <template #action
+          ><Button size="small" @click="load">刷新列表</Button></template
+        >
+      </Alert>
+      <Table
+        :columns="columns"
+        :data-source="items"
+        :loading="loading"
+        :scroll="{ x: 340 }"
+        :pagination="{ pageSize: 20, hideOnSinglePage: true }"
+        :locale="{ emptyText: '暂无第三方账号' }"
+        row-key="id"
+      >
+        <template #bodyCell="{ column, record }">
+          <span v-if="column.dataIndex === 'username'" class="identifier">{{
+            record.username
+          }}</span>
+          <Tag
+            v-else-if="column.key === 'state'"
+            :color="record.disabled ? 'default' : 'green'"
+          >
+            {{ record.disabled ? "已撤销" : "可使用" }}
+          </Tag>
+          <Popconfirm
+            v-else-if="column.key === 'actions' && !record.disabled"
+            title="撤销该账号？"
+            description="账号将无法继续登录或录单，历史记录会保留。"
+            ok-text="确认撤销"
+            :ok-button-props="{ danger: true }"
+            @confirm="revoke(record.id)"
+          >
+            <Button
+              type="link"
+              danger
+              :loading="revoking === record.id"
+              :disabled="creating || !!revoking"
+            >
+              撤销账号
+            </Button>
+          </Popconfirm>
+        </template>
+      </Table>
+    </Card>
+    <Modal
+      :open="!!credentials"
+      title="账号已生成"
+      :closable="false"
+      :mask-closable="false"
+      :keyboard="false"
     >
-    <section v-if="credentials" class="credentials" aria-label="账号交付信息">
-      <h2>账号已生成</h2>
-      <p>密码仅展示这一次，请保存并交付给使用人。</p>
-      <dl>
-        <dt>用户名</dt>
-        <dd data-testid="issued-username">{{ credentials.username }}</dd>
-        <dt>初始密码</dt>
-        <dd data-testid="issued-password">{{ credentials.password }}</dd>
-      </dl>
-      <Button @click="credentials = null">已保存，关闭</Button>
-    </section>
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>用户名</th>
-            <th>状态</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="item in items" :key="item.id">
-            <td>{{ item.username }}</td>
-            <td>{{ item.disabled ? "已撤销" : "可使用" }}</td>
-            <td>
-              <Button
-                v-if="!item.disabled"
-                danger
-                :disabled="busy"
-                @click="revoke(item.id)"
-                >撤销账号</Button
-              >
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </main>
+      <template #footer>
+        <Button type="primary" @click="credentials = null">已保存，关闭</Button>
+      </template>
+      <div v-if="credentials">
+        <Alert
+          type="info"
+          message="密码仅展示这一次，请保存并交付给使用人。"
+          show-icon
+          class="mb-4"
+        />
+        <dl class="credentials">
+          <dt>用户名</dt>
+          <dd data-testid="issued-username">{{ credentials.username }}</dd>
+          <dt>初始密码</dt>
+          <dd data-testid="issued-password">{{ credentials.password }}</dd>
+        </dl>
+      </div>
+    </Modal>
+  </Page>
 </template>
 <style scoped>
-.credentials {
-  margin: 20px 0;
-  padding: 20px;
-  background: var(--background, #fff);
-  border: 1px solid #ddd;
-}
-dd {
+.credentials dd {
+  font-family: ui-monospace, monospace;
   overflow-wrap: anywhere;
-  margin: 8px 0 16px;
-}
-table {
-  width: 100%;
-  margin-top: 24px;
-}
-th,
-td {
-  padding: 12px;
-  text-align: left;
-}
-.table-scroll {
-  overflow-x: auto;
+  margin: 4px 0 12px;
 }
 </style>

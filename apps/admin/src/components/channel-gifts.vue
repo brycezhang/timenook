@@ -21,6 +21,7 @@ const rows = ref<AdminChannelGiftView[]>([]),
   loading = ref(false),
   saving = ref(false),
   error = ref(""),
+  listError = ref(""),
   result = ref<AdminChannelGiftView | null>(null);
 const phone = ref(""),
   external = ref(""),
@@ -31,6 +32,7 @@ const submission = ref<{ key: string; body: CreateChannelGiftCommand } | null>(
 );
 const detail = ref<AdminChannelGiftDetail | null>(null);
 const detailOpen = ref(false),
+  openingId = ref<string | null>(null),
   changing = ref(false),
   changeError = ref("");
 const changeMode = ref<"correct" | "void" | null>(null),
@@ -38,8 +40,17 @@ const changeMode = ref<"correct" | "void" | null>(null),
   reason = ref("");
 const canChange = (row: AdminChannelGiftView) =>
   row.state === "active" && row.usageStatus !== "activated" && !row.projectId;
+function statusLabel(row: AdminChannelGiftView) {
+  if (row.state === "void") return "已作废";
+  if (!canChange(row)) return "已开通";
+  if (session.value?.operator?.role === "partner") return "待开通";
+  return row.buyerId ? "待送出" : "待关联";
+}
 async function openDetail(id: string) {
+  if (openingId.value) return;
   const epoch = sessionEpoch;
+  openingId.value = id;
+  listError.value = "";
   changeError.value = "";
   changeMode.value = null;
   try {
@@ -50,7 +61,9 @@ async function openDetail(id: string) {
     detail.value = next;
     detailOpen.value = true;
   } catch (e) {
-    if (epoch === sessionEpoch) error.value = errorText(e);
+    if (epoch === sessionEpoch) listError.value = errorText(e);
+  } finally {
+    openingId.value = null;
   }
 }
 function beginChange(mode: "correct" | "void") {
@@ -128,11 +141,12 @@ async function load() {
   const n = ++serial,
     epoch = sessionEpoch;
   loading.value = true;
+  listError.value = "";
   try {
     const next = await adminRequest<AdminChannelGiftView[]>("/channel-gifts");
     if (n === serial && epoch === sessionEpoch) rows.value = next;
   } catch (e) {
-    if (n === serial) error.value = errorText(e);
+    if (n === serial && epoch === sessionEpoch) listError.value = errorText(e);
   } finally {
     if (n === serial) loading.value = false;
   }
@@ -249,13 +263,14 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <Card title="录入订单" class="channel-card">
+  <Card title="购买信息">
     <form class="channel-form" @submit.prevent="submit">
       <label
         >购买者手机号<Input
           v-model:value="phone"
           aria-label="购买者手机号"
           placeholder="11 位手机号"
+          inputmode="tel"
           :disabled="!!submission || saving"
           :maxlength="14"
       /></label>
@@ -274,6 +289,7 @@ onBeforeUnmount(() => {
               v-model:value="amount"
               aria-label="实付金额（元）"
               placeholder="未提供"
+              inputmode="decimal"
               :disabled="!!submission || saving"
           /></label>
           <label
@@ -301,25 +317,26 @@ onBeforeUnmount(() => {
       /><Button @click="newPurchase">录入新的一笔</Button>
     </div>
   </Card>
-  <Card title="渠道购买记录" class="channel-card"
+  <Card title="渠道购买记录"
     ><template #extra
       ><Button :loading="loading" @click="load">刷新</Button></template
     >
+    <Alert v-if="listError" type="error" :message="listError" role="alert" class="mb-4" />
     <Table
       :columns="columns"
       :data-source="rows"
       row-key="id"
       :loading="loading"
-      :scroll="{ x: 1190 }"
-      :pagination="{ pageSize: 20 }"
+      :scroll="{ x: 1290 }"
+      :pagination="{ pageSize: 20, hideOnSinglePage: true }"
       :locale="{ emptyText: '暂无渠道购买记录' }"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'actions'"
-          ><Button @click="openDetail(record.id)">详情</Button></template
+          ><Button type="link" :loading="openingId === record.id" @click="openDetail(record.id)">详情</Button></template
         >
         <template v-else-if="column.key === 'purchase'"
-          ><div>{{ record.internalNumber }}</div>
+          ><div class="identifier">{{ record.internalNumber }}</div>
           <div>
             {{ record.buyerPhone || record.maskedBuyerPhone }}
           </div></template
@@ -330,21 +347,13 @@ onBeforeUnmount(() => {
           <div>实付金额 {{ money(record.paidAmount) }}</div></template
         >
         <template v-else-if="column.key === 'source'"
-          ><div>录入账号 {{ record.operatorName }}</div>
-          <div>原订单号 {{ record.externalOrderNo ?? "未提供" }}</div></template
+          ><div class="break-anywhere">录入账号 {{ record.operatorName }}</div>
+          <div class="break-anywhere">原订单号 {{ record.externalOrderNo ?? "未提供" }}</div></template
         >
         <template v-else-if="column.key === 'state'"
-          ><Tag>{{
-            record.state === "void"
-              ? "已作废"
-              : record.usageStatus === "activated" || record.projectId
-                ? "已开通"
-                : record.buyerId
-                  ? "待送出"
-                  : "待关联"
-          }}</Tag>
-          <div v-if="record.buyerId">账号 {{ record.buyerId }}</div>
-          <div v-if="record.projectId">
+          ><Tag>{{ statusLabel(record as AdminChannelGiftView) }}</Tag>
+          <div v-if="record.buyerId" class="identifier">账号 {{ record.buyerId }}</div>
+          <div v-if="record.projectId" class="identifier">
             故事书 {{ record.projectId }}
           </div></template
         >
@@ -364,18 +373,14 @@ onBeforeUnmount(() => {
     :footer="null"
     :mask-closable="!changing"
     :closable="!changing"
+    :keyboard="!changing"
+    @after-close="detail = null"
   >
     <div v-if="detail" class="channel-detail">
       <div>内部编号 {{ detail.internalNumber }}</div>
       <div>购买者 {{ detail.buyerPhone || detail.maskedBuyerPhone }}</div>
       <div>录入账号 {{ detail.operatorName }}</div>
-      <Tag>{{
-        detail.state === "void"
-          ? "已作废"
-          : canChange(detail)
-            ? "待送出"
-            : "已开通"
-      }}</Tag>
+      <div><Tag>{{ statusLabel(detail) }}</Tag></div>
       <div v-if="!canChange(detail)">
         {{
           detail.state === "void"
@@ -396,6 +401,7 @@ onBeforeUnmount(() => {
           >新购买者手机号<Input
             v-model:value="nextPhone"
             aria-label="新购买者手机号"
+            inputmode="tel"
             :maxlength="14"
             :disabled="changing"
         /></label>
@@ -450,14 +456,12 @@ onBeforeUnmount(() => {
 }
 .channel-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .channel-operation {
   border-top: 1px solid #eee;
   padding-top: 12px;
-}
-.channel-card {
-  margin-bottom: 16px;
 }
 .channel-form {
   display: grid;
@@ -467,6 +471,16 @@ onBeforeUnmount(() => {
 .channel-form label {
   display: grid;
   gap: 6px;
+}
+.channel-form > button,
+.channel-result > button {
+  justify-self: start;
+}
+.channel-form summary {
+  cursor: pointer;
+}
+.break-anywhere {
+  overflow-wrap: anywhere;
 }
 .channel-extra {
   display: grid;

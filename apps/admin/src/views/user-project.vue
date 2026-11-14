@@ -3,7 +3,7 @@ import { formatAdminTime } from "../utils/time";
 import { ref, watch, onBeforeUnmount, computed } from "vue";
 import { useRoute, useRouter, RouterLink } from "vue-router";
 import { Page } from "@vben/common-ui";
-import { Alert, Button, Card, Spin } from "antdv-next";
+import { Alert, Button, Card, Space, Spin } from "antdv-next";
 import {
   ADMIN_PERMISSIONS,
   type AdminProjectDetail,
@@ -59,12 +59,14 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <Page title="项目详情" class="project-details"
+  <Page title="项目详情" header-class="flex-wrap gap-2" class="project-details"
     ><template #title><h1>项目详情</h1></template
-    ><template #extra
-      ><Button @click="router.push(back)">返回关联列表</Button
-      ><Button :loading="busy" @click="load">刷新</Button></template
-    ><Alert v-if="error" type="error" :message="error" role="alert" /><Spin
+    ><template #extra>
+      <Space wrap>
+        <Button @click="router.push(back)">返回关联列表</Button>
+        <Button :loading="busy" @click="load">刷新</Button>
+      </Space>
+    </template><Alert v-if="error" type="error" :message="error" role="alert" /><Spin
       v-if="busy"
     /><template v-if="detail && can(ADMIN_PERMISSIONS.writeCare)"
       ><Card title="项目与参与身份"

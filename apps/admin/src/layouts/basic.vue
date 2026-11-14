@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { BasicLayout } from "@vben/layouts";
+import { BasicLayout, UserDropdown } from "@vben/layouts";
 import type { AdminPermission } from "@timenook/contracts";
-import { Alert, Button } from "antdv-next";
+import { Alert } from "antdv-next";
 import { useRoute, useRouter } from "vue-router";
 import { adminApi } from "../api/admin";
 import {
@@ -24,6 +24,7 @@ const canRenderProtected = computed(() => {
 async function logout() {
   if (busy.value) return;
   busy.value = true;
+  sessionError.value = "";
   try {
     await adminApi.logout(session.value!.csrfToken);
     clearPrivateState();
@@ -39,13 +40,13 @@ async function logout() {
 </script>
 <template>
   <BasicLayout v-if="canRenderProtected" @clear-preferences-and-logout="logout">
-    <template #logo-text><span class="font-semibold">时光里</span></template>
-    <template #user-dropdown
-      ><div class="operator-actions">
-        <span>{{ session?.operator?.username }}</span
-        ><Button :loading="busy" @click="logout">退出登录</Button>
-      </div></template
-    >
+    <template #user-dropdown>
+      <UserDropdown
+        :text="session?.operator?.username"
+        :enable-shortcut-key="false"
+        @logout="logout"
+      />
+    </template>
     <template #extra
       ><Alert
         v-if="sessionError"

@@ -44,3 +44,5 @@ The upstream menu helper now uses a redirect only when it is a string; Vue Route
 Source-consumption compatibility: removed unused ts-expect-error comments reported by vue-tsc 3.2 in form/popup/tabs; icon-picker pending-request map now marks absent entries optional. Retained the hooks-required global type-only export and json-bigint declaration dependency.
 
 Vue SFC source-consumption adjustment: MenuProps and NormalMenuProps have explicit type re-exports so inherited menu properties are emitted at runtime. Layout wrappers retain their typed inheritance without @vue-ignore; this fixes the observed undefined menu-prop warnings.
+
+Admin layout adjustments: collapsed mobile navigation is inert, desktop collapse has a keyboard-operable button, and the mobile menu trigger exposes its expanded state. Menu links retain accessible names when collapsed and resolve through the app's router base. UserDropdown keeps its account name within the popup width. Pausing the hover watcher also clears pending timers so a click-triggered account menu stays open.

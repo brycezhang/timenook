@@ -148,6 +148,7 @@ export function useHoverToggle(
     },
     disable() {
       hoverWatcher.pause();
+      clearTimers();
     },
   };
 

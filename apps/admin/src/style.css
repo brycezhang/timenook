@@ -313,14 +313,6 @@ p {
   height: auto;
   min-height: 40px;
 }
-/* Business content lives inside the upstream Vben layout. */
-.operator-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 16px;
-  font-size: 13px;
-}
 .login-form {
   width: 100%;
   max-width: 400px;
@@ -340,11 +332,15 @@ p {
   flex-wrap: wrap;
 }
 .query-form > .ant-input-affix-wrapper {
-  flex: 1;
-  min-width: 240px;
+  flex: 1 1 240px;
+  min-width: 0;
 }
 .query-form > .ant-select {
   min-width: 160px;
+}
+.query-actions {
+  display: flex;
+  gap: 8px;
 }
 .identifier {
   font-family: ui-monospace, monospace;
@@ -373,16 +369,10 @@ p {
   color: #666;
 }
 @media (max-width: 767px) {
-  .query-form > * {
+  .query-form > .ant-input-affix-wrapper,
+  .query-form > .ant-select {
+    flex: 1 1 100%;
     width: 100%;
-  }
-  .operator-actions {
-    gap: 8px;
-  }
-  .operator-actions > span {
-    max-width: 100px;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 }
 
@@ -396,16 +386,6 @@ p {
   margin-top: 16px;
 }
 
-.operator-actions {
-  flex: 0 0 auto;
-  min-width: 0;
-}
-.operator-actions > span {
-  white-space: nowrap;
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .order-details .ant-descriptions-view table {
   table-layout: fixed;
   width: 100%;
@@ -418,12 +398,6 @@ p {
   overflow-wrap: anywhere;
 }
 @media (max-width: 767px) {
-  .operator-actions > span {
-    display: none;
-  }
-  .operator-actions {
-    padding: 0 8px;
-  }
   .order-details .ant-descriptions-item-label {
     width: 40%;
   }

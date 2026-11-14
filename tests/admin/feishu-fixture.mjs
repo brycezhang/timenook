@@ -134,7 +134,7 @@ export async function feishuLogin(page, identity) {
     // Keep interception active until the returned app mounts. Removing the final
     // route during module imports can leave Chromium's requests paused.
     await page
-      .locator("#app .login-form, #app .operator-actions")
+      .locator('#app .login-form, #app [aria-label="账号菜单"]')
       .first()
       .waitFor({
         state: "visible",

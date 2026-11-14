@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount } from "vue";
-import ChannelGifts from "../components/channel-gifts.vue";
 import { useRoute, useRouter } from "vue-router";
 import { Page } from "@vben/common-ui";
 import { Alert, Button, Card, Input, Select, Table, Tag } from "antdv-next";
@@ -66,6 +65,12 @@ function submit() {
   if (router.resolve(target).fullPath === route.fullPath) void load();
   else void router.push(target);
 }
+function resetFilters() {
+  search.value = "";
+  state.value = "";
+  pending.value = "";
+  void router.push("/orders");
+}
 function paginate(page: number, pageSize: number) {
   void router.push({
     path: "/orders",
@@ -96,7 +101,7 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <Page title="订单管理" description="查询购买记录、付款事实与关联服务。"
-    ><template #title><h1>订单管理</h1></template><ChannelGifts /><Card
+    ><template #title><h1>订单管理</h1></template><Card
       ><form class="query-form" @submit.prevent="submit">
         <Input
           v-model:value="search"
@@ -122,7 +127,11 @@ onBeforeUnmount(() => {
             { value: 'true', label: '有待处理售后' },
             { value: 'false', label: '无待处理售后' },
           ]"
-        /><Button html-type="submit" type="primary">查询</Button>
+        />
+        <div class="query-actions">
+          <Button html-type="submit" type="primary">查询</Button>
+          <Button @click="resetFilters">重置</Button>
+        </div>
       </form>
       <Alert v-if="error" type="error" :message="error" role="alert" /><Button
         v-if="error"

@@ -4,6 +4,7 @@ import {
   installFeishuAuthorization,
   syntheticFeishuEnv,
 } from "../feishu-fixture.mjs";
+import { logoutAdmin } from "../admin-startup.mjs";
 import { test, expect } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
@@ -160,7 +161,7 @@ test("operator login offers Feishu and partner password login without MFA", asyn
   page,
 }) => {
   await page.goto("./");
-  await expect(page).toHaveTitle("时光里 · 运营管理");
+  await expect(page).toHaveTitle("时光故事管理后台");
   await expect(page.locator("vite-error-overlay")).toHaveCount(0);
   // The first navigation also compiles the Vite route on a cold CI runner.
   await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible({
@@ -212,6 +213,23 @@ test("desktop and mobile operator completes one Feishu login, survives API resta
   await expect(
     page.getByRole("heading", { name: "订单管理", exact: true }),
   ).toBeVisible();
+  const sidebar = page.locator("aside");
+  await expect(sidebar.getByText("时光故事管理后台", { exact: true })).toBeVisible();
+  const content = page.locator("#__vben_main_content");
+  await sidebar.getByRole("menuitem", { name: "订单管理" }).hover();
+  await expect
+    .poll(async () => {
+      const menu = await sidebar.boundingBox();
+      const body = await content.boundingBox();
+      return Math.round(body.x - menu.x - menu.width);
+    })
+    .toBe(0);
+  await page.getByRole("button", { name: "收起侧栏" }).click();
+  await expect.poll(async () => Math.round((await content.boundingBox()).x)).toBe(64);
+  await sidebar.getByRole("menuitem", { name: "订单管理" }).hover({ timeout: 5000 });
+  await expect.poll(async () => Math.round((await sidebar.boundingBox()).width)).toBe(64);
+  await page.getByRole("button", { name: "展开侧栏" }).click();
+  await expect.poll(async () => Math.round((await content.boundingBox()).x)).toBe(248);
   const cookies = await context.cookies(
     "https://localhost:3443/api/v1/admin/runtime",
   );
@@ -250,7 +268,23 @@ test("desktop and mobile operator completes one Feishu login, survives API resta
   ).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => errors.length).toBe(0);
-  await expect(page.getByRole("button", { name: "退出登录" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "账号菜单" })).toBeInViewport();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBe(0);
+  await expect(sidebar).toHaveAttribute("inert", "");
+  await page.getByRole("button", { name: "打开导航菜单" }).click();
+  await expect(sidebar.getByRole("menuitem", { name: "用户管理" })).toBeInViewport();
+  await page.screenshot({ path: "/tmp/timenook-admin-mobile-menu.png" });
+  await sidebar.getByRole("menuitem", { name: "用户管理" }).click();
+  await expect(page.getByRole("heading", { name: "用户管理" })).toBeVisible();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBe(0);
+  await page.getByRole("textbox", { name: "搜索用户" }).fill("合成测试");
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  await expect(page).toHaveURL(/\/users\?q=/);
+  await page.getByRole("button", { name: "重置", exact: true }).click();
+  await expect(page).toHaveURL(/\/users$/);
+  await expect(page.getByRole("textbox", { name: "搜索用户" })).toHaveValue("");
+  await expect(page.getByText("没有符合条件的用户或讲述者")).toBeInViewport();
+  await expect.poll(async () => Math.round((await page.locator("header").boundingBox()).width)).toBe(390);
   await page.screenshot({
     path: "/tmp/timenook-feishu-admin-mobile.png",
     fullPage: true,
@@ -260,7 +294,7 @@ test("desktop and mobile operator completes one Feishu login, survives API resta
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  await page.getByRole("button", { name: "退出登录" }).click();
+  await logoutAdmin(page);
   await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
   expect(
     (await context.cookies()).some(
@@ -333,7 +367,7 @@ test("an unapproved Feishu identity cannot enter the console", async ({
   await expect(page.getByRole("alert")).toContainText(
     "飞书登录未完成，请重试或联系管理员。",
   );
-  await expect(page.getByRole("button", { name: "退出登录" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "账号菜单" })).toHaveCount(0);
   await expect(page).toHaveURL(/\/admin\/auth\/login\?redirect=/);
 });
 
@@ -375,7 +409,7 @@ test("a revoked operator session clears the console and returns to Feishu login"
     await expect(
       page.getByText("登录已到期，请重新登录。", { exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "退出登录" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "账号菜单" })).toHaveCount(0);
   } finally {
     await db.adminAccount.updateMany({
       where: { username: account.username },
@@ -401,7 +435,7 @@ test("valid Feishu identities are super admins despite legacy permission values"
     ).toBeVisible();
     const current = await page.request.get("/api/v1/admin/session");
     expect((await current.json()).data.operator.role).toBe("super_admin");
-    await page.getByRole("button", { name: "退出登录" }).click();
+    await logoutAdmin(page);
   } finally {
     await db.$disconnect();
   }

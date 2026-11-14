@@ -60,6 +60,11 @@ function submit() {
   if (router.resolve(target).fullPath === route.fullPath) void load();
   else void router.push(target);
 }
+function resetFilters() {
+  search.value = "";
+  pending.value = "";
+  void router.push("/users");
+}
 function paginate(page: number, pageSize: number) {
   void router.push({
     path: "/users",
@@ -108,7 +113,11 @@ onBeforeUnmount(() => {
             { value: 'true', label: '有待处理服务' },
             { value: 'false', label: '无待处理服务' },
           ]"
-        /><Button html-type="submit" type="primary">查询</Button>
+        />
+        <div class="query-actions">
+          <Button html-type="submit" type="primary">查询</Button>
+          <Button @click="resetFilters">重置</Button>
+        </div>
       </form>
       <Alert v-if="error" type="error" :message="error" role="alert" /><Button
         v-if="error"

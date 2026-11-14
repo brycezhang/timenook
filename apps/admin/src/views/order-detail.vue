@@ -9,6 +9,7 @@ import {
   Card,
   Descriptions,
   DescriptionsItem,
+  Space,
   TextArea,
   Spin,
   Table,
@@ -178,12 +179,14 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <Page title="订单详情" class="order-details"
+  <Page title="订单详情" header-class="flex-wrap gap-2" class="order-details"
     ><template #title><h1>订单详情</h1></template
-    ><template #extra
-      ><Button @click="router.push(back)">返回订单列表</Button
-      ><Button :loading="busy" @click="load">刷新</Button></template
-    ><Alert v-if="error" role="alert" type="error" :message="error" /><Alert
+    ><template #extra>
+      <Space wrap>
+        <Button @click="router.push(back)">返回订单列表</Button>
+        <Button :loading="busy" @click="load">刷新</Button>
+      </Space>
+    </template><Alert v-if="error" role="alert" type="error" :message="error" /><Alert
       v-if="notice"
       role="status"
       type="success"

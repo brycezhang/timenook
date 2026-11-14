@@ -4,6 +4,7 @@ import {
   installFeishuAuthorization,
   syntheticFeishuEnv,
 } from "../feishu-fixture.mjs";
+import { logoutAdmin } from "../admin-startup.mjs";
 import { test, expect } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
@@ -365,7 +366,7 @@ test("HTTPS operator discovers pending orderless narrators, opens linked account
     path: "/tmp/timenook-admin-implementation/152-mobile.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await logoutAdmin(page);
   await expect(
     page.getByRole("heading", { name: "运营登录", exact: true }),
   ).toBeVisible();

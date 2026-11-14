@@ -4,6 +4,7 @@ import {
   installFeishuAuthorization,
   syntheticFeishuEnv,
 } from "../feishu-fixture.mjs";
+import { logoutAdmin } from "../admin-startup.mjs";
 import { test, expect } from "@playwright/test";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
@@ -361,7 +362,7 @@ test("HTTPS operator searches historical orders, navigates actual Vben tabs/deta
   expect(cookie.secure && cookie.httpOnly && cookie.sameSite === "Strict").toBe(
     true,
   );
-  await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await logoutAdmin(page);
   await expect(page.getByRole("heading", { name: "运营登录" })).toBeVisible();
   await expect(
     page.getByText("合成浏览器沟通备注", { exact: true }),
@@ -419,7 +420,7 @@ test("super admin can write notes and open user routes; disabled authority clear
 test("channel entry unlocks rejected input for correction and a new successful submission", async ({
   page,
 }) => {
-  await page.goto("./orders");
+  await page.goto("./channel-gifts");
   await feishuLogin(page, account);
   const phone = page.getByRole("textbox", {
     name: "购买者手机号",
@@ -484,10 +485,10 @@ test("channel entry unlocks rejected input for correction and a new successful s
 test("channel phone-only entry preserves a lost-response submission across reload and explicitly starts the next purchase", async ({
   page,
 }) => {
-  await page.goto("./orders");
+  await page.goto("./channel-gifts");
   await feishuLogin(page, account);
   await expect(
-    page.getByRole("heading", { name: "订单管理", exact: true }),
+    page.getByRole("heading", { name: "录入订单", exact: true }),
   ).toBeVisible();
   await page
     .getByRole("textbox", { name: "购买者手机号", exact: true })
@@ -659,6 +660,7 @@ test("super admin issues credentials; partner records a gift with one business m
       .filter({ hasText: username })
       .getByRole("button", { name: "撤销账号" })
       .click();
+    await page.getByRole("button", { name: "确认撤销", exact: true }).click();
     await expect(
       page.getByRole("row").filter({ hasText: username }),
     ).toContainText("已撤销");
@@ -775,7 +777,7 @@ test("super admin and original partner correct or void unopened gifts in detail;
     await sales.keyboard.press("Escape");
     await sales.getByRole("button", { name: "录入新的一笔" }).click();
     const activatedGift = await createGift();
-    await page.goto("./orders");
+    await page.goto("./channel-gifts");
     await page
       .getByRole("row")
       .filter({ hasText: activatedGift.internalNumber })

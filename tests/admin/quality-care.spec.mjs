@@ -427,7 +427,7 @@ test("quality request, personal scoped materials and original-order reprint use 
     admin.getByText("生产单：" + project.order.id, { exact: true }),
   ).toBeVisible();
   await admin
-    .getByRole("button", { name: "返回查询位置", exact: true })
+    .getByRole("link", { name: "返回查询位置", exact: true })
     .click();
   await expect(admin).toHaveURL(new RegExp(`case=${requested.caseId}`));
   await expect(

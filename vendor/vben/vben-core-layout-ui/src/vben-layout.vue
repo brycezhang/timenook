@@ -504,7 +504,7 @@ const idMainContent = ELEMENT_ID_MAIN_CONTENT;
       v-model:expand-on-hovering="sidebarExpandOnHovering"
       v-model:extra-collapse="sidebarExtraCollapse"
       v-model:extra-visible="sidebarExtraVisible"
-      :show-collapse-button="sidebarCollapsedButton"
+      :show-collapse-button="sidebarCollapsedButton && !isMobile"
       :show-fixed-button="sidebarFixedButton"
       :collapse-width="getSideCollapseWidth"
       :dom-visible="!isMobile"
@@ -573,6 +573,8 @@ const idMainContent = ELEMENT_ID_MAIN_CONTENT;
           <template #toggle-button>
             <VbenIconButton
               v-if="showHeaderToggleButton"
+              aria-label="打开导航菜单"
+              :aria-expanded="isMobile ? !sidebarCollapse : showSidebar"
               class="my-0 mr-1 rounded-md"
               @click="handleHeaderToggle"
             >

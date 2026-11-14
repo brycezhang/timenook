@@ -1,42 +1,10 @@
 import { initPreferences } from "@vben/preferences";
+import { overridesPreferences } from "./preferences";
+
 async function bootstrap() {
   await initPreferences({
-    namespace: "timenook-admin-v2",
-    overrides: {
-      app: {
-        name: "时光里运营管理",
-        defaultHomePath: "/orders",
-        enablePreferences: false,
-        enableCheckUpdates: false,
-        authPageLayout: "panel-center",
-        contentPadding: 20,
-      },
-      theme: { mode: "light" },
-      logo: { source: "" },
-      copyright: { enable: false },
-      tabbar: {
-        enable: true,
-        keepAlive: false,
-        persist: false,
-        visitHistory: false,
-      },
-      widget: {
-        globalSearch: false,
-        lockScreen: false,
-        notification: false,
-        timezone: false,
-        languageToggle: false,
-        fullscreen: false,
-        themeToggle: false,
-      },
-      sidebar: {
-        collapsedButton: false,
-        fixedButton: false,
-        draggable: false,
-        expandOnHover: false,
-      },
-      transition: { enable: false },
-    },
+    namespace: "timenook-admin-v3",
+    overrides: overridesPreferences,
   });
   const [
     { createApp },
