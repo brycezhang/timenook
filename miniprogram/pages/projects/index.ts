@@ -1,4 +1,6 @@
+import { channelGiftClient } from "../../services/channel-gifts";
 import type {
+  ChannelGiftView,
   GiftCategory,
   ProjectMembership,
   PaymentOrderView,
@@ -29,6 +31,10 @@ Page({
     categories,
     category: "sent" as GiftCategory,
     pending: [] as PendingRow[],
+    channelRows: [] as (ChannelGiftView & {
+      detail: string;
+      dateLabel: string;
+    })[],
     rows: [] as Row[],
     selected: "",
     busy: false,
@@ -42,6 +48,7 @@ Page({
   owner: "",
   projects: [] as ProjectMembership[],
   orders: [] as PaymentOrderView[],
+  channelGifts: [] as ChannelGiftView[],
   onLoad(q) {
     this.setData({
       switching: q.switch === "1",
@@ -56,7 +63,10 @@ Page({
     if (previous !== this.owner) this.clearProjects();
     this.setData({
       busy: true,
-      pageLoading: !this.projects.length && !this.orders.length,
+      pageLoading:
+        !this.projects.length &&
+        !this.orders.length &&
+        !this.channelGifts.length,
       status: "",
     });
     try {
@@ -69,14 +79,16 @@ Page({
       }
       const owner = sessionClient.context();
       if (owner !== this.owner) this.clearProjects();
-      const [{ projects }, orders] = await Promise.all([
+      const [{ projects }, orders, channelGifts] = await Promise.all([
         projectOverviewClient.memberships(),
         paymentClient.list(),
+        channelGiftClient.list(),
       ]);
       if (n !== this.generation || owner !== sessionClient.context()) return;
       this.owner = owner;
       this.projects = projects;
       this.orders = orders;
+      this.channelGifts = channelGifts;
       this.showCategory();
     } catch (e) {
       if (n === this.generation) {
@@ -93,8 +105,9 @@ Page({
   clearProjects() {
     this.projects = [];
     this.orders = [];
+    this.channelGifts = [];
     this.owner = "";
-    this.setData({ rows: [], pending: [], selected: "" });
+    this.setData({ rows: [], pending: [], channelRows: [], selected: "" });
   },
   showCategory() {
     const category = this.data.category;
@@ -110,6 +123,16 @@ Page({
       }
     }
     this.setData({
+      channelRows:
+        category === "sent" && !this.data.switching
+          ? this.channelGifts
+              .filter((g) => !g.projectId)
+              .map((g) => ({
+                ...g,
+                detail: `${g.state === "void" ? "已作废" : "待送出"} · 实付${g.paidAmount === null ? "未提供" : ` ¥${(g.paidAmount / 100).toFixed(2)}`}`,
+                dateLabel: `${g.paidAt ? "购买时间" : "录入时间"} ${(g.paidAt ?? g.createdAt).slice(0, 10)} · 长期有效`,
+              }))
+          : [],
       rows: this.projects
         .filter((p) => p.categories.includes(category))
         .map((p) => ({
@@ -155,6 +178,14 @@ Page({
       this.data.rows.some((p) => p.projectId === id)
     )
       switchProjectTab("home", id);
+  },
+  channelGift(e: WechatMiniprogram.TouchEvent) {
+    const id = e.currentTarget.dataset.id as string;
+    if (
+      this.owner === sessionClient.context() &&
+      this.data.channelRows.some((g) => g.id === id && g.state === "active")
+    )
+      go("new-book", `channelGiftId=${id}`);
   },
   payment(e: WechatMiniprogram.TouchEvent) {
     const id = e.currentTarget.dataset.id as string;

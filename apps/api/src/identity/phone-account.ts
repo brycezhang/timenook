@@ -1,3 +1,4 @@
+import { associateChannelGiftsIn } from "../channel-gifts/record";
 import { BadRequestException, ConflictException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
@@ -59,6 +60,7 @@ export async function phoneAccountIn(
             nickname: `用户${phoneNumber.slice(-4)}`,
           },
         }));
+  await associateChannelGiftsIn(tx, phoneNumber, user.id);
   if (wechat && !identity)
     await tx.wechatIdentity.create({ data: { ...wechat, userId: user.id } });
   if (user.nickname === null) {

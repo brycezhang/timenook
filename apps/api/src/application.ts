@@ -1,3 +1,4 @@
+import { ChannelGifts, ChannelGiftsController, AdminChannelGiftsController } from "./channel-gifts/channel-gifts";
 import { MAX_RECORDING_BYTES } from "@timenook/contracts";
 import { WebOrders, WebOrdersController } from "./payments/web-orders";
 import { validateInternalMediaConfig } from "./media/product-runtime";
@@ -192,6 +193,8 @@ class HealthController {
     IdentityController,
     AdminController,
     AdminOrdersController,
+    AdminChannelGiftsController,
+    ChannelGiftsController,
     AdminUsersController,
     CatalogController,
     AdminCatalogController,
@@ -703,6 +706,7 @@ export async function createApplication(
       AdminAccess,
       Catalog,
       Orders,
+      ChannelGifts,
       WebOrders,
       Refunds,
       {

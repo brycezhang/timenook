@@ -1,0 +1,262 @@
+import {
+  BadRequestException,
+  Body,
+  ConflictException,
+  Controller,
+  Get,
+  Header,
+  Inject,
+  Injectable,
+  OnModuleDestroy,
+  Post,
+  Req,
+  ServiceUnavailableException,
+} from "@nestjs/common";
+import { Prisma, PrismaClient, type ChannelGift } from "@prisma/client";
+import { createHash, randomUUID } from "node:crypto";
+import type { FastifyRequest } from "fastify";
+import {
+  ADMIN_PERMISSIONS,
+  type AdminChannelGiftView,
+  type ChannelGiftView,
+  type CreateChannelGiftCommand,
+} from "@timenook/contracts";
+import { API_CONFIG, ApiConfig } from "../config";
+import { AdminAccess } from "../admin/admin-access";
+import { readSessionContextIn } from "../identity/identity-access";
+import { mainlandPhone } from "../identity/phone-account";
+
+function command(value: unknown): CreateChannelGiftCommand {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).some(
+      (k) =>
+        !["buyerPhone", "externalOrderNo", "paidAmount", "paidAt"].includes(k),
+    )
+  )
+    throw new BadRequestException();
+  const v = value as CreateChannelGiftCommand;
+  if (typeof v.buyerPhone !== "string") throw new BadRequestException();
+  const buyerPhone = mainlandPhone(v.buyerPhone);
+  if (
+    v.externalOrderNo !== undefined &&
+    (typeof v.externalOrderNo !== "string" ||
+      !v.externalOrderNo.trim() ||
+      v.externalOrderNo.length > 200 ||
+      /[\u0000-\u001f\u007f]/u.test(v.externalOrderNo))
+  )
+    throw new BadRequestException();
+  if (
+    v.paidAmount !== undefined &&
+    (!Number.isSafeInteger(v.paidAmount) ||
+      v.paidAmount < 0 ||
+      v.paidAmount > 2147483647)
+  )
+    throw new BadRequestException();
+  if (
+    v.paidAt !== undefined &&
+    (typeof v.paidAt !== "string" ||
+      !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?(?:Z|[+-]\d\d:\d\d)$/.test(
+        v.paidAt,
+      ) ||
+      !Number.isFinite(Date.parse(v.paidAt)))
+  )
+    throw new BadRequestException();
+  return {
+    buyerPhone,
+    ...(v.externalOrderNo !== undefined
+      ? { externalOrderNo: v.externalOrderNo }
+      : {}),
+    ...(v.paidAmount !== undefined ? { paidAmount: v.paidAmount } : {}),
+    ...(v.paidAt !== undefined
+      ? { paidAt: new Date(v.paidAt).toISOString() }
+      : {}),
+  };
+}
+export function channelGiftView(gift: ChannelGift): ChannelGiftView {
+  return {
+    id: gift.id,
+    internalNumber: gift.internalNumber,
+    packageTitle: gift.packageTitle,
+    listAmount: gift.listAmount,
+    paidAmount: gift.paidAmount,
+    paidAt: gift.paidAt?.toISOString() ?? null,
+    createdAt: gift.createdAt.toISOString(),
+    state: gift.state as "active" | "void",
+    projectId: gift.projectId,
+    orderId: gift.orderId,
+  };
+}
+@Injectable()
+export class ChannelGifts implements OnModuleDestroy {
+  readonly database: PrismaClient;
+  constructor(@Inject(API_CONFIG) private readonly config: ApiConfig) {
+    this.database = new PrismaClient({ datasourceUrl: config.databaseUrl });
+  }
+  async adminView(
+    tx: Prisma.TransactionClient,
+    row: ChannelGift,
+  ): Promise<AdminChannelGiftView> {
+    const operator = await tx.adminAccount.findUniqueOrThrow({
+      where: { id: row.operatorId },
+    });
+    return {
+      ...channelGiftView(row),
+      buyerPhone: row.buyerPhone,
+      maskedBuyerPhone:
+        row.buyerPhone.slice(3, 6) + "****" + row.buyerPhone.slice(-4),
+      buyerId: row.buyerId,
+      operatorId: row.operatorId,
+      operatorName: operator.username,
+      externalOrderNo: row.externalOrderNo,
+      associatedAt: row.associatedAt?.toISOString() ?? null,
+    };
+  }
+  async createIn(
+    tx: Prisma.TransactionClient,
+    operatorId: string,
+    key: unknown,
+    input: unknown,
+  ) {
+    if (typeof key !== "string" || !/^[-A-Za-z0-9_:]{8,128}$/.test(key))
+      throw new BadRequestException();
+    const body = command(input),
+      requestHash = createHash("sha256")
+        .update(JSON.stringify(body))
+        .digest("hex");
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`channel-gift:${operatorId}:${key}`},0))`;
+    const prior = await tx.channelGift.findUnique({
+      where: { operatorId_idempotencyKey: { operatorId, idempotencyKey: key } },
+    });
+    if (prior) {
+      if (prior.requestHash !== requestHash) throw new ConflictException();
+      return this.adminView(tx, prior);
+    }
+    const realm =
+      this.config.environment === "production" ? "production" : "local";
+    const version =
+      (this.config.checkoutE2e?.enabled
+        ? await tx.packageVersion.findFirst({
+            where: { realm, purpose: "e2e" },
+            orderBy: { sequence: "desc" },
+          })
+        : null) ??
+      (await tx.packageVersion.findFirst({
+        where: { realm, purpose: "production" },
+        orderBy: { sequence: "desc" },
+      })) ??
+      (realm === "local"
+        ? await tx.packageVersion.findFirst({
+            where: { realm, purpose: "local_preview" },
+            orderBy: { sequence: "desc" },
+          })
+        : null);
+    if (!version) throw new ServiceUnavailableException("Package unavailable");
+    const offer = version.publicOffer as Prisma.JsonObject;
+    if (typeof offer.title !== "string")
+      throw new ServiceUnavailableException("Package unavailable");
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`phone:${body.buyerPhone}`},0))`;
+    const buyer = await tx.user.findUnique({
+      where: { phoneNumber: body.buyerPhone },
+    });
+    const row = await tx.channelGift.create({
+      data: {
+        id: randomUUID(),
+        internalNumber: "CG" + randomUUID().replaceAll("-", ""),
+        operatorId,
+        idempotencyKey: key,
+        requestHash,
+        buyerPhone: body.buyerPhone,
+        buyerId: buyer?.id,
+        associatedAt: buyer ? new Date() : null,
+        packageVersionId: version.id,
+        packageSnapshot: version.snapshot as Prisma.InputJsonValue,
+        packageTitle: offer.title,
+        listAmount: 99900,
+        paidAmount: body.paidAmount,
+        paidAt: body.paidAt ? new Date(body.paidAt) : null,
+        externalOrderNo: body.externalOrderNo,
+      },
+    });
+    return this.adminView(tx, row);
+  }
+  async listIn(tx: Prisma.TransactionClient, operatorId?: string) {
+    const rows = await tx.channelGift.findMany({
+      where: operatorId ? { operatorId } : {},
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    return Promise.all(rows.map((row) => this.adminView(tx, row)));
+  }
+  async mine(authorization?: string) {
+    return this.database.$transaction(async (tx) => {
+      const user = await readSessionContextIn(tx, authorization);
+      return (
+        await tx.channelGift.findMany({
+          where: { buyerId: user.id },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        })
+      ).map(channelGiftView);
+    });
+  }
+  async onModuleDestroy() {
+    await this.database.$disconnect();
+  }
+}
+@Controller("v1/admin/channel-gifts")
+export class AdminChannelGiftsController {
+  constructor(
+    private readonly access: AdminAccess,
+    private readonly gifts: ChannelGifts,
+  ) {}
+  @Get()
+  @Header("Cache-Control", "no-store")
+  list(@Req() req: FastifyRequest) {
+    return this.access.run("channel-gifts.list", req, async () => ({
+      data: await this.access.command(
+        req,
+        ADMIN_PERMISSIONS.readOrders,
+        (tx) => this.gifts.listIn(tx),
+        true,
+      ),
+      meta: { requestId: req.id },
+    }));
+  }
+  @Post()
+  @Header("Cache-Control", "no-store")
+  create(@Req() req: FastifyRequest, @Body() body: unknown) {
+    return this.access.run("channel-gifts.create", req, async () => ({
+      data: await this.access.command(
+        req,
+        ADMIN_PERMISSIONS.writeOrders,
+        async (tx) => {
+          const row = await this.gifts.createIn(
+            tx,
+            (req as FastifyRequest & { adminOperator: string }).adminOperator,
+            req.headers["idempotency-key"],
+            body,
+          );
+          Object.assign(req, {
+            adminResourceType: "channel-gift",
+            adminResourceId: row.id,
+          });
+          return row;
+        },
+      ),
+      meta: { requestId: req.id },
+    }));
+  }
+}
+@Controller("v1/channel-gifts")
+export class ChannelGiftsController {
+  constructor(private readonly gifts: ChannelGifts) {}
+  @Get()
+  @Header("Cache-Control", "no-store")
+  async list(@Req() req: FastifyRequest) {
+    return {
+      data: await this.gifts.mine(req.headers.authorization),
+      meta: { requestId: req.id },
+    };
+  }
+}
