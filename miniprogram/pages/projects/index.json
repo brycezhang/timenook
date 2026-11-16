@@ -1,1 +1,5 @@
-{ "navigationStyle": "custom", "navigationBarTitleText": "我的礼物" }
+{
+  "navigationStyle": "custom",
+  "navigationBarTitleText": "我的礼物",
+  "usingComponents": { "quick-login": "/components/quick-login/index" }
+}

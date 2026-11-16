@@ -18,6 +18,7 @@ await fs.rm(out, { recursive: true, force: true });
 async function walk(dir) {
   let files = [];
   for (const e of await fs.readdir(dir, { withFileTypes: true })) {
+    if (e.name === ".DS_Store") continue;
     const f = path.join(dir, e.name);
     if (e.isDirectory()) files.push(...(await walk(f)));
     else files.push(f);
@@ -28,10 +29,10 @@ const files = (await walk("miniprogram")).filter(
   (file) =>
     !release ||
     // Website originals and development-only book covers are not used by release pages.
-    (!/\/assets\/(?:family|book|father-book|home-family|sample-book)\.jpg$/.test(
+    (!/\/assets\/(?:family|book|father-book|home-family)\.jpg$/.test(
       file,
     ) &&
-      !/\/(?:pages\/(?:audio-probe|account-link|login|assisted|settings|service|refunds|quality|export|deletion-status|project)\/|services\/(?:audio-probe|account-link|login|assisted|settings|service|refunds|quality|export|deletion-status|project)\.ts)/.test(
+      !/\/(?:pages\/(?:audio-probe|account-link|login|assisted|settings|service|refunds|quality|export|deletion-status|project)\/|services\/(?:audio-probe|devtools-recording|mp3-encoder|account-link|login|assisted|settings|service|refunds|quality|export|deletion-status|project)\.ts)/.test(
         file,
       )),
 );
@@ -68,6 +69,8 @@ await build({
   target: "es2020",
   platform: "neutral",
   bundle: true,
+  // DevTools scans the development compiler output before upload compression.
+  minify: release,
   nodePaths: [path.resolve(import.meta.dirname, "../node_modules")],
   plugins: [
     {
@@ -167,22 +170,24 @@ if (release) {
       await fs.rm(file);
   }
 }
-// Native encoding is an independent module; publish notices and an exact source link.
-const notices = path.resolve(
-  import.meta.dirname,
-  "../third-party/lamejs-1.2.7",
-);
-await fs.mkdir(`${out}/third-party/lamejs-1.2.7`, { recursive: true });
-for (const name of [
-  "NOTICE.md",
-  "UPSTREAM-LICENSE.txt",
-  "LGPL-3.0.txt",
-  "GPL-3.0.txt",
-])
-  await fs.copyFile(
-    path.join(notices, name),
-    `${out}/third-party/lamejs-1.2.7/${name}`,
+if (!release) {
+  // Keep the replaceable DevTools encoder with its license and source link.
+  const notices = path.resolve(
+    import.meta.dirname,
+    "../third-party/lamejs-1.2.7",
   );
+  await fs.mkdir(`${out}/third-party/lamejs-1.2.7`, { recursive: true });
+  for (const name of [
+    "NOTICE.md",
+    "UPSTREAM-LICENSE.txt",
+    "LGPL-3.0.txt",
+    "GPL-3.0.txt",
+  ])
+    await fs.copyFile(
+      path.join(notices, name),
+      `${out}/third-party/lamejs-1.2.7/${name}`,
+    );
+}
 for (const page of config.pages) {
   for (const ext of [".js", ".wxml", ".wxss", ".json"])
     await fs.access(`${out}/${page}${ext}`);

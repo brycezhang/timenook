@@ -1,1 +1,5 @@
-{ "navigationStyle": "custom", "navigationBarTitleText": "加入项目" }
+{
+  "navigationStyle": "custom",
+  "navigationBarTitleText": "加入项目",
+  "usingComponents": { "quick-login": "/components/quick-login/index" }
+}

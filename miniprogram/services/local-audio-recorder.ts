@@ -3,7 +3,9 @@ import {
   MAX_RECORDING_DURATION_MS,
 } from "../../packages/contracts/src/recording";
 import { recordingLease } from "./recording-lease";
+// @development-only:start
 import { prepareDevtoolsRecording } from "./devtools-recording";
+// @development-only:end
 import type {
   ProbeLocalClip,
   ProbeSnapshot,
@@ -242,6 +244,7 @@ export class LocalAudioRecorder {
     this.update("saving", "正在保存本机文件，请先别退出");
     try {
       const pending = this.pending;
+      // @development-only:start
       if (!pending.savedPath && wx.getDeviceInfo?.().platform === "devtools") {
         const prepared = await prepareDevtoolsRecording(
           pending.tempFilePath,
@@ -252,6 +255,7 @@ export class LocalAudioRecorder {
         pending.savedPath = prepared.savedPath;
         pending.duration = prepared.duration;
       }
+      // @development-only:end
       pending.savedPath ??= await new Promise<string>((resolve, reject) =>
         wx.getFileSystemManager().saveFile({
           tempFilePath: pending.tempFilePath,

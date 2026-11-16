@@ -208,6 +208,15 @@ test("built new-book preserves an encoded user title and relationship", async ()
   assert.equal(purchase.data.relationship, "妈妈");
 });
 
+test("development package includes DevTools recording conversion and its license", async () => {
+  for (const file of [
+    "services/devtools-recording.js",
+    "services/mp3-encoder.js",
+    "third-party/lamejs-1.2.7/NOTICE.md",
+  ])
+    assert.ok((await stat(path.join(root, file))).isFile(), file);
+});
+
 test("release package excludes website and probe routes and ignores stored demo mode", async (t) => {
   await appendFile(
     path.join(fixture, "miniprogram/templates/print-book.wxml"),
@@ -233,6 +242,14 @@ test("release package excludes website and probe routes and ignores stored demo 
     },
   );
   assert.equal(release.status, 0, release.stderr);
+  await t.test("release excludes DevTools recording conversion", async () => {
+    for (const file of [
+      "services/devtools-recording.js",
+      "services/mp3-encoder.js",
+      "third-party/lamejs-1.2.7",
+    ])
+      await assert.rejects(stat(path.join(root, file)), { code: "ENOENT" });
+  });
   await t.test(
     "release keeps imported print templates and their included content",
     async () => {
@@ -265,6 +282,22 @@ test("release package excludes website and probe routes and ignores stored demo 
   );
   assert.ok(config.pages.includes("pages/interview/index"));
   assert.ok(config.pages.includes("pages/manuscript/index"));
+  await t.test("release declares quick-login only on pages that render it", async () => {
+    assert.equal(config.usingComponents?.["quick-login"], undefined);
+    for (const route of config.pages) {
+      const base = path.join(root, route);
+      const template = await readFile(base + ".wxml", "utf8");
+      const pageConfig = JSON.parse(await readFile(base + ".json", "utf8"));
+      const declaration = pageConfig.usingComponents?.["quick-login"];
+      assert.equal(Boolean(declaration), /<quick-login\b/.test(template), route);
+      if (declaration)
+        assert.equal(
+          path.posix.resolve("/", path.posix.dirname(route), declaration),
+          "/components/quick-login/index",
+          route,
+        );
+    }
+  });
   for (const name of [
     "account-link",
     "audio-probe",

@@ -1,4 +1,5 @@
 {
   "navigationBarTitleText": "书中原声",
-  "navigationStyle": "custom"
+  "navigationStyle": "custom",
+  "usingComponents": { "quick-login": "/components/quick-login/index" }
 }
