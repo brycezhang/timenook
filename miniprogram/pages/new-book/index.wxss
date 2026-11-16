@@ -9,3 +9,4 @@
 .gift-preview { display:flex;align-items:center;gap:20px;padding:20px;border:1px solid #ded4c6;border-radius:20px; }
 .gift-preview-copy { min-width:0;display:flex;flex-direction:column;gap:8px; }
 .gift-preview-title { font-size:20px;line-height:1.5;font-weight:600;overflow-wrap:anywhere; }
+.gift-preview-note { color:#756859;font-size:12px;line-height:1.5; }
