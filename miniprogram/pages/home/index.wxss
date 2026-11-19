@@ -22,20 +22,60 @@ page { background: #fff; }
 .home-page { gap: 20px; }
 .home-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .home-badge { align-self: flex-start; max-width: 100%; padding: 5px 9px; border-radius: 8px; background: #edf0e7; color: #46563c; font-size: 12px; font-weight: 600; line-height: 1.5; }
-.home-book-entry { width: 100%; display: flex; align-items: center; gap: 18px; padding: 0; color: #382c24; text-align: left; }
+.home-book { display: flex; align-items: center; gap: 18px; }
+.home-book-details { flex: 1; min-width: 0; }
+.home-book-entry { width: 100%; min-height: 44px; color: #382c24; text-align: left; white-space: normal; }
 .home-title-row { display: flex; align-items: center; gap: 8px; }
 .home-title { flex: 1; min-width: 0; font-size: 27px; line-height: 1.35; letter-spacing: -.6px; font-weight: 700; overflow-wrap: anywhere; }
-.home-caption { margin-top: 8px; font-size: 13px; line-height: 1.7; color: #756859; }
-.home-cover { width: 72px; height: 102px; padding: 10px 7px; border-left: 5px solid #46563c; border-radius: 2px 6px 6px 2px; box-shadow: 4px 7px 18px #382c241a; display: flex; flex-direction: column; gap: 9px; flex-shrink: 0; }
-.home-cover > text { font-size: 8px; line-height: 1.4; font-weight: 700; }
-.home-cover image { width: 100%; height: 59px; }
-.home-cover-title { height: 59px; overflow: hidden; background: #edf0e7; font-size: 9px; line-height: 1.8; padding: 6px 3px; color: #46563c; }
+.home-caption { margin-top: 6px; font-size: 13px; line-height: 1.7; color: #756859; overflow-wrap: anywhere; }
+.home-cover {
+  position: relative;
+  width: 72px;
+  height: 102px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 2px 4px 4px 2px;
+  background: #f7f1e3;
+  box-shadow: 1px 2px 4px #382c2426;
+  text-align: left;
+}
+.home-cover-art { width: 100%; height: 100%; }
+.home-cover-type { position: absolute; top: 13px; left: 12px; right: 6px; }
+.home-cover-brand { display: block; margin-bottom: 3px; color: #46563c; font-size: 6px; line-height: 1.4; font-weight: 600; }
+.home-cover-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-family: "Songti SC", "STSong", SimSun, serif;
+  font-size: 9px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+.home-gift-action { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; }
+.home-gift-button { display: flex; min-height: 44px; align-items: center; flex-shrink: 0; }
+.home-gift-label {
+  display: block;
+  padding: 4px 11px;
+  border: 1px solid #b9c7b0;
+  border-radius: 7px;
+  background: #edf0e7;
+  color: #46563c;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.home-gift-pressed .home-gift-label { background: #e0e7d9; }
+.home-gift-status { color: #756859; font-size: 12px; line-height: 1.5; }
 .home-statistics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; padding: 12px 0; border-top: 1px solid #ded4c6; border-bottom: 1px solid #ded4c6; }
 .home-statistics > button, .home-statistics > view { min-width: 0; min-height: 44px; padding: 0; display: flex; align-items: center; gap: 4px; font-size: 12px; color: #46563c; }
 .home-statistics > view { font-size: 11px; color: #756859; }
 .home-statistics .home-number { color: #382c24; font-size: 24px; font-weight: 700; }
-.home-family, .home-gift { display: flex; align-items: center; gap: 12px; padding: 17px 16px; border: 1px solid #ded4c6; border-radius: 18px; color: #382c24; text-align: left; }
-.home-family .tn-icon-tile, .home-gift .tn-icon-tile { width: 42px; height: 42px; }
+.home-family { display: flex; align-items: center; gap: 12px; padding: 17px 16px; border: 1px solid #ded4c6; border-radius: 18px; color: #382c24; text-align: left; }
+.home-family .tn-icon-tile { width: 42px; height: 42px; }
 .home-family-title { font-size: 17px; font-weight: 700; }
 .home-family-meta { margin-top: 5px; font-size: 12px; color: #756859; }
 .home-question { border: 1px solid #ded4c6; border-radius: 20px; background: #edf0e7; padding: 18px; display: flex; flex-direction: column; gap: 12px; }

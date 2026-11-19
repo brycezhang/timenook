@@ -19,9 +19,6 @@ import {
 } from "../../services/question-recommendations";
 import { startOutlineAnswer } from "../../services/outline";
 import { readCurrentPackage } from "../../services/catalog";
-import { bookClient } from "../../services/books";
-import { previewBookPhoto } from "../../services/book-editor";
-import { clearPhotoPreviews } from "../../services/story-photos";
 import { giftContinuation } from "../../services/gifts";
 import type {
   CurrentPackage,
@@ -48,7 +45,6 @@ Page({
     familyPending: 0,
     giftCaption: "",
     giftPage: "" as ReturnType<typeof giftContinuation>,
-    coverImage: "",
     loggedIn: false,
     loginVisible: false,
     ...emptyOffer,
@@ -56,20 +52,11 @@ Page({
     offerError: "",
   },
   plan: null as PersonalPlan | null,
-  coverAssetId: "",
-  coverExpiresAt: null as string | null,
-  coverExpiryTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   generation: 0,
   ownerContext: "",
   loginDestination: "home",
   stopSession: undefined as (() => void) | undefined,
-  clearCoverOnAppHide: undefined as (() => void) | undefined,
   onLoad() {
-    this.clearCoverOnAppHide = () => {
-      ++this.generation;
-      this.clearCover();
-    };
-    wx.onAppHide?.(this.clearCoverOnAppHide);
     this.stopSession = sessionClient.onSessionEnded((owner, reason) => {
       if (owner !== this.ownerContext) return;
       ++this.generation;
@@ -88,36 +75,8 @@ Page({
       if (reason !== "replaced") void this.loadOffer();
     });
   },
-  clearCover() {
-    if (this.coverExpiryTimer !== undefined) clearTimeout(this.coverExpiryTimer);
-    this.coverExpiryTimer = undefined;
-    this.coverAssetId = "";
-    this.coverExpiresAt = null;
-    const { coverImage } = this.data;
-    if (coverImage) {
-      this.setData({ coverImage: "" });
-      void clearPhotoPreviews([coverImage]).catch(() => {});
-    }
-  },
-  scheduleCoverExpiry(expiresAt: string | null) {
-    if (this.coverExpiryTimer !== undefined) clearTimeout(this.coverExpiryTimer);
-    this.coverExpiryTimer = undefined;
-    this.coverExpiresAt = expiresAt;
-    if (!expiresAt) return;
-    const remaining = Date.parse(expiresAt) - Date.now();
-    if (remaining <= 0) {
-      this.clearCover();
-      return;
-    }
-    const timer = setTimeout(() => {
-      // This deadline belongs to the displayed cover, even while a refresh is pending.
-      if (this.coverExpiryTimer === timer) this.scheduleCoverExpiry(expiresAt);
-    }, Math.min(remaining, 2 ** 31 - 1));
-    this.coverExpiryTimer = timer;
-  },
   clearProject() {
     this.plan = null;
-    this.clearCover();
     this.setData({
       overview: null,
       question: null,
@@ -140,8 +99,6 @@ Page({
       this.clearProject();
       wx.pageScrollTo({ scrollTop: 0, duration: 0 });
     }
-    if (this.coverExpiresAt && Date.parse(this.coverExpiresAt) <= Date.now())
-      this.clearCover();
     if (owner !== this.ownerContext)
       this.setData({ ...emptyOffer, offerError: "", offerLoading: false });
     this.ownerContext = owner;
@@ -200,7 +157,6 @@ Page({
         busy: false,
         pageLoading: false,
       });
-      await this.loadCover(selected.projectId, generation, owner);
     } catch (e) {
       if (generation === this.generation) {
         if (
@@ -224,61 +180,6 @@ Page({
             !this.data.busy &&
             !this.data.loginVisible,
         ).catch(() => {});
-    }
-  },
-  async loadCover(projectId: string, generation: number, owner: string) {
-    const current = () =>
-      generation === this.generation &&
-      owner === sessionClient.context() &&
-      this.data.overview?.projectId === projectId;
-    try {
-      const context = await bookClient.read(projectId);
-      if (!current()) return;
-      const expiresAt = context.draftAccess.expiresAt;
-      const authorized = () =>
-        current() && (!expiresAt || Date.parse(expiresAt) > Date.now());
-      const photo =
-        context.draftAccess.allowed && authorized()
-          ? context.coverPhotoOptions.find(
-              (p) => p.assetId === context.cover.photoAssetId,
-            )
-          : undefined;
-      if (!photo) {
-        this.clearCover();
-        return;
-      }
-      const { coverImage: cachedImage } = this.data;
-      if (this.coverAssetId === photo.assetId && cachedImage) {
-        const exists = await new Promise<boolean>((resolve) =>
-          wx.getFileSystemManager().access({
-            path: cachedImage,
-            success: () => resolve(true),
-            fail: () => resolve(false),
-          }),
-        );
-        if (!current()) return;
-        if (exists && this.data.coverImage === cachedImage && authorized()) {
-          this.scheduleCoverExpiry(expiresAt);
-          return;
-        }
-      }
-      this.clearCover();
-      if (!authorized()) return;
-      const coverImage = await previewBookPhoto(projectId, photo, authorized);
-      if (!authorized()) {
-        await clearPhotoPreviews([coverImage]).catch(() => {});
-        return;
-      }
-      this.coverAssetId = photo.assetId;
-      this.setData({ coverImage });
-      this.scheduleCoverExpiry(expiresAt);
-    } catch (error) {
-      if (
-        current() &&
-        error instanceof ApiFailure &&
-        [401, 403, 404].includes(error.status)
-      )
-        this.clearCover();
     }
   },
   async loadOffer() {
@@ -315,9 +216,7 @@ Page({
   },
   onUnload() {
     this.stopSession?.();
-    if (this.clearCoverOnAppHide) wx.offAppHide?.(this.clearCoverOnAppHide);
     this.onHide();
-    this.clearCover();
   },
   refresh() {
     return this.onShow();

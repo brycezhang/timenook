@@ -9,12 +9,6 @@ const phoneEvent = {
 };
 const base = "https://example.test/api/v1";
 const projectId = "33333333-3333-4333-8333-333333333333";
-const coverPhoto = {
-  id: "55555555-5555-4555-8555-555555555555",
-  assetId: "66666666-6666-4666-8666-666666666666",
-  sha256: "f".repeat(64),
-  bytes: 42,
-};
 const questions = ["one", "two"].map((id) => ({
   id,
   text: id,
@@ -59,10 +53,6 @@ async function harness(
   let rejectMembership = false;
   let membershipOffline = false;
   let rejectOffer = false;
-  let showCover = false;
-  let coverExpiresAt: string | null = null;
-  const files = new Set<string>();
-  const downloads: string[] = [];
   let random = 0;
   runInNewContext(bundle.outputFiles[0].text, {
     Date,
@@ -92,20 +82,6 @@ async function harness(
       openPrivacyContract: () => {},
       login: (options: any) =>
         options.success({ code: "synthetic-device-code" }),
-      downloadFile(options: any) {
-        downloads.push(options.url);
-        files.add(options.filePath);
-        options.success({ statusCode: 200, filePath: options.filePath });
-      },
-      getFileSystemManager: () => ({
-        access: (o: any) => (files.has(o.path) ? o.success() : o.fail()),
-        getFileInfo: (o: any) =>
-          o.success({ size: 42, digest: coverPhoto.sha256 }),
-        unlink: (o: any) =>
-          files.delete(o.filePath)
-            ? o.success()
-            : o.fail({ errMsg: "no such file" }),
-      }),
       request(options: any) {
         const route = options.url.slice(base.length);
         requests.push(route);
@@ -151,23 +127,7 @@ async function harness(
                 }
               : route.endsWith("/family-questions")
                 ? { projectId: route.split("/")[2], questions }
-                : route.endsWith("/book")
-                  ? {
-                      projectId: route.split("/")[2],
-                      draftAccess: { allowed: true, expiresAt: coverExpiresAt },
-                      inputHash: "f".repeat(64),
-                      directory: { version: 1, chapters: [] },
-                      eligibleStories: [],
-                      cover: {
-                        version: 1,
-                        salutation: "",
-                        photoAssetId: coverPhoto.assetId,
-                      },
-                      coverPhotoOptions: showCover ? [coverPhoto] : [],
-                      current: null,
-                      accessExpiresAt: null,
-                    }
-                  : undefined;
+                : undefined;
         const data =
           extra ??
           (route === "/users/me"
@@ -219,12 +179,6 @@ async function harness(
     routes,
     requests,
     storage,
-    files,
-    downloads,
-    showCover(allowed: boolean, expiresAt: string | null = null) {
-      showCover = allowed;
-      coverExpiresAt = expiresAt;
-    },
     failNextMembership() {
       membershipOffline = true;
     },
@@ -281,6 +235,7 @@ test("home renders the selected project in place and never opens an order", asyn
   assert.equal(h.page.data.count, 2);
   assert.deepEqual(h.routes, []);
   assert.ok(!h.requests.includes("/orders"));
+  assert.ok(!h.requests.includes(`/projects/${second}/book`));
   h.page.switchProject();
   assert.deepEqual(h.routes, ["/pages/projects/index?switch=1"]);
 });
@@ -301,74 +256,27 @@ test("home keeps the current book visible while returning from another page", as
   assert.equal(h.page.data.busy, false);
   await returning;
 });
-test("switching through My keeps the chosen recommendation and reuses the authorized cover file", async () => {
+test("switching through My keeps the chosen recommendation", async () => {
   const h = await harness("home", [{ projectId }]);
-  h.showCover(true);
   await h.page.onShow();
   const firstQuestion = h.page.data.question.id;
   h.page.nextQuestion();
   const question = h.page.data.question.id;
   assert.notEqual(question, firstQuestion);
-  const image = h.page.data.coverImage;
-  assert.ok(image && h.files.has(image));
 
   h.page.onHide();
   await h.account.onShow();
   h.account.onHide();
-  const returning = h.page.onShow();
-  assert.equal(h.page.data.coverImage, image);
-  await returning;
+  await h.page.onShow();
   assert.equal(h.page.data.question.id, question);
-  assert.equal(h.page.data.coverImage, image);
-  assert.equal(h.downloads.length, 1);
-
-  h.files.delete(image);
-  await h.page.onShow();
-  const recoveredImage = h.page.data.coverImage;
-  assert.notEqual(recoveredImage, image);
-  assert.ok(h.files.has(recoveredImage));
-  assert.equal(h.downloads.length, 2);
-
-  h.showCover(false);
-  await h.page.onShow();
-  assert.equal(h.page.data.coverImage, "");
-  assert.equal(h.files.has(recoveredImage), false);
-  assert.equal(h.downloads.length, 2);
 });
-test("logging out in My clears the hidden home cover before visiting home again", async () => {
+test("logging out in My clears the hidden home project before visiting home again", async () => {
   const h = await harness("home", [{ projectId }]);
-  h.showCover(true);
   await h.page.onShow();
-  const image = h.page.data.coverImage;
-  assert.ok(h.files.has(image));
   h.page.onHide();
   await h.account.onShow();
   await h.account.logout();
-  assert.equal(h.page.data.coverImage, "");
   assert.equal(h.page.data.overview, null);
-  assert.equal(h.files.has(image), false);
-});
-test("an open home page clears the cover at its renewed authorization deadline", async (t) => {
-  const start = Date.now();
-  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: start });
-  const h = await harness("home", [{ projectId }]);
-  h.showCover(true, new Date(start + 2000).toISOString());
-  await h.page.onShow();
-  const image = h.page.data.coverImage;
-  assert.ok(h.files.has(image));
-
-  t.mock.timers.tick(1000);
-  h.showCover(true, new Date(start + 3000).toISOString());
-  await h.page.onShow();
-  t.mock.timers.tick(1000);
-  assert.equal(h.page.data.coverImage, image);
-  assert.equal(h.downloads.length, 1);
-
-  t.mock.timers.tick(1000);
-  assert.equal(h.page.data.coverImage, "");
-  assert.equal(h.page.data.overview.projectId, projectId);
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  assert.equal(h.files.has(image), false);
 });
 test("the public purchase button stays ready when revisiting a loaded home tab", async () => {
   const h = await harness("home", [], false);

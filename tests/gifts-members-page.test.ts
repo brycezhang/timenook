@@ -216,8 +216,6 @@ test("project home continues the selected gift until claimed and hides the actio
       accessExpiresAt: null,
     });
     h.respond(`/projects/${project}/family-questions`, { questions: [] });
-    await tick();
-    h.respond(`/projects/${project}/book`, null, 404);
     await showing;
   }
   h.page.onLoad();
