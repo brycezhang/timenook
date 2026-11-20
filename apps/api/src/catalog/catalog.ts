@@ -20,6 +20,10 @@ import {
 } from "./catalog-contract";
 import { createHash, randomUUID } from "node:crypto";
 import { publicTerms, validatePackage } from "./package-terms";
+import {
+  MANUAL_SALE_PROFILE_VERSION,
+  manualSalePackage,
+} from "./manual-sale-package";
 import type { CurrentPackage, PackageVersion } from "@timenook/contracts";
 import {
   Body,
@@ -348,28 +352,43 @@ export class Catalog implements OnModuleDestroy {
       label: labels[code],
     }));
   }
-  async publish(tx: Prisma.TransactionClient, id: string, body: PublishDto) {
+  private async draftForPublication(
+    tx: Prisma.TransactionClient,
+    id: string,
+    expectedRevision: number,
+  ) {
     await tx.$queryRaw`SELECT id FROM package_drafts WHERE id = ${id}::uuid FOR UPDATE`;
     const draft = await tx.packageDraft.findFirst({
       where: { id, realm: this.realm },
     });
-    if (!draft || draft.revision !== body.expectedRevision)
+    if (!draft || draft.revision !== expectedRevision)
       throw new ConflictException();
+    return draft;
+  }
+  private publishedRevision(
+    tx: Prisma.TransactionClient,
+    draftId: string,
+    draftRevision: number,
+  ) {
+    return tx.packageVersion.findUnique({
+      where: {
+        realm_draftId_draftRevision: {
+          realm: this.realm,
+          draftId,
+          draftRevision,
+        },
+      },
+    });
+  }
+  async publish(tx: Prisma.TransactionClient, id: string, body: PublishDto) {
+    const draft = await this.draftForPublication(tx, id, body.expectedRevision);
     if (
       !body.confirmRealParameters ||
       validatePackage(draft.d01, draft.admission, draft.shippingRegionLabels)
         .completeness !== "complete"
     )
       throw new InvalidPackageException();
-    const existing = await tx.packageVersion.findUnique({
-      where: {
-        realm_draftId_draftRevision: {
-          realm: this.realm,
-          draftId: id,
-          draftRevision: body.expectedRevision,
-        },
-      },
-    });
+    const existing = await this.publishedRevision(tx, id, draft.revision);
     if (existing) {
       if (existing.purpose !== "production") throw new ConflictException();
       return this.versionView(existing);
@@ -389,6 +408,37 @@ export class Catalog implements OnModuleDestroy {
       draft.title,
       publicTerms(draft.d01, draft.admission, draft.shippingRegionLabels),
       this.shippingRegions(draft),
+    );
+  }
+  async publishManualV12(
+    tx: Prisma.TransactionClient,
+    id: string,
+    expectedRevision: number,
+  ) {
+    if (this.config.payments?.mode !== "ordinary-merchant")
+      throw new ForbiddenException();
+    const draft = await this.draftForPublication(tx, id, expectedRevision);
+    const existing = await this.publishedRevision(tx, id, draft.revision);
+    if (existing) {
+      if (
+        existing.purpose !== "production" ||
+        (existing.snapshot as Prisma.JsonObject).profileVersion !==
+          MANUAL_SALE_PROFILE_VERSION
+      )
+        throw new ConflictException();
+      return this.versionView(existing);
+    }
+    const { title, snapshot, terms, shippingRegions } =
+      manualSalePackage(draft);
+    return this.persistVersion(
+      tx,
+      draft.id,
+      draft.revision,
+      "production",
+      snapshot,
+      title,
+      terms,
+      shippingRegions,
     );
   }
   private async persistVersion(
