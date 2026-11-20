@@ -2,7 +2,7 @@ import {
   USER_TERMS_VERSION,
   type Account,
 } from "../../../packages/contracts/src";
-import { sessionClient } from "../../services/session";
+import { ApiFailure, sessionClient } from "../../services/session";
 import { go } from "../../services/navigation";
 
 Component({
@@ -16,6 +16,7 @@ Component({
     busy: false,
     agreed: false,
     consentConfirm: false,
+    phoneConflict: false,
     status: "",
     generation: 0,
     sheetMounted: false,
@@ -29,6 +30,7 @@ Component({
         this.setData({
           agreed: false,
           consentConfirm: false,
+          phoneConflict: false,
           status: "",
           sheetMounted: !this.data.embedded,
           sheetOpen: !this.data.embedded,
@@ -52,12 +54,17 @@ Component({
     },
     toggleAgreed() {
       if (!this.data.busy)
-        this.setData({ agreed: !this.data.agreed, status: "" });
+        this.setData({
+          agreed: !this.data.agreed,
+          phoneConflict: false,
+          status: "",
+        });
     },
     requestConsent() {
       if (this.data.busy || this.data.sheetAction) return;
       this.setData({
         consentConfirm: true,
+        phoneConflict: false,
         status: "",
         ...(this.data.embedded ? { sheetMounted: true, sheetOpen: true } : {}),
       });
@@ -66,7 +73,13 @@ Component({
       if (this.data.busy || this.data.sheetAction) return;
       if (this.data.embedded)
         this.setData({ sheetOpen: false, sheetAction: "cancel-consent" });
-      else this.setData({ consentConfirm: false });
+      else
+        this.setData({
+          consentConfirm: false,
+          agreed: false,
+          phoneConflict: false,
+          status: "",
+        });
     },
     async continueLogin(e: { detail: { code?: string; errMsg?: string } }) {
       if (
@@ -92,7 +105,7 @@ Component({
         return;
       }
       const generation = ++this.data.generation;
-      this.setData({ busy: true, status: "" });
+      this.setData({ busy: true, phoneConflict: false, status: "" });
       try {
         const result = await sessionClient.login(
           { phoneCode: e.detail.code, termsVersion: USER_TERMS_VERSION },
@@ -108,11 +121,18 @@ Component({
           });
         else this.triggerEvent("success", { user: result.user });
       } catch (error) {
-        if (generation === this.data.generation)
+        if (generation === this.data.generation) {
+          const phoneConflict =
+            error instanceof ApiFailure && error.code === "CONFLICT";
           this.setData({
-            status:
-              error instanceof Error ? error.message : "登录未成功，请再试一次",
+            phoneConflict,
+            status: phoneConflict
+              ? "所选手机号与账号不匹配，请重新授权并选择原绑定手机号。"
+              : error instanceof Error
+                ? error.message
+                : "登录未成功，请再试一次",
           });
+        }
       } finally {
         if (generation === this.data.generation) this.setData({ busy: false });
       }
@@ -131,12 +151,16 @@ Component({
     },
     afterLeave() {
       const { sheetAction, signedInUser } = this.data;
+      const canceledConsent = sheetAction === "cancel-consent";
       this.setData({
         sheetMounted: false,
         sheetOpen: false,
         sheetAction: "",
         signedInUser: null,
         consentConfirm: false,
+        ...(canceledConsent
+          ? { agreed: false, phoneConflict: false, status: "" }
+          : {}),
       });
       if (sheetAction === "success")
         this.triggerEvent("success", { user: signedInUser });
@@ -147,7 +171,7 @@ Component({
     },
     privacy() {
       if (this.data.busy || this.data.sheetAction) return;
-      this.setData({ status: "" });
+      if (!this.data.phoneConflict) this.setData({ status: "" });
       wx.openPrivacyContract({
         fail: () =>
           this.setData({ status: "隐私保护指引暂时无法打开，请稍后重试" }),

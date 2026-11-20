@@ -236,6 +236,46 @@ test("a failed phone login keeps the popup and purchase destination available fo
   assert.deepEqual(h.routes, []);
 });
 
+test("an account conflict guides phone reauthorization and only a successful retry signs in", async () => {
+  const h = harness("account");
+  h.page.login();
+  h.quick.requestConsent();
+  const first = h.quick.continueLogin(phoneEvent);
+  await tick();
+  h.requests[0].success?.({
+    statusCode: 409,
+    data: {
+      error: { code: "CONFLICT", retryable: false },
+      meta: { requestId: "synthetic-conflict" },
+    },
+  } as unknown as WechatMiniprogram.RequestSuccessCallbackResult);
+  await first;
+  assert.equal(h.quick.data.phoneConflict, true);
+  assert.match(h.quick.data.status, /原绑定手机号/);
+  assert.equal(h.quick.data.sheetOpen, true);
+  assert.equal(h.page.data.loggedIn, false);
+  assert.equal(h.storage.has(`timenook.session.v1:${base}`), false);
+
+  const retry = h.quick.continueLogin({
+    detail: { ...phoneEvent.detail, code: "fresh-phone-code" },
+  });
+  await tick();
+  assert.equal(h.quick.data.phoneConflict, false);
+  assert.equal(h.requests.length, 2);
+  assert.equal(
+    (h.requests[1].data as { phoneCode: string }).phoneCode,
+    "fresh-phone-code",
+  );
+  h.requests[1].success?.({
+    statusCode: 201,
+    data: { data: identity, meta: { requestId: "synthetic-retry" } },
+  } as unknown as WechatMiniprogram.RequestSuccessCallbackResult);
+  await retry;
+  h.finishLeave();
+  assert.equal(h.page.data.loggedIn, true);
+  assert.equal(h.quick.data.visible, false);
+});
+
 test("WeChat Back dismisses an embedded consent sheet without closing the gift verification form", () => {
   const h = harness("home", false, true);
   h.page.purchase();
