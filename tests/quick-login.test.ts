@@ -42,6 +42,7 @@ function harness(
   if (signedIn) storage.set(`timenook.session.v1:${base}`, identity);
   const routes: string[] = [],
     requests: WechatMiniprogram.RequestOption[] = [];
+  let privacyOpens = 0;
   let page: any, quick: any, definition: any;
   const scope = {
     Page(value: any) {
@@ -74,6 +75,9 @@ function harness(
         storage.set(key, structuredClone(value)),
       removeStorageSync: (key: string) => storage.delete(key),
       navigateTo: ({ url }: { url: string }) => routes.push(url),
+      openPrivacyContract: () => {
+        privacyOpens++;
+      },
       pageScrollTo() {},
       login: (options: WechatMiniprogram.LoginOption) =>
         options.success?.({ code: "fresh-wechat-code", errMsg: "login:ok" }),
@@ -93,6 +97,9 @@ function harness(
     storage,
     routes,
     requests,
+    get privacyOpens() {
+      return privacyOpens;
+    },
     finishLeave() {
       quick.beforeLeave();
       quick.afterLeave();
@@ -148,7 +155,7 @@ test("a signed-in home purchase goes directly to new-book without another login"
   assert.equal(h.requests.length, 0);
 });
 
-test("unchecked login offers consent and Continue authorizes without a second login tap", async () => {
+test("agreeing in the privacy prompt continues login without a second login tap", async () => {
   const h = harness();
   h.page.purchase();
   h.quick.requestConsent();
@@ -164,15 +171,19 @@ test("unchecked login offers consent and Continue authorizes without a second lo
   assert.equal(h.quick.data.visible, false);
 });
 
-test("canceling consent and reading terms preserve the originating action without logging in", () => {
+test("reading the privacy guide and terms preserves the prompt until the user cancels", () => {
   const h = harness("account");
   h.page.purchase();
   h.quick.requestConsent();
+  h.quick.privacy();
+  h.quick.terms();
+  assert.equal(h.privacyOpens, 1);
+  assert.deepEqual(h.routes, ["/pages/terms/index"]);
+  assert.equal(h.quick.data.consentConfirm, true);
+  assert.equal(h.quick.data.agreed, false);
   h.quick.cancelConsent();
   assert.equal(h.quick.data.agreed, false);
   assert.equal(h.quick.data.consentConfirm, false);
-  h.quick.terms();
-  assert.deepEqual(h.routes, ["/pages/terms/index"]);
   assert.equal(h.page.loginDestination, "new-book");
   assert.equal(h.quick.data.visible, true);
   assert.equal(h.requests.length, 0);

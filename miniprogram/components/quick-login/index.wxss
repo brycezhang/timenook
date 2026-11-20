@@ -6,4 +6,7 @@
 .quick-login-box { width: 20px; height: 20px; line-height: 18px; text-align: center; border: 1px solid #756859; border-radius: 4px; font-size: 14px; }
 .quick-login-box.checked { background: #46563c; color: white; border-color: #46563c; }
 .quick-login-terms { flex: 1; min-width: 0; font-size: 13px; line-height: 1.8; }
-.quick-login-terms button, .quick-consent-terms { display: inline; white-space: normal; background: transparent; color: #46563c; font-size: 13px; line-height: 1.8; text-align: left; padding: 10px 0; }
+.quick-login-terms button, .quick-consent-terms { display: inline; white-space: nowrap; background: transparent; color: #46563c; font: inherit; text-align: left; }
+.quick-login-terms button { padding: 6px 0; }
+.quick-consent-actions { display: flex; gap: 12px; }
+.quick-consent-guide, .quick-consent-continue { flex: 1; min-width: 0; width: auto; }

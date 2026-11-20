@@ -146,6 +146,8 @@ Component({
       if (!this.data.busy && !this.data.sheetAction) go("terms");
     },
     privacy() {
+      if (this.data.busy || this.data.sheetAction) return;
+      this.setData({ status: "" });
       wx.openPrivacyContract({
         fail: () =>
           this.setData({ status: "隐私保护指引暂时无法打开，请稍后重试" }),
