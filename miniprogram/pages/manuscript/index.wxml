@@ -3,7 +3,7 @@
 <view wx:else class="tn-page with-dock book-page">
   <block wx:if="{{openFailed}}">
     <view class="book-state-space" /><view class="book-state-intro"><view class="book-state-icon"><image src="/assets/icons/modern-book.svg" /></view><view class="book-heading">PDF 打开失败</view></view><view class="book-state-tail" />
-    <view class="tn-dock"><button class="tn-button" bindtap="openPdf" disabled="{{busy}}" loading="{{busy}}"><image wx:if="{{!busy}}" class="tn-icon" src="/assets/icons/rotate-ccw-light.svg" />重新打开 PDF</button></view>
+    <view class="tn-dock"><button class="tn-button" bindtap="openPdf" disabled="{{busy}}" loading="{{busy}}"><image wx:if="{{!busy}}" class="tn-icon" src="/assets/icons/refresh-cw-light.svg" />重新打开 PDF</button></view>
   </block>
   <block wx:elif="{{version.pdf && (fixedProduction || version.state === 'ready')}}">
     <view class="tn-muted">第 {{version.version}} 版 · 共 {{version.pageCount}} 页</view>

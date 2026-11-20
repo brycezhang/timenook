@@ -24,7 +24,7 @@
     <button wx:else class="add-photo" bindtap="photos" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/image.svg"/>添加照片</button>
     <view wx:if="{{photoError}}" class="photo-error"><text class="tn-error">{{photoError}}</text><button class="tn-link" bindtap="loadRecordingPhotos">重新读取</button></view>
     <block wx:if="{{screen === 'ready'}}">
-      <button wx:if="{{canChooseQuestion}}" class="tn-button change-question" bindtap="chooseAnother" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/rotate-ccw.svg"/>换个问题</button>
+      <button wx:if="{{canChooseQuestion}}" class="tn-button change-question" bindtap="chooseAnother" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/refresh-cw.svg"/>换个问题</button>
       <text class="record-hint">每段 {{recordingMaxMinutes}} 分钟自动保存，可继续录。</text>
       <button wx:for="{{pendingInterviews}}" wx:key="*this" class="tn-row" data-id="{{item}}" bindtap="resumePending"><view class="tn-grow">继续保存本机录音 {{index + 1}}</view><image class="tn-icon" src="/assets/icons/chevron-right.svg"/></button>
     </block>
@@ -50,7 +50,7 @@
 <view wx:if="{{!pageLoading && (canRecord || (interview && screen === 'failed')) && (screen !== 'saving' || (status && !busy))}}" class="tn-dock recording-dock">
   <button wx:if="{{screen === 'ready'}}" class="start-recording" bindtap="startSpeaking" disabled="{{busy || state === 'requesting'}}" aria-label="开始录音"><view class="microphone"><image src="/assets/icons/mic-light.svg"/></view><text>{{state === 'requesting' ? '正在开启麦克风' : '开始录音'}}</text></button>
   <block wx:elif="{{screen === 'recording' || screen === 'paused'}}"><view class="record-actions"><button class="tn-button toggle-recording {{screen === 'recording' ? 'tn-secondary' : ''}}" bindtap="togglePause" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/{{screen === 'recording' ? 'pause' : 'mic-light'}}.svg"/>{{screen === 'recording' ? '暂停' : '继续讲述'}}</button><button class="tn-button finish-recording {{screen === 'paused' ? 'tn-secondary' : ''}}" bindtap="finishRecording" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/{{screen === 'paused' ? 'square' : 'square-light'}}.svg"/>结束并保存</button></view><text wx:if="{{screen === 'recording'}}" class="record-hint dock-hint">每段 {{recordingMaxMinutes}} 分钟自动保存，可继续录。</text></block>
-  <block wx:elif="{{screen === 'failed'}}"><button class="tn-button" bindtap="retryProcessing" loading="{{busy}}" disabled="{{busy}}"><image wx:if="{{!busy}}" class="tn-icon" src="/assets/icons/rotate-ccw-light.svg"/>{{localSaveFailed ? '重试保存' : '重新上传'}}</button><button wx:if="{{!localSaveFailed}}" class="tn-link" bindtap="leave">稍后再试</button></block>
+  <block wx:elif="{{screen === 'failed'}}"><button class="tn-button" bindtap="retryProcessing" loading="{{busy}}" disabled="{{busy}}"><image wx:if="{{!busy}}" class="tn-icon" src="/assets/icons/refresh-cw-light.svg"/>{{localSaveFailed ? '重试保存' : '重新上传'}}</button><button wx:if="{{!localSaveFailed}}" class="tn-link" bindtap="leave">稍后再试</button></block>
   <block wx:elif="{{screen === 'blocked'}}"><button class="tn-button" bindtap="settings">前往设置</button><button class="tn-link" bindtap="leave">返回这本书</button></block>
   <button wx:elif="{{status && !busy}}" class="tn-button" bindtap="saved">查看故事</button>
 </view>

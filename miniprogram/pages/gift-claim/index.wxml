@@ -18,7 +18,7 @@
 </view>
 <view wx:if="{{screen !== 'verify'}}" class="tn-dock">
  <button wx:if="{{screen === 'open' && gift}}" class="tn-button" bindtap="verify" loading="{{busy}}" disabled="{{busy || loading}}"><image class="tn-icon" src="/assets/icons/gift-light.svg"/>验证收礼手机号</button>
- <button wx:elif="{{screen === 'mismatch'}}" class="tn-button" bindtap="switchAccount" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/rotate-ccw-light.svg"/>更换微信手机号</button>
+ <button wx:elif="{{screen === 'mismatch'}}" class="tn-button" bindtap="switchAccount" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/refresh-cw-light.svg"/>更换微信手机号</button>
  <button wx:elif="{{screen === 'accept'}}" class="tn-button" bindtap="accept" loading="{{busy}}" disabled="{{busy || loading}}"><image class="tn-icon" src="/assets/icons/gift-light.svg"/>确认领取</button>
  <button wx:elif="{{screen === 'claimed' && projectId}}" class="tn-button" bindtap="project"><image class="tn-icon" src="/assets/icons/book-open-light.svg"/>进入项目</button>
  <button wx:elif="{{screen === 'claimed' && currentMaskedPhone}}" class="tn-button" bindtap="switchAccount" loading="{{busy}}" disabled="{{busy || loading}}">更换微信手机号</button>

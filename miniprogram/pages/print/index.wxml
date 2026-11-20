@@ -4,10 +4,10 @@
 <view wx:else class="tn-page with-dock print-page {{unknown ? 'double-dock' : ''}}">
   <block wx:if="{{unknown}}">
     <view class="book-state-space" />
-    <view class="book-state-intro"><view class="book-state-icon"><image src="/assets/icons/rotate-ccw.svg" /></view><view class="print-state-copy"><view class="print-state-title">正在确认提交结果</view><view class="tn-muted">请先查询结果，避免重复提交。</view></view></view>
+    <view class="book-state-intro"><view class="book-state-icon"><image src="/assets/icons/refresh-cw.svg" /></view><view class="print-state-copy"><view class="print-state-title">正在确认提交结果</view><view class="tn-muted">请先查询结果，避免重复提交。</view></view></view>
     <view class="book-state-tail" />
     <view class="tn-card"><text class="print-book-title">{{pendingIntent.title}}</text><text class="print-small">提交版本 V{{pendingIntent.version}} · 首本实体书</text></view>
-    <view class="tn-dock"><button wx:if="{{queryComplete}}" class="tn-button" bindtap="submit" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/rotate-ccw-light.svg" />重试原提交</button><button wx:else class="tn-button" bindtap="refresh" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/rotate-ccw-light.svg" />查询制作进度</button><button class="tn-link" bindtap="projectHome">回到这本书</button></view>
+    <view class="tn-dock"><button wx:if="{{queryComplete}}" class="tn-button" bindtap="submit" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/refresh-cw-light.svg" />重试原提交</button><button wx:else class="tn-button" bindtap="refresh" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/refresh-cw-light.svg" />查询制作进度</button><button class="tn-link" bindtap="projectHome">回到这本书</button></view>
   </block>
   <block wx:elif="{{context}}">
     <template wx:if="{{context.book}}" is="print-book" data="{{book: context.book, coverImage, badge: true, caption: '首本实体书 × 1'}}" />

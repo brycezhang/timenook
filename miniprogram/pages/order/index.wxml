@@ -3,7 +3,7 @@
  <block wx:if="{{loading && !activeOrder && !unknown}}"><view class="purchase-skeleton"/><view class="purchase-skeleton line"/></block>
  <block wx:else>
   <view class="payment-spacer"/>
-  <view class="payment-heading"><view class="payment-icon"><image src="/assets/icons/{{activeOrder.state === 'paid' ? 'check' : activeOrder.state === 'closed' ? 'x' : unknown ? 'rotate-ccw' : 'calendar'}}.svg"/></view><view class="payment-heading-copy"><view class="payment-heading-title">{{activeOrder.state === 'paid' ? '购买成功' : activeOrder.state === 'closed' ? '订单已关闭' : unknown ? '正在确认付款结果' : '订单待付款'}}</view><view wx:if="{{unknown}}" class="tn-muted">已付款？请先查询结果。</view></view></view>
+  <view class="payment-heading"><view class="payment-icon"><image src="/assets/icons/{{activeOrder.state === 'paid' ? 'check' : activeOrder.state === 'closed' ? 'x' : unknown ? 'refresh-cw' : 'calendar'}}.svg"/></view><view class="payment-heading-copy"><view class="payment-heading-title">{{activeOrder.state === 'paid' ? '购买成功' : activeOrder.state === 'closed' ? '订单已关闭' : unknown ? '正在确认付款结果' : '订单待付款'}}</view><view wx:if="{{unknown}}" class="tn-muted">已付款？请先查询结果。</view></view></view>
   <view class="payment-card-spacer"/>
   <view wx:if="{{activeOrder.state === 'paid'}}" class="tn-card"><view class="purchase-book-row"><view class="mini-book"><text class="mini-title">{{bookTitle}}</text><text class="mini-subtitle">那些年，那些我们</text><image class="mini-photo" src="/assets/purchase-cover.jpg" mode="aspectFill"/><text class="mini-brand">时光故事</text></view><view class="purchase-book-copy"><view class="payment-book-title">{{bookTitle}}</view><view class="purchase-tag">{{activeOrder.mode === 'channel' ? '渠道购买' : '已付款'}}</view><view wx:if="{{activeOrder.mode === 'channel'}}" class="purchase-book-meta">实付 {{paidAmountLabel}}</view><view wx:if="{{channelDate}}" class="purchase-book-meta">{{channelDate}}</view><view class="purchase-book-meta">含首本实体书</view></view></view></view>
   <view wx:elif="{{bookTitle}}" class="tn-card"><view class="payment-book-title">{{bookTitle}}</view><view class="payment-detail"><text>{{activeOrder.state === 'closed' ? '未完成付款' : unknown ? '付款结果确认中' : '待付款'}}</text><text wx:if="{{!unknown && packagePrice}}" class="payment-amount">¥{{packagePrice}}</text></view></view>
@@ -15,7 +15,7 @@
  <button wx:if="{{giftPage}}" class="tn-button" bindtap="continueGift"><image class="tn-icon" src="/assets/icons/gift-light.svg"/>继续送出</button>
  <button wx:elif="{{activeOrder.state === 'paid'}}" class="tn-button" bindtap="project" disabled="{{loading || busy}}">进入故事书</button>
  <button wx:elif="{{activeOrder.state === 'closed'}}" class="tn-button" bindtap="catalog">重新购买</button>
- <block wx:elif="{{unknown}}"><button class="tn-button" bindtap="restoreOrders" loading="{{loading}}" disabled="{{loading || busy}}"><image class="tn-icon" src="/assets/icons/rotate-ccw-light.svg"/>查询付款结果</button><button class="tn-link" bindtap="gifts">返回我的礼物</button></block>
+ <block wx:elif="{{unknown}}"><button class="tn-button" bindtap="restoreOrders" loading="{{loading}}" disabled="{{loading || busy}}"><image class="tn-icon" src="/assets/icons/refresh-cw-light.svg"/>查询付款结果</button><button class="tn-link" bindtap="gifts">返回我的礼物</button></block>
  <block wx:else><button class="tn-button" bindtap="retryPayment" loading="{{busy}}" disabled="{{loading || busy || !activeOrder}}">继续付款</button><button class="tn-button tn-secondary" bindtap="gifts">返回我的礼物</button></block>
 </view>
 <quick-login visible="{{loginVisible}}" bind:success="loginSucceeded" bind:close="closeLogin"/>
