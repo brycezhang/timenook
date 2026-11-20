@@ -2,9 +2,9 @@
 <view class="tn-page {{nativeTabs ? '' : 'with-tabs'}}">
  <view class="tn-card profile-card">
   <view class="profile"><view class="avatar {{loggedIn ? 'account-avatar' : ''}}"><image src="/assets/icons/modern-user.svg"/></view>
-   <view class="tn-grow"><button wx:if="{{loggedIn}}" class="nickname-trigger" bindtap="editNickname" disabled="{{busy}}" aria-label="修改昵称"><view class="tn-grow nickname-info"><text class="nickname-text">{{nickname}}</text><view class="profile-phone">{{maskedPhone ? "微信手机号 " + maskedPhone : "已登录"}}</view></view><image class="nickname-edit-icon" src="/assets/icons/modern-pencil.svg"/></button><view wx:else="" class="profile-title">还未登录</view></view>
+   <view class="tn-grow"><button wx:if="{{loggedIn}}" class="nickname-trigger" bindtap="editNickname" disabled="{{busy}}" aria-label="修改昵称"><view class="tn-grow nickname-info"><text class="nickname-text">{{nickname}}</text><view class="profile-phone">{{maskedPhone ? "手机号 " + maskedPhone : "已登录"}}</view></view><image class="nickname-edit-icon" src="/assets/icons/modern-pencil.svg"/></button><view wx:else="" class="profile-title">还未登录</view></view>
   </view>
-  <button wx:if="{{!loggedIn}}" class="tn-button account-login" bindtap="login" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/phone-white.svg"/>微信手机号登录</button>
+  <button wx:if="{{!loggedIn}}" class="tn-button account-login" bindtap="login" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/phone-white.svg"/>手机号快捷登录</button>
  </view>
  <button wx:if="{{loggedIn}}" class="tn-row" bindtap="projects"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/modern-book.svg"/></view><text class="tn-grow">我的礼物</text><text wx:if="{{pendingGifts > 0}}" class="tn-muted">{{pendingGifts}} 份待送出</text><image class="account-arrow" src="/assets/icons/modern-chevron-right.svg"/></button>
  <button class="tn-row" bindtap="purchase"><view class="tn-icon-tile"><image class="tn-icon" src="/assets/icons/modern-gift.svg"/></view><text class="tn-grow">送出一份礼物</text><image class="account-arrow" src="/assets/icons/modern-chevron-right.svg"/></button>

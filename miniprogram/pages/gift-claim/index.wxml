@@ -8,7 +8,7 @@
  </block>
  <block wx:elif="{{screen === 'accept' && gift}}"><view class="tn-card"><view class="purchase-book-row"><view class="mini-book"><text class="mini-title">{{gift.bookTitle}}</text><text class="mini-subtitle">那些年，那些我们</text><image class="mini-photo" src="/assets/purchase-cover.jpg" mode="aspectFill"/><text class="mini-brand">时光故事</text></view><view class="purchase-book-copy"><view class="gift-accept-title">{{gift.bookTitle}}</view><view class="purchase-tag">手机号已验证</view></view></view></view></block>
  <block wx:elif="{{screen !== 'open'}}">
-  <view class="gift-spacer"/><view class="gift-heading"><view class="gift-icon"><image src="/assets/icons/{{screen === 'verify' ? 'smartphone' : screen === 'mismatch' ? 'lock' : screen === 'claimed' ? 'check' : 'gift'}}.svg"/></view><view class="gift-heading-copy"><view wx:if="{{screen !== 'verify'}}" class="gift-heading-title">{{title}}</view><view wx:if="{{screen === 'verify'}}" class="tn-muted">请使用收礼人微信绑定的手机号。</view><view wx:elif="{{screen === 'invalid'}}" class="tn-muted">领取信息已更改，请联系送礼人获取新卡片。</view></view></view><view class="gift-card-spacer"/>
+  <view class="gift-spacer"/><view class="gift-heading"><view class="gift-icon"><image src="/assets/icons/{{screen === 'verify' ? 'smartphone' : screen === 'mismatch' ? 'lock' : screen === 'claimed' ? 'check' : 'gift'}}.svg"/></view><view class="gift-heading-copy"><view wx:if="{{screen !== 'verify'}}" class="gift-heading-title">{{title}}</view><view wx:if="{{screen === 'verify'}}" class="tn-muted">请使用收礼手机号登录。</view><view wx:elif="{{screen === 'invalid'}}" class="tn-muted">领取信息已更改，请联系送礼人获取新卡片。</view></view></view><view class="gift-card-spacer"/>
   <view wx:if="{{screen === 'verify' || screen === 'mismatch'}}" class="tn-card"><view class="gift-detail"><text>收礼手机号</text><text class="gift-detail-value">{{gift.maskedPhone}}</text></view><view wx:if="{{screen === 'mismatch'}}" class="gift-detail"><text>当前手机号</text><text class="gift-detail-value">{{currentMaskedPhone}}</text></view></view>
   <view wx:if="{{screen === 'mismatch'}}" class="gift-caption">换用收礼手机号，或请送礼人更正。</view>
   <view wx:if="{{screen === 'claimed' && gift}}" class="tn-card gift-claimed-title">{{gift.bookTitle}}</view>
@@ -18,10 +18,10 @@
 </view>
 <view wx:if="{{screen !== 'verify'}}" class="tn-dock">
  <button wx:if="{{screen === 'open' && gift}}" class="tn-button" bindtap="verify" loading="{{busy}}" disabled="{{busy || loading}}"><image class="tn-icon" src="/assets/icons/gift-light.svg"/>验证收礼手机号</button>
- <button wx:elif="{{screen === 'mismatch'}}" class="tn-button" bindtap="switchAccount" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/refresh-cw-light.svg"/>更换微信手机号</button>
+ <button wx:elif="{{screen === 'mismatch'}}" class="tn-button" bindtap="switchAccount" loading="{{busy}}" disabled="{{busy}}"><image class="tn-icon" src="/assets/icons/refresh-cw-light.svg"/>换个手机号登录</button>
  <button wx:elif="{{screen === 'accept'}}" class="tn-button" bindtap="accept" loading="{{busy}}" disabled="{{busy || loading}}"><image class="tn-icon" src="/assets/icons/gift-light.svg"/>确认领取</button>
  <button wx:elif="{{screen === 'claimed' && projectId}}" class="tn-button" bindtap="project"><image class="tn-icon" src="/assets/icons/book-open-light.svg"/>进入项目</button>
- <button wx:elif="{{screen === 'claimed' && currentMaskedPhone}}" class="tn-button" bindtap="switchAccount" loading="{{busy}}" disabled="{{busy || loading}}">更换微信手机号</button>
+ <button wx:elif="{{screen === 'claimed' && currentMaskedPhone}}" class="tn-button" bindtap="switchAccount" loading="{{busy}}" disabled="{{busy || loading}}">换个手机号登录</button>
  <button wx:elif="{{screen === 'claimed'}}" class="tn-button" bindtap="verify" loading="{{busy}}" disabled="{{busy || loading}}">验证手机号进入项目</button>
  <button wx:elif="{{screen === 'invalid'}}" class="tn-button tn-secondary" bindtap="home">返回首页</button>
  <button wx:else class="tn-button" bindtap="load" loading="{{loading}}" disabled="{{loading}}">重新读取</button>

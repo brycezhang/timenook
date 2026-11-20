@@ -15,7 +15,7 @@
     </view>
     <view class="audio-note">对应所印版本原声，仅项目成员可回听。</view>
   </block>
-  <view wx:else class="tn-card audio-locked"><view class="tn-heading">登录后回听原声</view><view class="tn-muted">请使用已加入这本书的账号。</view><button wx:if="{{!loggedIn}}" class="tn-button" bindtap="login" disabled="{{busy}}">微信登录后回听</button></view>
+  <view wx:else class="tn-card audio-locked"><view class="tn-heading">登录后回听原声</view><view class="tn-muted">请使用已加入这本书的账号。</view><button wx:if="{{!loggedIn}}" class="tn-button" bindtap="login" disabled="{{busy}}">登录后回听</button></view>
   <view wx:if="{{status}}" class="tn-error" role="status">{{status}}</view>
   <button wx:if="{{loggedIn && !entry}}" class="tn-button tn-secondary" bindtap="refresh" disabled="{{busy}}" loading="{{busy}}">重新查询</button>
   <button wx:if="{{loggedIn}}" class="tn-link audio-logout" bindtap="logout" disabled="{{busy}}">退出登录</button>
